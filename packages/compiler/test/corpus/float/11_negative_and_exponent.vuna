@@ -1,0 +1,28 @@
+-- Float 负数、指数形态与 NaN / 无穷：规范化文本必须带符号且能按 `e±NN` 解析，
+-- 比较走 IEEE 语义（`0.0 - 2.5` 小于零、远小于 max_int 量级的字面量）。
+main : String
+main =
+  strFromFloat (0.0 - 2.5)
+    ++ "|"
+    ++ strFromFloat ((0.0 - 1.0) * 0.0)
+    ++ "|"
+    ++ strFromFloat (floatFromInt 1000000000000000000)
+    ++ "|"
+    ++ strFromFloat (1.0 / floatFromInt 1000000000000000000)
+    ++ "|"
+    ++ strFromFloat (0.0 / 0.0)
+    ++ "|"
+    ++ strFromFloat (1.0 / 0.0)
+    ++ "|"
+    ++ strFromFloat (0.0 - (1.0 / 0.0))
+    ++ "|"
+    ++ show (0.0 - 2.5)
+    ++ ","
+    ++ show (0.0 - 3.9)
+    ++ "|"
+    ++ strFromInt (intFromFloat (0.0 - 3.9))
+    ++ "|"
+    ++ show ((0.0 - 2.5) < 0.0)
+    ++ ","
+    ++ show ((0.0 - 2.5) >= 0.0)
+    ++ "|" ++ show (2.5 >= 4611686018427387903.0) ++ "," ++ show (2.5 < 4611686018427387903.0)

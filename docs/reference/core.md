@@ -60,6 +60,12 @@ data Term where
   定义体（签名表 `ecGlobalsTbl` 不参与展开）。
 - `quote` / `normalize`：值 → 项；深度正规化（构造子字段与卡住应用的实参也继续归约）
   用于显示与终止性检查。
+- 浮点值 `VFloat` 的载荷是 `string_of_float` 的规范文本：定义性相等比文本，算术 / 比较
+  先按 `[-]digits[.digits][e±NN]`、`nan`、`inf` 解析回宿主 `Float`。规范文本只有 12 位
+  有效数字，精度边界见 [debt.md](debt.md) CO-08。
+- `Nat` 值按 `Zero` / `Succ` 链物化。interp 建链有规模上限（`natValueMaybe`：超过
+  `natChainLimit = 65536` 不归约），避免为一个大整数分配上亿个构造子；超限时 `main`
+  报 `CG_MainNotValue`。
 - 类型级 `Vec n a` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
   定义性相等或可被元变量统一——这就是索引 unification 的用武之地。
 

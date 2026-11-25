@@ -244,6 +244,16 @@ natValueGo n acc = if n <= 0 then acc else natValueGo (n - 1) (VCon natSuccCtor 
 export natValue : Int -> Value
 natValue n = natValueGo (natClamp n) (VCon natZeroCtor [])
 
+-- | interp 物化 `Nat` 构造子链的规模上限。`Nat` 在 Core 里是 `Zero`/`Succ` 链，
+-- 算术本身在 `Int` 上折叠，只有结果值需要建链；超过上限就不归约（`Nothing`），
+-- 让 `main` 报 "does not reduce to a value"，而不是为一个大整数分配上亿个构造子。
+export natChainLimit : Int
+natChainLimit = 65536
+
+-- | 建链前先过上限；超限返回 `Nothing`（不归约），与除零的处理同口径。
+export natValueMaybe : Int -> Maybe Value
+natValueMaybe n = if natClamp n > natChainLimit then Nothing else Just (natValue (natClamp n))
+
 export natValueToInt : Value -> Maybe Int
 natValueToInt (VInt n) = Just n
 natValueToInt (VCon c args) = natCtorInt c args
@@ -271,21 +281,93 @@ asNat v = natValueToInt v
 -- ---------------------------------------------------------------
 -- `VFloat` 载荷保持字符串，但**一律**是宿主 `string_of_float` 的规范
 -- 文本（字面量在 `eval` 入口规范化），这样定义性相等（`fastSame` 比字符串）、quote /
--- 展示与编译产物三处天然一致。求值器自身没有宿主浮点类型可用，语义靠编译器的 `Float`
--- 类型 + 内建原语（`floatFromInt`/`strFromFloat`/`/` 等）在编译期完成，因此与
--- `ocamlopt` 产物逐位一致。
--- | 浮点规范文本 → 宿主 `Float`。解析只覆盖源码浮点字面量语法 `digits.digits`
--- （`Lexer` 的且唯一文法；规范化后仍可能带 `e` 指数？不会：string_of_float 产出
--- `digits.digits`/`infinity`/`nan`，这里对后两者返回 0 并由调用方语义兜底）。
+-- 展示与编译产物三处天然一致。求值器按规范文本解析回宿主 `Float` 做算术与比较；
+-- 规范文本只有 12 位有效数字，浮点因此只在「规范文本可表示」的精度内与产物一致。
+-- | 浮点规范文本 → 宿主 `Float`。接受 `string_of_float` 的形态
+-- `[-]digits[.digits][e±NN]`、`nan`、`infinity`，以及源码浮点字面量。
+-- 尾数在 `Int` 上精确累加，10 的幂按 ≤18 位一段乘除（`10^18` 在 double 里精确），
+-- 所以规范文本在本量级内与宿主解析逐位一致。
 floatOfRaw : String -> Float
 floatOfRaw raw =
-  case splitOnChar 46 raw of
-    [ip, fp] => floatFromInt (digitsOf "${ip}${fp}") / floatFromInt (pow10Of (strLength fp))
-    _ => floatFromInt (digitsOf raw)
+  case strUnpack raw of
+    45 :: rest => (0.0 - 1.0) * floatMagOfChars rest
+    43 :: rest => floatMagOfChars rest
+    cs => floatMagOfChars cs
 
--- | 十进制数字串 → Int（源码字面量只含 ASCII 数字；非数字按 0 处理）。
-digitsOf : String -> Int
-digitsOf s = digitsOfChars (strUnpack s) 0
+-- | 已剥掉正负号后的十进制量值（`nan` / `infinity` / `inf` 原样映射）。
+floatMagOfChars : List Int -> Float
+floatMagOfChars cs =
+  if charsAre cs [110, 97, 110] then
+    0.0 / 0.0
+  else if charsAre cs [105, 110, 102, 105, 110, 105, 116, 121] then
+    1.0 / 0.0
+  else if charsAre cs [105, 110, 102] then
+    1.0 / 0.0
+  else
+    let
+      p = floatSplitExp cs
+      q = floatMantissaOf (firstOf p)
+      k = secondOf p - secondOf q
+    in scaleFloatPow10 k (floatFromInt (firstOf q))
+
+-- | `e` / `E` 之前是尾数，之后是十进制指数（可带符号）。
+floatSplitExp : List Int -> (List Int, Int)
+floatSplitExp cs = floatSplitExpGo cs []
+
+floatSplitExpGo : List Int -> List Int -> (List Int, Int)
+floatSplitExpGo [] acc = (reverse acc, 0)
+floatSplitExpGo (c :: rest) acc =
+  if c == 101 || c == 69 then (reverse acc, expOfChars rest) else floatSplitExpGo rest (c :: acc)
+
+expOfChars : List Int -> Int
+expOfChars (45 :: rest) = 0 - digitsOfChars rest 0
+expOfChars (43 :: rest) = digitsOfChars rest 0
+expOfChars cs = digitsOfChars cs 0
+
+-- | 尾数 →（数字值，小数位数）：`1.25` 给 `(125, 2)`；非数字字符忽略。
+-- 只累计前 18 位有效数字（`10^18` 仍在 Int 内，不会溢出）；被丢弃的尾部数字
+-- 按位补偿到小数位数上（丢 1 位等价于多乘 10），所以量级不变、精度落在 double 内。
+floatMantissaOf : List Int -> (Int, Int)
+floatMantissaOf cs = floatMantissaGo cs True 0 0 0 False 0
+
+floatMantissaGo : List Int -> Bool -> Int -> Int -> Int -> Bool -> Int -> (Int, Int)
+floatMantissaGo [] _ m f _ _ dropped = (m, f - dropped)
+floatMantissaGo (c :: rest) beforeDot m f sig seen dropped =
+  if c == 46 then
+    floatMantissaGo rest False m f sig seen dropped
+  else if c >= 48 && c <= 57 then
+    if not seen && c == 48 then
+      if beforeDot then
+        floatMantissaGo rest True m f sig False dropped
+      else
+        floatMantissaGo rest False m (f + 1) sig False dropped
+    else if sig < 18 then
+      if beforeDot then
+        floatMantissaGo rest True (m * 10 + (c - 48)) f (sig + 1) True dropped
+      else
+        floatMantissaGo rest False (m * 10 + (c - 48)) (f + 1) (sig + 1) True dropped
+    else if beforeDot then
+      floatMantissaGo rest True m f sig True (dropped + 1)
+    else
+      floatMantissaGo rest False m (f + 1) sig True (dropped + 1)
+  else
+    floatMantissaGo rest beforeDot m f sig seen dropped
+
+-- | 10^n（`n` 为负时由调用方改成除法）。按 18 位一段乘，乘数始终在 double 精度内。
+pow10Float : Int -> Float
+pow10Float n =
+  if n <= 0 then
+    1.0
+  else if n <= 18 then floatFromInt (pow10Of n) else floatFromInt (pow10Of 18) * pow10Float (n - 18)
+
+scaleFloatPow10 : Int -> Float -> Float
+scaleFloatPow10 k x =
+  if k == 0 then x else if k > 0 then x * pow10Float k else x / pow10Float (0 - k)
+
+charsAre : List Int -> List Int -> Bool
+charsAre [] [] = True
+charsAre (a :: arest) (b :: brest) = if a == b then charsAre arest brest else False
+charsAre _ _ = False
 
 digitsOfChars : List Int -> Int -> Int
 digitsOfChars [] acc = acc
@@ -399,19 +481,19 @@ intPrim1 ([a]) f =
     Nothing => Nothing
 intPrim1 sp f = Nothing
 
-natPrim1 : List Value -> (Int -> Value) -> Maybe Value
+natPrim1 : List Value -> (Int -> Maybe Value) -> Maybe Value
 natPrim1 ([a]) f =
   case asNat a of
-    Just x => Just (f x)
+    Just x => f x
     Nothing => Nothing
 natPrim1 sp f = Nothing
 
-natPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
+natPrim2 : List Value -> (Int -> Int -> Maybe Value) -> Maybe Value
 natPrim2 ([a, b]) f =
   case asNat a of
     Just x =>
       case asNat b of
-        Just y => Just (f x y)
+        Just y => f x y
         Nothing => Nothing
     Nothing => Nothing
 natPrim2 sp f = Nothing
@@ -421,7 +503,7 @@ natPrim2Div ([a, b]) =
   case asNat a of
     Just x =>
       case asNat b of
-        Just y => if y <= 0 then Nothing else Just (natValue (x / y))
+        Just y => if y <= 0 then Nothing else natValueMaybe (x / y)
         Nothing => Nothing
     Nothing => Nothing
 natPrim2Div sp = Nothing
@@ -641,12 +723,15 @@ primReduce defs sols fuel g sp =
           OpStrSubstring => substringPrim sp
           OpStrShow => strPrim1 sp (\s => VStr (showCoreString s))
           -- Nat 原语：与 runtime bi_nat* 同一套饱和/截断/除零语义。
-          OpNatAdd => natPrim2 sp (\a, b => natValue (natSatAdd a b))
-          OpNatSub => natPrim2 sp (\a, b => natValue (natTruncSub a b))
-          OpNatMul => natPrim2 sp (\a, b => natValue (natSatMul a b))
+          OpNatAdd => natPrim2 sp (\a, b => natValueMaybe (natSatAdd a b))
+          OpNatSub => natPrim2 sp (\a, b => natValueMaybe (natTruncSub a b))
+          OpNatMul => natPrim2 sp (\a, b => natValueMaybe (natSatMul a b))
           OpNatDiv => natPrim2Div sp
-          OpNatToInt => natPrim1 sp (\n => VInt n)
-          OpNatFromInt => intPrim1 sp (\n => natValue (natClamp n))
+          OpNatToInt => natPrim1 sp (\n => Just (VInt n))
+          OpNatFromInt =>
+            case sp of
+              [VInt n] => natValueMaybe n
+              _ => Nothing
           -- 浮点原语（IEEE-754 double，与编译产物的 OCaml 运算符/比较同语义）。
           OpAddF => floatPrim2 sp (\a, b => a + b)
           OpSubF => floatPrim2 sp (\a, b => a - b)

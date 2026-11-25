@@ -259,6 +259,7 @@ Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。�
 | `Elab.Termination`（`strWalk` / `siteWalkC`） | `32 + 8*exprWeight`；每个被访问节点至少消耗 1 步 |
 | `Elab.Meta.zonkTerm` / `Core.Eval.substSolvedMetasAtTbl` | `128 + 4*termSize`（上限 1e6）：预算按项规模派生，深项不再静默停在原项上 |
 | `Core.Eval.normalize`（interp 深度正规化） | `interpFuelBound = 262144`：`main` 的递归深度由数据决定，不复用精化预算 `defaultFuel`（512，100 层递归就要 ~600 步）；条件卡住时只正规化条件、保持 `VIf` 卡住（与 `normalizeCaseFuel` 对中性 scrutinee 同口径），不展开两个分支 |
+| `Core.Eval.natValueMaybe`（interp 物化 `Nat` 链） | `natChainLimit = 65536` 个构造子：超过返回 `Nothing`（不归约），不按数据规模无限分配 |
 | `Core.Conv`（`convFuel`） | 基值 `convFuelBase = 4096`；`fuel` 同时是该互递归组唯一的 SCT 递减测度，所以结构比较每层扣 1（≈1000 层嵌套），元变量求解另按解链扣减 |
 | `Vuna.Json` | `8*len+64`；互递归组返回剩余输入，SCT 不可见，用同参数位 `fuel - 1` |
 | `Vuna.Fmt.Expr` | 固定预算 `formatFuelBound = 1073741824`（1G）；块级布局同时沿 AST 与缩进 / 模式前进 |

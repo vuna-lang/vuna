@@ -1,0 +1,46 @@
+-- interp 的 Nat 建链上限：限内正常建链，超限不归约（`Nothing`）而不是分配上亿个
+-- `Succ`。大整数（max_int 量级）必须被挡住。
+import Base
+import Vuna.Compiler.Core.Eval
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("nat chain limit failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "within-limit-builds" withinLimitBuilds,
+    Pair "over-limit-stuck" overLimitStuck,
+    Pair "max-int-stuck" maxIntStuck
+  ]
+
+withinLimitBuilds : Bool
+withinLimitBuilds =
+  case natValueMaybe 1024 of
+    Just v =>
+      case natValueToInt v of
+        Just n => n == 1024
+        Nothing => False
+    Nothing => False
+
+overLimitStuck : Bool
+overLimitStuck =
+  case natValueMaybe (natChainLimit + 1) of
+    Just _ => False
+    Nothing => True
+
+maxIntStuck : Bool
+maxIntStuck =
+  case natValueMaybe 4611686018427387903 of
+    Just _ => False
+    Nothing => True
