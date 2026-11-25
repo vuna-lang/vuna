@@ -53,13 +53,13 @@ record ParsedCore where
   pcToks : List PTok
   pcFin : PState
 
-parseSourceCore : String -> String -> Check ParsedCore
-parseSourceCore file source =
+parseSourceCore : EventMode -> String -> String -> Check ParsedCore
+parseSourceCore events file source =
   case lexSourceWithComments source of
     ErrC e => ErrC e
     OkC (toks, comments) =>
       let
-        st0 = mkState file source toks PmTool
+        st0 = mkState file source toks PmTool events
       in case parseSourceFile False st0 of
         ErrC e => ErrC e
         OkC p => OkC (ParsedCore (firstOf (firstOf p)) comments toks (secondOf (firstOf p)))
@@ -72,7 +72,7 @@ parseSourceCore file source =
 -- 节点载荷里，这里不另取 parser 的直接 AST——两边的漂移由测试锁住。
 export parseSourceDetailed : String -> String -> Check ParsedSource
 parseSourceDetailed file source =
-  case parseSourceCore file source of
+  case parseSourceCore EvFull file source of
     ErrC e => ErrC e
     OkC c =>
       let
@@ -95,7 +95,7 @@ parseSourceDetailed file source =
 -- （fmt / lint / index / doc）走 `parseSourceDetailed`。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
 parseSourceWithComments file source =
-  case parseSourceCore file source of
+  case parseSourceCore EvNone file source of
     ErrC e => ErrC e
     OkC c => OkC (c.pcSource, c.pcComments)
 
@@ -110,7 +110,7 @@ export parseExpressionSource : String -> Check Expr
 parseExpressionSource source =
   Vuna.Compiler.Base.Common.bind
     (lexSource source)
-    (\toks => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel (mkState "<expr>" source toks PmStrict)) (mkState "<expr>" source toks PmStrict) 0) (\e, st => if isEof st then OkC e else ps0 st ExpectedEndOfExpr))
+    (\toks => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel (mkState "<expr>" source toks PmStrict EvNone)) (mkState "<expr>" source toks PmStrict EvNone) 0) (\e, st => if isEof st then OkC e else ps0 st ExpectedEndOfExpr))
 
 -- 解析器累加器（导出/重导出/归约修饰符与声明一起收集）。
 record DeclAcc where
@@ -2009,7 +2009,7 @@ parseTemplateHole fuel st fallback toks =
         let
           pos = first.ptokPos
           file = fileOf st
-          subState = mkStateAt file st.sourceOf toks pos (length toks) (pmodeOf st)
+          subState = mkStateAt file st.sourceOf toks pos (length toks) (pmodeOf st) (eventMode st)
         in case parseExpr (fuel - 1) subState 0 of
           ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
           OkC (e, st2) =>
@@ -2902,7 +2902,7 @@ parseSourceRecovering file source =
 export parseSourceRecoveringTokens : String -> String -> ParseMode -> List PTok -> Check ((SourceFile, FixityFacts), List Diagnostic)
 parseSourceRecoveringTokens file source mode toks =
   let
-    st0 = mkState file source toks mode
+    st0 = mkState file source toks mode EvLayout
   in Vuna.Compiler.Base.Common.bind (parseSourceFile True st0) (
       \p =>
         let

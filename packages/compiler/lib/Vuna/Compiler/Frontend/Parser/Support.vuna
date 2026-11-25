@@ -18,6 +18,15 @@ export data ParseMode(..) : Type where
   PmStrict : ParseMode
   PmTool : ParseMode
 
+-- | 建树事件的记录档位：只有要组装无损树的路径付事件成本。
+--   * `EvNone`：只要 AST（`parseSource` / `parseSourceWithComments` / REPL 表达式）；
+--   * `EvLayout`：加载器要 open/close 事件算括号层数，但不建树（不挂语义载荷）；
+--   * `EvFull`：工具路径，open / 语义载荷 / close 全记（`nestToTree` 用）。
+export data EventMode(..) : Type where
+  EvNone : EventMode
+  EvLayout : EventMode
+  EvFull : EventMode
+
 -- 末尾 `toksLeft` 是余下 token 数（O(1) 维护）：`stateFuel` 在每个声明/表达式循环
 -- 入口都被调用，若每次都遍历剩余 token 列表，大文件解析就退化成 O(n²)。
 -- `tokIndex` 是当前 head token 的**绝对**下标（`advance` 与 `recoverDecl` 各前进一步，
@@ -58,22 +67,24 @@ export record PState(..) where
   -- 洞是独立 token 子流，洞内节点不在主树的 children 里（`TTmpl` 叶已覆盖那段字节），
   -- 子树随模板节点携带；`cstIndexOf` / `fixityFactsOf` 沿同一棵「主树 + 洞子树」走。
   templateHoles : List (Int, List CstNode)
+  -- | 建树事件的记录档位（见 `EventMode`）。`EvNone` 时 `withExtent` 不分配事件。
+  eventMode : EventMode
 
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
-export mkState : String -> String -> List PTok -> ParseMode -> PState
-mkState file source toks mode =
-  PState file source toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] []
+export mkState : String -> String -> List PTok -> ParseMode -> EventMode -> PState
+mkState file source toks mode events =
+  PState file source toks (Pos 1 0 0 0) (length toks) mode 0 [] 1 0 False [] [] [] [] events
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 -- 建树事件在模板洞内单独收集（洞内 token 的绝对下标从 0 起，与外层不相交）；节点 id
 -- 取负、由洞起点的字节偏移错开（见 `subStream`）。
-export mkStateAt : String -> String -> List PTok -> Pos -> Int -> ParseMode -> PState
-mkStateAt file source toks last count mode =
-  PState file source toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] []
+export mkStateAt : String -> String -> List PTok -> Pos -> Int -> ParseMode -> EventMode -> PState
+mkStateAt file source toks last count mode events =
+  PState file source toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] [] events
 
 -- | 结束状态里的建树事件（按发生顺序；每次事件一次 cons）。只有建树消费者调用，
 -- 不建树时这份列表不会产生。
@@ -88,18 +99,35 @@ eventsOf st = reverse st.pendEvents
 --
 -- 失败分支不补 close 是安全的：parser 的失败路径会整段丢弃状态（`do` 语句回退、
 -- `recoverDecl` 从入口状态重来、模板洞另起状态），未配对的 open 因此不会进入最终事件流。
+--
+-- 事件按 `eventMode` 记录：`EvNone` 只要 AST，连 open/close 都不 cons；`EvLayout`
+-- 记 open/close（加载器算括号层数）；`EvFull` 再挂语义载荷（建树消费者）。语义载荷
+-- 只在 `EvFull` 分支里构造，其余路径不为它分配。
 export withExtent : {a : Type} -> CstKind -> (a -> Maybe CstSem) -> PState -> (PState -> Check (a, PState)) -> Check (a, PState)
 withExtent kind toSem st k =
   let
     nid = st.nextNodeId
     next = if st.subStream then nid - 1 else nid + 1
-    opened =
+    opened = openNodeState st kind nid next
+  in Vuna.Compiler.Base.Common.step (k opened) (
+      \v, st1 =>
+        case st.eventMode of
+          EvFull => OkC (v, closeWithSem nid (toSem v) st1)
+          EvLayout => OkC (v, closedAt st1)
+          EvNone => OkC (v, st1)
+    )
+
+-- | 入口发 open：只有要事件时 cons（`EvNone` 只推进 id 游标）。
+openNodeState : PState -> CstKind -> Int -> Int -> PState
+openNodeState st kind nid next =
+  case st.eventMode of
+    EvNone => { st | nextNodeId = next, openNodeId = nid }
+    _ =>
       { st
         | pendEvents = EvOpen kind st.tokIndex nid :: st.pendEvents,
         nextNodeId = next,
         openNodeId = nid
       }
-  in Vuna.Compiler.Base.Common.step (k opened) (\v, st1 => OkC (v, closeWithSem nid (toSem v) st1))
 
 -- | 先挂载荷再 close（`pendEvents` 是逆序累积，所以先 cons `EvSem` 让它在最终流里位于
 -- `EvClose` 之前）。
