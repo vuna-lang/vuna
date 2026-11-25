@@ -238,8 +238,9 @@
 `Base.Effect.Core.runPure : Eff [] a -> a`。
 
 **宿主原语是隐藏名**：宿主叶子只有 `@vuna@prim_eff_*` / `@vuna@host@*` 两族，源码写不出
-（`Frontend/Lexer` 的 `@vuna@` 内部名规则 + 不在用户可见内建表）。可见的效果内建只有
-`effTimeUs` / `effTimeUs_host`（`Eff [] Int`）。用户面只有 `Base.Effect.*` 标签 + handler：
+（`Frontend/Lexer` 的 `@vuna@` 内部名规则 + 不在用户可见内建表），类型固定为 `Eff [HostOp] a`。
+可见的效果内建只有 `effTimeUs` / `effTimeUs_host`（同样是 `Eff [HostOp] Int`）。
+用户面只有 `Base.Effect.*` 标签 + handler：
 
 | 模块 | 标签 | 用户面 sender | handler 内部的宿主符号 |
 | --- | --- | --- | --- |
@@ -250,11 +251,13 @@
 | `Base.Effect.Process` | `ProcessOp` | `processRunIn` / `processSpawn` / `processWait` / `processArgs` / `processExit` | `@vuna@prim_eff_runIn` / `spawn` / `wait` / `getArgs` / `exit`；宿主行变体 `@vuna@host@tryRunIn`、`@vuna@prim_eff_*_process_host` |
 | `Base.Effect.Stdin` | `StdinOp` | `stdinReadLine`（`Maybe String`）/ `stdinReadBytes` | `@vuna@host@readLine` / `readBytes`；无 handler 行的库路径回落到 `@vuna@prim_eff_readLine` / `readBytes` |
 | `Base.Effect.Args` | `ArgsOp` | `argsGetArgs` | `@vuna@prim_eff_getArgs` |
+| `Base.Effect.Tty` | `TtyOp` | `ttyIsTty`（结果 `Bool`） | `@vuna@host@isTty`（wasm 恒 `False`） |
 | `Base.Effect.Exit` | `ExitOp` | `exitWith` | `@vuna@prim_eff_exit`（库路径）/ `@vuna@host@exitOp`（宿主行） |
 | `Base.Effect.Net` | `NetOp` | `netListen` / `netPort` / `netAccept` / `netRecv` / `netSend` / `netClose` / `netConnect`（含 `Within` 变体） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
 | （隐藏）`@vuna@Cell` | `Base.Effect.MutRef` 的私有单元 | — | `@vuna@prim_mrefNew` / `read` / `write`（句柄由精化器在 `withMutRef` 作用域里合成） |
 
-**执行与求值**：宿主原语是 `Eff []` 动作叶子；codegen 按 arity 包成 `MkEff`（零参原语是动作
+**执行与求值**：宿主原语是 `Eff [HostOp]` 动作叶子（`Base.Effect.Host` 的 `runHost` /
+`hostSync` 是唯一关闭器）；codegen 按 arity 包成 `MkEff`（零参原语是动作
 **值**，引用不执行、不重新求值），`@vuna@prim_eff_bind1`（线性绑定）由 `effLinearBindText` 生成。
 `Int`/`Nat` 归一化只在 handler 的结果索引（`Print`、`WriteFile`、`FileSize` 返回 `Nat`），
 宿主原语本身返回 `Int`。`@vuna@prim_eff_hostStatus` 是 try 变体的失败码状态槽
