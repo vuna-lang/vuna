@@ -254,6 +254,11 @@ scratch 的链>; mov rD, rax` 直接以 `rD` 为目标（`rS == rD` 时连首条
 的 OF 与 `test`（恒 0）不同，只有 `je`/`jne`/`jz`/`jnz`/`js`/`jns` 能复用；逻辑运算清 OF，
 有符号条件都可以。
 
+同一趟里还做两类强度削减：`mov d, s; imul d, k`（k ∈ 2/3/5/9）合成一条
+`lea d, [s + s*(k-1)]`，紧跟的 `add d, c` 再并进位移——把 3 拍延迟的 `imul` 换成 1 拍的
+`lea`，对循环携带的乘法链（`d = d*5+7`）直接缩短关键路径；`and r, 0xFFFF_FFFF` 折成
+`mov r32, r32`（写低 32 位并零扩展，`and` 的立即数编码不了 4G-1）。
+
 只提升**循环携带**的槽（循环头的 `live_in`，按「块内先读后写」的精确活跃性算）：
 迭代内定义、迭代内用完的临时值留在槽里更好，提升它们只多出两次寄存器搬运，反而加长
 关键路径。取访问次数最多的 4 个槽，够用即可；直线函数不动，不为一次调用付 push/pop
@@ -358,13 +363,15 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   调试 / 可观测性零参桩。符号词表只有一份（`scalarPlanOf`），`RuntimeTable` 单测校验
   它与 `nativeRtTarget` 指向同一实现。
   - 63-bit wrap 仍是 `shl 1 / sar 1`；Nat 饱和 / 夹取用 `cmov`；比较结果固定在 `rax`
-    （`setcc` + `movzx`）。除零、移位计数越界与 `natDiv` 仍走运行时；`natMul` 用
+    （先 `xor rax, rax` 清零再 `cmp` + `setcc`，省掉 `movzx`，也切断 `setcc al` 对上一轮
+    `rax` 的部分寄存器依赖）。除零、移位计数越界与 `natDiv` 仍走运行时；`natMul` 用
     `imul` + `cmov`（64-bit 溢出与 63-bit max 两级夹取）内联。
   - **除以编译期常量**（`Select.divPlanOf`）在调用点展开：`d` 是 2 的幂时用符号修正
-    移位 `(x + (x >> 63 & (d-1))) >> k`（向零截断，与 OCaml `/` 一致）；其余常量走
-    magic 乘法（`ceil(2^64/d)`，`imul` 取 64-bit 高半后按余数修正符号），不再 `cqo` +
-    `idiv`。`d = 3`（magic 超出 63-bit）、负常量与 `d = 0` / `-1` 仍走 `idiv` / `rt_div`——
-    除零 trap 与 `min_int / -1` 的语义留在运行时。需要 `rax` 的形状会被挑到「实参顺序」上：
+    移位——非负被除数是单条 `shr`，可能为负时是 `test` + `lea d-1` + `cmovns` 选回原值
+    + `sar k`（向零截断，与 OCaml `/` 一致）；其余常量走 magic 乘法（`ceil(2^64/d)`，
+    `imul` 取 64-bit 高半后按余数修正符号），不再 `cqo` + `idiv`。`d = 3`（magic 超出
+    63-bit）、负常量与 `d = 0` / `-1` 仍走 `idiv` / `rt_div`——除零 trap 与
+    `min_int / -1` 的语义留在运行时。需要 `rax` 的形状会被挑到「实参顺序」上：
     第二个实参要 `rax` 时，第一个实参先拿非 `rax` 的寄存器。
   - **零参运行时别名**（`Alias.irAliasTargetOf` + `Module.resolveDefAliases`）：
     `Nat.plus = natAdd` / `Nat.mult = natMul` / `Nat.toInt = natToInt` 这类定义在应用位置

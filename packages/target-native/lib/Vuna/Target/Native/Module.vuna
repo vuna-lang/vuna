@@ -1193,6 +1193,7 @@ allocLeafToR10 =
   [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc_leaf"), IMov (OpReg R10) (OpReg Rax)]
 
 -- | 常数除法：先选被除数，再从剩余池里取 scratch。
+-- | 有符号常量除法：先选被除数，再从剩余池里取 scratch。
 genDivInto : Int -> FGen -> List Reg -> Ir -> DivPlan -> Maybe (Reg, List Instr, List Reg)
 genDivInto bud st pool a (DivShift k) =
   case genScalarIntoW (bud - 1) True st pool a of
@@ -1202,18 +1203,19 @@ genDivInto bud st pool a (DivShift k) =
         s :: rest =>
           let
             r = firstOf pa
+            ins = firstOf (secondOf pa)
             -- 非负被除数：`x / 2^k` 就是逻辑右移一条（算术右移结果相同，`shr` 更直白）。
-            -- 负数仍走符号修正，保证向零截断。
-            instrs =
-              if k == 0 then
-                firstOf (secondOf pa)
-              else if nonNegative (rangeOf st.fgRanges a) then
-                append (firstOf (secondOf pa)) [IBinReg "shr" r (OpImm k)]
-              else
-                append
-                  (firstOf (secondOf pa))
-                  [IMov (OpReg s) (OpReg r), IBinReg "sar" s (OpImm 63), IBinReg "and" s (OpImm (ipow2 k - 1)), IBinReg "add" r (OpReg s), IBinReg "sar" r (OpImm k)]
-          in Just (r, instrs, s :: rest)
+            -- 负数要按符号补 `d-1` 再算术右移（向零截断）：用 `test` + `lea d-1` +
+            -- `cmovns` 选回原值，比 `sar 63; and d-1; add` 少一条、关键路径短一拍。
+            nonNeg = k == 0 || nonNegative (rangeOf st.fgRanges a)
+          in if nonNeg then
+            let
+              instrs = if k == 0 then ins else append ins [IBinReg "shr" r (OpImm k)]
+            in Just (r, instrs, s :: rest)
+          else
+            let
+              instrs = append ins [ITest r r, ILeaMem s r (ipow2 k - 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm k)]
+            in Just (s, instrs, r :: rest)
         [] => Nothing
 genDivInto bud st pool a (DivMagic _ m shift) =
   case genScalarIntoW (bud - 1) True st pool a of

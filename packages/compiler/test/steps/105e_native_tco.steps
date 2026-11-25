@@ -74,7 +74,7 @@ exit: 0
 out-equals: 10000000
 run: sh -c 'grep -q "shr " "$TMPDIR/rangeloop-out/Main.s"'
 exit: 0
-run: sh -c '! grep -q "sar r10, 63" "$TMPDIR/rangeloop-out/Main.s"'
+run: sh -c '! grep -q "cmovns" "$TMPDIR/rangeloop-out/Main.s"'
 exit: 0
 run: sh -c '! grep -q "shl rax, 1" "$TMPDIR/rangeloop-out/Main.s"'
 exit: 0
@@ -85,7 +85,7 @@ exit: 0
 run: "$TMPDIR/rangenguard-out/bin/rangenguard" 2>&1
 exit: 0
 out-equals: 3
-run: sh -c 'grep -q "sar r10, 63" "$TMPDIR/rangenguard-out/Main.s"'
+run: sh -c 'grep -q "cmovns" "$TMPDIR/rangenguard-out/Main.s"'
 exit: 0
 run: sh -c 'grep -q "shl rax, 1" "$TMPDIR/rangenguard-out/Main.s"'
 exit: 0

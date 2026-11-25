@@ -566,12 +566,13 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 
 下一步的顺序（都有明确的读数目标）：
 
-- **复制合并**：`mov rax, rA; op rax, rB; mov rA, rax` 合成 `op rA, rB`，删掉
-  `mov rax, rX; cmp rax, 0` 这类装载——对应 `scalar_xor` 的剩余 1.26x；
-- **`lea` 取小常量乘**：`x * 3 / 5 / 9` 用 `lea`（1 周期）替 `imul`（3 周期）；
-- **32-bit 窄化**：`band (acc * C + c) 0xFFFFFFFF` 用 32-bit 形式，`scalar_muladd` 再压两条；
 - **`IrNatCase` 的 0 / 后继事实**：给 `nat_bits` 这类结构递归补范围；
 - **未引用 `.bss` 缓冲**：可达性裁剪只裁了函数，8 MiB 的 `rt_read_buf` 等仍进产物。
+- **循环代数化**：`state_machine` / `tco_wide` / `tco_mutual` 的默认 C 会做周期展开 +
+  归纳变量消去（`tco_mutual` 的 C 把 2 步折成 `subq $2; jne`），这一档还没做——同形 C
+  （关掉这些 loop pass）下 native 与 C 已在同一量级。
+- **分支选择**：`tco_unrotated` 的 C 用 `?:` 把两侧尾调用写成 `cmov`（`step = flag ? n :
+  -n`），native 仍是两条自调用分支。这属于控制流 if-conversion，不是 peephole。
 
 #### 1.6.2 入口初始化裁剪
 
@@ -592,3 +593,20 @@ A/B 用 C harness 直接 `fork`/`exec` 交替采样（绕开 bench 自身的 bas
 **结论**：`bench/run.sh` 里 T0 的 0.58–0.67 ms 由 bench 自身的 bash fork（~400 µs）与
 exec（~200 µs）主导，init 只剩 10–20 µs。裁剪的收益在产物（-69% 字节、`text` 约 2 KiB）
 与「不为未用子系统付启动账」，不是 T0 的时间读数。
+
+#### 1.6.3 T1 标量 / 浮点收口（2026-11-25）
+
+§1.6.1 列出的「复制合并 / `lea` / 32-bit 窄化」三条已落地，同一轮还做了浮点形参拆箱与
+有符号常量除法的符号修正改写（实现见 [native.md](native.md) §3.7 / §3.10）：
+
+| 用例 | 改动前 vs c | 改动后 vs c | 机制 |
+| --- | --- | --- | --- |
+| `scalar_cmp` | 1.98x | **1.00x** | 比较改 `xor rax, rax; cmp; setcc`，切断 `setcc al` 对上一轮 `rax` 的部分寄存器依赖 |
+| `scalar_ilp` | 1.54x | **0.99x** | `d = d*5+7` 折成 `lea d, [d+d*4+7]`（1 拍替 3 拍 `imul`），`a += n*3` 也走 `lea` |
+| `scalar_muladd` | 1.24x | **0.96x** | `& 0xFFFF_FFFF` 折成 `mov r32, r32`（零扩展），省掉一次 scratch 装掩码 |
+| `scalar_divsigned` | 1.72x | **~1.4x** | 负被除数的符号修正改 `test` + `lea d-1` + `cmovns` + `sar`（原 `sar 63` + `and` + `add`） |
+| `float_math` | 2.5x | **1.8x** | 浮点形参拆箱：循环参数槽存 raw `f64` 位，循环内不再每轮 `alloc_leaf` |
+
+读数在同一台机器（Ryzen 7 7840HS）同一会话内交替测得，loadavg 3–5，绝对 ms 只作方向
+参考；「默认 C」= GCC 16 `-O2`。`float_math` 剩余差距在 `sqrt` / `divsd` 吞吐、`abs`
+的位运算与三次常量装填（C 侧因为 `n > 0` 直接省掉了 `fabs`）。
