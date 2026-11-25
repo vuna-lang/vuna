@@ -36,6 +36,7 @@ import Base.Effect.Types as EffTypes
 import Base.Effect.Host
 import Base.Effect.Args as EffArgs
 import Base.Effect.Exit as EffExit
+import Base.Effect.Tty as EffTty
 
 -- | CLI 辅助：compilerUsageLines（参数/退出码约定见 tooling.md）。
 export compilerUsageLines : String -> String
@@ -64,7 +65,7 @@ mapEff f (x :: rest) =
     pure (y :: ys)
 
 -- | CLI 辅助：runCompilerCli（参数/退出码约定见 tooling.md）。
-export runCompilerCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
+export runCompilerCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => List String -> Eff r Int
 runCompilerCli args = runCompilerCliFor "vuna" args
 
 -- CLI 选项集中状态：入口构造一次，命令链显式传递（没有 ambient 存储）。
@@ -496,17 +497,12 @@ stripDiagFormatGo (arg :: rest) acc found =
   else
     stripDiagFormatGo rest (arg :: acc) found
 
--- 终端探测：OCaml 用 `Unix.isatty Unix.stdout`，native 用 `ioctl(1, TCGETS)`；
--- wasm 的 WASI preview1 没有 isatty，恒 False（诊断默认 short）。
-stdoutIsTty : {r : Row} -> Eff r Bool
-stdoutIsTty = hostSync @vuna@host@isTty
-
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
-export runCompilerCliFor : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> Eff r Int
+export runCompilerCliFor : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => String -> List String -> Eff r Int
 runCompilerCliFor prog args =
   do
     envRel <- envGetEnv "VUNA_RELEASE"
-    tty <- stdoutIsTty
+    tty <- ttyIsTty
     let
       stripped = stripDiagFormat args
       strippedLang = stripLang (firstOf stripped)
@@ -568,7 +564,7 @@ stripMaxErrorsGo (arg :: rest) acc n =
     stripMaxErrorsGo rest (arg :: acc) n
 
 -- | 编译器 CLI 子命令分发。
-runCompilerCliFor1 : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
+runCompilerCliFor1 : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 runCompilerCliFor1 prog args o =
   case args of
     [] => withOpts o (usageErr prog)

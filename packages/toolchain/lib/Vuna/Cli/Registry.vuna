@@ -26,6 +26,7 @@ import Vuna.Lsp
 import Vuna.Run
 import Vuna.Search
 import Base.Effect.Types as EffTypes
+import Base.Effect.Tty as EffTty
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -41,7 +42,7 @@ export record Handler(..) where
   -- | 命令路径（不含程序名）。
   handlerPath : List String
   -- | 实现；效应行是 CLI 入口实际用到的全部标签。
-  handlerRun : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+  handlerRun : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 
 -- | 产品命令表。编译器命令把 argv 原样转交 `CompilerCli`（flag 真源在编译器包里）。
 export handlers : List Handler
@@ -64,18 +65,18 @@ handlers =
   ]
 
 -- | 插件入口：读 argv，处理 describe / help，其余交给接线表。
-export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runPlugin =
   do
     args <- argsGetArgs
     runArgs args
 
 -- | 按 argv 执行一条命令；`--vuna-describe [FILE]` 与 `--help` 优先。
-export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runArgs raw = runArgsClean raw
 
 -- | 内部：`runArgs` 的主体。
-runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runArgsClean args =
   case args of
     ["--vuna-describe"] => printText (Describe.render "toolchain" commands)
@@ -86,21 +87,21 @@ runArgsClean args =
         Nothing => dispatch args
 
 -- | 内部：把命令表写到 `file`（入口据此收集插件的命令面）。
-writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 writeDescribe file =
   do
     _ <- fsWriteFileAtomic file (Describe.render "toolchain" commands)
     pure 0
 
 -- | 内部：打印某路径的帮助；未登记给未知命令。
-printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printHelp path =
   case helpForPath path of
     Just text => printText text
     Nothing => printText (unknownCommandText (join " " path))
 
 -- | 内部：分派——查接线表，未知命令给建议。
-dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 dispatch [] =
   do
     _ <- consolePrint overviewText
@@ -111,7 +112,7 @@ dispatch (args@(arg :: _)) =
     Nothing => printText (unknownCommandText arg)
 
 -- | 内部：打印文本并返回 0。
-printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printText text =
   do
     _ <- consolePrint text

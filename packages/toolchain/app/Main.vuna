@@ -7,6 +7,7 @@
 import Vuna.Cli.Registry
 import Base.Data.Obs as Obs
 import Base.Effect.Types as EffTypes
+import Base.Effect.Tty as EffTty
 import Base.Effect.Args as EffArgs
 import Base.Effect.Exit as EffExit
 import Base.Effect.Clock as EffClock
@@ -25,7 +26,7 @@ sampleWanted =
     pure (if mode == "" then False else True)
 
 -- | 进程入口：按需启动采样，读 argv 交给插件主体，最后以它的返回码 `exitWith` 退出。
-main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 main =
   do
     sample <- sampleWanted

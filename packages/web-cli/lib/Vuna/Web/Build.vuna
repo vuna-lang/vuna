@@ -12,6 +12,7 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Exit as EffExit
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
+import Base.Effect.Tty as EffTty
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile as Compile
 import Vuna.Compiler.Driver.CompilerCli
@@ -37,7 +38,7 @@ export record Layout(..) where
   adapterName : String
 
 -- | 构建应用：返回进程退出码（0 成功、1 构建失败、2 输入/环境错误）。
-export buildApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> BuildOpts -> Eff r Int
+export buildApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => String -> BuildOpts -> Eff r Int
 buildApp appDir opts =
   do
     ctxR <- Pkg.contextForDir appDir
@@ -184,5 +185,5 @@ finishBuild l =
     pure 0
 
 -- | `check`：只对应用包做类型检查（不生成产物）。
-export checkApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r Int
+export checkApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => String -> Eff r Int
 checkApp appDir = runCompilerCliFor "vuna-web-cli" ["check", appDir]

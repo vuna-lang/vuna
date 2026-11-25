@@ -8,8 +8,9 @@ import Base.Effect.Console as EffConsole
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
+import Base.Effect.Tty as EffTty
 
-main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
+main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp, TtyOp] Int
 main =
   do
     args <- argsGetArgs

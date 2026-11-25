@@ -10,8 +10,9 @@ import Base.Effect.Net as EffNet
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
+import Base.Effect.Tty as EffTty
 
-main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 main =
   do
     code <- Vuna.Web.Plugin.Registry.runPlugin

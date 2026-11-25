@@ -23,19 +23,20 @@ import Base.Effect.Net as EffNet
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
+import Base.Effect.Tty as EffTty
 
 -- | 插件入口：读 argv，处理 describe / help，其余交给 `web` 分派。
-export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+export runPlugin : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runPlugin =
   do
     args <- argsGetArgs
     runArgs args
 
 -- | 按 argv 执行；`--vuna-describe [FILE]` 与 `--help` 优先。
-export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+export runArgs : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runArgs raw = runArgsClean raw
 
-runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+runArgsClean : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runArgsClean args =
   case args of
     ["--vuna-describe"] => printText (Describe.render "web" commands)
@@ -45,24 +46,24 @@ runArgsClean args =
         Just path => printHelp path
         Nothing => dispatch args
 
-writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 writeDescribe file =
   do
     _ <- fsWriteFileAtomic file (Describe.render "web" commands)
     pure 0
 
-printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printHelp : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printHelp path =
   case helpForPathIn commands noDelegated path of
     Just text => printText text
     Nothing => printText (unknownCommandText (join " " path))
 
-dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 dispatch ("web" :: "version" :: _) = printText "vuna web ${Version.vunaVersion}\n"
 dispatch ("web" :: rest) = runWebCli rest
 dispatch args = printText (unknownCommandText (join " " args))
 
-printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printText text =
   do
     _ <- consolePrint text

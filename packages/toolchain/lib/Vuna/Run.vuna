@@ -36,6 +36,7 @@ import Base.Effect.Fs as EffFs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Exit as EffExit
 import Base.Effect.Args as EffArgs
+import Base.Effect.Tty as EffTty
 
 -- | 内部：按第一个 `--` 切分：前段是自身参数，后段原样透传。
 splitPassthrough : List String -> (List String, List String)
@@ -47,7 +48,7 @@ splitPassthrough (arg :: rest) =
 
 -- | `vuna run` 的入口：先按 `--` 切分透传参数，再解析自身 flag 与可选目录。
 -- 参数个数或用法错误打印 `error: ...` 并返回 2；被运行程序的退出码原样返回。
-export runRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
+export runRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => List String -> Eff r Int
 runRun args =
   let
     parts = splitPassthrough args
@@ -204,7 +205,7 @@ launchPrefix parsed targetName =
   in append timeoutPrefix envPrefix
 
 -- | 内部：校验 `--target` 后进入正式流程（不合法时打印用法错误并返回 2）。
-runGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Eff r Int
+runGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => Parsed -> List String -> String -> Eff r Int
 runGo parsed passthrough dir =
   case flagValue parsed "target" of
     Just t =>
@@ -220,7 +221,7 @@ validRunTarget t = t == "ocaml" || t == "wasm" || t == "native"
 
 -- | 内部：检查目录、加载包、选目标包，最后构建并执行。
 -- 目录 / 用法错误返回 2，包加载失败返回 1。
-runGoValid : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Eff r Int
+runGoValid : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => Parsed -> List String -> String -> Eff r Int
 runGoValid parsed passthrough dir =
   do
     dirR <- requireDirectory dir
@@ -319,7 +320,7 @@ nonNativeLimitFlag parsed targetName =
 
 -- | 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
 -- `--no-build` 跳过构建直接执行；构建失败时原样返回其退出码。
-runTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Package -> Eff r Int
+runTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nTty TtyOp r => Parsed -> List String -> String -> Package -> Eff r Int
 runTarget parsed passthrough dir target =
   let
     pkgFlag =

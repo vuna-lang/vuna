@@ -26,6 +26,7 @@ import Base.Effect.Net as EffNet
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
 import Base.Effect.Types as EffTypes
+import Base.Effect.Tty as EffTty
 
 -- | 入口自带的命令（其余全部来自插件）。
 ownCommands : List Cmd
@@ -63,7 +64,7 @@ concatCommands [] = []
 concatCommands (p :: rest) = append p.pluginCommands (concatCommands rest)
 
 -- | CLI 总入口：版本与帮助优先，其余路由到插件。
-export runCli : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+export runCli : List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 runCli args =
   case args of
     ["version"] => printVersion
@@ -80,7 +81,7 @@ runCli args =
           Nothing => dispatch plugins cmds args route
 
 -- | 内部：分发——元命令就地处理，其余查插件。
-dispatch : List Plugin -> List Cmd -> List String -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+dispatch : List Plugin -> List Cmd -> List String -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 dispatch plugins cmds args route =
   case route of
     [] =>
@@ -100,7 +101,7 @@ dispatch plugins cmds args route =
               if startsWith "-" arg then compilerFallback plugins args else unknownCommand cmds arg
 
 -- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
-helpCommand : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+helpCommand : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 helpCommand plugins cmds [] = helpOut plugins cmds []
 helpCommand plugins cmds rest =
   case matchCommandIn 3 rest cmds of
@@ -108,7 +109,7 @@ helpCommand plugins cmds rest =
     Nothing => unknownCommand cmds (join " " rest)
 
 -- | 内部：打印某路径的帮助。`[]` 是总览；delegated 命令转交插件（它才知道编译器 flag）。
-helpOut : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+helpOut : List Plugin -> List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 helpOut plugins cmds path =
   if path == [] then
     printText (renderOverview cmds)
@@ -118,14 +119,14 @@ helpOut plugins cmds path =
       Just c => if c.cmdDelegated then delegatedHelpOut plugins c else localHelp cmds path
 
 -- | 内部：本地渲染（表里已有全部元数据）。
-localHelp : List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+localHelp : List Cmd -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 localHelp cmds path =
   case helpForPathIn cmds noDelegated path of
     Just text => printText text
     Nothing => unknownCommand cmds (join " " path)
 
 -- | 内部：delegated 命令的帮助——转交拥有它的插件（`<path> --help`）。
-delegatedHelpOut : List Plugin -> Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+delegatedHelpOut : List Plugin -> Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 delegatedHelpOut plugins c =
   do
     _ <- consolePrint (delegatedHeader c)
@@ -160,21 +161,21 @@ ownerAt path (p :: rest) =
     Nothing => ownerAt path rest
 
 -- | 内部：把合并命令表写到 `file`（`--vuna-describe FILE`）。
-writeDescribe : String -> List Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+writeDescribe : String -> List Cmd -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 writeDescribe file cmds =
   do
     _ <- fsWriteFile file (Describe.render "vuna" cmds)
     pure 0
 
 -- | 内部：打印文本并返回 0。
-printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printText : String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printText text =
   do
     _ <- consolePrint text
     pure 0
 
 -- | 内部：打印版本号并返回 0。版本唯一真源在编译器包（`Vuna.Compiler.Base.Version`）。
-printVersion : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+printVersion : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 printVersion = printText "vuna ${vunaVersion}\n"
 
 -- | 内部：已改名命令的迁移提示（旧名字不再分发）。
@@ -202,14 +203,14 @@ unknownCommandText cmds arg =
     Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
 
 -- | 内部：未知命令（附最近候选与帮助提示），返回 2。
-unknownCommand : List Cmd -> String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+unknownCommand : List Cmd -> String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 unknownCommand cmds arg =
   do
     _ <- consolePrint (unknownCommandText cmds arg)
     pure 2
 
 -- | 内部：裸 flag（`vuna --typed` 这类）转给编译器插件——已删 flag 的提示真源在它那里。
-compilerFallback : List Plugin -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
+compilerFallback : List Plugin -> List String -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp, TtyOp] Int
 compilerFallback plugins args =
   case findByDomain "compiler" plugins of
     Just p => processRunIn "." (append [p.pluginBinary] args)
