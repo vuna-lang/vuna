@@ -52,13 +52,18 @@ main =
     foldedBig <- Par.parFoldMap (\x => "(" ++ strFromInt x ++ ")") (range 1 50)
     bigSeq <- Par.parMapWith 1 (\x => x * x) (range 0 400)
     bigPar <- Par.parMapWith 8 (\x => x * x) (range 0 400)
+    effOrdered <- Par.parMapEff (\comp => comp) (\x => pure (x * 3)) (range 0 40)
+    effOne <- Par.parMapEffWith 1 (\comp => comp) (\x => pure (x + 2)) [1, 2, 3]
+    effEmpty <- Par.parMapEff (\comp => comp) (\x => pure (x + 1)) []
+    effResults <- Par.parMapEff (\comp => fmap Ok comp) (\x => pure (x * x)) [1, 2, 3]
     a <- Thread.newAtomic 0
     b <- Thread.newAtomic 0
     flags <- Par.parMapWith 2 (\i => if i == 0 then spin a b else spin b a) [0, 1]
     let
       overlapOk = if par < 2 then True else flags == [1, 1]
       expectedBig = wrapAll (range 1 50)
-      bad = append (check "order" (ordered == map (\x => x * 2) (range 0 100))) (append (check "jobs1" (oneJob == [2, 3, 4])) (append (check "clamp" (clamped == [2, 3, 4])) (append (check "empty" (empty == [])) (append (check "single" (single == [42])) (append (check "strings" (strs == ["v1", "v2", "v3"])) (append (check "fold" (folded == "(1)(2)(3)")) (append (check "fold-chunked" (foldedBig == expectedBig)) (append (check "big-consistent" (bigSeq == bigPar)) (check "overlap" overlapOk)))))))))
+      effBad = append (check "eff-order" (effOrdered == map (\x => x * 3) (range 0 40))) (append (check "eff-jobs1" (effOne == [3, 4, 5])) (append (check "eff-empty" (effEmpty == [])) (check "eff-result" (effResults == [Ok 1, Ok 4, Ok 9]))))
+      bad = append effBad (append (check "order" (ordered == map (\x => x * 2) (range 0 100))) (append (check "jobs1" (oneJob == [2, 3, 4])) (append (check "clamp" (clamped == [2, 3, 4])) (append (check "empty" (empty == [])) (append (check "single" (single == [42])) (append (check "strings" (strs == ["v1", "v2", "v3"])) (append (check "fold" (folded == "(1)(2)(3)")) (append (check "fold-chunked" (foldedBig == expectedBig)) (append (check "big-consistent" (bigSeq == bigPar)) (check "overlap" overlapOk))))))))))
     in case bad of
       [] => pure ""
       _ =>

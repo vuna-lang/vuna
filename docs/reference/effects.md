@@ -311,8 +311,9 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   另一条轴：`Base.Thread` 用 OS 线程（OCaml 侧 `Domain`）提供 `spawn`/`join`、`Mutex`、
   `Condvar`、`Atomic`，线程体是 `Eff [] a`、续延不跨线程；宿主效应要在任务体内显式安装
   真实 handler（`runFsError "fs-error" (runFsHost comp)`，夹具 `effect/common/104`）。
-  结构化纯并行入口是 `Base.Thread.Par`（`parMap` / `parFoldMap`，body 必须是纯函数，
-  `Eff r` body 不支持），见 [primitives.md](primitives.md) §6.2。并行/多核不走 fiber 调度器（[debt.md](debt.md) D41）。
+  结构化并行入口是 `Base.Thread.Par`：纯 body 用 `parMap` / `parFoldMap`；effectful body 用
+  `parMapEff` / `parMapEffWith`，由显式 runner（如 `Base.Effect.Fs.runFsResult`）在 worker 内
+  收成 `Eff []`，见 [primitives.md](primitives.md) §6.2。并行/多核不走 fiber 调度器（[debt.md](debt.md) D41）。
 - **未处理效应诊断**：入口在类型层收紧——`runPure : Eff [] a -> a`；
   `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签；负例 `dt_err/82_unhandled_effect_entry`）。

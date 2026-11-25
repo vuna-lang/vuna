@@ -278,8 +278,11 @@
 
 **库面组合子**：`Base.Thread.Par` 的 `parMap` / `parMapWith` / `parFoldMap` 把列表切成连续块，
 每块一个 `spawn`，结果按输入顺序拼接；并行度收敛到 `1..min 32 parallelism n`，`k = 1` 时在调用
-线程顺序执行（不 spawn，也是 worker 内不要再并行的逃生口）。body 必须是纯函数；不提供取消；
-不可嵌套。
+线程顺序执行（不 spawn，也是 worker 内不要再并行的逃生口）。纯 body 用这三个；effectful body 用
+`parMapEff` / `parMapEffWith`，第一个参数是 worker 内的收口 runner `Eff r b -> Eff [] c`（例如
+`Base.Effect.Fs.runFsResult` 把默认 fs 行收成 `Result`）。runner 在子线程里安装自己的 handler，
+父线程 handler 栈仍不继承；不提供取消；不可嵌套。夹具 `effect/common/106` 覆盖逐项
+读 → 算 → 写与失败收成 `Result`。
 
 **target 能力**：`Ir.Runtime.irRtTargets` 是唯一判据。同步原语（Mutex / Condvar / Atomic）是
 `["ocaml","native"]`；调度子集（spawn / join / yield / id / parallelism）三端都支持，wasm 上按

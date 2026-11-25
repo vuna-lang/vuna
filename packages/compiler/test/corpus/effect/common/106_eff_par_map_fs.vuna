@@ -1,0 +1,58 @@
+-- 并行 effectful map：每项在自己的 worker 里读 → 算 → 写，逐项失败收成 `Result`；
+-- 结果保序，一项失败不影响其它项。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Data.List as List
+import Base.Data.Result
+import Base.Data.String as String
+import Base.Thread.Par as Par
+
+expected : Int -> String
+expected k = "v" ++ strFromInt k ++ "!"
+
+work : Int -> Eff [FsOp] String
+work k =
+  if k == 2 then
+    fsReadFile "par-eff-missing/file.txt"
+  else
+    do
+      let
+        src = "par-eff-src-" ++ strFromInt k ++ ".txt"
+        dst = "par-eff-dst-" ++ strFromInt k ++ ".txt"
+      _ <- fsWriteFile src ("v" ++ strFromInt k)
+      s <- fsReadFile src
+      _ <- fsWriteFile dst (s ++ "!")
+      back <- fsReadFile dst
+      pure back
+
+oks : List (Result String) -> List String
+oks [] = []
+oks (r :: rest) =
+  case r of
+    Ok s => s :: oks rest
+    Err _ => oks rest
+
+errs : List (Result String) -> List String
+errs [] = []
+errs (r :: rest) =
+  case r of
+    Ok _ => errs rest
+    Err e => e :: errs rest
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    rs <- Par.parMapEff runFsResult work (range 0 8)
+    let
+      want = map expected (filter (\k => k /= 2) (range 0 8))
+      got = oks rs
+      es = errs rs
+    if got == want && length es == 1 then
+      do
+        _ <- consolePrint ("ok " ++ strFromInt (length got) ++ "\n")
+        pure 0
+    else
+      do
+        _ <- consolePrint ("bad got=" ++ strFromInt (length got) ++ " err=" ++ strFromInt (length es) ++ "\n")
+        pure 1

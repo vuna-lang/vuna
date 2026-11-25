@@ -332,6 +332,10 @@ fsErrorOpHR i op _ =
 export runFsError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n FsErrorOp :: r) a -> Eff r (Result a)
 runFsError n comp = handleCoreAt (Named n FsErrorOp) "fs-error" n fsErrorRet fsErrorOpHR comp
 
+-- | 在 `Eff []` 的 worker / 子计算里跑默认 fs 行：安装真实 handler，把失败收口成 `Result`。
+export runFsResult : {a : Type} -> Eff [FsOp] a -> Eff [] (Result a)
+runFsResult comp = runFsError "fs-error" (runFsHost comp)
+
 -- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
 runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Named "fs-error" FsErrorOp :: r) a -> Eff r a
 runFsErrorHost comp =

@@ -1,12 +1,15 @@
--- | 纯函数结构化并行：把列表切成连续块，各块在独立线程里执行纯函数，结果按输入顺序合并。
+-- | 结构化并行：纯函数 `parMap` / `parMapWith` / `parFoldMap` 与 effectful
+-- `parMapEff` / `parMapEffWith`。把列表切成连续块，各块在独立线程里执行，结果按输入顺序合并。
 --
--- 线程数收敛到 `1 .. min 32 parallelism n`：`parMap` 取 CPU 并行度，`parMapWith` 取调用方
+-- 线程数收敛到 `1 .. min 32 parallelism n`：自动版取 CPU 并行度，`With` 版取调用方
 -- 给的值。`k = 1` 时在调用线程顺序执行（不 spawn），因此也用于“已经在 worker 里、不要再
 -- 并行”的场合。
 --
--- body 是纯函数（`a -> b` / `a -> m`）：线程里不能做 IO 或效果，也不继承调用方的 handler
--- 栈（见 [primitives.md §6.2](../../../../docs/reference/primitives.md)）。worker 内的运行时
--- trap 按线程语义报错并 exit 2，不包装成 `Result`。不提供取消：发散会在 `join` 处挂住。
+-- 纯 body 是 `a -> b` / `a -> m`；effectful body 是 `a -> Eff r b`，必须配 runner
+-- `Eff r b -> Eff [] c` 在 worker 内收口（例如 `Base.Effect.Fs.runFsResult`）。线程体进入
+-- 运行时仍是 `Eff []`，不继承调用方的 handler 栈（见
+-- [primitives.md §6.2](../../../../docs/reference/primitives.md)）。worker 内的运行时 trap
+-- 按线程语义报错并 exit 2，不包装成 `Result`。不提供取消：发散会在 `join` 处挂住。
 --
 -- wasm 上 `parallelism = 1`，自动走顺序路径；`spawn` 在 wasm 运行时里立即执行并返回已完成
 -- 的句柄，因此同一份代码在三端结果一致。
@@ -16,6 +19,7 @@ import Base.Effect.Types
 import Base.Trait.Monad
 import Base.Trait.Monoid
 import Base.Trait.Foldable
+import Base.Trait.Traversable
 import Base.Trait.Num
 import Base.Trait.Ord
 import Base.Data.Int
@@ -100,6 +104,50 @@ parMapWith jobs f xs =
   do
     par <- Thread.parallelism
     runChunked (clampJobs jobs par (natToInt (length xs))) (natToInt (length xs)) f xs
+
+-- | 内部：把一个块 spawn 成 effectful 线程；`run` 在子线程里把块内的行收成 `Eff []`。
+spawnChunkEff : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (Thread (List c))
+spawnChunkEff run f chunk = Thread.spawn (pure chunk >>= \cs => mapM (\x => run (f x)) cs)
+
+-- | 内部：`fuel` 是剩余块数。
+spawnChunksEff : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> Int -> Int -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (List (Thread (List c)))
+spawnChunksEff fuel size run f xs =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      t <- spawnChunkEff run f (take size xs)
+      ts <- spawnChunksEff (fuel - 1) size run f (drop size xs)
+      pure (t :: ts)
+
+-- | 内部：顺序路径（不 spawn）；`run` 在调用线程里收口。
+mapSeqEff : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (List c)
+mapSeqEff run f xs = raise (mapM (\x => run (f x)) xs)
+
+-- | 内部：`k` 已收敛；`k ≤ 1` 走顺序路径。
+runChunkedEff : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> Int -> Int -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (List c)
+runChunkedEff k n run f xs =
+  if k <= 1 then
+    mapSeqEff run f xs
+  else
+    do
+      ts <- spawnChunksEff (chunkCount n (chunkLen n k)) (chunkLen n k) run f xs
+      joinChunks ts
+
+-- | 按 CPU 并行度自动分块的 effectful map：`run` 在 worker 内把每项的 `Eff e` 收成 `Eff []`；
+-- 结果顺序与输入一致。
+export parMapEff : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (List c)
+parMapEff run f xs =
+  do
+    par <- Thread.parallelism
+    runChunkedEff (clampJobs par par (natToInt (length xs))) (natToInt (length xs)) run f xs
+
+-- | 显式指定并行度的 effectful map；`jobs ≤ 1` 时在调用线程顺序执行。
+export parMapEffWith : {e : Row} -> {r : Row} -> {a : Type} -> {b : Type} -> {c : Type} -> Int -> (Eff e b -> Eff [] c) -> (a -> Eff e b) -> List a -> Eff r (List c)
+parMapEffWith jobs run f xs =
+  do
+    par <- Thread.parallelism
+    runChunkedEff (clampJobs jobs par (natToInt (length xs))) (natToInt (length xs)) run f xs
 
 -- | 内部：把一个块 spawn 成 fold 线程（同样用 bind 推迟块内计算）。
 spawnFold : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> (a -> m) -> List a -> Eff r (Thread m)
