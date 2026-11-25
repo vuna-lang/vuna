@@ -38,8 +38,9 @@ loop counter (Succ m) =
 
 main : Int
 main =
-  MutRef.withMutRefPure 0 (\counter =>
-      do
-        _ <- loop counter (natFromInt 2000)
-        MutRef.read counter
-  )
+  MutRef.withMutRefPure 0 (
+      \counter =>
+        do
+          _ <- loop counter (natFromInt 2000)
+          MutRef.read counter
+    )
