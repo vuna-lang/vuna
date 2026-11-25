@@ -311,5 +311,6 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | 观测（`Target.Ocaml.Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | 文本日志（`Base.Data.Log` / `log!` / `Target.Ocaml.Term.dtLogRuntime` / `VUNA_LOG*`） | 第 107 段的 `log!`/`mark!` 断言 + `vuna check .`（[logging.md](reference/logging.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
+| 工具链 / 插件自身（fmt/lint/dev/后端） | `nix/tools/dev-loop.sh -p <pkg> -- <cmd>`（只重建改动的包；[tooling.md](reference/tooling.md) §0） |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

@@ -1,10 +1,47 @@
 # 工具链：goal、LSP、doc、fmt 与错误码
 
 本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
-`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码。命令面（命令树、flag 词汇、
-帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.md](cli.md)。
+`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码；开发循环见 §0。命令面（命令树、
+flag 词汇、帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.md](cli.md)。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
+
+## 0. 树内开发循环（改工具链 / 插件时）
+
+改 `packages/{cli,toolchain,dev,target-native,target-wasm}` 时不要用 `nix run .#vuna`：
+产品派生一次构建 7 个插件（`nix build .#vuna` 实测约 105 s），而工具/插件改动只需要重建
+那一个包。`nix/tools/dev-loop.sh` 用当前工作树源码构建出的 stage 1 编译器增量构建指定包，再组装
+`VUNA_BASE` / `VUNA_EXEC_PATH`（以及 `VUNA_OCAML_ID`、`VUNA_WASM_RUNNER`）把命令交给
+`packages/cli/.output/bin/vuna`：
+
+```console
+$ nix/tools/dev-loop.sh -p toolchain -- fmt --check packages/toolchain
+$ nix/tools/dev-loop.sh -p wasm -- compile bench/programs/t1/arith/arith.vuna /tmp/out --target wasm
+$ nix/tools/dev-loop.sh -p compiler -- version      # 构建工作树编译器（不切换默认编译器）
+$ nix/tools/dev-loop.sh --all -- version
+$ eval "$(nix/tools/dev-loop.sh --print-env)"       # 进子 shell 手工反复跑
+```
+
+- `-p/--pkg` 可重复；短名 `cli` / `toolchain` / `dev` / `web` / `native` / `wasm` / `compiler`。
+- 对象库沿用宿主 `~/.vuna/store`（`VUNA_STORE` 覆盖），依赖包按接口复用；`--no-build` 只组装环境。
+- 构建和执行固定用同一个 stage 1 编译器（路径缓存在 `.local/dev-loop/compiler`）；要试刚
+  编出的工作树编译器，用 `--compiler packages/compiler/.output/bin/vuna-compiler`。
+- 换分支 / rebase 后旧编译器可能读不懂新源码：删 `.local/dev-loop/compiler` 重新取 stage 1。
+
+读数（16 核开发机，热 store；改的是注释——接口未变，属于最乐观的一档；改签名或实现会向
+冷值靠）：
+
+| 场景 | 墙钟 |
+| --- | --- |
+| 无改动重建 | <1 s |
+| 改 toolchain → 重建 toolchain | ~36 s |
+| ↳ 下游 dev | ~5 s |
+| 改 dev → 重建 dev | ~24 s |
+| 改 wasm 后端 → 重建插件 | ~5 s |
+| 改 compiler → 重建 compiler | ~20 s |
+| 冷 store 首次构建 toolchain | 1–2 min（一次性） |
+
+稳态数字的前提是对象库已经热过：空 store 上跑一次 `check .` 约 45 s。
 
 ## 1. `vuna goal`：洞目标与上下文
 

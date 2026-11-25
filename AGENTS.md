@@ -35,7 +35,10 @@
    需要固定二进制（性能读数、反复调用、传给别的脚本）时**先显式重建**；
 3. 远端稳定版（`nix registry list` 的别名）：`nix run vuna -- <subcommand>`；
 4. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <owner/family>` 过滤，
-   无参数等价 `vuna dev suite test/suite.toml`；`--jobs auto` 用全部可用核）。
+   无参数等价 `vuna dev suite test/suite.toml`；`--jobs auto` 用全部可用核）；
+5. 改**工具链 / 插件**（`packages/{cli,toolchain,dev,target-*}`）时用 `nix/tools/dev-loop.sh`：
+   只重建改动的包，对象库沿用宿主 store；`nix run .#vuna` 会重建整个产品派生（7 个插件），
+   不适合这个循环。口径见 [tooling.md §0](docs/reference/tooling.md)。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
 测试需要 PATH 里有 `ocamlopt`（`nix develop` 提供）。
@@ -117,6 +120,7 @@
 nix run .#vuna -- check .                 # 包级类型检查（自检）；check <pkg> 只查该包闭包
 nix run .#vuna -- fmt <改动的文件/目录>     # 格式化；--check 只检查
 nix run .#vuna -- run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
+nix/tools/dev-loop.sh -p toolchain -- fmt --check . # 树内增量循环（改工具/插件；tooling.md §0）
 nix run .#vuna-run-tests -- --only <owner/family> # 按 owner/family 跑 suite（--list 看 id；用 ~/.vuna/test-store）
 nix run .#vuna-run-tests -- --backend wasm # 后端矩阵：只跑 matrix 允许 wasm 的 case
 nix build .#vuna --out-link result        # 需要固定二进制时才构建（result 可能指向别的产物）

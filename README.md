@@ -60,6 +60,8 @@ nix run .#vuna -- doc                          # 生成 docs/api.html（gitignor
 编译器选取：默认 `nix run .#vuna -- <subcommand>`（按当前源码构建）；需要固定二进制时先
 `nix build .#vuna --out-link result`，再用 `./result/bin/vuna`（`result` 是共享 out-link，可能
 指向别的产物或旧二进制）；远端稳定版是 `nix run vuna -- <subcommand>`（注册表别名）。
+改工具链 / 插件自身时用 `nix/tools/dev-loop.sh -p <pkg> -- <cmd>`：只重建改动的包，不重跑
+产品派生（口径见 [tooling.md §0](docs/reference/tooling.md)）。
 
 提交门禁：`nix develop` / direnv 进入仓库时会把 `core.hooksPath` 指向 `.githooks`，
 `git commit` 前自动跑全仓库 `fmt --check`（含 `examples/`）、`lint --max-warnings 0`、
