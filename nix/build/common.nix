@@ -33,6 +33,8 @@ let
     ++ wasmTools pkgs
     ++ [
       pkgs.util-linux
+      # 105c 的进程组断言用 `ps -o pgid=` 读自己的 pgid（e2e 沙箱必须能解析到 ps）。
+      pkgs.procps
       pkgs.git
       pkgs.jq
       # wasm 产物的执行宿主（`wasm-host/run.mjs`）与 `108_obs_cdp` 的 CDP 冒烟都用 Node。
