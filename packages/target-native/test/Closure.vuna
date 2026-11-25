@@ -11,15 +11,17 @@ import Base.Effect.Core
 import Vuna.Ir.Model
 import Vuna.Target.Native.Abi
 import Vuna.Target.Native.Module
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case problems of
     [] => pure ""
     ps =>
       do
-        _ <- prim_eff_print ("native closure capture drifted:\n" ++ join "\n" ps ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("native closure capture drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 outer : IrBinder

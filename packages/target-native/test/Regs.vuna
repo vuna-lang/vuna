@@ -12,15 +12,17 @@ import Vuna.Target.Native.Model
 import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
 import Vuna.Target.Native.Select
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case problems of
     [] => pure ""
     ps =>
       do
-        _ <- prim_eff_print ("native regs drifted:\n" ++ join "\n" ps ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("native regs drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 -- | 有栈实参的循环（arity > 6）：提升后 prologue 的 push 会移动来参区，正偏移整体加 8。

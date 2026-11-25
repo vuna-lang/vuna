@@ -10,15 +10,17 @@ import Base.Data.List as List
 import Base.Data.String as String
 import Base.Effect.Core
 import Vuna.Ir.FloatLit
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case problems of
     [] => pure ""
     ps =>
       do
-        _ <- prim_eff_print ("ir float literal text drifted:\n" ++ join "\n" ps ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("ir float literal text drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 -- | double 的溢出中点 `2^1024 - 2^970`（309 位）。

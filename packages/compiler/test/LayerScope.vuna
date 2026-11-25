@@ -9,15 +9,17 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Layers
 import Vuna.Compiler.Loader.Modules
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (secondOf p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("layer scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("layer scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 results : List (Pair String Bool)

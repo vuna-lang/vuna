@@ -23,6 +23,11 @@ import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Packages.Source
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Env
+import Base.Effect.Fs
+import Base.Effect.Exit
 
 -- 基础设施自检：内容寻址摘要、无损 CST roundtrip、canonical 编码、TOML、包身份。
 -- 逐行输出由 test/suite/steps/64_infra.steps 断言；任何一项失败都会让 steps 失败。
@@ -41,81 +46,78 @@ f : Float
 f = 1.5
 """
 
-main : Eff [] Int
+main : Eff [ConsoleOp, EnvOp, FsOp, ExitOp] Int
 main =
   do
-    _ <- prim_eff_print (("hash-empty " ++ digestHex (digestOfString "")) ++ "\n")
-    _ <- prim_eff_print (("hash-abc " ++ digestHex (digestOfString "abc")) ++ "\n")
-    _ <- prim_eff_print (("sha-80a " ++ digestHex (digestOfString (repeatA 80))) ++ "\n")
+    _ <- consolePrint (("hash-empty " ++ digestHex (digestOfString "")) ++ "\n")
+    _ <- consolePrint (("hash-abc " ++ digestHex (digestOfString "abc")) ++ "\n")
+    _ <- consolePrint (("sha-80a " ++ digestHex (digestOfString (repeatA 80))) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("bits " ++ joinInts [bitAnd 240 204, bitOr 240 15, bitXor 255 15, bitNot 0, bitShl 1 4, bitShr 256 4, bitShr 256 63, bitShl 1 63]) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("bitslib " ++ joinInts [rotr32 1 1, add32 4294967295 2, mask32 (0 - 1), mask8 511, rol32 1 31]) ++ "\n")
-    _ <- prim_eff_print (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
-    _ <- prim_eff_print (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
-    _ <- prim_eff_print (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
-    _ <- prim_eff_print (("cst-tree " ++ verdict (treeOk sample)) ++ "\n")
-    _ <- prim_eff_print (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
-    src <- prim_eff_getenv "INFRA_SRC"
-    pathOk <- prim_eff_fileExists src
-    raw <- if pathOk then prim_eff_readFile src else pure ""
+    _ <- consolePrint (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
+    _ <- consolePrint (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
+    _ <- consolePrint (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
+    _ <- consolePrint (("cst-tree " ++ verdict (treeOk sample)) ++ "\n")
+    _ <- consolePrint (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
+    src <- envGetEnv "INFRA_SRC"
+    pathOk <- fsFileExists src
+    raw <- if pathOk then fsReadFile src else pure ""
     _ <-
-      prim_eff_print
-        (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
+      consolePrint (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
     _ <-
-      prim_eff_print
-        (("cst-tree-file " ++ (if pathOk then verdict (treeOk raw) else "skip")) ++ "\n")
-    _ <- prim_eff_print (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
-    _ <- prim_eff_print (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
-    _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
-    _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
-    _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
-    _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
-    _ <- prim_eff_print (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
-    _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
+      consolePrint (("cst-tree-file " ++ (if pathOk then verdict (treeOk raw) else "skip")) ++ "\n")
+    _ <- consolePrint (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
+    _ <- consolePrint (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
+    _ <- consolePrint (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
+    _ <- consolePrint (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
+    _ <- consolePrint (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
+    _ <- consolePrint (("canon-span " ++ verdict spanInsensitive) ++ "\n")
+    _ <- consolePrint (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
+    _ <- consolePrint (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
     -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
-    _ <- prim_eff_print (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
-    _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
-    _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
-    _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
-    _ <- prim_eff_print (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
-    _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
+    _ <- consolePrint (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
+    _ <- consolePrint (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
+    _ <- consolePrint (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
+    _ <- consolePrint (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
+    _ <- consolePrint (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
+    _ <- consolePrint (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
     -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
     -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
     _ <-
-      prim_eff_print
-        (("toml-subtable " ++ verdict (lookupIntIs ["a"] "x" 1 "[a]\nx = 1\n")) ++ "\n")
+      consolePrint (("toml-subtable " ++ verdict (lookupIntIs ["a"] "x" 1 "[a]\nx = 1\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-quoted " ++ verdict (lookupStrIs ["releases", "1.2.0"] "git" "g" "[releases.\"1.2.0\"]\ngit = \"g\"\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-dotted " ++ verdict (lookupIntIs ["a", "b"] "c" 7 "a.b.c = 7\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-inline " ++ verdict (lookupStrIs ["dependencies", "greet"] "path" "../greet" "[dependencies]\ngreet = { path = \"../greet\" }\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-array-len " ++ strFromInt (arrayLenOf "x" "x = [1, \"two\", true]\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-table-array " ++ verdict (lookupStrIs ["bin", "1"] "name" "b" "[[bin]]\nname = \"a\"\n[[bin]]\nname = \"b\"\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-multiline " ++ verdict (lookupStrIs [] "s" "hello\nworld" "s = \"\"\"\nhello\nworld\"\"\"\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-unicode " ++ verdict (lookupStrIs [] "s" "中" "s = \"\\u4e2d\"\n")) ++ "\n")
     _ <-
-      prim_eff_print
+      consolePrint
         (("toml-literal " ++ verdict (lookupStrIs [] "s" "a\\nb" "s = 'a\\nb'\n")) ++ "\n")
-    _ <- prim_eff_print (("toml-dup-key " ++ verdict (parsesNot "[a]\nx = 1\nx = 2\n")) ++ "\n")
-    _ <- prim_eff_print (("toml-float " ++ verdict (parsesNot "x = 1.5\n")) ++ "\n")
-    _ <- prim_eff_print (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
-    _ <- prim_eff_print (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
-    prim_eff_exit 0
+    _ <- consolePrint (("toml-dup-key " ++ verdict (parsesNot "[a]\nx = 1\nx = 2\n")) ++ "\n")
+    _ <- consolePrint (("toml-float " ++ verdict (parsesNot "x = 1.5\n")) ++ "\n")
+    _ <- consolePrint (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
+    _ <- consolePrint (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
+    exitWith 0
 
 -- ---------------------------------------------------------------
 -- 输出辅助

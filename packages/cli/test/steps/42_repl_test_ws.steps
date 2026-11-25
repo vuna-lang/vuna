@@ -6,8 +6,8 @@
 run: sh -c 'cp -R $VUNA_SUITE_ROOT/packages/cli/test/corpus/test-m30 "$TMPDIR/test-m30"; find "$TMPDIR/test-m30" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
 run: sh -c 'printf "f : Int -> Int\nf x =\n  x + 1\n\nf 41\n:q\n" | "$VUNA" repl 2>&1'
 out-contains: 42
-# REPL：动作表达式走临时包编译+运行（效果输出直接到终端）。
-run: sh -c 'printf "import Base.Effect.Core as Eff\nprim_eff_print \"hi\"\n:q\n" | "$VUNA" repl 2>&1'
+# REPL：动作表达式走临时包编译+运行（效果输出直接到终端）；带行动作要有显式签名。
+run: sh -c 'printf "import Base.Effect.Core\nimport Base.Effect.Console\n\nprog : Eff [ConsoleOp] Int\nprog = do\n  _ <- consolePrint \"hi\"\n  pure 0\n\nprog\n:q\n" | "$VUNA" repl 2>&1'
 out-contains: hi
 # REPL：不完整输入 + 空行 → 报错丢弃但继续。
 run: sh -c 'printf "x =\n\n:q\n" | "$VUNA" repl 2>&1'

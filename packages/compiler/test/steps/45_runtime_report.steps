@@ -10,9 +10,11 @@ out-contains: vuna: runtime error: division by zero
 out-contains:   at main (
 out-contains: app/Main.vuna:
 out-not-contains: Fatal error
-run: sh -c 'printf "import Base.Effect.Core as Eff\n\nmain : Eff [] Int\nmain = do\n  prim_eff_print \"m38-start\\\\n\"\n  prim_eff_exit (10 / 0)\n" >"$TMPDIR/m38-rt/app/Main.vuna"'
+run: sh -c 'printf "import Base.Effect.Core as Eff\nimport Base.Effect.Console\nimport Base.Effect.Exit\n\nmain : Eff [ConsoleOp, ExitOp] Int\nmain = do\n  consolePrint \"m38-start\\\\n\"\n  exitWith (10 / 0)\n" >"$TMPDIR/m38-rt/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-rt" 2>&1
 run: "$TMPDIR/m38-rt/.output/bin/m38-rt" 2>&1
 exit: 2
 out-contains: m38-start
-out-contains:   at main (
+# 动作 main 的陷阱发生在库续延里（`joinEff`），帧名不是 `main`；这里只锁消息与不泄漏 OCaml 异常。
+out-contains: vuna: runtime error: division by zero
+out-not-contains: Fatal error

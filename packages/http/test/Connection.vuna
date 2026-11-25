@@ -6,8 +6,10 @@ import Http.Connection as C
 import Http.Request as Req
 import Http.Response as Res
 import Http.Render as R
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   do
     input <-
@@ -20,8 +22,8 @@ main =
       [] => pure ""
       bad =>
         do
-          _ <- prim_eff_print ("http connection failed: " ++ join "; " bad ++ "\n")
-          _ <- prim_eff_exit 1
+          _ <- consolePrint ("http connection failed: " ++ join "; " bad ++ "\n")
+          _ <- exitWith 1
           pure ""
 
 -- | 断言：两条请求都被服务、输出里两条响应体都在。

@@ -2,15 +2,17 @@
 import Base
 import Base.Effect.Core
 import Web.View as V
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (isPassing p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("web view failed: " ++ join "; " (map nameOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("web view failed: " ++ join "; " (map nameOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 -- | 一条检查是否通过。

@@ -50,10 +50,12 @@ run: sh -c 'printf "%s\n" "main : List Int" "main = strUnpack \"ab\"" > "$TMPDIR
 run: "$VUNA" compile "$TMPDIR/p/bridge.vuna" "$TMPDIR/p/out-bridge"
 file-contains: $TMPDIR/p/out-bridge/Main.ml (B_dData_dList.dtp_unpack "ab")
 
-# 动作 main：宿主原语走 thunk（`IrEffThunk`），entry 走 runMain/sched 钩子。
-run: sh -c 'printf "%s\n" "import Base.Effect.Core as Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
+# 动作 main：entry 走 runMain / sched 钩子；宿主效应按标签预装 handler（原语在 base handler 内，
+# 不在 Main.ml 里）。
+run: sh -c 'printf "%s\n" "import Base.Effect.Core as Eff" "import Base.Effect.Console" "" "main : Eff [ConsoleOp] Int" "main = do" "  _ <- consolePrint \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/eff.vuna" "$TMPDIR/p/out-eff"
-file-contains: $TMPDIR/p/out-eff/Main.ml dtp_print
+file-contains: $TMPDIR/p/out-eff/Main.ml v_runMain
+file-contains: $TMPDIR/p/out-eff/Main.ml v_runConsoleHost
 file-contains: $TMPDIR/p/out-eff/Main.ml dtp_sched_main
 run: cd "$TMPDIR/p/out-eff" && sh build.sh prog 2>&1
 exit: 0

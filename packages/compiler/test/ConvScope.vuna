@@ -6,15 +6,17 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Term
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (secondOf p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("conv scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("conv scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 results : List (Pair String Bool)

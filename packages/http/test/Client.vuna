@@ -7,8 +7,10 @@ import Http.Connection as Conn
 import Http.Request as Req
 import Http.Response as Res
 import Http.Render as R
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   do
     toServer <- Pure.IORef.newRef ""
@@ -20,8 +22,8 @@ main =
       [] => pure ""
       bad =>
         do
-          _ <- prim_eff_print ("http client failed: " ++ join "; " bad ++ "\n")
-          _ <- prim_eff_exit 1
+          _ <- consolePrint ("http client failed: " ++ join "; " bad ++ "\n")
+          _ <- exitWith 1
           pure ""
 
 -- | 两个方向各一个缓冲：读 `inRef`、写 `outRef`。

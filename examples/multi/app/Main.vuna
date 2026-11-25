@@ -2,14 +2,16 @@ import Greet
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Effect.Core as Eff
+import Base.Effect.Console
+import Base.Effect.Exit
 
 -- DT 的 build 会先执行动作、再打印 main 的返回值；do 块末用 `exit 0` 结束，
 -- 让示例的输出只含业务内容（不依赖「是否打印返回值」这一 CLI 细节）。
-main : Eff [] Int
+main : Eff [ConsoleOp, ExitOp] Int
 main =
   do
-    _ <- prim_eff_print (greeting 3 ++ "|" ++ showNames (names 2))
-    prim_eff_exit 0
+    _ <- consolePrint (greeting 3 ++ "|" ++ showNames (names 2))
+    exitWith 0
 
 showNames : List String -> String
 showNames [] = ""

@@ -8,17 +8,19 @@ import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.String as String
 import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
 import Vuna.Ir.Kinds
 import Vuna.Ir.Model
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case problems of
     [] => pure ""
     ps =>
       do
-        _ <- prim_eff_print ("ir kinds drifted:\n" ++ join "\n" ps ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("ir kinds drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 problems : List String

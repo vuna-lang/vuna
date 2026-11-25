@@ -3,15 +3,17 @@ import Base
 import Base.Effect.Core
 import Vuna.Ir.Model
 import Vuna.Target.Native.Module
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case problems of
     [] => pure ""
     ps =>
       do
-        _ <- prim_eff_print ("native bool-select drifted:\n" ++ join "\n" ps ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("native bool-select drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 problems : List String

@@ -7,15 +7,17 @@ import Base
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Reserved
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (secondOf p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("reserved names failed: " ++ join "; " (map firstOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("reserved names failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 results : List (Pair String Bool)
@@ -32,7 +34,7 @@ results =
     Pair "at-not-ident-char" (not (isIdentChar 64)),
     Pair "lex-hash-name-rejected" (lexRejected "#section"),
     Pair "lex-user-name-accepted" (lexAccepted "section"),
-    Pair "lex-internal-name-one-token" (lexAccepted "@vuna@prim_eff_print"),
+    Pair "lex-internal-name-one-token" (lexAccepted "@vuna@consolePrint"),
     Pair "lex-at-op-accepted" (lexAccepted "x@y")
   ]
 

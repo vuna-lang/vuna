@@ -5,15 +5,17 @@ import Http.WebSocket as Ws
 import Http.Request as Req
 import Http.Response as Res
 import Http.Render as R
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (isPassing p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("http websocket failed: " ++ join "; " (map nameOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("http websocket failed: " ++ join "; " (map nameOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 -- | 一条检查是否通过。

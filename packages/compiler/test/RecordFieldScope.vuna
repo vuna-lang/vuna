@@ -5,15 +5,17 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Source
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Data
+import Base.Effect.Console
+import Base.Effect.Exit
 
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main =
   case filter (\p => not (secondOf p)) results of
     [] => pure ""
     bad =>
       do
-        _ <- prim_eff_print ("record field scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
-        _ <- prim_eff_exit 1
+        _ <- consolePrint ("record field scope failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
         pure ""
 
 results : List (Pair String Bool)
