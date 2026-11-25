@@ -61,6 +61,7 @@ reservedTypeAtomText (r@(RsOverValue _ _)) = reservedText r
 reservedTypeAtomText (r@(RsMacro _)) = reservedText r
 reservedTypeAtomText (r@(RsDoBind _)) = reservedText r
 reservedTypeAtomText (r@(RsDoIgnore _)) = reservedText r
+reservedTypeAtomText (r@(RsFieldSel _ _)) = reservedText r
 
 -- | 内部：元组类型（parser 保留名）右嵌套尾段：`(a, b, c)` 的 `, b, c`。
 tupleTailText : Expr -> String

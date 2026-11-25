@@ -1,0 +1,238 @@
+-- | record 字段选择器的生成：模块内唯一的字段名自动生成 `f : {params} -> R params -> T`；
+-- 同名字段由唯一一个 record 用 `deriving (Selectors)` 认领，多个 record 同时认领、或共享
+-- 字段无人认领都是错误。`Loader.Flatten` 在解析后、导出表计算前调用：生成的声明与源码声明
+-- 走同一条解析/精化路径，导出跟随 record 类型。
+module Vuna.Compiler.Loader.Selectors where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Base.Diagnostics.Rn
+import Vuna.Compiler.Frontend.Ast
+
+-- 一条 record 的选择器视图：名字 / 参数 / 字段表 / 是否显式认领 / 线性标记 / 声明范围。
+record SelectorRecord where
+  srName : String
+  srParams : List String
+  srFields : List Field
+  srClaim : Bool
+  srLinear : Bool
+  srRef : NodeRef
+
+-- 认领 `Selectors` 的 deriving 名（源码写法，Loader 解析前的形态）。
+export selectorDerivingName : String
+selectorDerivingName = "Selectors"
+
+-- | 冲突判据的严格程度。源码里还有手写访问器、共享字段名尚未认领时用宽松模式：
+-- 冲突处不生成选择器、也不报错；全部认领/清理完毕后切到严格模式（报错）。
+export selectorsStrict : Bool
+selectorsStrict = False
+
+-- | 该 record 会生成选择器的字段名（生成与导出共用的唯一判据）。
+export selectedFieldNames : List Decl -> String -> List String
+selectedFieldNames decls recordName =
+  let
+    all = selectorRecords decls
+    topNames = topLevelNames decls
+  in case findSelectorRecord recordName all of
+    Nothing => []
+    Just r => selectedFieldNamesOf all topNames r
+
+selectedFieldNamesOf : List SelectorRecord -> List String -> SelectorRecord -> List String
+selectedFieldNamesOf all topNames r =
+  if r.srLinear then [] else filter (fieldNameSelected all topNames r) (recordFieldNames r)
+
+findSelectorRecord : String -> List SelectorRecord -> Maybe SelectorRecord
+findSelectorRecord name [] = Nothing
+findSelectorRecord name (r :: rest) =
+  if r.srName == name then Just r else findSelectorRecord name rest
+
+-- 生成 / 导出的逐字段判据：显式认领，或本模块内字段名唯一。
+-- 宽松模式下已有同名顶层声明就不生成（手写访问器与生成的声明不抢名字）；
+-- 严格模式下仍选中，由 `checkOneField` 报 `SelectorNameTaken`。
+fieldNameSelected : List SelectorRecord -> List String -> SelectorRecord -> String -> Bool
+fieldNameSelected all topNames r fieldName =
+  if r.srLinear then
+    False
+  else if not (r.srClaim || fieldOwnerCount all fieldName == 1) then
+    False
+  else if selectorsStrict then True else not (memName fieldName topNames)
+
+-- | 生成一个模块的字段选择器声明（顺序 = 声明顺序 × 字段顺序，逐字节稳定）。
+export selectorDecls : List Decl -> Check (List Decl)
+selectorDecls decls =
+  Vuna.Compiler.Base.Common.bind
+    (checkDataSelectors decls)
+    (\_ => checkClaims (selectorRecords decls) (topLevelNames decls))
+
+-- | 收集 record 声明（非 record 的声明不贡献选择器）。
+selectorRecords : List Decl -> List SelectorRecord
+selectorRecords [] = []
+selectorRecords (d :: rest) =
+  case d of
+    DRecord name params fields derivings viaField repr lin ref =>
+      (::)
+        (SelectorRecord name params fields (memName selectorDerivingName derivings) lin ref)
+        (selectorRecords rest)
+    _ => selectorRecords rest
+
+-- | `data` 声明不接受 `deriving (Selectors)`（选择器只对 record 有意义）。
+checkDataSelectors : List Decl -> Check Int
+checkDataSelectors [] = OkC 0
+checkDataSelectors (d :: rest) =
+  case d of
+    DData name params kind ctors derivings viaField repr lin ref =>
+      if memName selectorDerivingName derivings then
+        rnAt1 (nodeRefSpan ref) (SelectorNotRecord name) name
+      else
+        checkDataSelectors rest
+    _ => checkDataSelectors rest
+
+-- | 顶层声明名（值命名空间）：与选择器同名时报错。
+topLevelNames : List Decl -> List String
+topLevelNames [] = []
+topLevelNames (d :: rest) = append (declTopNames d) (topLevelNames rest)
+
+declTopNames : Decl -> List String
+declTopNames (DSig name ctx ty ref) = [name]
+declTopNames (DFun name pats body ref) = [name]
+declTopNames (DAxiom name ty ref) = [name]
+declTopNames (DExtern name cName ty ref) = [name]
+declTopNames (DTrait name params supers methods ref) = name :: traitMethodNames methods
+declTopNames (DRecord name params fields derivings viaField repr lin ref) = [name]
+declTopNames (DData name params kind ctors derivings viaField repr lin ref) =
+  name :: ctorNames ctors
+declTopNames (DInstance ctx head methods ref) = []
+
+traitMethodNames : List TraitMethod -> List String
+traitMethodNames [] = []
+traitMethodNames (m :: rest) = m.traitMethodName :: traitMethodNames rest
+
+ctorNames : List Ctor -> List String
+ctorNames [] = []
+ctorNames (c :: rest) = c.ctorName :: ctorNames rest
+
+-- 某字段被多少个 record 拥有 / 被多少个 record 用 `deriving (Selectors)` 认领。
+fieldOwnerCount : List SelectorRecord -> String -> Int
+fieldOwnerCount [] fieldName = 0
+fieldOwnerCount (r :: rest) fieldName =
+  if memName fieldName (recordFieldNames r) then
+    1 + fieldOwnerCount rest fieldName
+  else
+    fieldOwnerCount rest fieldName
+
+fieldClaimCount : List SelectorRecord -> String -> Int
+fieldClaimCount [] fieldName = 0
+fieldClaimCount (r :: rest) fieldName =
+  if r.srClaim && memName fieldName (recordFieldNames r) then
+    1 + fieldClaimCount rest fieldName
+  else
+    fieldClaimCount rest fieldName
+
+recordFieldNames : SelectorRecord -> List String
+recordFieldNames r = fieldNamesOf r.srFields
+
+fieldNamesOf : List Field -> List String
+fieldNamesOf [] = []
+fieldNamesOf (f :: rest) = f.fieldName :: fieldNamesOf rest
+
+ownersText : List SelectorRecord -> String -> String
+ownersText recs fieldName = joinWithComma (ownersOf recs fieldName)
+
+ownersOf : List SelectorRecord -> String -> List String
+ownersOf [] fieldName = []
+ownersOf (r :: rest) fieldName =
+  if memName fieldName (recordFieldNames r) then
+    r.srName :: ownersOf rest fieldName
+  else
+    ownersOf rest fieldName
+
+joinWithComma : List String -> String
+joinWithComma [] = ""
+joinWithComma (x :: rest) = if rest == [] then x else "${x}, ${joinWithComma rest}"
+
+-- | 逐 record 逐字段判定：生成 / 跳过 / 报错。
+checkClaims : List SelectorRecord -> List String -> Check (List Decl)
+checkClaims recs topNames = checkClaimsGo recs recs topNames
+
+checkClaimsGo : List SelectorRecord -> List SelectorRecord -> List String -> Check (List Decl)
+checkClaimsGo all [] topNames = OkC []
+checkClaimsGo all (r :: rest) topNames =
+  Vuna.Compiler.Base.Common.bind
+    (checkRecordClaims all r topNames)
+    (\ds => Vuna.Compiler.Base.Common.bind (checkClaimsGo all rest topNames) (\more => OkC (append ds more)))
+
+checkRecordClaims : List SelectorRecord -> SelectorRecord -> List String -> Check (List Decl)
+checkRecordClaims all r topNames =
+  if r.srLinear then
+    if r.srClaim then rnAt1 (nodeRefSpan r.srRef) (SelectorNotRecord r.srName) r.srName else OkC []
+  else
+    checkFieldClaims all r r.srFields topNames
+
+checkFieldClaims : List SelectorRecord -> SelectorRecord -> List Field -> List String -> Check (List Decl)
+checkFieldClaims all r [] topNames = OkC []
+checkFieldClaims all r (f :: rest) topNames =
+  Vuna.Compiler.Base.Common.bind
+    (checkOneField all r f topNames)
+    (\ds => Vuna.Compiler.Base.Common.bind (checkFieldClaims all r rest topNames) (\more => OkC (append ds more)))
+
+checkOneField : List SelectorRecord -> SelectorRecord -> Field -> List String -> Check (List Decl)
+checkOneField all r f topNames =
+  let
+    fieldName = f.fieldName
+    owners = fieldOwnerCount all fieldName
+    claims = fieldClaimCount all fieldName
+  in if claims > 1 then
+    if selectorsStrict then
+      rnAt2
+        (nodeRefSpan r.srRef)
+        (SelectorConflict fieldName (ownersText all fieldName))
+        fieldName
+        (ownersText all fieldName)
+    else
+      OkC []
+  else if owners > 1 && claims == 0 then
+    if selectorsStrict then
+      rnAt2
+        (nodeRefSpan r.srRef)
+        (SelectorShared fieldName (ownersText all fieldName))
+        fieldName
+        (ownersText all fieldName)
+    else
+      OkC []
+  else if not (fieldNameSelected all topNames r fieldName) then
+    OkC []
+  else if memName fieldName topNames then
+    if selectorsStrict then
+      rnAt2 (nodeRefSpan r.srRef) (SelectorNameTaken fieldName r.srName) fieldName r.srName
+    else
+      OkC []
+  else
+    OkC [selectorSigDecl r f, selectorFunDecl r f]
+
+-- 生成的签名：族参数是隐式 `{a : Type}`，末位 `(p : R params) -> 字段类型`。
+selectorSigDecl : SelectorRecord -> Field -> Decl
+selectorSigDecl r f = DSig f.fieldName [] (selectorSigType r f) f.fieldRef
+
+selectorSigType : SelectorRecord -> Field -> Expr
+selectorSigType r f =
+  paramPis r.srParams f.fieldRef (EPi "p" False Nothing (recordTypeExpr r) f.fieldType f.fieldRef)
+
+paramPis : List String -> NodeRef -> Expr -> Expr
+paramPis [] ref body = body
+paramPis (param :: rest) ref body =
+  EPi param True Nothing (EVar "Type" ref) (paramPis rest ref body) ref
+
+recordTypeExpr : SelectorRecord -> Expr
+recordTypeExpr r =
+  case r.srParams of
+    [] => EVar r.srName r.srRef
+    params => EApp (EVar r.srName r.srRef) (map (\p => EVar p r.srRef) params) r.srRef
+
+-- 生成的函数体：`f p = p.field`（字段类型由签名钉住，精化期直接产出投影）。
+selectorFunDecl : SelectorRecord -> Field -> Decl
+selectorFunDecl r f =
+  DFun
+    f.fieldName
+    [PVar "p" f.fieldRef]
+    (EField (EVar "p" f.fieldRef) f.fieldName f.fieldRef)
+    f.fieldRef

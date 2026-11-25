@@ -25,6 +25,7 @@ import Vuna.Compiler.Frontend.Parser.Support
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
+import Vuna.Compiler.Loader.Selectors
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Packages.Pkg
@@ -188,37 +189,45 @@ ownDataCtorEntries prefix dname (cname :: rest) =
     ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
     (ownDataCtorEntries prefix dname rest)
 
--- | 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
-ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
-ownTypeEntries prefix [] name = Nothing
-ownTypeEntries prefix (d :: rest) name =
+-- | 本地类型名的完整导出条目（type + 其构造子/方法/字段选择器），供 `T(..)` 导出使用。
+-- `all` 是模块的完整声明表：选择器集合按它算（与生成同一判据）。
+ownTypeEntries : List Decl -> String -> List Decl -> String -> Maybe (List ExportEntry)
+ownTypeEntries all prefix [] name = Nothing
+ownTypeEntries all prefix (d :: rest) name =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
       if dname == name then
         Just
           ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
       else
-        ownTypeEntries prefix rest name
+        ownTypeEntries all prefix rest name
     DRecord dname params fields derivings viaField repr lin sp =>
       if dname == name then
         Just
-          ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
+          ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (append (ownCtorEntries prefix dname [dname]) (ownSelectorEntries prefix all dname)))
       else
-        ownTypeEntries prefix rest name
+        ownTypeEntries all prefix rest name
     DTrait tname params supers methods sp =>
       if tname == name then
         Just
           ((::) ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
       else
-        ownTypeEntries prefix rest name
-    _ => ownTypeEntries prefix rest name
+        ownTypeEntries all prefix rest name
+    _ => ownTypeEntries all prefix rest name
+
+-- 选择器作为 record 类型接口的一部分导出：`kind = "val"`，`parent` 是记录的 canonical 名。
+ownSelectorEntries : String -> List Decl -> String -> List ExportEntry
+ownSelectorEntries prefix all dname =
+  map
+    (\f => ExportEntry { kind = "val", public = f, target = mangle prefix f, parent = mangle prefix dname })
+    (selectedFieldNames all dname)
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
 -- 源模块本来就公开的构造器，从而保持源模块的抽象性。
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
 ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
-  if e.kind == "ctor" && e.parent == typeTarget then
+  if (e.kind == "ctor" || e.kind == "val") && e.parent == typeTarget then
     (::) e (ctorEntriesOfType typeTarget rest)
   else
     ctorEntriesOfType typeTarget rest
@@ -321,6 +330,11 @@ ownCtorEntriesNamed prefix name (d :: rest) =
         (ownCtorEntriesNamed prefix name rest)
     _ => ownCtorEntriesNamed prefix name rest
 
+-- 裸类型导出（`export R`）也要带上 R 生成的选择器：record 类型导出即导出它的字段接口。
+-- 非 record / 非本模块类型时 `ownSelectorEntries` 为空。
+bareEntries : List Decl -> String -> String -> List ExportEntry -> List ExportEntry
+bareEntries decls prefix name entries = append entries (ownSelectorEntries prefix decls name)
+
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
 exportBare modules prefix decls imports name sp =
   case splitLastDot (splitOnDot name) of
@@ -338,8 +352,8 @@ exportBare modules prefix decls imports name sp =
                             Just _ => OkC (refEntryList name vr)
                         Just _ =>
                           case vr of
-                            Nothing => OkC (refEntryList name tr)
-                            Just _ => if typeRefDominates modules decls prefix tr vr then OkC (refEntryList name tr) else OkC (append (refEntryList name tr) (refEntryList name vr))
+                            Nothing => OkC (bareEntries decls prefix name (refEntryList name tr))
+                            Just _ => if typeRefDominates modules decls prefix tr vr then OkC (bareEntries decls prefix name (refEntryList name tr)) else OkC (bareEntries decls prefix name (append (refEntryList name tr) (refEntryList name vr)))
                   )
             )
         _ =>
@@ -379,7 +393,7 @@ exportTypeAll modules prefix decls imports name sp =
     (revPrefix, base) =>
       case revPrefix of
         [] =>
-          case ownTypeEntries prefix decls name of
+          case ownTypeEntries decls prefix decls name of
             Just entries => OkC entries
             Nothing =>
               Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (
@@ -425,7 +439,7 @@ namespaceImportsGo imports (_ :: rest) acc = namespaceImportsGo imports rest acc
 
 hasImportOf : List Import -> String -> Bool
 hasImportOf [] name = False
-hasImportOf (imp :: rest) name = importName imp == name || hasImportOf rest name
+hasImportOf (imp :: rest) name = importModuleName imp == name || hasImportOf rest name
 
 -- | 导出项里的模块前缀：必须唯一（重复 alias/弱短名在导出定义处报歧义）。
 resolveImportPrefix : List Import -> String -> Check String
@@ -535,6 +549,11 @@ opaqueBaseName name =
 export isAbstractOpaqueName : String -> Bool
 isAbstractOpaqueName name = startsWith abstractOpaquePrefix name
 
+-- 解析后的声明 + 自动生成的字段选择器（`Loader.Selectors` 的规则）：冲突直接让加载失败。
+withSelectors : List Decl -> Check (List Decl)
+withSelectors decls =
+  Vuna.Compiler.Base.Common.bind (selectorDecls decls) (\gen => OkC (append decls gen))
+
 computeExports : List Module -> String -> Maybe ModDecl -> List Import -> List Decl -> List ExportSpec -> List ExportItem -> Check (List ExportEntry)
 computeExports modules prefix hdr imports decls extraExports extraReexports =
   let
@@ -636,7 +655,7 @@ nsDropLocal n (x :: rest) = if n <= 0 then (::) x rest else nsDropLocal (n - 1) 
 loadModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> Import -> Eff r (Check (List Module))
 loadModule fuel roots importerPkg modules stack imp =
   let
-    name = importName imp
+    name = importModuleName imp
   in if fuel <= 0 then
     pure (icFuel "loader")
   else
@@ -713,12 +732,17 @@ loadModule fuel roots importerPkg modules stack imp =
                                         OkC modules2 =>
                                           let
                                             imports2 = normalizeImports modules2 imports
-                                          in case computeExports modules2 name hdr imports2 decls exports reexports of
+                                          in case withSelectors decls of
                                             ErrC e => pure (ErrC e)
-                                            OkC exports =>
-                                              let
-                                                visible = fixities
-                                              in pure (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface) modules2))
+                                            OkC declsSel =>
+                                              case computeExports modules2 name hdr imports2 decls exports reexports of
+                                                -- 导出表按源码声明算：生成的 selector 不在 decls 里，
+                                                -- `ownSelectorEntries` 的 topNames 才不会看见自己。
+                                                ErrC e => pure (ErrC e)
+                                                OkC exports =>
+                                                  let
+                                                    visible = fixities
+                                                  in pure (OkC ((::) (Module name (rootName root) imports2 implicit declsSel exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface) modules2))
         else
           pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
@@ -785,7 +809,9 @@ loadProjectWithPreloaded ctx entry preloaded =
                                   OkC modules =>
                                     let
                                       imports2 = normalizeImports modules imports1
-                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry) surface)
+                                    in case withSelectors decls of
+                                      ErrC e => ErrC e
+                                      OkC declsSel => withLayerCheck (contextRoots ctx) (Project declsSel imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry) surface)
                               )
     else
       pure (ldErr1 (EntryFileNotFound entry) entry)
@@ -852,7 +878,9 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
                               OkC modules =>
                                 let
                                   imports2 = normalizeImports modules imports1
-                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label) surface)
+                                in case withSelectors decls of
+                                  ErrC e => ErrC e
+                                  OkC declsSel => withLayerCheck (contextRoots ctx) (Project declsSel imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label) surface)
                           )
 
 -- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
@@ -904,12 +932,15 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                           OkC modules =>
                             let
                               imports2 = normalizeImports modules imports
-                            in case computeExports modules name hdr imports2 decls exports reexports of
+                            in case withSelectors decls of
                               ErrC e => pure (ErrC e)
-                              OkC exports =>
-                                let
-                                  visible = fixities
-                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
+                              OkC declsSel =>
+                                case computeExports modules name hdr imports2 decls exports reexports of
+                                  ErrC e => pure (ErrC e)
+                                  OkC exports =>
+                                    let
+                                      visible = fixities
+                                    in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit declsSel exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -1066,7 +1097,7 @@ visibleFixityOps : List Module -> List Import -> List String
 visibleFixityOps modules imports =
   concatMap (
       \imp =>
-        case findModule modules (importName imp) of
+        case findModule modules (importModuleName imp) of
           Just m => fixityOpsOf (moduleFixitiesOf m)
           Nothing => []
     ) imports
@@ -1074,10 +1105,10 @@ visibleFixityOps modules imports =
 unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Import -> List Decl -> List String -> List Import -> Check (List Diagnostic)
 unusedImportWarningsGo modules nameSet sourceNames imports decls reexports [] = OkC []
 unusedImportWarningsGo modules nameSet sourceNames imports decls reexports (imp :: rest) =
-  Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (
+  Vuna.Compiler.Base.Common.bind (exportsOf modules (importModuleName imp)) (
       \es =>
         let
-          used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
+          used = memName (importModuleName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
         in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet sourceNames imports decls reexports rest) (\more => OkC (if used then more else (::) (unusedImportDiag imports decls imp) more))
     )
 
@@ -1098,7 +1129,7 @@ unusedImportDiag imports decls imp =
 -- 而 fixity 声明不进 `Decl`，rename 结果里看不到引用，只能拿源码名比对。
 importProvidesUsedFixity : HashMap String Bool -> List Module -> Import -> Bool
 importProvidesUsedFixity sourceNames modules imp =
-  case findModule modules (importName imp) of
+  case findModule modules (importModuleName imp) of
     Nothing => False
     Just m => anyNameIn sourceNames (fixityOpsOf (moduleFixitiesOf m))
 
@@ -1110,7 +1141,7 @@ fixityOpsOf (d :: rest) = d.fixityOp :: fixityOpsOf rest
 -- 这个 import 是给**下游**用的（fixity 表随 import 闭包传播），不能算 unused。
 importProvidesDeclaredFixity : List Decl -> List Module -> Import -> Bool
 importProvidesDeclaredFixity decls modules imp =
-  case findModule modules (importName imp) of
+  case findModule modules (importModuleName imp) of
     Nothing => False
     Just m => anyOpDeclared (fixityOpsOf (moduleFixitiesOf m)) (definedNamesOf decls)
 
@@ -1151,7 +1182,7 @@ anyNameIn s (n :: rest) = if HashMap.member n s then True else anyNameIn s rest
 -- 「加载这些实例」这件事；声明了实例的模块被 import 就是可见副作用，不算 unused。
 moduleDeclaresInstance : List Module -> Import -> Bool
 moduleDeclaresInstance modules imp =
-  case findModule modules (importName imp) of
+  case findModule modules (importModuleName imp) of
     Nothing => False
     Just m => anyInstanceDecl (moduleDeclsOf m)
 
@@ -1221,6 +1252,8 @@ expandGlobalName n =
     Just (RsOverCtor _ targets) => targets
     Just (RsDoBind canonical) => [canonical]
     Just (RsDoIgnore canonical) => [canonical]
+    -- `@vuna@select@<记录>@<字段>`：字段选择器引用记录类型（字段表随记录 iface 流动）。
+    Just (RsFieldSel recName _) => [recName]
     _ => [n]
 
 -- | 导出条目的 canonical target。

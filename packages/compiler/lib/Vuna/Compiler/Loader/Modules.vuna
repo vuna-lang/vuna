@@ -183,11 +183,11 @@ sliceEqGo i srcOff src dstOff dst n fuel =
 export ctorCanonical : String -> String -> String -> String
 ctorCanonical prefix dname cname = mangle prefix "${dname}.${cname}"
 
-export importName : Import -> String
-importName (Import name isQualified alias sp) = name
+export importModuleName : Import -> String
+importModuleName (Import name isQualified alias sp) = name
 
 export importModuleNames : List Import -> List String
-importModuleNames imports = map importName imports
+importModuleNames imports = map importModuleName imports
 
 -- 导入点 span：隐式我们自己的合成 Import 没有真实位置（file = ""）时不加。
 withImportSite : Span -> Diagnostic -> Diagnostic
@@ -200,11 +200,12 @@ qualifierCandidates imports q =
   let
     strong =
       nubNames
-        (append (map importName (filter (\imp => importName imp == q) imports)) (map importName (filter (\imp => aliasIs q imp) imports)))
+        (append (map importModuleName (filter (\imp => importModuleName imp == q) imports)) (map importModuleName (filter (\imp => aliasIs q imp) imports)))
   in if notEmptyList strong then
     strong
   else
-    nubNames (map importName (filter (\imp => lastSegment (importName imp) == q) imports))
+    nubNames
+      (map importModuleName (filter (\imp => lastSegment (importModuleName imp) == q) imports))
 
 aliasIs : String -> Import -> Bool
 aliasIs q imp =
@@ -247,17 +248,17 @@ openModuleNamesAll (imp :: rest) =
   if imp.importIsQualified then
     openModuleNamesAll rest
   else
-    importName imp :: openModuleNamesAll rest
+    importModuleName imp :: openModuleNamesAll rest
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
 export findImportModule : List Import -> String -> Maybe String
 findImportModule [] _ = Nothing
 findImportModule (imp :: rest) name =
-  if importName imp == name then
-    Just (importName imp)
+  if importModuleName imp == name then
+    Just (importModuleName imp)
   else
     case imp.importAlias of
-      Just alias => if alias == name then Just (importName imp) else findImportModule rest name
+      Just alias => if alias == name then Just (importModuleName imp) else findImportModule rest name
       Nothing => findImportModule rest name
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
@@ -309,7 +310,7 @@ importByPrefix (imp :: rest) name =
       case imp.importAlias of
         Just alias => alias
         Nothing => imp.importName
-  in if startsWith "${prefix}." name then Just (importName imp) else importByPrefix rest name
+  in if startsWith "${prefix}." name then Just (importModuleName imp) else importByPrefix rest name
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
 export reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String

@@ -208,7 +208,7 @@ methodProjType tname params pKinds methodTy =
 -- 签名 `{p1..pn} -> {d : Dict_C p1..pn} -> <方法类型>`；de Bruijn 索引：`_d = ar`（参数
 -- binder 在 d 之外，不影响 d 的内层索引）、`f_k = n-1-k`、`x_i = n+(ar-1-i)`（最内层 = 0，
 -- 分支绑定子 f 在方法参数之内）。单参数时参数 binder 是 `_p`，多参数是 `_p0 .. _p{n-1}`。
--- `rigs` 是方法显式参数各自的 multiplicity（从方法签名逐 binder 取，`binderRig` 判据与
+-- `rigs` 是方法显式参数各自的 multiplicity（从方法签名逐 binder 取，`piBinderRig` 判据与
 -- 实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：擦除位既不生成运行时形参、也不传
 -- 实参——两侧都跳过，才能与由 `checkDef` 生成的实例方法体（同样按 rig 跳过擦除位）严格对齐。
 export projectionBody : String -> Int -> List Rig -> Int -> Int -> Term
@@ -261,7 +261,7 @@ projectionDefsOpaqueGo flags ctor nParams [] fieldTys idx nFields = []
 projectionDefsOpaqueGo flags ctor nParams (m :: rest) [] idx nFields = []
 projectionDefsOpaqueGo flags ctor nParams ((mname, mexpr) :: rest) (t :: rest2) idx nFields =
   (mname,
-    projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf binderRig t) nFields nParams)
+    projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf piBinderRig t) nFields nParams)
     :: projectionDefsOpaqueGo flags ctor nParams rest rest2 (idx + 1) nFields
 
 flagAt : Int -> List Bool -> Bool

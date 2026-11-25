@@ -93,14 +93,14 @@ withImportSpan imp e =
 checkImports : List Layer -> List Layer -> String -> String -> String -> List Module -> List Import -> Check Int
 checkImports allRules matched srcName srcPkg checkedPkg modules [] = OkC 0
 checkImports allRules matched srcName srcPkg checkedPkg modules (imp :: rest) =
-  case findModule modules (importName imp) of
+  case findModule modules (importModuleName imp) of
     -- 目标不在表里（preloaded 装配下依赖模块未被装入）：只有目标名落在本包声明的层里
     -- 才可能判定（跨包/无层目标无法从名字推归属），此时仍按名字判定，不能跳过。
     Nothing =>
-      if srcPkg == checkedPkg && length (matchingLayers allRules (importName imp)) > 0 && not (importAllowed allRules matched (importName imp)) then
+      if srcPkg == checkedPkg && length (matchingLayers allRules (importModuleName imp)) > 0 && not (importAllowed allRules matched (importModuleName imp)) then
         onErrDiag
           (withImportSpan imp)
-          (ldErr4 (LayerViolation "" "" "" "") srcName (importName imp) (labelOf allRules srcName) (labelOf allRules (importName imp)))
+          (ldErr4 (LayerViolation "" "" "" "") srcName (importModuleName imp) (labelOf allRules srcName) (labelOf allRules (importModuleName imp)))
       else
         checkImports allRules matched srcName srcPkg checkedPkg modules rest
     Just t =>

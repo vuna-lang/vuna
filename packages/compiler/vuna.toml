@@ -79,6 +79,7 @@ modules = [
   "Vuna.Compiler.Loader.Layers",
   "Vuna.Compiler.Loader.Modules",
   "Vuna.Compiler.Loader.Resolve",
+  "Vuna.Compiler.Loader.Selectors",
   "Vuna.Compiler.Lowering.Checks",
   "Vuna.Compiler.Lowering.Entry",
   "Vuna.Compiler.Lowering.Env",

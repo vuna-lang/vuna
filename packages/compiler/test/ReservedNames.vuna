@@ -34,7 +34,7 @@ results =
       (not (isSurfaceName "@vuna@prim_eff_print" || isSurfaceName "@vuna@Cell" || isSurfaceName "@vuna@obs@level" || isSurfaceName "@vuna@do@pat")),
     Pair
       "parser-surface-narrow"
-      (isParserSurface RsListNil && isParserSurface RsPerform && isParserSurface RsHandle && isParserSurface RsRowAt && isParserSurface RsAppAt && not (isParserSurface (RsOverCtor "X" ["A.B.C"])) && not (isParserSurface (RsOverValue "f" ["A.B.g"])) && not (isParserSurface (RsMacro "dbg")) && not (isParserSurface (RsDoBind "Base.Trait.Monad.bind"))),
+      (isParserSurface RsListNil && isParserSurface RsPerform && isParserSurface RsHandle && isParserSurface RsRowAt && isParserSurface RsAppAt && not (isParserSurface (RsOverCtor "X" ["A.B.C"])) && not (isParserSurface (RsOverValue "f" ["A.B.g"])) && not (isParserSurface (RsMacro "dbg")) && not (isParserSurface (RsDoBind "Base.Trait.Monad.bind")) && not (isParserSurface (RsFieldSel "A.B" "f"))),
     Pair "hash-not-ident-start" (not (isIdentStart 35)),
     Pair "hash-not-ident-char" (not (isIdentChar 35)),
     Pair "at-not-ident-start" (not (isIdentStart 64)),
@@ -76,7 +76,8 @@ allReserved =
     RsOverValue "f" ["A.B.g", "C.D.h"],
     RsMacro "dbg",
     RsDoBind "Base.Trait.Monad.bind",
-    RsDoIgnore "Base.Trait.Monad.bind"
+    RsDoIgnore "Base.Trait.Monad.bind",
+    RsFieldSel "Vuna.Ir.Anf.Anf" "anfNext"
   ]
 
 -- | 线上编码与分类互逆（`reservedText` / `classify` 是唯一一对编解码）。

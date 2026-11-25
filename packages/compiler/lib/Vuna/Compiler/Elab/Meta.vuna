@@ -2,7 +2,7 @@ module Vuna.Compiler.Elab.Meta where
 
 -- Vuna.Compiler.Elab.Meta：Elab 的共享工具层：值/构造子引用（零参构造子、Bool 专用表示）、convEc 与元变量解的作用域复核、
 -- 全局签名表与 UTC 收集、dt data/ctor 查找、telescope 与结果 spine 计算、已解元变量内联、
--- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
+-- 擦除判据（piBinderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Vuna.Compiler.Base.Diag
 import Base.Data.List as List
@@ -809,7 +809,7 @@ isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec 
 --   2) 中性局部变量：**定义侧** `{x : a}` 的 `a` 是上下文里的类型/索引变量；
 --      查它的 binder 类型，若 binder 类型本身是 index domain（`Type` / 高阶 kind /
 --      `Nat` 之类索引族）则放行。`Int` / `String` 这类非类型域仍拒绝。
--- 放行**不改变擦除判据**：隐式 binder 恒 Rig0（`binderRig`），值只在类型/证明位置可用；
+-- 放行**不改变擦除判据**：隐式 binder 恒 Rig0（`piBinderRig`），值只在类型/证明位置可用；
 -- 运行时使用由 `Checks` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
 export isImplicitDomain : Ctx -> Ec -> Value -> Bool
 isImplicitDomain ctx ec dom =
@@ -831,7 +831,7 @@ isImplicitDomain ctx ec dom =
       _ => False
 
 -- 隐式 binder 的 rig：String 实例名是运行时值（RigOmega），其余隐式仍 Rig0。
--- （`binderRig` 只用于显式 binder；隐式 binder 的 Pi rig 在 `inferPiFuel` 里由这里给出。）
+-- （`piBinderRig` 只用于显式 binder；隐式 binder 的 Pi rig 在 `inferPiFuel` 里由这里给出。）
 export isStringImplicitDomain : Ec -> Value -> Bool
 isStringImplicitDomain ec dom =
   case forceVal ec dom of
@@ -918,13 +918,13 @@ ctxItemAt i (x :: rest) = if i <= 0 then Just x else ctxItemAt (i - 1) rest
 -- 域是类型变量而不是宇宙，不能被误判（否则函数参数会被擦掉）。`isTypeValue` 是它的
 -- 特例（VType 是空 Pi 链）。只查裸 `Type` 的判据会在显式高阶类型参数上漂移，所以
 -- 这里统一走 `isTypeDomain`。
--- `binderRig` 是**唯一的 Rig 构造入口**：`teleOf` / `checkBinders` / `bindOnePattern` /
+-- `piBinderRig` 是**唯一的 Rig 构造入口**：`teleOf` / `checkBinders` / `bindOnePattern` /
 -- `checkLam` / `inferArgs` / `bindCtorBinder` 六处都必须走它。
 export isTypeDomain : Value -> Bool
 isTypeDomain v = isTypeLayerValue v
 
-export binderRig : Bool -> Value -> Rig
-binderRig implicit dom = rigOfBinder implicit (isTypeDomain dom)
+export piBinderRig : Bool -> Value -> Rig
+piBinderRig implicit dom = rigOfBinder implicit (isTypeDomain dom)
 
 -- 源码 quantity → Rig（唯一映射；隐式/类型层域强制 0，标注由上层校验）。
 export rigOfQty : Bool -> Bool -> Maybe Qty -> Rig

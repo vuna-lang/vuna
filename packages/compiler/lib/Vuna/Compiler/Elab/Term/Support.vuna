@@ -19,22 +19,96 @@ import Vuna.Compiler.Frontend.Rast.Name
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
 export inferVarRef : List (String, Term) -> Ctx -> Ec -> String -> Span -> Check (Term, Value, Ec)
 inferVarRef globals ctx ec name sp =
-  case ctxLookup name ctx of
-    Just (idx, tyTerm) => OkC (TVar name idx sp, varTypeValue ctx idx tyTerm, ec)
+  case fieldSelectorOf name of
+    Just (recordName, fieldName) => elabFieldSelector ctx ec recordName fieldName sp
     Nothing =>
-      case valueLookup globals ec name of
-        Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
-        -- 全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
-        -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
-        -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
-        Just (VEDef tyTerm) =>
-          if allImplicitPrefix tyTerm then
-            let
-              inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
-            in OkC inst
-          else
-            OkC (ctorRefTerm (ecDatas ec) name, eval [] tyTerm, ec)
-        Nothing => tcErr1 sp (UnknownName name) name
+      case ctxLookup name ctx of
+        Just (idx, tyTerm) => OkC (TVar name idx sp, varTypeValue ctx idx tyTerm, ec)
+        Nothing =>
+          case valueLookup globals ec name of
+            Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
+            -- 全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
+            -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
+            -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
+            Just (VEDef tyTerm) =>
+              if allImplicitPrefix tyTerm then
+                let
+                  inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
+                in OkC inst
+              else
+                OkC (ctorRefTerm (ecDatas ec) name, eval [] tyTerm, ec)
+            Nothing => tcErr1 sp (UnknownName name) name
+
+-- ---------------------------------------------------------------
+-- 字段选择器（Loader 为 `R.f` 合成的 `@vuna@select@<记录>@<字段>`）
+-- ---------------------------------------------------------------
+-- 选择器就是字段投影的 η 展开：`\{params} (p : R params) -> p.f`，类型
+-- `{params} -> R params -> T`。record 身份、字段表与构造子 telescope 全部来自
+-- `ecDatas`（跨包经 iface 流动），所以不依赖源码声明，也不产生新的全局。
+-- | 线上名是否是字段选择器标记（返回记录 canonical 名与字段名）。
+export fieldSelectorOf : String -> Maybe (String, String)
+fieldSelectorOf name =
+  case classify name of
+    Just (RsFieldSel recName fldName) => Just (recName, fldName)
+    _ => Nothing
+
+-- | 线上名是否是字段选择器标记。
+export isFieldSelectorName : String -> Bool
+isFieldSelectorName name = isFieldSelText name
+
+-- | 合成字段选择器项与类型；record 不存在 / 不是 record / 线性 record / 无该字段都报错。
+export elabFieldSelector : Ctx -> Ec -> String -> String -> Span -> Check (Term, Value, Ec)
+elabFieldSelector ctx ec recordName fieldName sp =
+  case dtDataLookup recordName (ecDatas ec) of
+    Nothing => errAt sp "field selector needs a record in scope: ${recordName}"
+    Just dd =>
+      if not (dtDataIsRecord dd) then
+        errAt sp "${recordName} is not a record; field selector ${fieldName} is undefined"
+      else if dtDataLinear dd then
+        errAt sp "linear record ${recordName} has no field selectors; use pattern matching"
+      else
+        case dtDataCtors dd of
+          [ctor] =>
+            case fieldMetaOf fieldName (dtDataFields dd) of
+              Nothing => errAt sp "record ${recordName} has no field ${fieldName}"
+              Just fm => OkC (selectorTerm dd ctor fm, eval (ctxEnv ctx) (selectorType dd fm), ec)
+          _ => errAt sp "record ${recordName} is malformed: expected exactly one constructor"
+
+-- | 按名字查字段元数据（字段表线性扫）。
+fieldMetaOf : String -> List DtFieldMeta -> Maybe DtFieldMeta
+fieldMetaOf name [] = Nothing
+fieldMetaOf name (fm :: rest) = if fm.dtFieldName == name then Just fm else fieldMetaOf name rest
+
+-- | 选择器的类型：族参数改成隐式 Pi（与构造子类型同形），末位接 `(p : R params) -> T`。
+selectorType : DtData -> DtFieldMeta -> Term
+selectorType dd fm = selectorPiTail dd fm (dtDataKind dd)
+
+selectorPiTail : DtData -> DtFieldMeta -> Term -> Term
+selectorPiTail dd fm (TPi name implicit rig dom cod) =
+  TPi name True rig dom (selectorPiTail dd fm cod)
+selectorPiTail dd fm _ = TPi "p" False RigOmega (recordTypeApp dd) (shift 0 1 fm.dtFieldType)
+
+-- | 记录类型应用 `R p_0 .. p_{n-1}`（索引按当前 Pi 链的深度）。
+recordTypeApp : DtData -> Term
+recordTypeApp dd =
+  recordTypeAppGo 0 (length dd.dtDataParams) (TGlobal dd.dtDataName) dd.dtDataParams
+
+recordTypeAppGo : Int -> Int -> Term -> List (String, Rig) -> Term
+recordTypeAppGo i n acc [] = acc
+recordTypeAppGo i n acc ((paramName, paramRig) :: rest) =
+  recordTypeAppGo (i + 1) n (TApp acc (TVar paramName (n - 1 - i) spanEmpty) Rig0) rest
+
+-- | 选择器项：族参数 λ 链 + `p` λ，体是 record 投影（与字段访问同一个 `TProj` 形态）。
+selectorTerm : DtData -> DtCtor -> DtFieldMeta -> Term
+selectorTerm dd ctor fm =
+  selectorParamLams
+    dd.dtDataParams
+    (TLam "p" RigOmega Nothing spanEmpty (TProj (TVar "p" 0 spanEmpty) (dtCtorName ctor) (drop (length dd.dtDataParams) (dtCtorTelescope ctor)) (length dd.dtDataParams + fm.dtFieldIndex) fm.dtFieldIndex))
+
+selectorParamLams : List (String, Rig) -> Term -> Term
+selectorParamLams [] body = body
+selectorParamLams ((paramName, paramRig) :: rest) body =
+  TLam paramName paramRig Nothing spanEmpty (selectorParamLams rest body)
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
 export allImplicitPrefix : Term -> Bool

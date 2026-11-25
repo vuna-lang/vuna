@@ -336,7 +336,7 @@ checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected bin
     let
       -- ctxBindValue 的第二个参数是**类型值**——这里绑 scrutinee 的类型，不是值本身。
       ctx2 = ctxBindValue name (VNeutral (NGlobal tyName [])) ctx
-      rig = binderRig False (VNeutral (NGlobal tyName []))
+      rig = piBinderRig False (VNeutral (NGlobal tyName []))
     in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (
         \p =>
           case p of
@@ -429,7 +429,7 @@ checkNatLitBoundVarFuel fuel globals ctx ec bindTerm binderTy name body expected
   else
     let
       ctx2 = ctxBindValue name binderTy ctx
-      rig = binderRig False binderTy
+      rig = piBinderRig False binderTy
     in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (
         \p =>
           case p of
@@ -1227,10 +1227,13 @@ inferAppFuel fuel globals ctx ec fn args sp hint =
       _ =>
         case fn of
           EVar name vsp =>
-            if isOverCtorName (rnameKey name) then
+            if isFieldSelectorName (rnameKey name) then
+              inferAppGeneralGoFuel (fuel - 1) globals ctx ec fn args sp hint
+            else if isOverCtorName (rnameKey name) then
               Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp Nothing (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) vsp) args sp hint)
             else
               case ctxLookup (rnameKey name) ctx of
+                -- 字段选择器：按 `inferVarRef` 合成的 Pi 类型消费显式实参。
                 Just _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
                 -- 与类型同名的构造子（`data Pair a b where Pair : a -> b -> ...`）在
                 -- 推断位置按**构造子**解释（推断位置是值位置；类型位置由 checkTypeFuel (fuel - 1) / checkAppFuel (fuel - 1)
@@ -2184,7 +2187,7 @@ checkEFuelNoRowPlainGo fuel globals ctx ec expr expected =
 -- `let` 表达式
 -- ---------------------------------------------------------------
 -- 逐条处理：推断绑定值 → 上下文绑名 → 处理后续与 body → `(\x => body) value`（beta 等价）。
--- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `binderRig` 决定，
+-- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `piBinderRig` 决定，
 -- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
 -- 统一绑定块：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
 -- （签名行必填，`checkBindingSigs`）。`Rast.ofBinding` 把签名合成 `EAnn value ty`，

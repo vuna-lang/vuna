@@ -37,6 +37,7 @@ reservedAtomText (r@(RsOverCtor _ _)) = reservedText r
 reservedAtomText (r@(RsOverValue _ _)) = reservedText r
 reservedAtomText (r@(RsDoBind _)) = reservedText r
 reservedAtomText (r@(RsDoIgnore _)) = reservedText r
+reservedAtomText (r@(RsFieldSel _ _)) = reservedText r
 
 -- | `n` 个空格；`n <= 0` 时为空串。
 export spaces : Int -> String

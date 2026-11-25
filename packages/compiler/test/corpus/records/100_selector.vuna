@@ -1,0 +1,42 @@
+-- 字段选择器 `R.f`：值位置的字段投影（一等函数、参数化 record、字段链、直接应用）。
+record Point where
+  x : Int
+  y : Int
+
+record Segment where
+  start : Point
+  stop : Point
+
+record Box a where
+  boxed : a
+
+p1 : Point
+p1 = Point { x = 1, y = 2 }
+
+p2 : Point
+p2 = Point { x = 10, y = 20 }
+
+seg : Segment
+seg = Segment { start = p1, stop = p2 }
+
+bx : Box Int
+bx = Box { boxed = 7 }
+
+-- 一等函数形态：选择器直接传给高阶函数。
+xs : List Int
+xs = map Point.x [p1, p2]
+
+-- 字段链：选择器之后继续取字段。
+startX : Segment -> Int
+startX s = Point.x s.start
+
+-- 直接应用：记录名 + 字段位置按选择器的 Pi 类型消费实参。
+applied : Int
+applied = Point.x p2 + Box.boxed bx
+
+-- 期望类型给定时（check 位）也能选到同一个选择器。
+applySel : (Point -> Int) -> Point -> Int
+applySel f p = f p
+
+main : Int
+main = length xs * 100 + startX seg + applied + applySel Point.y p1 + (Box.boxed bx - 7)

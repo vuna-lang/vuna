@@ -16,6 +16,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Loader.Selectors
 import Vuna.Compiler.Base.Intrinsics
 import Base.Effect.Types as EffTypes
 
@@ -554,10 +555,37 @@ resolveDottedExpr modules label prefix ns imports scope name sp =
                   else if startsUpperName head then
                     case resolveCtorDotted modules label prefix ns imports name of
                       OkC t => OkC (EVar t sp)
-                      ErrC _ => onErrDiag (withFallbackSpan (nodeRefSpan sp)) (rnNoLoc1 (ModuleNotImported head) head)
+                      ErrC _ =>
+                        case dottedFieldSelector prefix ns imports head rest sp of
+                          Just e => OkC e
+                          Nothing => onErrDiag (withFallbackSpan (nodeRefSpan sp)) (rnNoLoc1 (ModuleNotImported head) head)
                   else
                     Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveGlobal modules label prefix ns imports scope head)) (\n => OkC (foldFieldChain (EVar n sp) rest sp))
           )
+
+-- | 模块前缀解析失败后的字段选择器回退：`head` 是类型命名空间里的名字时，
+-- `R.f`（及 `R.f.g`）合成 `@vuna@select@<记录 canonical 名>@<字段>` 再拼字段链。
+-- 记录身份与字段是否存在由精化器按字段表判定。
+dottedFieldSelector : String -> Namespaces -> List Import -> String -> List String -> NodeRef -> Maybe Expr
+dottedFieldSelector prefix ns imports head [] sp = Nothing
+dottedFieldSelector prefix ns imports head (field :: tail) sp =
+  case selectorRecordTarget prefix ns imports head of
+    Just rec => Just (foldFieldChain (EVar (reservedText (RsFieldSel rec field)) sp) tail sp)
+    Nothing => Nothing
+
+-- | 类型命名空间里的名字 → canonical 名（本模块类型 / import 导出的类型）。
+-- 不是类型名或导出有歧义时 `Nothing`（调用方回落到原诊断）。
+selectorRecordTarget : String -> Namespaces -> List Import -> String -> Maybe String
+selectorRecordTarget prefix ns imports head =
+  if HashMap.member head ns.nsTypeSet then
+    Just (mangle prefix head)
+  else
+    case modulesExportingTypeIn ns.nsModuleTbl imports head of
+      OkC pairs =>
+        case nubNames (map pairExportTarget pairs) of
+          [t] => Just t
+          _ => Nothing
+      ErrC _ => Nothing
 
 foldFieldChain : Expr -> List String -> NodeRef -> Expr
 foldFieldChain base [] sp = base
@@ -1187,6 +1215,22 @@ startsUpperName name =
 --   2. 非小写名找不到类型时，退化为**索引构造子**（本地构造子 + 跨模块 import 的构造子），
 --      最后才是本模块的值定义（大写类型层 def，少见）。
 -- | 类型名解析：本模块类型 → 内建类型 → 小写（类型变量/退化）→ 非小写（索引构造子等）。
+-- | record 与 data 的 `deriving` 名解析：`Selectors` 是选择器生成标记（不是类型名）。
+-- record 放行给 `Loader.Selectors` 消费；data 上用它直接报错。
+resolveRecordDeriving : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
+resolveRecordDeriving modules label prefix ns imports name =
+  if name == selectorDerivingName then
+    OkC name
+  else
+    resolveTypeName modules label prefix ns imports name
+
+resolveDataDeriving : List Module -> String -> String -> Namespaces -> List Import -> String -> String -> Check String
+resolveDataDeriving modules label prefix ns imports dname name =
+  if name == selectorDerivingName then
+    rnNoLoc1 (SelectorNotRecord dname) dname
+  else
+    resolveTypeName modules label prefix ns imports name
+
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveTypeName modules label prefix ns imports name =
   if HashMap.member name ns.nsTypeSet then
@@ -1364,11 +1408,11 @@ resolveDecl modules label prefix ns imports d =
     DData dname params kind ctors derivings viaField repr lin sp =>
       Vuna.Compiler.Base.Common.bind
         (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveTypeTopName label prefix dname))
-        (\dn => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => OkC (DData dn params kind2 ctors2 ds2 viaField repr lin sp)))))
+        (\dn => Vuna.Compiler.Base.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports kind) (\kind2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveCtorSpec modules label prefix ns imports dname) ctors) (\ctors2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveDataDeriving modules label prefix ns imports dname) derivings) (\ds2 => OkC (DData dn params kind2 ctors2 ds2 viaField repr lin sp)))))
     DRecord dname params fields derivings viaField repr lin sp =>
       Vuna.Compiler.Base.Common.bind
         (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveTypeTopName label prefix dname))
-        (\dn => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => OkC (DRecord dn params fields2 ds2 viaField repr lin sp))))
+        (\dn => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (resolveRecordDeriving modules label prefix ns imports) derivings) (\ds2 => OkC (DRecord dn params fields2 ds2 viaField repr lin sp))))
     DTrait tname params supers methods sp =>
       Vuna.Compiler.Base.Common.bind
         (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveTypeTopName label prefix tname))

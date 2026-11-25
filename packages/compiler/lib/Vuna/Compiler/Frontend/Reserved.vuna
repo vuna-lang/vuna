@@ -83,6 +83,8 @@ export data Reserved(..) : Type where
   RsDoBind : String -> Reserved
   -- do 链丢弃绑定（`_ <- e` / 裸语句）的标记头。
   RsDoIgnore : String -> Reserved
+  -- 字段选择器 `R.f`：记录 canonical 名 + 字段名；Loader 在模块名解析失败后合成。
+  RsFieldSel : String -> String -> Reserved
 
 -- 线上编码的原子段；只在 `reservedText` / `classify` 各引用一次。
 rsListNilText : String
@@ -134,6 +136,9 @@ rsDoBindPrefix = "@vuna@do@bind@"
 rsDoIgnorePrefix : String
 rsDoIgnorePrefix = "@vuna@do@ignore@"
 
+rsFieldSelPrefix : String
+rsFieldSelPrefix = "@vuna@select@"
+
 -- | 表面标记 → 线上字符串。
 export reservedText : Reserved -> String
 reservedText RsListNil = rsListNilText
@@ -152,6 +157,7 @@ reservedText (RsOverValue short targets) = "${rsOverValuePrefix}${short}@${joinW
 reservedText (RsMacro name) = "${rsMacroPrefix}${name}"
 reservedText (RsDoBind canonical) = "${rsDoBindPrefix}${canonical}"
 reservedText (RsDoIgnore canonical) = "${rsDoIgnorePrefix}${canonical}"
+reservedText (RsFieldSel recName fldName) = "${rsFieldSelPrefix}${recName}@${fldName}"
 
 -- | 线上字符串 → 表面标记（不是表面标记给 `Nothing`）。
 export classify : String -> Maybe Reserved
@@ -186,7 +192,15 @@ classify name =
     case overParts rsOverValuePrefix name of
       Just (short, targets) => Just (RsOverValue short targets)
       Nothing => Nothing
-  else if startsWith rsMacroPrefix name then Just (RsMacro (dropNamePrefix rsMacroPrefix name)) else if startsWith rsDoBindPrefix name then Just (RsDoBind (dropNamePrefix rsDoBindPrefix name)) else if startsWith rsDoIgnorePrefix name then Just (RsDoIgnore (dropNamePrefix rsDoIgnorePrefix name)) else Nothing
+  else if startsWith rsMacroPrefix name then Just (RsMacro (dropNamePrefix rsMacroPrefix name)) else if startsWith rsDoBindPrefix name then Just (RsDoBind (dropNamePrefix rsDoBindPrefix name)) else if startsWith rsDoIgnorePrefix name then Just (RsDoIgnore (dropNamePrefix rsDoIgnorePrefix name)) else if startsWith rsFieldSelPrefix name then fieldSelParts name else Nothing
+
+-- | 字段选择器标记的 `<记录>@<字段>` 段 → （记录名，字段名）。
+fieldSelParts : String -> Maybe Reserved
+fieldSelParts name =
+  case splitOnChar 64 (dropNamePrefix rsFieldSelPrefix name) of
+    [recName, fldName] =>
+      if recName == "" || fldName == "" then Nothing else Just (RsFieldSel recName fldName)
+    _ => Nothing
 
 -- | 重载标记的 `<短名>@<target>@...` 段 → 短名 + 候选（尾随分隔符的空段折叠掉）。
 overParts : String -> String -> Maybe (String, List String)
@@ -216,6 +230,7 @@ isParserSurface (RsOverValue _ _) = False
 isParserSurface (RsMacro _) = False
 isParserSurface (RsDoBind _) = False
 isParserSurface (RsDoIgnore _) = False
+isParserSurface (RsFieldSel _ _) = False
 
 -- | 丢掉空串（`a@b@` 的尾段是构造 `overCtorName name []` 的形态，不是候选）。
 dropEmpty : List String -> List String
@@ -225,6 +240,10 @@ dropEmpty (x :: rest) = if x == "" then dropEmpty rest else x :: dropEmpty rest
 -- | 是否是宏调用标记（`@vuna@macro@<name>`）。
 export isMacroSyntaxName : String -> Bool
 isMacroSyntaxName name = startsWith rsMacroPrefix name
+
+-- | 是否是字段选择器标记（`@vuna@select@<record>@<field>`）。
+export isFieldSelText : String -> Bool
+isFieldSelText name = startsWith rsFieldSelPrefix name
 
 -- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
 export macroNameOf : String -> Maybe String

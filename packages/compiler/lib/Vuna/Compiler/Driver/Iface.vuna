@@ -604,7 +604,7 @@ sourceOf [] _ = SourceInfo "" "" 0 0
 sourceOf ((n, s) :: rest) name = if n == name then s else sourceOf rest name
 
 importNameOf : Import -> String
-importNameOf = importName
+importNameOf = importModuleName
 
 importNamesOfModule : Module -> List String
 importNamesOfModule m = map importNameOf (append m.moduleImportsOf m.moduleImplicitImportsOf)

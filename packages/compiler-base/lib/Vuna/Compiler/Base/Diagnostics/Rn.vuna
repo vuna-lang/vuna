@@ -18,6 +18,8 @@ export data RnErr(..) : Nat -> Type where
   DuplicateImport : RnErr 0
   -- arity 1
   AmbiguousConstructorExport : String -> RnErr 1
+  -- | `deriving (Selectors)` 写在非 record 声明上（名字）。
+  SelectorNotRecord : String -> RnErr 1
   AmbiguousModule : String -> String -> RnErr 2
   -- | 同一运算符在程序里声明了不止一次 fixity（符号的 fixity 全程序唯一）。
   DuplicateFixity : String -> RnErr 1
@@ -51,6 +53,12 @@ export data RnErr(..) : Nat -> Type where
   AmbiguousConstructorInExport : String -> String -> RnErr 2
   TypeNotExported : String -> String -> RnErr 2
   ValueNotExported : String -> String -> RnErr 2
+  -- | 同名字段的选择器被多个 record 的 `deriving (Selectors)` 认领（字段名 + 认领者）。
+  SelectorConflict : String -> String -> RnErr 2
+  -- | 同名字段被多个 record 共享且无人认领（字段名 + 拥有者）。
+  SelectorShared : String -> String -> RnErr 2
+  -- | 生成的选择器与已有顶层声明同名（选择器名 + record 名）。
+  SelectorNameTaken : String -> String -> RnErr 2
   -- arity 3
   -- | 内置宏的实参个数与注册 arity 不符。
   MacroArity : String -> String -> String -> RnErr 3
@@ -88,6 +96,10 @@ rnCode (AmbiguousConstructor _ _) = "RN_AmbiguousConstructor"
 rnCode (AmbiguousConstructorInExport _ _) = "RN_AmbiguousConstructorInExport"
 rnCode (TypeNotExported _ _) = "RN_TypeNotExported"
 rnCode (ValueNotExported _ _) = "RN_ValueNotExported"
+rnCode (SelectorConflict _ _) = "RN_SelectorConflict"
+rnCode (SelectorShared _ _) = "RN_SelectorShared"
+rnCode (SelectorNameTaken _ _) = "RN_SelectorNameTaken"
+rnCode (SelectorNotRecord _) = "RN_SelectorNotRecord"
 rnCode (MacroArity _ _ _) = "RN_MacroArity"
 rnCode (AmbiguousName _ _ _) = "RN_AmbiguousName"
 
@@ -128,6 +140,12 @@ rnTemplate (AmbiguousConstructorInExport _ _) =
   "ambiguous constructor <0> in <1> (export T(..) instead)"
 rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
+rnTemplate (SelectorConflict _ _) = "field <0> has a selector claimed by more than one record (<1>)"
+rnTemplate (SelectorShared _ _) =
+  "field <0> is shared by <1>; add deriving (Selectors) to the record that owns the selector"
+rnTemplate (SelectorNameTaken _ _) =
+  "selector <0> for record <1> collides with an existing top-level definition"
+rnTemplate (SelectorNotRecord _) = "deriving (Selectors) only applies to record declarations"
 rnTemplate (MacroArity _ _ _) = "macro <0> expects <1> argument(s), got <2>"
 rnTemplate (AmbiguousName _ _ _) =
   "ambiguous <0> <1> (imported from <2>; qualify it at the use site)"
@@ -273,6 +291,22 @@ rnAll =
       (rnCode (MacroArity "" "" ""))
       (rnTemplate (MacroArity "" "" ""))
       "宏实参个数不匹配",
+    RnEntry
+      (rnCode (SelectorConflict "" ""))
+      (rnTemplate (SelectorConflict "" ""))
+      "字段选择器被多个 record 认领",
+    RnEntry
+      (rnCode (SelectorShared "" ""))
+      (rnTemplate (SelectorShared "" ""))
+      "同名字段无人认领选择器",
+    RnEntry
+      (rnCode (SelectorNameTaken "" ""))
+      (rnTemplate (SelectorNameTaken "" ""))
+      "选择器与已有顶层声明同名",
+    RnEntry
+      (rnCode (SelectorNotRecord ""))
+      (rnTemplate (SelectorNotRecord ""))
+      "deriving (Selectors) 用在非 record 上",
     RnEntry
       (rnCode (AmbiguousName "" "" ""))
       (rnTemplate (AmbiguousName "" "" ""))
