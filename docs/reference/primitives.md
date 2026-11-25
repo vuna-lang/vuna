@@ -305,11 +305,12 @@ native `96` 与 ocaml `95` 分别覆盖 Process / Net 的 `Result` runner。
 - 子线程在 `runPure` 里执行任务体；`threadId` 是线程表槽号（主线程 0，与 OCaml 的 domain
   id 同口径），`threadParallelism` 数 `sched_getaffinity` 的位。
 - 分配：有子线程（`rt_thread_count > 0`）时 `alloc` 拿一把 futex 堆锁；单线程路径不加锁。
-- **STW GC**：回收器置 `rt_gc_requested`，等 `rt_parked_threads == live-1`；线程在
+- **STW GC**：回收器置 `rt_gc_requested`，轮询线程表（上界 `rt_thread_hi`）直到非自身的
+  live 线程都离开 running；`rt_parked_threads` / `rt_live_threads` 只是计数。线程在
   `alloc` / 循环头（`rt_safepoint`，只在线程程序里注入）、futex 等待（`block_begin`/
   `block_end`）以及阻塞的宿主 syscall（read / write / wait4 / nanosleep / getdents64，
-  有子线程时才标记）发布 `saved_rsp` 并停车。根集 = 每个 live 线程的 `[saved_rsp, stack_top)`
-  保守扫描 + CAF + 每个线程 TCB 的 cleanup 链。回收结束清请求、推进 `rt_gc_epoch` 并唤醒
+  begin 按子线程数决定，end 按 TCB state 收尾）发布 `saved_rsp` 并停车。根集 = 每个
+  live 线程的 `[saved_rsp, stack_top)` 保守扫描 + CAF + 每个线程 TCB 的 cleanup 链。回收结束清请求、推进 `rt_gc_epoch` 并唤醒
   全部停车线程（先读 epoch 再查请求，避免丢失唤醒）。扫描上界取 `rt_thread_hi`（已用最高
   槽 + 1，单调）而不是表容量：并发通常只有几十，扫满 4096 槽会在 `GC_STRESS` 下变成可测
   开销；槽里解引用 TCB 前核对 magic，表被写坏时 trap 而不是把任意内存当 TCB 扫。

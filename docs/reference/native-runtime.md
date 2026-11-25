@@ -219,7 +219,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（逐帧保守 /
   脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
   清扫与尺寸类回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
-  子线程存活（`rt_thread_count > 0`）时回收直接返回（并行区只增长）。
+  线程程序（`rt_threaded = 1`）回收时置 `rt_gc_requested`，等非自身 live 线程离开 running
+  后按线程表扫根；没有启用线程运行时的程序走单线程 `rbp` 链。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity；线程/同步原语（`clone` + futex）也在这里。
 - `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、**按模块切分的
