@@ -788,7 +788,7 @@ ecRemoveDefTbl name (Ec next sols defs datas depths goals insts classes dgoals d
     insts
     classes
     dgoals
-    (HashMap.fromList (filter (\p => not (firstOf p == name)) (HashMap.toList deftbl)))
+    (HashMap.remove name deftbl)
     gtbl
     soltbl
     dptbl

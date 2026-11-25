@@ -122,9 +122,10 @@ ctorCandsOf (d :: rest) =
     _ => ctorCandsOf rest
 
 -- | 解析期命名空间（`release` 决定 assert/todo 拒绝检查是否生效；
--- `modules` 用来建「模块名 → 模块」表，解析每个引用时不再线性扫模块表）。
-export namespacesOfWith : Bool -> List Module -> List Decl -> Namespaces
-namespacesOfWith release modules decls =
+-- `modules` 用来建「模块名 → 模块」表，解析每个引用时不再线性扫模块表；
+-- `imports` 一次算出 open import 的模块名，逐引用查表时不再重算）。
+export namespacesOfWith : Bool -> List Module -> List Decl -> List Import -> Namespaces
+namespacesOfWith release modules decls imports =
   let
     vals = valueNamesOf decls
     cts = ctorsOf decls
@@ -139,6 +140,7 @@ namespacesOfWith release modules decls =
     nsTypeSet = HashMap.ofNames tys,
     nsCtorCands = cands,
     nsModuleTbl = moduleTblOf modules,
+    nsOpenNames = openModuleNames imports,
     nsRelease = release
   }
 
@@ -168,10 +170,10 @@ pairIsDataCtor : List Module -> (String, ExportEntry) -> Bool
 pairIsDataCtor modules p = isDataOrRecordCtorTarget modules (pairExportTarget p)
 
 -- | open import 里同名 data/record 构造子的 target 集合（去重）。
-importedCtorTargets : List Module -> HashMap String Module -> List Import -> String -> Check (List String)
-importedCtorTargets modules tbl imports name =
+importedCtorTargets : List Module -> HashMap String Module -> List String -> String -> Check (List String)
+importedCtorTargets modules tbl openNames name =
   Vuna.Compiler.Base.Common.bind
-    (modulesExportingCtorIn tbl imports name)
+    (modulesExportingCtorIn tbl openNames name)
     (\pairs => OkC (nubNames (map pairExportTarget (filter (pairIsDataCtor modules) pairs))))
 
 -- | 构造子候选 = 本地候选 ∪ import 候选（本地候选优先的规则见函数内注释）。
@@ -179,7 +181,7 @@ ctorCandidates : List Module -> String -> Namespaces -> List Import -> String ->
 -- 与本地**类型名**同名的构造子（record 构造子 / `data Pair where Pair` 的双命名空间）
 -- 保持词法遮蔽：本地优先，不并入 import 候选。纯构造子名（`Nil` 等）才做 union。
 ctorCandidates modules prefix ns imports name =
-  Vuna.Compiler.Base.Common.bind (importedCtorTargets modules ns.nsModuleTbl imports name) (
+  Vuna.Compiler.Base.Common.bind (importedCtorTargets modules ns.nsModuleTbl ns.nsOpenNames name) (
       \imp =>
         let
           local = localCtorTargets prefix ns name
@@ -402,7 +404,7 @@ resolveTypeTarget modules label prefix ns imports name =
   else if containsDot name then
     resolveDottedTypeTargetOnly modules label imports name
   else
-    Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl imports name) (
+    Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
         \pairs =>
           case pairs of
             [] => rnNoLoc1 (UnknownType name) name
@@ -556,7 +558,7 @@ resolveDottedExpr modules label prefix ns imports scope name sp =
                     case resolveCtorDotted modules label prefix ns imports name of
                       OkC t => OkC (EVar t sp)
                       ErrC _ =>
-                        case dottedFieldSelector prefix ns imports head rest sp of
+                        case dottedFieldSelector prefix ns head rest sp of
                           Just e => OkC e
                           Nothing => onErrDiag (withFallbackSpan (nodeRefSpan sp)) (rnNoLoc1 (ModuleNotImported head) head)
                   else
@@ -566,21 +568,21 @@ resolveDottedExpr modules label prefix ns imports scope name sp =
 -- | 模块前缀解析失败后的字段选择器回退：`head` 是类型命名空间里的名字时，
 -- `R.f`（及 `R.f.g`）合成 `@vuna@select@<记录 canonical 名>@<字段>` 再拼字段链。
 -- 记录身份与字段是否存在由精化器按字段表判定。
-dottedFieldSelector : String -> Namespaces -> List Import -> String -> List String -> NodeRef -> Maybe Expr
-dottedFieldSelector prefix ns imports head [] sp = Nothing
-dottedFieldSelector prefix ns imports head (field :: tail) sp =
-  case selectorRecordTarget prefix ns imports head of
+dottedFieldSelector : String -> Namespaces -> String -> List String -> NodeRef -> Maybe Expr
+dottedFieldSelector prefix ns head [] sp = Nothing
+dottedFieldSelector prefix ns head (field :: tail) sp =
+  case selectorRecordTarget prefix ns head of
     Just rec => Just (foldFieldChain (EVar (reservedText (RsFieldSel rec field)) sp) tail sp)
     Nothing => Nothing
 
 -- | 类型命名空间里的名字 → canonical 名（本模块类型 / import 导出的类型）。
 -- 不是类型名或导出有歧义时 `Nothing`（调用方回落到原诊断）。
-selectorRecordTarget : String -> Namespaces -> List Import -> String -> Maybe String
-selectorRecordTarget prefix ns imports head =
+selectorRecordTarget : String -> Namespaces -> String -> Maybe String
+selectorRecordTarget prefix ns head =
   if HashMap.member head ns.nsTypeSet then
     Just (mangle prefix head)
   else
-    case modulesExportingTypeIn ns.nsModuleTbl imports head of
+    case modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames head of
       OkC pairs =>
         case nubNames (map pairExportTarget pairs) of
           [t] => Just t
@@ -684,7 +686,7 @@ resolveGlobal modules label prefix ns imports scope name =
         else if isDtPreludeName name then
           OkC name
         else
-          Vuna.Compiler.Base.Common.bind (modulesExportingValueIn ns.nsModuleTbl imports name) (
+          Vuna.Compiler.Base.Common.bind (modulesExportingValueIn ns.nsModuleTbl ns.nsOpenNames name) (
               \pairs =>
                 case pairs of
                   [] =>
@@ -692,14 +694,14 @@ resolveGlobal modules label prefix ns imports scope name =
                         \cands =>
                           case cands of
                             [] =>
-                              Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl imports name) (
+                              Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl ns.nsOpenNames name) (
                                   \cpairs =>
                                     case cpairs of
                                       [] =>
                                         if HashMap.member name ns.nsTypeSet then
                                           OkC (mangle prefix name)
                                         else
-                                          Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl imports name) (
+                                          Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
                                               \tpairs =>
                                                 case tpairs of
                                                   [] => onErrDiag (appendMessage "${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}") (onErrDiag (appendMessage (traitImportHint name)) (rnNoLoc1 (UnknownVariable name) name))
@@ -760,7 +762,7 @@ resolveCtor modules label prefix ns imports name =
               else if isIntrinsicName name then
                 OkC name
               else
-                Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl imports name) (
+                Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl ns.nsOpenNames name) (
                     \pairs =>
                       case pairs of
                         [] => onErrDiag (appendMessage (suggest name ns.nsCtors)) (rnNoLoc1 (UnknownConstructor name) name)
@@ -1264,15 +1266,15 @@ resolveLowerTypeName modules label prefix ns imports name =
           case mc of
             Just t => OkC t
             Nothing =>
-              Vuna.Compiler.Base.Common.bind (modulesExportingValueIn ns.nsModuleTbl imports name) (
+              Vuna.Compiler.Base.Common.bind (modulesExportingValueIn ns.nsModuleTbl ns.nsOpenNames name) (
                   \vp =>
                     case vp of
                       [] =>
-                        Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl imports name) (
+                        Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl ns.nsOpenNames name) (
                             \cp =>
                               case cp of
                                 [] =>
-                                  Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl imports name) (
+                                  Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
                                       \tp =>
                                         case tp of
                                           [] => OkC name
@@ -1295,7 +1297,7 @@ resolveNonLowerTypeName modules label prefix ns imports name =
             if containsDot name then
               resolveDottedTypeName modules label prefix ns imports name
             else
-              Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl imports name) (
+              Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
                   \pairs =>
                     case pairs of
                       -- 类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Data.Nat`
@@ -1523,13 +1525,15 @@ resolveDeclWithImplicitScopes scopes modules label prefix ns imports d =
 -- entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子互不覆盖。
 export resolveEntry : Bool -> List Module -> String -> List Import -> List Decl -> Check (List Decl)
 resolveEntry release modules entryPkg imports decls =
-  resolveProgram modules "<entry>" "" (namespacesOfWith release modules decls) imports decls
+  resolveProgram modules "<entry>" "" (namespacesOfWith release modules decls imports) imports decls
 
 resolveModules : Bool -> List Module -> Check (List Decl)
 resolveModules release [] = OkC []
 resolveModules release (modules@((Module name mpkg imports imps decls exports fx _ _ _ _) :: rest)) =
-  Vuna.Compiler.Base.Common.bind
-    (resolveProgram modules name name (namespacesOfWith release modules decls) (append imports imps) decls)
+  let
+    allImps = append imports imps
+  in Vuna.Compiler.Base.Common.bind
+    (resolveProgram modules name name (namespacesOfWith release modules decls allImps) allImps decls)
     (\d1 => Vuna.Compiler.Base.Common.bind (resolveModules release rest) (\d2 => OkC (append d1 d2)))
 
 tyShape : Expr -> String

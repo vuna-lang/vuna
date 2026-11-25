@@ -1054,7 +1054,7 @@ resolveModuleGo release m rest declsR =
       \decls3 =>
         let
           modules2 = Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf decls3 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleFixFactsOf :: rest
-          ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3)
+          ns = obsPure "vuna.resolve.ns" (\_ => namespacesOfWith release modules2 decls3 (moduleAllImportsOf m))
         in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.module" (\_ => resolveProgram modules2 (moduleNameOf m) (moduleNameOf m) ns (moduleAllImportsOf m) decls3)) (\d1 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules2 m.moduleImportsOf d1 decls3 (moduleReexportsOf m))) (\warns => OkC (Module (moduleNameOf m) (modulePackageOf m) m.moduleImportsOf m.moduleImplicitImportsOf d1 m.moduleExportsOf (moduleFixitiesOf m) (moduleReexportsOf m) (moduleOpaqueOf m) m.moduleExportIndexOf m.moduleFixFactsOf, warns)))
     )
 

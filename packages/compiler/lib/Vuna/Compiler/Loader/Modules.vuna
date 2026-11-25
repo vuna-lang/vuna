@@ -84,6 +84,9 @@ export record Namespaces(..) where
   nsCtorCands : List (String, String)
   -- | 模块名 → 模块（解析期按 import 名查导出，见 `Modules.moduleTblOf`）。
   nsModuleTbl : HashMap String Module
+  -- | open import 的模块名（去重后）。`modulesExporting*In` 每个引用都查它，
+  -- 逐次 `openModuleNames` 会把 O(imports²) 去重摊到每个节点上。
+  nsOpenNames : List String
   -- release 构建模式：Resolve 的 assert/todo 拒绝检查用（显式传入，不读进程环境）。
   nsRelease : Bool
 
@@ -215,7 +218,7 @@ checkImportAliasSyntax (imp :: rest) =
       else
         onErrDiag (withImportSite (importSpan imp)) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
-openModuleNames : List Import -> List String
+export openModuleNames : List Import -> List String
 openModuleNames imports = nubNames (openModuleNamesAll imports)
 
 -- 先按原顺序收集，末尾**一次**去重（逐层 `nubNames` 是 O(n²)）。
@@ -517,9 +520,9 @@ modulesExportingValue modules imports name =
   modulesExportingValueFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- | 表版本（解析期热路径）。
-export modulesExportingValueIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
-modulesExportingValueIn tbl imports name =
-  modulesExportingValueFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
+export modulesExportingValueIn : HashMap String Module -> List String -> String -> Check (List (String, ExportEntry))
+modulesExportingValueIn tbl names name =
+  modulesExportingValueFrom (exportIndexOfModuleIn tbl) names name
 
 -- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
 modulesExportingCtorFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (String, ExportEntry))
@@ -537,9 +540,9 @@ modulesExportingCtor modules imports name =
   modulesExportingCtorFrom (exportIndexOfModule modules) (openModuleNames imports) name
 
 -- | 表版本（解析期热路径）。
-export modulesExportingCtorIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
-modulesExportingCtorIn tbl imports name =
-  modulesExportingCtorFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
+export modulesExportingCtorIn : HashMap String Module -> List String -> String -> Check (List (String, ExportEntry))
+modulesExportingCtorIn tbl names name =
+  modulesExportingCtorFrom (exportIndexOfModuleIn tbl) names name
 
 modulesExportingTypeFrom : (String -> Check (HashMap String (List ExportEntry))) -> List String -> String -> Check (List (String, ExportEntry))
 modulesExportingTypeFrom idxOf [] name = OkC []
@@ -552,9 +555,9 @@ modulesExportingTypeFrom idxOf (m :: rest) name =
     )
 
 -- | 表版本（解析期热路径）。
-export modulesExportingTypeIn : HashMap String Module -> List Import -> String -> Check (List (String, ExportEntry))
-modulesExportingTypeIn tbl imports name =
-  modulesExportingTypeFrom (exportIndexOfModuleIn tbl) (openModuleNames imports) name
+export modulesExportingTypeIn : HashMap String Module -> List String -> String -> Check (List (String, ExportEntry))
+modulesExportingTypeIn tbl names name =
+  modulesExportingTypeFrom (exportIndexOfModuleIn tbl) names name
 
 export modulesExportingType : List Module -> List Import -> String -> Check (List (String, ExportEntry))
 modulesExportingType modules imports name =
