@@ -1057,7 +1057,7 @@ optimizeDispatch raw =
       blocks = map (addFallLabelToBlock guards) (splitBlocks instrs)
       deadRegs = deadStateRegs disps guards instrs
       threaded = threadBlocks disps tables guards safeArms safeDisps deadRegs blocks
-    in alignSmallLoops (foldDivSignChains (foldDivChains (dropDeadFlagWrites (rotateSelfLoops (rotateGuardBlocks guards (splitBlocks threaded))))))
+    in alignSmallLoops (foldDivSignChains (foldDivChains (dropRedundantTests (dropDeadFlagWrites (rotateSelfLoops (rotateGuardBlocks guards (splitBlocks threaded)))))))
 
 -- ---------------------------------------------------------------
 -- 标量三元选择（cmov）
@@ -1618,3 +1618,56 @@ operandReads : Reg -> Operand -> Bool
 operandReads s (OpReg r) = sameReg s r
 operandReads s (OpMem b off) = sameReg s b
 operandReads _ _ = False
+
+-- ---------------------------------------------------------------
+-- 冗余 `test`
+-- ---------------------------------------------------------------
+-- `sub n, 1; test n, n; jle` 里的 `test` 是多余的：`sub` 已经按结果置了标志。
+-- `jl / jle / jg / jge` 的 SF^OF 就是与 0 相比的正确结果，`je / jne` 看 ZF，
+-- `js / jns` 看 SF；`add` / `sub` / `and` / `or` / `xor` 给的标志都满足这几条
+-- （移位与 `imul` 的 OF 语义不同，不收）。
+export dropRedundantTests : List Instr -> List Instr
+dropRedundantTests instrs = testGo Nothing instrs
+
+testGo : Maybe Instr -> List Instr -> List Instr
+testGo prev [] = []
+testGo prev (i :: rest) =
+  case i of
+    ITest a b =>
+      if sameReg a b && prevFlagsHere prev a then
+        case rest of
+          next :: _ => if signFlagJump next then testGo prev rest else i :: testGo (Just i) rest
+          [] => testGo prev rest
+      else
+        i :: testGo (Just i) rest
+    _ => i :: testGo (Just i) rest
+
+prevFlagsHere : Maybe Instr -> Reg -> Bool
+prevFlagsHere Nothing _ = False
+prevFlagsHere (Just (IBinReg op d _)) r = sameReg d r && zeroFlagOp op
+prevFlagsHere (Just (IBin op _)) r = sameReg r Rax && zeroFlagOp op
+prevFlagsHere _ _ = False
+
+zeroFlagOp : String -> Bool
+zeroFlagOp op =
+  op
+    == "add"
+    || op == "sub" || op == "and" || op == "or" || op == "xor" || op == "inc" || op == "dec"
+
+-- | 只依赖 SF / ZF / (SF^OF) 的条件跳转。
+signFlagJump : Instr -> Bool
+signFlagJump (IJcc cond _) = signFlagCond cond
+signFlagJump _ = False
+
+signFlagCond : String -> Bool
+signFlagCond cond =
+  cond
+    == "je"
+    || cond
+    == "jz"
+    || cond
+    == "jne"
+    || cond
+    == "jnz"
+    || cond
+    == "jl" || cond == "jle" || cond == "jg" || cond == "jge" || cond == "js" || cond == "jns"

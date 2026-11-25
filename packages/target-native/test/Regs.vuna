@@ -191,7 +191,7 @@ problems : List String
 problems =
   concatMap
     (\s => if s == "" then [] else [s])
-    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody), check "live rax keeps chain" True (hasRaxFromRbx liveChainPlan.rpBody), check "loop const hoisted" True (beforeLabel isBigConst ".L" hoistPlan.rpBody), check "setcc writes slot reg" True (hasSetccRbx setccPlan.rpBody), check "setcc copy removed" False (hasMovRbxRax setccPlan.rpBody)]
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody), check "live rax keeps chain" True (hasRaxFromRbx liveChainPlan.rpBody), check "loop const hoisted" True (beforeLabel isBigConst ".L" hoistPlan.rpBody), check "setcc writes slot reg" True (hasSetccRbx setccPlan.rpBody), check "setcc copy removed" False (hasMovRbxRax setccPlan.rpBody), check "redundant test dropped" False (hasRedundantTest (dropRedundantTests testGuardBody)), check "kept test stays" True (mentionsTest (dropRedundantTests keptTestBody))]
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
@@ -309,3 +309,21 @@ instrMentionsPos _ _ = False
 operandIsPos : Int -> Operand -> Bool
 operandIsPos off (OpMem Rbp o) = o == off
 operandIsPos _ _ = False
+
+-- | `sub n, 1; test n, n; jle`：`test` 冗余（`sub` 已置标志）。
+testGuardBody : List Instr
+testGuardBody = [IBinReg "sub" Rbx (OpImm 1), ITest Rbx Rbx, IJcc "jle" ".L"]
+
+-- | 上一条不写 rbx（`and` 写 rax）时 `test` 必须留着。
+keptTestBody : List Instr
+keptTestBody = [IBinReg "and" Rax (OpImm 1), ITest Rbx Rbx, IJcc "jle" ".L"]
+
+hasRedundantTest : List Instr -> Bool
+hasRedundantTest instrs = foldl (\acc, i => acc || isRbxTest i) False instrs
+
+isRbxTest : Instr -> Bool
+isRbxTest (ITest a b) = sameReg a Rbx && sameReg b Rbx
+isRbxTest _ = False
+
+mentionsTest : List Instr -> Bool
+mentionsTest instrs = foldl (\acc, i => acc || isRbxTest i) False instrs

@@ -381,6 +381,11 @@ prologue 保存用到的寄存器（奇数个补 8 字节，保持 `call` 前 16
 - **自递归循环的守卫标志复用**：`Lb: <体>; Lg: test r, r; jg Lb` 且体尾是
   `sub r, k`（`k ≥ 1`）时，把 `jg Lb` 挂到体尾：63-bit 计数器上 `sub` 的 ZF/OF 与
   `test` 等价，每轮少一条 `test`。入口仍走原守卫。
+- **冗余 `test` 清理**（`Regs.dropRedundantTests`）：`sub r, 1; test r, r; jle` 里
+  `sub` 已经按结果置了标志，而 `jl / jle / jg / jge` 的 SF^OF、`je / jne` 的 ZF、
+  `js / jns` 的 SF 与 `test r, r` 一致（`add` / `sub` / `and` / `or` / `xor` 都成立，
+  移位与 `imul` 的 OF 语义不同，不收），于是紧跟其后的 `test` 直接删掉。分派链里
+  「臂尾 `sub` 后紧跟复制过来的守卫」这类形态就是它收掉的（`state_machine` 的状态 7 臂）。
 - **标量三元选择**：`mov rax, A; <rax 上的标量链>; cmp rax, B; jcc L; mov rax, C;
   L: mov d, rax` 直接以 `d` 为目标——快路径的链重定向到 `d`、慢路径写 `d`；`C` 是
   寄存器 / 内存时再折成 `cmov`，立即数保留分支（`cmov` 不收立即数）。
