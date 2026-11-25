@@ -1,0 +1,56 @@
+-- | 变长字节缓冲：句柄是普通值，元素固定为字节（没有元素类型参数）。
+--
+-- 追加原地进行，容量不足时按倍数增长；`toString` 取一次快照（复制成新字符串）。
+-- 分配与读写要求 `Member MutOp r`，`withMutBuffer` 在结束时关闭标记。
+module Base.Container.MutBuffer where
+
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Trait.Monad
+import Base.Data.Unit
+import Base.Data.Nat
+
+-- | 字节缓冲句柄：表示是隐藏的 `@vuna@MBuffer`（OCaml `Buffer.t` / wasm `$buf` / native 稳定句柄）。
+export alias record MutBuffer where
+  raw : @vuna@MBuffer
+
+-- | 分配一个空缓冲。
+export new : {r : Row} -> {w : Member MutOp r} -> Eff r MutBuffer
+new = pure (MutBuffer { raw = @vuna@prim_mbufNew (natToInt 0) })
+
+-- | 追加一个字符串的字节。
+export append : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> String -> Eff r Unit
+append m s =
+  do
+    _ <- raise (@vuna@prim_mbufAppend m.raw s)
+    pure MkUnit
+
+-- | 追加一个字节（取低 8 位，不做 UTF-8 校验）。
+export appendChar : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> Int -> Eff r Unit
+appendChar m c =
+  do
+    _ <- raise (@vuna@prim_mbufAppendChar m.raw c)
+    pure MkUnit
+
+-- | 当前字节数。
+export size : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> Eff r Nat
+size m = pure (natFromInt (@vuna@prim_mbufLen m.raw))
+
+-- | 清空内容（容量保留）。
+export clear : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> Eff r Unit
+clear m =
+  do
+    _ <- raise (@vuna@prim_mbufClear m.raw)
+    pure MkUnit
+
+-- | 取当前内容的快照字符串（之后继续追加不影响已取出的串）。
+export toString : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> Eff r String
+toString m = pure (@vuna@prim_mbufToString m.raw)
+
+-- | 引入一个空缓冲的作用域：结束时标记关闭、内容丢弃。
+export withMutBuffer : {b : Type} -> {r : Row} -> (MutBuffer -> Eff (MutOp :: r) b) -> Eff r b
+withMutBuffer body = dropEffHead (body (MutBuffer { raw = @vuna@prim_mbufNew (natToInt 0) }))
+
+-- | 纯端点：body 只剩标记行，执行完丢弃缓冲。
+export withMutBufferPure : {b : Type} -> (MutBuffer -> Eff (MutOp :: Nil) b) -> b
+withMutBufferPure body = runPure (withMutBuffer body)

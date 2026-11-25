@@ -1,0 +1,6 @@
+-- 标记缺失：`Eff []` 里读不到任何句柄，读写要求 `Member MutOp r`。
+import Base.Container.MutRef as MutRef
+import Base.Effect.Core as Eff
+
+bad : MutRef.MutRef Int -> Eff [] Int
+bad r = MutRef.read r

@@ -1,0 +1,54 @@
+-- | 类型层定长的原地可变向量：句柄是普通值，长度 `n` 与下标 `Fin n` 都在类型层。
+--
+-- 越界在编译期不可能，运行时没有边界检查。存储是定长数组，`set` 写穿同一块存储，
+-- 不返回新向量。分配与读写要求 `Member MutOp r`，`withMutVec` 在结束时关闭标记。
+-- 长度索引是 Rig0（运行时擦除），运行时长度来自种子 `Vec n a` 的构造子结构。
+--
+-- 句柄是单构造子 data（不是 alias record）：`n` 不参与运行时字段，record 参数的 kind
+-- 无法从字段反推；data 的显式 kind `Nat -> Type -> Type` 把它固定在类型层。
+module Base.Container.MutVec where
+
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Trait.Monad
+import Base.Data.Unit
+import Base.Data.Nat
+import Base.Data.Fin
+import Base.Data.Vec
+
+-- | 向量句柄：唯一字段是隐藏的 `@vuna@MArray a`（普通数组），`n` 是擦除索引。
+export data MutVec : Nat -> Type -> Type where
+  MkMutVec : {n : Nat} -> {a : Type} -> @vuna@MArray a -> MutVec n a
+
+-- | 分配一个内容来自种子 `Vec n a` 的向量。
+export new : {n : Nat} -> {a : Type} -> {r : Row} -> {w : Member MutOp r} -> Vec n a -> Eff r (MutVec n a)
+new seed = pure (MkMutVec (@vuna@prim_marrFromList (vecToList seed)))
+
+-- | 按 `Fin n` 读元素。
+export get : {n : Nat} -> {a : Type} -> {r : Row} -> {w : Member MutOp r} -> MutVec n a -> Fin n -> Eff r a
+get m i =
+  case m of
+    MkMutVec arr => raise (@vuna@prim_marrGet arr (natToInt (finToNat i)))
+
+-- | 按 `Fin n` 原地写元素。
+export set : {n : Nat} -> {a : Type} -> {r : Row} -> {w : Member MutOp r} -> MutVec n a -> Fin n -> a -> Eff r Unit
+set m i v =
+  case m of
+    MkMutVec arr =>
+      do
+        _ <- raise (@vuna@prim_marrSet arr (natToInt (finToNat i)) v)
+        pure MkUnit
+
+-- | 向量长度（运行时从存储读出）。
+export size : {n : Nat} -> {a : Type} -> {r : Row} -> {w : Member MutOp r} -> MutVec n a -> Eff r Nat
+size m =
+  case m of
+    MkMutVec arr => pure (natFromInt (@vuna@prim_marrLen arr))
+
+-- | 引入一个内容来自种子 `Vec n a` 的作用域：结束时标记关闭、内容丢弃。
+export withMutVec : {n : Nat} -> {a : Type} -> {b : Type} -> {r : Row} -> Vec n a -> (MutVec n a -> Eff (MutOp :: r) b) -> Eff r b
+withMutVec seed body = dropEffHead (body (MkMutVec (@vuna@prim_marrFromList (vecToList seed))))
+
+-- | 纯端点：body 只剩标记行，执行完丢弃向量。
+export withMutVecPure : {n : Nat} -> {a : Type} -> {b : Type} -> Vec n a -> (MutVec n a -> Eff (MutOp :: Nil) b) -> b
+withMutVecPure seed body = runPure (withMutVec seed body)

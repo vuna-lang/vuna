@@ -1,0 +1,43 @@
+-- | 定长原地可变数组：句柄是普通值，长度在分配时确定。
+--
+-- 读写下标是 `Nat`，越界是宿主 trap（与 `arrayGet` 一致）；`set` 写穿同一块存储，
+-- 不返回新数组。分配与读写要求 `Member MutOp r`，`withMutArray` 在结束时关闭标记。
+module Base.Container.MutArray where
+
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Trait.Monad
+import Base.Data.Unit
+import Base.Data.Nat
+
+-- | 定长数组句柄：运行时表示是隐藏的 `@vuna@MArray a`（普通数组）。
+export alias record MutArray a where
+  raw : @vuna@MArray a
+
+-- | 分配长度为 `cap`、元素全为 `init` 的数组。
+export new : {r : Row} -> {w : Member MutOp r} -> Nat -> a -> Eff r (MutArray a)
+new cap init = pure (MutArray { raw = @vuna@prim_marrNew (natToInt cap) init })
+
+-- | 按下标读元素。
+export get : {r : Row} -> {w : Member MutOp r} -> MutArray a -> Nat -> Eff r a
+get m i = raise (@vuna@prim_marrGet m.raw (natToInt i))
+
+-- | 按下标原地写元素。
+export set : {r : Row} -> {w : Member MutOp r} -> MutArray a -> Nat -> a -> Eff r Unit
+set m i v =
+  do
+    _ <- raise (@vuna@prim_marrSet m.raw (natToInt i) v)
+    pure MkUnit
+
+-- | 数组长度（分配时给定的容量）。
+export size : {r : Row} -> {w : Member MutOp r} -> MutArray a -> Eff r Nat
+size m = pure (natFromInt (@vuna@prim_marrLen m.raw))
+
+-- | 引入一个长度为 `cap`、元素全为 `init` 的作用域：结束时标记关闭、内容丢弃。
+export withMutArray : {a : Type} -> {b : Type} -> {r : Row} -> Nat -> a -> (MutArray a -> Eff (MutOp :: r) b) -> Eff r b
+withMutArray cap init body =
+  dropEffHead (body (MutArray { raw = @vuna@prim_marrNew (natToInt cap) init }))
+
+-- | 纯端点：body 只剩标记行，执行完丢弃数组。
+export withMutArrayPure : {a : Type} -> {b : Type} -> Nat -> a -> (MutArray a -> Eff (MutOp :: Nil) b) -> b
+withMutArrayPure cap init body = runPure (withMutArray cap init body)

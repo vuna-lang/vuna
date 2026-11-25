@@ -1,0 +1,48 @@
+-- 值句柄：五个家族嵌套作用域，句柄是普通值，标记 `MutOp` 由 with* 关闭。
+import Base.Container.MutArray as MutArray
+import Base.Container.MutBuffer as MutBuffer
+import Base.Container.MutDynArray as MutDynArray
+import Base.Container.MutRef as MutRef
+import Base.Container.MutVec as MutVec
+import Base.Data.Fin
+import Base.Data.Nat
+import Base.Data.Vec
+import Base.Trait.Monad
+
+main : Int
+main =
+  MutRef.withMutRefPure 10 (
+      \r =>
+        do
+          MutRef.write r 41
+          x <- MutRef.read r
+          a <-
+            MutArray.withMutArray 3 0 (
+                \xs =>
+                  do
+                    MutArray.set xs 0 7
+                    MutArray.get xs 0
+              )
+          v <-
+            MutVec.withMutVec (VCons 5 (VCons 2 Nil)) (
+                \vec =>
+                  do
+                    MutVec.set vec FZero 7
+                    MutVec.get vec FZero
+              )
+          n <-
+            MutDynArray.withMutDynArray (
+                \d =>
+                  do
+                    MutDynArray.push d 9
+                    MutDynArray.size d
+              )
+          s <-
+            MutBuffer.withMutBuffer (
+                \b =>
+                  do
+                    MutBuffer.append b "ab"
+                    MutBuffer.toString b
+              )
+          pure (x + a + v + natToInt n + strLength s)
+    )

@@ -1,0 +1,44 @@
+-- 值句柄是一等值：进 record、进 List、由函数返回、跨函数传参；标记仍在作用域里。
+import Base.Container.MutRef as MutRef
+import Base.Data.List as List
+import Base.Effect.Core as Eff
+import Base.Effect.Mut
+import Base.Trait.Monad
+
+record Holder where
+  h : MutRef Int
+
+readAll : {r : Row} -> {w : Member MutOp r} -> List (MutRef Int) -> Eff r (List Int)
+readAll xs =
+  case xs of
+    [] => pure []
+    y :: ys =>
+      do
+        v <- MutRef.read y
+        vs <- readAll ys
+        pure (v :: vs)
+
+sumList : List Int -> Int
+sumList xs =
+  case xs of
+    [] => 0
+    y :: ys => y + sumList ys
+
+makeHolder : {r : Row} -> {w : Member MutOp r} -> Eff r Holder
+makeHolder =
+  do
+    a <- MutRef.new 1
+    pure (Holder { h = a })
+
+main : Int
+main =
+  MutRef.withMutRefPure 0 (
+      \first =>
+        do
+          MutRef.write first 1
+          second <- MutRef.new 2
+          holder <- makeHolder
+          v <- MutRef.read holder.h
+          vs <- readAll [first, second, holder.h]
+          pure (sumList vs + v)
+    )

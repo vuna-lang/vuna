@@ -6,6 +6,11 @@
 module Base.Container where
 
 export module Base.Container.Map as Map
+export module Base.Container.MutArray as MutArray
+export module Base.Container.MutBuffer as MutBuffer
+export module Base.Container.MutDynArray as MutDynArray
+export module Base.Container.MutRef as MutRef
+export module Base.Container.MutVec as MutVec
 export module Base.Container.HashMap as HashMap
 export module Base.Container.HashSet as HashSet
 export module Base.Container.Queue as Queue

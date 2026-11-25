@@ -1,0 +1,56 @@
+-- | 可变长元素容器：句柄是普通值，长度在运行时（`Nat` 下标 + 越界 trap）。
+--
+-- `push` 原地追加，容量不足时按倍数增长；`size` 是已用长度，`clear` 保留容量。
+-- 分配与读写要求 `Member MutOp r`，`withMutDynArray` 在结束时关闭标记。
+module Base.Container.MutDynArray where
+
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Trait.Monad
+import Base.Data.Unit
+import Base.Data.Nat
+
+-- | 变长容器句柄：表示是隐藏的 `@vuna@MDynArray a`（`(Obj.t array * int) ref`）。
+export alias record MutDynArray a where
+  raw : @vuna@MDynArray a
+
+-- | 分配一个空容器。
+export new : {r : Row} -> {w : Member MutOp r} -> Eff r (MutDynArray a)
+new = pure (MutDynArray { raw = @vuna@prim_dynNew (natToInt 0) })
+
+-- | 按下标读元素；越界是宿主 trap。
+export get : {r : Row} -> {w : Member MutOp r} -> MutDynArray a -> Nat -> Eff r a
+get m i = raise (@vuna@prim_dynGet m.raw (natToInt i))
+
+-- | 按下标原地写元素；越界是宿主 trap。
+export set : {r : Row} -> {w : Member MutOp r} -> MutDynArray a -> Nat -> a -> Eff r Unit
+set m i v =
+  do
+    _ <- raise (@vuna@prim_dynSet m.raw (natToInt i) v)
+    pure MkUnit
+
+-- | 在末尾原地追加元素（必要时增长容量）。
+export push : {r : Row} -> {w : Member MutOp r} -> MutDynArray a -> a -> Eff r Unit
+push m v =
+  do
+    _ <- raise (@vuna@prim_dynPush m.raw v)
+    pure MkUnit
+
+-- | 已用长度。
+export size : {r : Row} -> {w : Member MutOp r} -> MutDynArray a -> Eff r Nat
+size m = pure (natFromInt (@vuna@prim_dynLen m.raw))
+
+-- | 清空内容（容量保留）。
+export clear : {r : Row} -> {w : Member MutOp r} -> MutDynArray a -> Eff r Unit
+clear m =
+  do
+    _ <- raise (@vuna@prim_dynClear m.raw)
+    pure MkUnit
+
+-- | 引入一个空容器的作用域：结束时标记关闭、内容丢弃。
+export withMutDynArray : {a : Type} -> {b : Type} -> {r : Row} -> (MutDynArray a -> Eff (MutOp :: r) b) -> Eff r b
+withMutDynArray body = dropEffHead (body (MutDynArray { raw = @vuna@prim_dynNew (natToInt 0) }))
+
+-- | 纯端点：body 只剩标记行，执行完丢弃容器。
+export withMutDynArrayPure : {a : Type} -> {b : Type} -> (MutDynArray a -> Eff (MutOp :: Nil) b) -> b
+withMutDynArrayPure body = runPure (withMutDynArray body)

@@ -1,0 +1,10 @@
+-- | 内部可变状态标记：出现在行里表示这次求值可能读写本地可变单元。
+--
+-- 它是**标记类型**，没有操作、没有实例名、没有 handler：行条目只需要类型身份。
+-- 句柄自身是普通值（[Base.Container.MutRef] 等），单元身份由值携带；分配与读写要求
+-- `Member MutOp r`，作用域入口（`with*`）在结束时用 `dropEffHead` 关闭标记，因此
+-- `Eff []` 里读不到任何句柄。纯度判据见 [Base.Effect.Host]。
+module Base.Effect.Mut where
+
+-- | 本地可变状态标记（空 data；唯一用法是行里的 `Member MutOp r`）。
+export data MutOp : Type where

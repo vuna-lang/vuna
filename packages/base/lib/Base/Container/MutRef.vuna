@@ -1,0 +1,45 @@
+-- | 可逃逸的可变单元：句柄是普通值，身份在值上，不在行里。
+--
+-- 分配与读写要求行里有 `Base.Effect.Mut.MutOp`；`withMutRef` 打开标记、结束时关闭，
+-- 所以 `Eff []` 里读不到任何句柄。句柄本身可以存进 record、从函数返回、被闭包捕获。
+-- 读写都是原地操作（同一块存储），不是函数式 state 的线程化。
+module Base.Container.MutRef where
+
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Trait.Monad
+import Base.Data.Unit
+
+-- | 单元句柄：运行时表示是隐藏的 `@vuna@Cell a`（OCaml `ref` / wasm `$rt_cell` / native heap cell）。
+export alias record MutRef a where
+  cell : @vuna@Cell a
+
+-- | 分配一个新单元（初值由调用方给）。
+export new : {r : Row} -> {w : Member MutOp r} -> a -> Eff r (MutRef a)
+new x = pure (MutRef { cell = @vuna@prim_mrefNew x })
+
+-- | 读当前值。
+export read : {r : Row} -> {w : Member MutOp r} -> MutRef a -> Eff r a
+read m = raise (@vuna@prim_mrefRead m.cell)
+
+-- | 原地写新值。
+export write : {r : Row} -> {w : Member MutOp r} -> MutRef a -> a -> Eff r Unit
+write m v =
+  do
+    _ <- raise (@vuna@prim_mrefWrite m.cell v)
+    pure MkUnit
+
+-- | 读-改-写一次完成。
+export modify : {r : Row} -> {w : Member MutOp r} -> MutRef a -> (a -> a) -> Eff r Unit
+modify m f =
+  do
+    x <- read m
+    write m (f x)
+
+-- | 引入一个存 `a` 的作用域：整体结束时标记关闭，最终值丢弃。
+export withMutRef : {a : Type} -> {b : Type} -> {r : Row} -> a -> (MutRef a -> Eff (MutOp :: r) b) -> Eff r b
+withMutRef init body = dropEffHead (body (MutRef { cell = @vuna@prim_mrefNew init }))
+
+-- | 纯端点：body 只剩标记行，执行完丢弃最终状态。
+export withMutRefPure : {a : Type} -> {b : Type} -> a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
+withMutRefPure init body = runPure (withMutRef init body)
