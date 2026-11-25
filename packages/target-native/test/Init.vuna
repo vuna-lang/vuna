@@ -57,8 +57,8 @@ expectInit label heap stack cpus scratch n =
 problems : List String
 problems =
   append
-    (append (append tailProblems stackProblems) (append heapProblems cpuProblems))
-    scratchProblems
+    (append (append (append tailProblems stackProblems) (append heapProblems cpuProblems)) scratchProblems)
+    threadProblems
 
 -- 尾递归是函数内回边：不涨栈，不需要自带栈。
 tailProblems : List String
@@ -99,3 +99,17 @@ scratchProblems =
   append
     (expectInit "print only" False False False False (needsOf [fn "vuna_main" [ICall "rt_print_int"]] ["vuna_main"]))
     (append (expectInit "fs leaf" False False False True (needsOf [fn "vuna_main" [IMovFsLoad Rax nativeTcbScratchOff]] ["vuna_main"])) (append (expectInit "scratch store" False False False True (needsOf [fn "vuna_main" [IMovFsStore nativeTcbScratchOff Rax]] ["vuna_main"])) (append (expectInit "transitive scratch" False False False True (needsOf [fn "vuna_main" [ICall "rt_fs_leaf"], fn "rt_fs_leaf" [IMovFsLoad Rax nativeTcbScratchOff]] ["vuna_main"])) (append (expectInit "child tcb field" False False False False (needsOf [fn "vuna_main" [IMov (OpMem Rcx nativeTcbScratchOff) (OpReg Rax)]] ["vuna_main"])) (expectInit "threads without host leaves" False True False False (needsOf [fn "vuna_main" [ICall "rt_thread_spawn"], fn "rt_thread_spawn" [IMov (OpMem Rcx nativeTcbScratchOff) (OpReg Rax), ICallReg Rax]] ["vuna_main"]))))))
+
+-- 线程运行时只看能创建 / 协调线程的原语；分配器经堆锁到达 `rt_safepoint` 不算。
+expectThreads : String -> Bool -> InitNeeds -> List String
+expectThreads label want n =
+  if n.inThreads == want then
+    []
+  else
+    [label ++ ": expected threads=" ++ flag want ++ ", got " ++ flag n.inThreads]
+
+threadProblems : List String
+threadProblems =
+  append
+    (expectThreads "alloc via heap lock" False (needsOf [fn "vuna_main" [ICall "rt_alloc"], fn "rt_alloc" [ICall "rt_heap_lock_acquire"], fn "rt_heap_lock_acquire" [ICall "rt_safepoint"]] ["vuna_main"]))
+    (append (expectThreads "spawn" True (needsOf [fn "vuna_main" [ICall "rt_thread_spawn"]] ["vuna_main"])) (append (expectThreads "join" True (needsOf [fn "vuna_main" [ICall "rt_thread_join"]] ["vuna_main"])) (expectThreads "mutex" True (needsOf [fn "vuna_main" [ICall "rt_mutex_lock"]] ["vuna_main"]))))

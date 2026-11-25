@@ -150,6 +150,13 @@ run: sh -c 'd="$TMPDIR/scratchfs"; mkdir -p "$d/app"; printf "[package]\nname = 
 exit: 0
 file-contains: $TMPDIR/scratchfs-out/runtime.s rt_init_tcb_scratch
 
+# 14) 入口线程运行时按需：分配型程序经堆锁到达 `rt_safepoint`，不等于使用了线程；
+#     只有 spawn / join / mutex / condvar 这类原语才发 `init_threads`。
+run: sh -c 'd="$TMPDIR/nothreads"; mkdir -p "$d/app"; printf "[package]\nname = \"nothreads\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.String as String\n\nmain : Int\nmain = strLength (strFromInt 42)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/nothreads-out" "$d"'
+exit: 0
+run: sh -c '! grep -rq "call rt_init_threads" "$TMPDIR/nothreads-out"'
+exit: 0
+
 # 9s6) 自递归循环体旋转：入口跳到条件检查，回边就是条件分支本身（循环体内不再有
 #      无条件 `jmp` 回边）。
 run: sh -c 'd="$TMPDIR/looprot"; mkdir -p "$d/app"; printf "[package]\nname = \"looprot\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (acc + n) (n - 1)\n\nmain : Int\nmain = loop 0 1000\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/looprot-n" "$d"'

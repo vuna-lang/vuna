@@ -3572,7 +3572,10 @@ dedupeClosures (c :: rest) =
 --     （闭包调用、续延恢复）时才有——尾调用是 `jmp`，不涨栈，不算；
 --   * 核数（亲和性）：可达代码里出现子进程原语时才有（子进程继承亲和性）；
 --   * 宿主 scratch：可达代码里有 `%fs` 的 scratch 访问时才有（fs / process / 时钟 / tty /
---     线程并行度的固定缓冲）。
+--     线程并行度的固定缓冲）；
+--   * 线程运行时：可达代码里出现**能创建或协调线程**的原语时才有。`rt_safepoint` 是
+--     停车原语，`alloc` → `heap_lock_acquire` 让每个分配型程序都能到达它，不能把它当成
+--     “程序用了线程”的证据。
 --
 -- `init_timeout` 总是发：`VUNA_NATIVE_TIMEOUT_MS` 是对任何程序的兜底。
 -- 判定只看已发射的指令：运行时函数若新增分配 / spawn 调用，会被自动算进来。
@@ -3727,6 +3730,8 @@ anyFuncIndirect funcs = foldl (\acc, f => acc || funcHasIndirect f) False funcs
 -- | 由可达集合推初始化需求。分配器 / 子进程原语用标签判定；堆指针的**直接**
 -- 读写（内联 bump）也按分配算，防止绕过分配器。
 export initNeeds : List NativeFunc -> List String -> InitNeeds
+-- `rt_safepoint` 不在这里：它被 `heap_lock_acquire` 引用，任何分配型程序都可到达；
+-- 线程运行时是否启用只能由能创建 / 协调线程的原语决定。
 initNeeds funcs live =
   let
     liveFuncs = funcsWithLabelIn funcs live
@@ -3734,7 +3739,7 @@ initNeeds funcs live =
     (anyMem ["rt_alloc", "rt_alloc_leaf"] live || foldl (\acc, f => acc || touchesHeapPtr f) False liveFuncs)
     (hasCallCycle funcs live || anyFuncIndirect liveFuncs)
     (anyMem ["rt_spawn_exec", "rt_cmd_run_sh", "rt_wait_pid", "rt_child_push", "rt_child_drop", "rt_env_filter"] live)
-    (anyMem ["rt_thread_spawn", "rt_thread_join", "rt_mutex_lock", "rt_condvar_wait", "rt_safepoint"] live)
+    (anyMem ["rt_thread_spawn", "rt_thread_join", "rt_mutex_lock", "rt_condvar_wait"] live)
     (funcsScratchAccess liveFuncs)
 
 -- ---------------------------------------------------------------

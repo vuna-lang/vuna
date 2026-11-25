@@ -78,6 +78,8 @@ run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcthread-out/bin/gcthre
 out-equals: 1
 run: sh -c 'grep -rq "call rt_thread_spawn" "$TMPDIR/gcthread-out"'
 exit: 0
+run: sh -c 'grep -rq "call rt_init_threads" "$TMPDIR/gcthread-out"'
+exit: 0
 
 # 9ac) 阻塞线程 + GC：一个线程在 Condvar 上等待（blocked 状态），主线程分配触发回收；
 #      GC 必须扫描阻塞线程的 saved_rsp 栈并正常结束，随后 broadcast 唤醒它。
