@@ -1,0 +1,38 @@
+-- | 后端构建的共用部分：native 的 `build.sh` 文本与「编译 + 链接到 outDir」。
+--
+-- `vuna build --target native`（[Vuna.Compiler.Driver.CompilerCli]）与工具链的动作程序执行
+-- （`Vuna.EffectRun`）共用同一份脚本与链接流程，避免链接脚本出现两份。
+module Vuna.Compiler.Driver.TargetBuild where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Target
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+
+-- | native 的多对象构建脚本：内容哈希判增量（`cksum`），只重编变化的 `.s`，然后链接。
+--   对象与哈希都放在 `build/`；文件顺序由生成的文件列表固定。
+export nativeBuildScript : String -> List String -> String
+nativeBuildScript name files =
+  let
+    sources = join " " files
+    total = strFromInt (length files)
+  in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nCOMPILED=0\nTOTAL=${total}\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  hf=\"build/$src.hash\"\n  h=$(cksum < \"$src\")\n  old=\"\"\n  if [ -f \"$hf\" ]; then old=$(cat \"$hf\"); fi\n  if [ -f \"$obj\" ] && [ \"$old\" = \"$h\" ]; then :; else\n    mkdir -p \"$(dirname \"$obj\")\"\n    cc -c -o \"$obj\" \"$src\"\n    printf '%s\\n' \"$h\" > \"$hf\"\n    COMPILED=$((COMPILED + 1))\n  fi\n  OBJECTS=\"$OBJECTS $obj\"\ndone\necho \"native-build: compiled $COMPILED of $TOTAL\"\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
+
+-- | 编译入口到 native 文件集、写 `build.sh` 并链接出 `bin/<name>`。
+export buildNativeToDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check Int)
+buildNativeToDir ctx entry printResult outDir name =
+  do
+    compiled <- compileBackend ctx "native" entry printResult outDir
+    case compiled of
+      ErrC e => pure (ErrC e)
+      OkC p =>
+        do
+          _ <- fsWriteFile "${outDir}/build.sh" (nativeBuildScript name (firstOf p))
+          _ <- ensureDirPath "${outDir}/bin"
+          code <- processRunIn outDir ["sh", "build.sh"]
+          if code == 0 then pure (OkC 0) else pure (err "native link failed: `sh build.sh` exited ${strFromInt code} in ${outDir}")

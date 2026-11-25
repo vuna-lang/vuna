@@ -17,6 +17,7 @@ import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Target
+import Vuna.Compiler.Driver.TargetBuild
 import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Base.Version
@@ -1309,15 +1310,6 @@ buildNativeOne noCompile multiOut outM pkg o =
                 do
                   _ <- consolePrint "native link failed: cc exited ${strFromInt code}\n"
                   pure (1, o)
-
--- | native 的多对象构建脚本：内容哈希判增量（`cksum`），只重编变化的 `.s`，然后链接。
---   对象与哈希都放在 `build/`；文件顺序由生成的文件列表固定。
-nativeBuildScript : String -> List String -> String
-nativeBuildScript name files =
-  let
-    sources = join " " files
-    total = strFromInt (length files)
-  in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nCOMPILED=0\nTOTAL=${total}\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  hf=\"build/$src.hash\"\n  h=$(cksum < \"$src\")\n  old=\"\"\n  if [ -f \"$hf\" ]; then old=$(cat \"$hf\"); fi\n  if [ -f \"$obj\" ] && [ \"$old\" = \"$h\" ]; then :; else\n    mkdir -p \"$(dirname \"$obj\")\"\n    cc -c -o \"$obj\" \"$src\"\n    printf '%s\\n' \"$h\" > \"$hf\"\n    COMPILED=$((COMPILED + 1))\n  fi\n  OBJECTS=\"$OBJECTS $obj\"\ndone\necho \"native-build: compiled $COMPILED of $TOTAL\"\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
 
 -- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时跑 `build.sh`
 -- （`wasm-tools parse` 汇编，`--wasm-opt N` > 0 时再经 `wasm-opt -ON`）。

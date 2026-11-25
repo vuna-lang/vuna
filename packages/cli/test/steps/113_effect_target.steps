@@ -1,0 +1,10 @@
+# 113) 效果表达式的目标（内部）：`VUNA_EFFECT_TARGET` 让 REPL 动作表达式走 native 构建。
+# 产品面没有 `--target`；这条只锁内部 target 分支（native 编到私有目录再链接，跑同一入口），
+# 以及未知目标必须明确报错、不静默回落 ocaml。
+
+run: sh -c 'printf "import Base.Effect.Core\nimport Base.Effect.Console\n\nprog : Eff [ConsoleOp] Int\nprog = do\n  _ <- consolePrint \"native-hi\"\n  pure 0\n\nprog\n:q\n" | VUNA_EFFECT_TARGET=native "$VUNA" repl 2>&1'
+out-contains: native-hi
+
+# 未知目标：明确报错。
+run: sh -c 'printf "import Base.Effect.Core\nimport Base.Effect.Console\n\nprog : Eff [ConsoleOp] Int\nprog = do\n  _ <- consolePrint \"x\"\n  pure 0\n\nprog\n:q\n" | VUNA_EFFECT_TARGET=bogus "$VUNA" repl 2>&1'
+out-contains: VUNA_EFFECT_TARGET

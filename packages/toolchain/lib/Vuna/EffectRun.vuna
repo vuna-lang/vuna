@@ -11,6 +11,7 @@ module Vuna.EffectRun where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.TargetBuild
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Fingerprint
 import Vuna.Files
@@ -37,9 +38,30 @@ effectPackageName = "vuna-effect"
 effectBinaryName : String
 effectBinaryName = "vuna-effect"
 
+-- | 内部：`VUNA_EFFECT_TARGET` 选目标（缺省 `ocaml`）。只给 steps / 排障用，产品面没有 flag。
+effectTargetEff : Member nEnv EnvOp r => Int -> Eff r String
+effectTargetEff _ =
+  do
+    env <- envGetEnv "VUNA_EFFECT_TARGET"
+    pure (if env == "" then "ocaml" else env)
+
 -- | 编译并运行一段入口源码，返回进程退出码（非 0 是程序结果，不是工具失败）。
 export runEffectSource : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
 runEffectSource ctx source printResult =
+  do
+    target <- effectTargetEff 0
+    runEffectOn target ctx source printResult
+
+-- | 内部：按目标分派；未知目标明确报错（不静默回落 ocaml）。
+runEffectOn : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> PackageContext -> String -> Bool -> Eff r (Check Int)
+runEffectOn "ocaml" ctx source printResult = runOcamlEffect ctx source printResult
+runEffectOn "native" ctx source printResult = runNativeEffect ctx source printResult
+runEffectOn target _ _ _ =
+  pure (err "VUNA_EFFECT_TARGET: unsupported target `${target}` (ocaml | native)")
+
+-- | 内部：OCaml 目标——产物按 digest 发布成视图（命中直接跑）。
+runOcamlEffect : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
+runOcamlEffect ctx source printResult =
   do
     digest <- effectSourceDigest ctx source printResult
     pid <- projectIdOf ctx
@@ -81,7 +103,30 @@ runEffectSource ctx source printResult =
                   code <- runEffectIn dir
                   cleanupDir dir code
 
--- | 内部：跑已发布的产物视图（cwd = 视图根，相对路径 `bin/vuna-effect`）。
+-- | 内部：native 目标——编到私有目录再链接（不发布视图）。
+-- 不做视图缓存：`target-out` 只缓存插件写出的文本，链接在驱动层；要把插件身份与 `cc`
+-- 版本都算进视图 key 才能安全命中，等这一步真正需要时再加。
+runNativeEffect : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
+runNativeEffect ctx source printResult =
+  do
+    base <- tempBase 0
+    now <- clockNow
+    dir <- freshTempDir 1000 "${base}/vuna-effect-native-${strFromInt now}"
+    _ <- fsMakeDir dir
+    prepared <- prepareEffectPackage ctx source "${dir}/src"
+    case prepared of
+      ErrC e => cleanupDir dir (ErrC e)
+      OkC pkgCtx =>
+        do
+          built <- buildNativeToDir pkgCtx "${dir}/src/pkg/app/Main.vuna" printResult "${dir}/out" effectBinaryName
+          case built of
+            ErrC e => cleanupDir dir (ErrC e)
+            OkC _ =>
+              do
+                code <- processRunIn "${dir}/out" ["bin/${effectBinaryName}"]
+                cleanupDir dir (OkC code)
+
+-- | 内部：跑产物（cwd = 产物根，相对路径 `bin/vuna-effect`）。
 runEffectIn : Member nProcess ProcessOp r => String -> Eff r (Check Int)
 runEffectIn dir =
   do
@@ -92,10 +137,9 @@ runEffectIn dir =
 effectSrcDirOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
 effectSrcDirOf digest = storeScratchPathEff effectSrcKind digest
 
--- | 内部：构建入口源码 → 可执行文件（写在 `out` 里，`bin/vuna-effect`）。
--- `srcRoot` 是合成包输入目录的根（其下写 `pkg/`）。
-buildEffectSource : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check String)
-buildEffectSource ctx source printResult srcRoot out =
+-- | 内部：把合成包写到 `srcRoot`（`pkg/vuna.toml` + `pkg/app/Main.vuna`）并加载上下文。
+prepareEffectPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check PackageContext)
+prepareEffectPackage ctx source srcRoot =
   do
     manifest <- effectManifest ctx
     _ <- fsMakeDir srcRoot
@@ -103,8 +147,15 @@ buildEffectSource ctx source printResult srcRoot out =
     _ <- fsMakeDir "${srcRoot}/pkg/app"
     _ <- fsWriteFile "${srcRoot}/pkg/vuna.toml" manifest
     _ <- fsWriteFile "${srcRoot}/pkg/app/Main.vuna" source
-    ctxR <- contextForDir "${srcRoot}/pkg"
-    case ctxR of
+    contextForDir "${srcRoot}/pkg"
+
+-- | 内部：构建入口源码 → 可执行文件（写在 `out` 里，`bin/vuna-effect`）。
+-- `srcRoot` 是合成包输入目录的根（其下写 `pkg/`）。
+buildEffectSource : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check String)
+buildEffectSource ctx source printResult srcRoot out =
+  do
+    prepared <- prepareEffectPackage ctx source srcRoot
+    case prepared of
       ErrC e => pure (ErrC e)
       OkC pkgCtx =>
         do

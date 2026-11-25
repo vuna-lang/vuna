@@ -224,6 +224,10 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 行里带标签时要先定义成带显式签名的值（`prog : Eff [ConsoleOp] Int`，再求值 `prog`），REPL
 用源码里的签名合成入口。包上下文取最近 `vuna.toml` 的本地依赖闭包（不在包内时 base-only）。
 
+内部的 `VUNA_EFFECT_TARGET=ocaml|native`（缺省 `ocaml`）只给 steps / 排障用，产品面没有
+`--target`：`native` 走私有用目录构建 + `cc` 链接（不发布视图，也不会与 ocaml 的
+`views/effectbin` 混用），未知值明确报错、不静默回落。
+
 **加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
 
 | 目标 | 行为 | 输出片段 |
