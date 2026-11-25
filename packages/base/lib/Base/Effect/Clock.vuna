@@ -51,3 +51,7 @@ handleClockHostHost n comp =
 -- | entry 自动预装用（泛化 r）：把行头 `ClockOp` 的 send 翻译成宿主 intrinsic。
 runClockHost : {r : Row} -> {a : Type} -> Eff (Named "default" ClockOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runClockHost comp = joinEff (handleClockHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`。
+export runClockEff : {a : Type} -> Eff [ClockOp] a -> Eff [] a
+runClockEff comp = hostSync (runClockHost comp)

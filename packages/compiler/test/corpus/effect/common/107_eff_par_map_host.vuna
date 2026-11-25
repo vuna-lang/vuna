@@ -1,0 +1,42 @@
+-- 并行 effectful map 配各宿主效应模块的默认实例闭合 runner：worker 内安装真实 handler，
+-- 结果保序；父线程只汇总固定文本。Exit 只做闭合（不退出进程）。
+import Base.Data.Bool
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Effect.Args as EffArgs
+import Base.Effect.Core
+import Base.Trait.Monad
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Tty as EffTty
+import Base.Thread.Par as Par
+
+main : Eff [ArgsOp, ConsoleOp, EnvOp, ExitOp] Int
+main =
+  do
+    hostCwd <- envGetCwd
+    hostArgs <- argsGetArgs
+    consoles <- Par.parMapEff runConsoleEff (\_ => consolePrint "") (range 0 8)
+    clocks <- Par.parMapEff runClockEff (\_ => clockNow) (range 0 8)
+    cwds <- Par.parMapEff runEnvEff (\_ => envGetCwd) (range 0 8)
+    args <- Par.parMapEff runArgsEff (\_ => argsGetArgs) (range 0 8)
+    ttys <- Par.parMapEff runTtyEff (\_ => ttyIsTty) (range 0 8)
+    exits <- Par.parMapEff runExitEff (\x => pure (x + 1)) (range 0 4)
+    let
+      okConsoles = map natToInt consoles == map (\_ => 0) (range 0 8)
+      okClocks = filter (\t => t <= 0) clocks == []
+      okCwds = cwds == map (\_ => hostCwd) (range 0 8)
+      okArgs = args == map (\_ => hostArgs) (range 0 8)
+      okTtys = length ttys == 8
+      okExits = exits == [1, 2, 3, 4]
+    in if okConsoles && okClocks && okCwds && okArgs && okTtys && okExits then
+      do
+        _ <- consolePrint "ok 6\n"
+        pure 0
+    else
+      do
+        _ <- consolePrint "bad\n"
+        _ <- exitWith 1
+        pure 1

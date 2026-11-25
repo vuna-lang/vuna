@@ -62,3 +62,7 @@ handleConsoleHostHost n comp =
 -- 在结果行尾接上宿主行。
 runConsoleHost : {r : Row} -> {a : Type} -> Eff (Named "default" ConsoleOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runConsoleHost comp = joinEff (handleConsoleHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`。
+export runConsoleEff : {a : Type} -> Eff [ConsoleOp] a -> Eff [] a
+runConsoleEff comp = hostSync (runConsoleHost comp)

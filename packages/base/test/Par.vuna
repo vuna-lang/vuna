@@ -2,8 +2,14 @@
 -- 断言在末尾集中判定，失败打印 FAIL 并 exit 1。
 import Base
 import Base.Effect.Core
+import Base.Effect.Args
+import Base.Effect.Clock
 import Base.Effect.Console
+import Base.Effect.Env
 import Base.Effect.Exit
+import Base.Effect.Process
+import Base.Effect.Stdin
+import Base.Effect.Tty
 import Base.Thread as Thread
 import Base.Thread.Par as Par
 
@@ -38,10 +44,12 @@ report : List String -> String
 report [] = ""
 report (x :: rest) = " " ++ x ++ report rest
 
-main : Eff [ConsoleOp, ExitOp] String
+main : Eff [ArgsOp, ConsoleOp, EnvOp, ExitOp] String
 main =
   do
     par <- Thread.parallelism
+    hostCwd <- envGetCwd
+    hostArgs <- argsGetArgs
     ordered <- Par.parMap (\x => x * 2) (range 0 100)
     oneJob <- Par.parMapWith 1 (\x => x + 1) [1, 2, 3]
     clamped <- Par.parMapWith 100000 (\x => x + 1) [1, 2, 3]
@@ -56,6 +64,14 @@ main =
     effOne <- Par.parMapEffWith 1 (\comp => comp) (\x => pure (x + 2)) [1, 2, 3]
     effEmpty <- Par.parMapEff (\comp => comp) (\x => pure (x + 1)) []
     effResults <- Par.parMapEff (\comp => fmap Ok comp) (\x => pure (x * x)) [1, 2, 3]
+    consoleRuns <- Par.parMapEff runConsoleEff (\_ => consolePrint "") (range 0 8)
+    clockRuns <- Par.parMapEff runClockEff (\_ => clockNow) (range 0 8)
+    envRuns <- Par.parMapEff runEnvEff (\_ => envGetCwd) (range 0 8)
+    argsRuns <- Par.parMapEff runArgsEff (\_ => argsGetArgs) (range 0 8)
+    ttyRuns <- Par.parMapEff runTtyEff (\_ => ttyIsTty) (range 0 8)
+    exitRuns <- Par.parMapEff runExitEff (\x => pure (x + 1)) (range 0 4)
+    stdinRuns <- Par.parMapEff runStdinEff (\_ => pure 5) (range 0 4)
+    processRuns <- Par.parMapEff runProcessResult (\_ => processArgs) (range 0 4)
     a <- Thread.newAtomic 0
     b <- Thread.newAtomic 0
     flags <- Par.parMapWith 2 (\i => if i == 0 then spin a b else spin b a) [0, 1]
@@ -63,7 +79,8 @@ main =
       overlapOk = if par < 2 then True else flags == [1, 1]
       expectedBig = wrapAll (range 1 50)
       effBad = append (check "eff-order" (effOrdered == map (\x => x * 3) (range 0 40))) (append (check "eff-jobs1" (effOne == [3, 4, 5])) (append (check "eff-empty" (effEmpty == [])) (check "eff-result" (effResults == [Ok 1, Ok 4, Ok 9]))))
-      bad = append effBad (append (check "order" (ordered == map (\x => x * 2) (range 0 100))) (append (check "jobs1" (oneJob == [2, 3, 4])) (append (check "clamp" (clamped == [2, 3, 4])) (append (check "empty" (empty == [])) (append (check "single" (single == [42])) (append (check "strings" (strs == ["v1", "v2", "v3"])) (append (check "fold" (folded == "(1)(2)(3)")) (append (check "fold-chunked" (foldedBig == expectedBig)) (append (check "big-consistent" (bigSeq == bigPar)) (check "overlap" overlapOk))))))))))
+      hostBad = append (check "host-console" (map natToInt consoleRuns == map (\_ => 0) (range 0 8))) (append (check "host-clock" (filter (\t => t <= 0) clockRuns == [])) (append (check "host-env" (envRuns == map (\_ => hostCwd) (range 0 8))) (append (check "host-args" (argsRuns == map (\_ => hostArgs) (range 0 8))) (append (check "host-tty" (length ttyRuns == 8)) (append (check "host-exit" (exitRuns == [1, 2, 3, 4])) (append (check "host-stdin" (stdinRuns == [5, 5, 5, 5])) (check "host-process" (processRuns == map (\_ => Ok hostArgs) (range 0 4)))))))))
+      bad = append hostBad (append effBad (append (check "order" (ordered == map (\x => x * 2) (range 0 100))) (append (check "jobs1" (oneJob == [2, 3, 4])) (append (check "clamp" (clamped == [2, 3, 4])) (append (check "empty" (empty == [])) (append (check "single" (single == [42])) (append (check "strings" (strs == ["v1", "v2", "v3"])) (append (check "fold" (folded == "(1)(2)(3)")) (append (check "fold-chunked" (foldedBig == expectedBig)) (append (check "big-consistent" (bigSeq == bigPar)) (check "overlap" overlapOk)))))))))))
     in case bad of
       [] => pure ""
       _ =>

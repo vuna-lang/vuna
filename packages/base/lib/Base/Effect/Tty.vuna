@@ -43,3 +43,7 @@ handleTtyHostHost n comp = handleCoreAt (Named n TtyOp) "tty" n (\a => pure a) t
 -- | entry 自动预装用（泛化 r）：把行头 `TtyOp` 的 send 翻译成宿主 intrinsic。
 runTtyHost : {r : Row} -> {a : Type} -> Eff (Named "default" TtyOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runTtyHost comp = joinEff (handleTtyHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`。
+export runTtyEff : {a : Type} -> Eff [TtyOp] a -> Eff [] a
+runTtyEff comp = hostSync (runTtyHost comp)

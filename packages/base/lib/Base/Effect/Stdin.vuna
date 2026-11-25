@@ -56,3 +56,7 @@ handleStdinHostHost n comp =
 -- | entry 自动预装用（泛化 r）：把行头 `StdinOp` 的 send 翻译成宿主 intrinsic。
 runStdinHost : {r : Row} -> {a : Type} -> Eff (Named "default" StdinOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runStdinHost comp = joinEff (handleStdinHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`。
+export runStdinEff : {a : Type} -> Eff [StdinOp] a -> Eff [] a
+runStdinEff comp = hostSync (runStdinHost comp)

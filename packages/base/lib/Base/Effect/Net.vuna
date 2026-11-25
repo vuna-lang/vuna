@@ -265,6 +265,10 @@ netErrorOpHR i op _ =
 export runNetError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n NetErrorOp :: r) a -> Eff r (Result a)
 runNetError n comp = handleCoreAt (Named n NetErrorOp) "net-error" n netErrorRet netErrorOpHR comp
 
+-- | worker / 子计算用：安装默认实例的真实 handler，把网络失败收成 `Result`。
+export runNetResult : {a : Type} -> Eff [NetOp] a -> Eff [] (Result a)
+runNetResult comp = runNetError "net-error" (runNetHost comp)
+
 -- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
 runNetErrorHost : {r : Row} -> {a : Type} -> Eff (Named "net-error" NetErrorOp :: r) a -> Eff r a
 runNetErrorHost comp =

@@ -6,7 +6,8 @@
 -- 并行”的场合。
 --
 -- 纯 body 是 `a -> b` / `a -> m`；effectful body 是 `a -> Eff r b`，必须配 runner
--- `Eff r b -> Eff [] c` 在 worker 内收口（例如 `Base.Effect.Fs.runFsResult`）。线程体进入
+-- `Eff r b -> Eff [] c` 在 worker 内收口（每个宿主效应模块都有默认实例的闭合入口，
+-- 如 `Base.Effect.Fs.runFsResult` / `Base.Effect.Console.runConsoleEff`）。线程体进入
 -- 运行时仍是 `Eff []`，不继承调用方的 handler 栈（见
 -- [primitives.md §6.2](../../../../docs/reference/primitives.md)）。worker 内的运行时 trap
 -- 按线程语义报错并 exit 2，不包装成 `Result`。不提供取消：发散会在 `join` 处挂住。

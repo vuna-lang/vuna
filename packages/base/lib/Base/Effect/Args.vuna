@@ -38,3 +38,7 @@ handleArgsHostHost n comp = handleCoreAt (Named n ArgsOp) "args" n (\a => pure a
 -- | entry 自动预装用（泛化 r）：把行头 `ArgsOp` 的 send 翻译成宿主 intrinsic。
 runArgsHost : {r : Row} -> {a : Type} -> Eff (Named "default" ArgsOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runArgsHost comp = joinEff (handleArgsHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`。
+export runArgsEff : {a : Type} -> Eff [ArgsOp] a -> Eff [] a
+runArgsEff comp = hostSync (runArgsHost comp)

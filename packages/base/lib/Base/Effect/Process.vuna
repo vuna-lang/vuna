@@ -163,6 +163,10 @@ export runProcessError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n
 runProcessError n comp =
   handleCoreAt (Named n ProcessErrorOp) "process-error" n processErrorRet processErrorOpHR comp
 
+-- | worker / 子计算用：安装默认实例的真实 handler（`Exit` 走真实退出），启动失败收成 `Result`。
+export runProcessResult : {a : Type} -> Eff [ProcessOp] a -> Eff [] (Result a)
+runProcessResult comp = runProcessError "process-error" (runProcessHost comp)
+
 -- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
 runProcessErrorHost : {r : Row} -> {a : Type} -> Eff (Named "process-error" ProcessErrorOp :: r) a -> Eff r a
 runProcessErrorHost comp =

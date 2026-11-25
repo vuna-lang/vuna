@@ -252,12 +252,12 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.Effect.Mut` | 内部可变状态标记 `MutOp : Type`（空 data，无操作 / 无实例名 / 无 handler，与 `HostOp` 同构）；`with*` 在作用域结束时用 `dropEffHead` 关闭它 |
 | `Base.Container.Mut*` | 值句柄可变容器（`MutRef` / `MutArray` / `MutVec` / `MutDynArray` / `MutBuffer`）：句柄是普通值，分配与读写要求 `Member MutOp r`；`with*` / `with*Pure` 打开并关闭标记。见 §8.8 |
-| `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsReadFileRange n`/`fsWriteFile n`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
-| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
-| `Base.Effect.Tty` | 终端元数据标签 `TtyOp`：`IsTty`（stdout 是否连接终端，结果索引 `Bool`）；`ttyIsTty`/`handleTty`/`handleTtyHost`（真实 handler 用 `@vuna@host@isTty`；wasm 的 WASI preview1 没有 isatty，恒 `False`）。诊断格式的默认值依赖它，所以它必须是正常效应——工具链不再用 `hostSync` 就地关闭宿主行 |
-| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `@vuna@prim_eff_sleep`） |
-| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`） |
-| `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `@vuna@prim_eff_getArgs`/`@vuna@prim_eff_exit`/`@vuna@prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
+| `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile`/`fsReadFileRange`/`fsWriteFile`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`runFsHost`（entry 预装）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`，`runFsResult` 把默认 fs 行收成 `Eff [] (Result a)`（worker / 子计算用）；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
+| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`runConsoleHost`（entry 预装的真实 handler，用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 的结果索引是 `Nat`）/`runConsoleEff`（默认 console 行收成 `Eff []`，worker / 子计算用）；写失败（EPIPE 等）返回 0、不崩进程 |
+| `Base.Effect.Tty` | 终端元数据标签 `TtyOp`：`IsTty`（stdout 是否连接终端，结果索引 `Bool`）；`ttyIsTty`/`handleTty`/`runTtyHost`（entry 预装的真实 handler，用 `@vuna@host@isTty`；wasm 的 WASI preview1 没有 isatty，恒 `False`）/`runTtyEff`（默认 tty 行收成 `Eff []`，worker / 子计算用）。诊断格式的默认值依赖它，所以它必须是正常效应——工具链不再用 `hostSync` 就地关闭宿主行 |
+| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`runClockHost`（entry 预装的真实 handler，用 `effTimeUs` 与编译器原生 `@vuna@prim_eff_sleep`）/`runClockEff`（默认 clock 行收成 `Eff []`，worker / 子计算用） |
+| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`runEnvHost`（entry 预装的真实 handler，用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`）/`runEnvEff`（默认 env 行收成 `Eff []`，worker / 子计算用） |
+| `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHostWith`（自定义 `onExit` 的宿主 handler）/`runProcessHost`（entry 预装：`Exit` 走真实退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`，`runProcessResult` 把默认 process 行收成 `Eff [] (Result a)`（worker / 子计算用，`Exit` 仍真实退出）；子进程非零退出码仍是**值** |
 | `Base.Effect.Error` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
 | `Base.Effect.Exn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
 | `Base.EffMutex` | Mutex/Semaphore（可变单元 + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -311,9 +311,14 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   另一条轴：`Base.Thread` 用 OS 线程（OCaml 侧 `Domain`）提供 `spawn`/`join`、`Mutex`、
   `Condvar`、`Atomic`，线程体是 `Eff [] a`、续延不跨线程；宿主效应要在任务体内显式安装
   真实 handler（`runFsError "fs-error" (runFsHost comp)`，夹具 `effect/common/104`）。
-  结构化并行入口是 `Base.Thread.Par`：纯 body 用 `parMap` / `parFoldMap`；effectful body 用
-  `parMapEff` / `parMapEffWith`，由显式 runner（如 `Base.Effect.Fs.runFsResult`）在 worker 内
-  收成 `Eff []`，见 [primitives.md](primitives.md) §6.2。并行/多核不走 fiber 调度器（[debt.md](debt.md) D41）。
+  每个宿主效应模块都提供默认实例的闭合 runner：无 typed error 族是 `runConsoleEff` /
+  `runClockEff` / `runEnvEff` / `runArgsEff` / `runStdinEff` / `runTtyEff` / `runExitEff`，
+  把 `Eff [XOp] a` 收成 `Eff [] a`；Fs / Process / Net 是 `runFsResult` / `runProcessResult` /
+  `runNetResult`，收成 `Eff [] (Result a)`。结构化并行入口是 `Base.Thread.Par`：
+  纯 body 用 `parMap` / `parFoldMap`；effectful body 用 `parMapEff` / `parMapEffWith`，
+  由上述 runner 在 worker 内收成 `Eff []`，见 [primitives.md](primitives.md) §6.2
+  （夹具 `effect/common/106`、`107`，native / ocaml 的 `96` / `95`）。并行/多核不走
+  fiber 调度器（[debt.md](debt.md) D41）。
 - **未处理效应诊断**：入口在类型层收紧——`runPure : Eff [] a -> a`；
   `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签；负例 `dt_err/82_unhandled_effect_entry`）。
@@ -410,7 +415,8 @@ console 的写失败（典型 EPIPE：`vuna … | head`）不是宿主错误：�
 
 net 走同一套：`Base.Effect.Net` 的 `NetOp` 是普通命名实例效应（可 mock、entry 预装
 `runNetHost`），失败抛 `NetErrorOp`（`NetRefused/Timeout/Closed/AddrInUse/BadAddr/Io`），
-`runNetError n` 可局部收成 `Result`；`netRecv` 的对端关闭是 `Nothing`（无值）。
+`runNetError n` 可局部收成 `Result`，`runNetResult` 把默认 net 行收成 `Eff [] (Result a)`
+（worker / 子计算用）；`netRecv` 的对端关闭是 `Nothing`（无值）。
 
 net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin` / `netSendWithin`
 返回 `NetStep a`（`StepOk` / `StepClosed` / `StepTimeout`），宿主侧用 `select` 实现。

@@ -38,3 +38,7 @@ handleExitHostHost n comp = handleCoreAt (Named n ExitOp) "exit" n (\a => pure a
 -- | entry 自动预装用（泛化 r）：把行头 `ExitOp` 的 send 翻译成宿主 intrinsic。
 runExitHost : {r : Row} -> {a : Type} -> Eff (Named "default" ExitOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runExitHost comp = joinEff (handleExitHostHost "default" comp)
+
+-- | worker / 子计算用：安装默认实例的真实 handler，把宿主行收成 `Eff []`（`ExitWith` 仍立即结束进程）。
+export runExitEff : {a : Type} -> Eff [ExitOp] a -> Eff [] a
+runExitEff comp = hostSync (runExitHost comp)

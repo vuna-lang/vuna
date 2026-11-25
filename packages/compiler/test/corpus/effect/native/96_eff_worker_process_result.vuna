@@ -1,0 +1,35 @@
+-- worker 里跑默认 Process 行的闭合 runner：并行取 argv、失败路径收成 Err；
+-- 不用并行 runIn（宿主 runIn 会改变进程级 cwd）。
+import Base.Data.Bool
+import Base.Data.List as List
+import Base.Data.Result
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core
+import Base.Effect.Exit as EffExit
+import Base.Effect.Process as EffProcess
+import Base.Trait.Monad
+import Base.Thread as Thread
+import Base.Thread.Par as Par
+
+main : Eff [ConsoleOp, ExitOp, ProcessOp] Int
+main =
+  do
+    hostArgs <- processArgs
+    runs <- Par.parMapEff runProcessResult (\_ => processArgs) (range 0 4)
+    t <- Thread.spawn (runProcessResult (processRunIn "no-such-dir" ["true"]))
+    bad <- Thread.join t
+    let
+      okRuns = runs == map (\_ => Ok hostArgs) (range 0 4)
+      okBad =
+        case bad of
+          Err _ => True
+          Ok _ => False
+    in if okRuns && okBad then
+      do
+        _ <- consolePrint "ok\n"
+        pure 0
+    else
+      do
+        _ <- consolePrint "bad\n"
+        _ <- exitWith 1
+        pure 1
