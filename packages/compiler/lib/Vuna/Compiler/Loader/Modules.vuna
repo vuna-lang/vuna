@@ -59,27 +59,8 @@ export record Project(..) where
   -- | 入口文件的 fixity 事实（从树派生）：入口声明重排用它判定括号边界。
   projectEntryFacts : FixityFacts
 
-export moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es fx _ _ _ _) = n
-
-export modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es fx _ _ _ _) = p
-
 export moduleAllImportsOf : Module -> List Import
 moduleAllImportsOf (Module n p is imps ds es fx _ _ _ _) = append is imps
-
-export moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es fx _ _ _ _) = ds
-
-export moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es fx _ _ _ _) = fx
-
--- | 模块重导出的 import 名（见 Module 字段注释）。
-export moduleReexportsOf : Module -> List String
-moduleReexportsOf (Module n p is imps ds es fx reexports _ _ _) = reexports
-
-export moduleOpaqueOf : Module -> List String
-moduleOpaqueOf (Module n p is imps ds es fx reexports opacity _ _) = opacity
 
 export projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg fx entryName surface) = append is imps
@@ -183,11 +164,8 @@ sliceEqGo i srcOff src dstOff dst n fuel =
 export ctorCanonical : String -> String -> String -> String
 ctorCanonical prefix dname cname = mangle prefix "${dname}.${cname}"
 
-export importModuleName : Import -> String
-importModuleName (Import name isQualified alias sp) = name
-
 export importModuleNames : List Import -> List String
-importModuleNames imports = map importModuleName imports
+importModuleNames imports = map importName imports
 
 -- 导入点 span：隐式我们自己的合成 Import 没有真实位置（file = ""）时不加。
 withImportSite : Span -> Diagnostic -> Diagnostic
@@ -200,12 +178,11 @@ qualifierCandidates imports q =
   let
     strong =
       nubNames
-        (append (map importModuleName (filter (\imp => importModuleName imp == q) imports)) (map importModuleName (filter (\imp => aliasIs q imp) imports)))
+        (append (map importName (filter (\imp => importName imp == q) imports)) (map importName (filter (\imp => aliasIs q imp) imports)))
   in if notEmptyList strong then
     strong
   else
-    nubNames
-      (map importModuleName (filter (\imp => lastSegment (importModuleName imp) == q) imports))
+    nubNames (map importName (filter (\imp => lastSegment (importName imp) == q) imports))
 
 aliasIs : String -> Import -> Bool
 aliasIs q imp =
@@ -248,17 +225,17 @@ openModuleNamesAll (imp :: rest) =
   if imp.importIsQualified then
     openModuleNamesAll rest
   else
-    importModuleName imp :: openModuleNamesAll rest
+    importName imp :: openModuleNamesAll rest
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
 export findImportModule : List Import -> String -> Maybe String
 findImportModule [] _ = Nothing
 findImportModule (imp :: rest) name =
-  if importModuleName imp == name then
-    Just (importModuleName imp)
+  if importName imp == name then
+    Just (importName imp)
   else
     case imp.importAlias of
-      Just alias => if alias == name then Just (importModuleName imp) else findImportModule rest name
+      Just alias => if alias == name then Just (importName imp) else findImportModule rest name
       Nothing => findImportModule rest name
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
@@ -310,7 +287,7 @@ importByPrefix (imp :: rest) name =
       case imp.importAlias of
         Just alias => alias
         Nothing => imp.importName
-  in if startsWith "${prefix}." name then Just (importModuleName imp) else importByPrefix rest name
+  in if startsWith "${prefix}." name then Just (importName imp) else importByPrefix rest name
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
 export reexportedImportNamesOfHeader : List Import -> Maybe ModDecl -> List String

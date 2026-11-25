@@ -2,6 +2,7 @@
 -- 固定 64 轮的旧实现会在链尾静默塌成 0 参数；预算按槽总数派生后必须收敛。
 record L0 a where
   f : a
+deriving (Selectors)
 
 record L1 a where
   f : L0 a

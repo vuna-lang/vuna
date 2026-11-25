@@ -61,12 +61,6 @@ export record PState(..) where
 -- ---------------------------------------------------------------
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
-export fileOf : PState -> String
-fileOf st = st.fileOf
-
--- | 解析模式（`PmStrict` / `PmTool`），见 `ParseMode`。
-export pmodeOf : PState -> ParseMode
-pmodeOf st = st.pmodeOf
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> String -> List PTok -> ParseMode -> PState
@@ -213,9 +207,6 @@ tokSpan st =
       in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
     PTok _ p =>
       Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
-
-export lastPos : PState -> Pos
-lastPos st = st.lastPos
 
 export advance : PState -> PState
 advance st =

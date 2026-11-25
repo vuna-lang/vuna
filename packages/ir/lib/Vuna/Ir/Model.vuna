@@ -363,12 +363,6 @@ export record IrGroup(..) where
   irGroupIsRec : Bool
   irGroupDefs : List IrDef
 
-export irGroupIsRec : IrGroup -> Bool
-irGroupIsRec (IrGroup isRec defs) = isRec
-
-export irGroupDefs : IrGroup -> List IrDef
-irGroupDefs (IrGroup isRec defs) = defs
-
 -- ---------------------------------------------------------------
 -- 入口（main 钩子）的已决策形态
 -- ---------------------------------------------------------------

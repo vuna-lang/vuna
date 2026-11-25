@@ -20,18 +20,6 @@ export record UnboxedCand(..) where
   unboxedCandCtor : DtCtor
   unboxedCandIndex : Int
 
--- | 候选的族名。
-unboxedCandName : UnboxedCand -> String
-unboxedCandName (UnboxedCand name ctor idx) = name
-
--- | 候选的唯一构造子。
-unboxedCandCtor : UnboxedCand -> DtCtor
-unboxedCandCtor (UnboxedCand name ctor idx) = ctor
-
--- | 保留字段在构造子完整 telescope 中的下标。
-unboxedCandIndex : UnboxedCand -> Int
-unboxedCandIndex (UnboxedCand name ctor idx) = idx
-
 -- 构造子字段形状唯一真源：True = 该 binder 进运行时表示。
 -- | 构造子字段形状的唯一真源：为每个 telescope binder 标出是否进入运行时表示（未擦除）。
 export ctorKeepFlags : DtCtor -> List Bool

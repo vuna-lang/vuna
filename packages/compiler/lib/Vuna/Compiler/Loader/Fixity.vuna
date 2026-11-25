@@ -44,9 +44,6 @@ tableOfCst cst = tableOf (fixityFactsOf cst)
 export tableOfKeepOpsCst : CstNode -> List FixityDecl -> FixityTable
 tableOfKeepOpsCst cst = tableOfKeepOps (fixityFactsOf cst)
 
-renameMode : FixityTable -> Bool
-renameMode (FixityTable r ds _) = r
-
 -- 内建运算符：`->` 是语法，`&&` / `||` 是短路原语。fixity 由编译器固定，
 -- 用户声明会命中 `BuiltinFixity`。
 export builtinFixityDecls : List FixityDecl

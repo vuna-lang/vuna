@@ -52,7 +52,7 @@ export record LwSt where
   -- | 下一个 binder 稳定 id（正数；擦除占位固定 0）。
   lwBinder : Int
 
--- record 字段访问器（vuna 不为 record 生成字段函数，统一用位置模式）。
+-- record 字段选择器（`Loader.Selectors` 生成同名函数，体是位置模式的 case）。
 binderErasedOf : IrBinder -> Bool
 binderErasedOf b = b.irBinderErased
 

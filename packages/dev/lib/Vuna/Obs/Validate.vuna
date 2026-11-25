@@ -271,10 +271,6 @@ countErrors report = countSeverity SevError report
 export countWarnings : ValidateReport -> Int
 countWarnings report = countSeverity SevWarning report
 
--- | 一条问题的可读行：`line N: error: ...` / `warning: ...`（行号 0 时省略位置）。
-export issueText : ValidateIssue -> String
-issueText i = "${severityText (issueSev i)}: ${positionText (issueLineOf i)}${issueBody i}"
-
 -- | 内部：问题的行号。
 issueLineOf : ValidateIssue -> Int
 issueLineOf i = i.issueLine

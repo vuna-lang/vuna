@@ -32,9 +32,6 @@ export record UnitParts where
   unitPartsState : GenSt
   unitPartsDeps : List String
 
-export unitPartsDeps : UnitParts -> List String
-unitPartsDeps (UnitParts fragments bodies st deps) = deps
-
 -- 单个单元的装配片段。
 --   qc     ：跨单元限定上下文（当前单元 + 名字归属表；check 路径用 `noQual`）
 --   shared ：程序级共享元数据（Lowering 一次算好）

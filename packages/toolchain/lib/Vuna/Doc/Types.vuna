@@ -20,22 +20,6 @@ export record DocBlock(..) where
   -- | 块起始列（1 基）；关联目标时要求列相同。
   docBlockCol : Int
 
--- | docstring 正文。
-export docBlockText : DocBlock -> String
-docBlockText (DocBlock text start end col) = text
-
--- | 块首行行号。
-export docBlockStartLine : DocBlock -> Int
-docBlockStartLine (DocBlock text start end col) = start
-
--- | 块末行行号。
-export docBlockEndLine : DocBlock -> Int
-docBlockEndLine (DocBlock text start end col) = end
-
--- | 块起始列。
-export docBlockCol : DocBlock -> Int
-docBlockCol (DocBlock text start end col) = col
-
 -- | 按模块整理的 docstring 查询表。
 export record DocTable(..) where
   -- | 模块头 docstring；空串表示没有。
@@ -44,18 +28,6 @@ export record DocTable(..) where
   docTableDecls : List (String, String)
   -- | `父名<TAB>成员名` -> docstring；没有 doc 的成员不出现。
   docTableMembers : List (String, String)
-
--- | 模块头 docstring。
-export docTableModuleDoc : DocTable -> String
-docTableModuleDoc (DocTable mdoc decls members0) = mdoc
-
--- | 顶层名 -> docstring 表。
-export docTableDecls : DocTable -> List (String, String)
-docTableDecls (DocTable mdoc decls members0) = decls
-
--- | 成员 docstring 表。
-export docTableMembers : DocTable -> List (String, String)
-docTableMembers (DocTable mdoc decls members0) = members0
 
 -- | 查顶层声明的 docstring；没有 doc 时返回空串（调用方按空串跳过渲染）。
 export docForDecl : DocTable -> String -> String

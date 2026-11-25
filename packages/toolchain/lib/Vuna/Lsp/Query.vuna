@@ -1144,14 +1144,6 @@ record Compl where
   -- | markdown 文档；"" = 省略。
   complDoc : String
 
--- | 候选的显示文本。
-complLabel : Compl -> String
-complLabel (Compl label kind detail doc) = label
-
--- | 候选的 markdown 文档。
-complDoc : Compl -> String
-complDoc (Compl label kind detail doc) = doc
-
 -- | 内部：符号种类 → LSP CompletionItemKind（Method=2、Function=3、Constructor=4、Field=5、
 -- Variable=6、Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22）。
 symCompletionKind : Sym -> Int

@@ -22,40 +22,29 @@ record SelectorRecord where
 export selectorDerivingName : String
 selectorDerivingName = "Selectors"
 
--- | 冲突判据的严格程度。源码里还有手写访问器、共享字段名尚未认领时用宽松模式：
--- 冲突处不生成选择器、也不报错；全部认领/清理完毕后切到严格模式（报错）。
-export selectorsStrict : Bool
-selectorsStrict = False
-
 -- | 该 record 会生成选择器的字段名（生成与导出共用的唯一判据）。
 export selectedFieldNames : List Decl -> String -> List String
 selectedFieldNames decls recordName =
   let
     all = selectorRecords decls
-    topNames = topLevelNames decls
   in case findSelectorRecord recordName all of
     Nothing => []
-    Just r => selectedFieldNamesOf all topNames r
+    Just r => selectedFieldNamesOf all r
 
-selectedFieldNamesOf : List SelectorRecord -> List String -> SelectorRecord -> List String
-selectedFieldNamesOf all topNames r =
-  if r.srLinear then [] else filter (fieldNameSelected all topNames r) (recordFieldNames r)
+selectedFieldNamesOf : List SelectorRecord -> SelectorRecord -> List String
+selectedFieldNamesOf all r =
+  if r.srLinear then [] else filter (fieldNameSelected all r) (recordFieldNames r)
 
 findSelectorRecord : String -> List SelectorRecord -> Maybe SelectorRecord
 findSelectorRecord name [] = Nothing
 findSelectorRecord name (r :: rest) =
   if r.srName == name then Just r else findSelectorRecord name rest
 
--- 生成 / 导出的逐字段判据：显式认领，或本模块内字段名唯一。
--- 宽松模式下已有同名顶层声明就不生成（手写访问器与生成的声明不抢名字）；
--- 严格模式下仍选中，由 `checkOneField` 报 `SelectorNameTaken`。
-fieldNameSelected : List SelectorRecord -> List String -> SelectorRecord -> String -> Bool
-fieldNameSelected all topNames r fieldName =
-  if r.srLinear then
-    False
-  else if not (r.srClaim || fieldOwnerCount all fieldName == 1) then
-    False
-  else if selectorsStrict then True else not (memName fieldName topNames)
+-- 生成 / 导出的逐字段判据：本 record 未被跳过（非线性），且显式认领或本模块内字段名唯一。
+-- 与已有顶层声明、其它 record 认领的冲突由 `checkOneField` 报错。
+fieldNameSelected : List SelectorRecord -> SelectorRecord -> String -> Bool
+fieldNameSelected all r fieldName =
+  not r.srLinear && (r.srClaim || fieldOwnerCount all fieldName == 1)
 
 -- | 生成一个模块的字段选择器声明（顺序 = 声明顺序 × 字段顺序，逐字节稳定）。
 export selectorDecls : List Decl -> Check (List Decl)
@@ -182,30 +171,21 @@ checkOneField all r f topNames =
     owners = fieldOwnerCount all fieldName
     claims = fieldClaimCount all fieldName
   in if claims > 1 then
-    if selectorsStrict then
-      rnAt2
-        (nodeRefSpan r.srRef)
-        (SelectorConflict fieldName (ownersText all fieldName))
-        fieldName
-        (ownersText all fieldName)
-    else
-      OkC []
+    rnAt2
+      (nodeRefSpan r.srRef)
+      (SelectorConflict fieldName (ownersText all fieldName))
+      fieldName
+      (ownersText all fieldName)
   else if owners > 1 && claims == 0 then
-    if selectorsStrict then
-      rnAt2
-        (nodeRefSpan r.srRef)
-        (SelectorShared fieldName (ownersText all fieldName))
-        fieldName
-        (ownersText all fieldName)
-    else
-      OkC []
-  else if not (fieldNameSelected all topNames r fieldName) then
+    rnAt2
+      (nodeRefSpan r.srRef)
+      (SelectorShared fieldName (ownersText all fieldName))
+      fieldName
+      (ownersText all fieldName)
+  else if not (fieldNameSelected all r fieldName) then
     OkC []
   else if memName fieldName topNames then
-    if selectorsStrict then
-      rnAt2 (nodeRefSpan r.srRef) (SelectorNameTaken fieldName r.srName) fieldName r.srName
-    else
-      OkC []
+    rnAt2 (nodeRefSpan r.srRef) (SelectorNameTaken fieldName r.srName) fieldName r.srName
   else
     OkC [selectorSigDecl r f, selectorFunDecl r f]
 

@@ -439,7 +439,7 @@ namespaceImportsGo imports (_ :: rest) acc = namespaceImportsGo imports rest acc
 
 hasImportOf : List Import -> String -> Bool
 hasImportOf [] name = False
-hasImportOf (imp :: rest) name = importModuleName imp == name || hasImportOf rest name
+hasImportOf (imp :: rest) name = importName imp == name || hasImportOf rest name
 
 -- | 导出项里的模块前缀：必须唯一（重复 alias/弱短名在导出定义处报歧义）。
 resolveImportPrefix : List Import -> String -> Check String
@@ -655,7 +655,7 @@ nsDropLocal n (x :: rest) = if n <= 0 then (::) x rest else nsDropLocal (n - 1) 
 loadModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> Import -> Eff r (Check (List Module))
 loadModule fuel roots importerPkg modules stack imp =
   let
-    name = importModuleName imp
+    name = importName imp
   in if fuel <= 0 then
     pure (icFuel "loader")
   else
@@ -1097,7 +1097,7 @@ visibleFixityOps : List Module -> List Import -> List String
 visibleFixityOps modules imports =
   concatMap (
       \imp =>
-        case findModule modules (importModuleName imp) of
+        case findModule modules (importName imp) of
           Just m => fixityOpsOf (moduleFixitiesOf m)
           Nothing => []
     ) imports
@@ -1105,10 +1105,10 @@ visibleFixityOps modules imports =
 unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Import -> List Decl -> List String -> List Import -> Check (List Diagnostic)
 unusedImportWarningsGo modules nameSet sourceNames imports decls reexports [] = OkC []
 unusedImportWarningsGo modules nameSet sourceNames imports decls reexports (imp :: rest) =
-  Vuna.Compiler.Base.Common.bind (exportsOf modules (importModuleName imp)) (
+  Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (
       \es =>
         let
-          used = memName (importModuleName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
+          used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
         in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet sourceNames imports decls reexports rest) (\more => OkC (if used then more else (::) (unusedImportDiag imports decls imp) more))
     )
 
@@ -1129,7 +1129,7 @@ unusedImportDiag imports decls imp =
 -- 而 fixity 声明不进 `Decl`，rename 结果里看不到引用，只能拿源码名比对。
 importProvidesUsedFixity : HashMap String Bool -> List Module -> Import -> Bool
 importProvidesUsedFixity sourceNames modules imp =
-  case findModule modules (importModuleName imp) of
+  case findModule modules (importName imp) of
     Nothing => False
     Just m => anyNameIn sourceNames (fixityOpsOf (moduleFixitiesOf m))
 
@@ -1141,7 +1141,7 @@ fixityOpsOf (d :: rest) = d.fixityOp :: fixityOpsOf rest
 -- 这个 import 是给**下游**用的（fixity 表随 import 闭包传播），不能算 unused。
 importProvidesDeclaredFixity : List Decl -> List Module -> Import -> Bool
 importProvidesDeclaredFixity decls modules imp =
-  case findModule modules (importModuleName imp) of
+  case findModule modules (importName imp) of
     Nothing => False
     Just m => anyOpDeclared (fixityOpsOf (moduleFixitiesOf m)) (definedNamesOf decls)
 
@@ -1182,7 +1182,7 @@ anyNameIn s (n :: rest) = if HashMap.member n s then True else anyNameIn s rest
 -- 「加载这些实例」这件事；声明了实例的模块被 import 就是可见副作用，不算 unused。
 moduleDeclaresInstance : List Module -> Import -> Bool
 moduleDeclaresInstance modules imp =
-  case findModule modules (importModuleName imp) of
+  case findModule modules (importName imp) of
     Nothing => False
     Just m => anyInstanceDecl (moduleDeclsOf m)
 

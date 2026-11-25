@@ -34,26 +34,6 @@ record DocTarget where
   -- | 成员所属的类型名；非成员为空串。
   targetParent : String
 
--- | 内部：目标起始行号。
-targetLine : DocTarget -> Int
-targetLine (DocTarget line col kind name parent) = line
-
--- | 内部：目标起始列号。
-targetCol : DocTarget -> Int
-targetCol (DocTarget line col kind name parent) = col
-
--- | 内部：目标种类。
-targetKind : DocTarget -> String
-targetKind (DocTarget line col kind name parent) = kind
-
--- | 内部：目标名。
-targetName : DocTarget -> String
-targetName (DocTarget line col kind name parent) = name
-
--- | 内部：成员所属的类型名。
-targetParent : DocTarget -> String
-targetParent (DocTarget line col kind name parent) = parent
-
 -- | 内部：目标的文本键（种类、父名、名字、行、列用制表符连接）。
 targetKey : DocTarget -> String
 targetKey t = "${targetKind t}\t${targetParent t}\t${targetName t}\t${targetLine t}\t${targetCol t}"
@@ -302,38 +282,6 @@ record Assign where
   assignMembers : List (String, String)
   -- | 模块头 docstring；空串表示还没有。
   assignModuleDoc : String
-
--- | 内部：行块已收的正文行。
-openLines : OpenLineBlock -> List String
-openLines (OpenLineBlock ls start end col) = ls
-
--- | 内部：行块首行行号。
-openStartLine : OpenLineBlock -> Int
-openStartLine (OpenLineBlock ls start end col) = start
-
--- | 内部：行块末行行号。
-openEndLine : OpenLineBlock -> Int
-openEndLine (OpenLineBlock ls start end col) = end
-
--- | 内部：行块起始列。
-openCol : OpenLineBlock -> Int
-openCol (OpenLineBlock ls start end col) = col
-
--- | 内部：已被占用的目标下标。
-assignUsed : Assign -> List Int
-assignUsed (Assign used decls members mdoc) = used
-
--- | 内部：顶层 doc 表。
-assignDecls : Assign -> List (String, String)
-assignDecls (Assign used decls members mdoc) = decls
-
--- | 内部：成员 doc 表。
-assignMembers : Assign -> List (String, String)
-assignMembers (Assign used decls members mdoc) = members
-
--- | 内部：模块头 docstring。
-assignModuleDoc : Assign -> String
-assignModuleDoc (Assign used decls members mdoc) = mdoc
 
 -- | 内部：逐块做前置关联，返回累积结果。
 assignBlocks : List Comment -> List (Int, DocTarget) -> List DocBlock -> Assign

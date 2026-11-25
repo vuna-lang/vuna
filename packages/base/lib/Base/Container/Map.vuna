@@ -64,10 +64,6 @@ size (Map pairs) = length pairs
 export fromList : List (k, v) -> Map k v
 fromList pairs = Map pairs
 
--- | 原样取回内部 `Pair` 列表（`fromList` 的逆操作，可能含重复键）。
-export toList : Map k v -> List (k, v)
-toList (Map pairs) = pairs
-
 -- 经 `toList`；构造器不导出，跨模块不能模式匹配。
 instance Show k, Show v => Show (Map k v) where
   show m = "fromList " `++` show (toList m)

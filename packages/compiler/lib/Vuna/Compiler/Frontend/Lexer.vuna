@@ -47,15 +47,6 @@ export record Chars(..) where
   charsOffset : Int
   charsPos : Pos
 
-export charsSource : Chars -> String
-charsSource cs = cs.charsSource
-
-export charsOffset : Chars -> Int
-charsOffset cs = cs.charsOffset
-
-export charsPos : Chars -> Pos
-charsPos cs = cs.charsPos
-
 -- 游标原语：全部 O(1)。`strAt` 越界返回 -1，正好当 EOF 哨兵。
 export charsEmpty : Chars -> Bool
 charsEmpty cs = cs.charsOffset >= strLength cs.charsSource
@@ -225,9 +216,6 @@ export record Comment(..) where
   commentKind : CKind
   commentText : String
   commentSpan : Span
-
-export commentSpan : Comment -> Span
-commentSpan (Comment kind text sp) = sp
 
 export trimTrailingSpace : String -> String
 trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))

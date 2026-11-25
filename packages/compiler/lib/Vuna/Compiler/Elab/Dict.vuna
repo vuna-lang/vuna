@@ -51,9 +51,6 @@ record InstMatch where
   instMatchInst : DtInst
   instMatchTerm : Term
 
-instMatchInst : InstMatch -> DtInst
-instMatchInst (InstMatch i t) = i
-
 -- 递归深度上限（实例 ctx 链）；`fuel` 在每个递归层减 1。
 --
 -- blanket 实例（头实参是裸类参数，见 `Elab.Meta.isBlanketInst`）是 fallback：
@@ -68,7 +65,7 @@ searchInstFuel globals ctx fuel ec0 dom sp =
     missingInstance ec dom sp
   else
     let
-      _ = log! "debug" "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
+      _ = log! "debug" "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInstList ec)}"
     in case localDictLookup ctx 0 dom ec of
       Just pair => OkC pair
       Nothing =>
@@ -216,7 +213,7 @@ searchCandidates : Ec -> Value -> List DtInst
 searchCandidates ec dom =
   let
     fam = valueDictFamily (forceVal ec dom)
-  in if fam == "" then ecInsts ec else ecInstsFamily ec fam
+  in if fam == "" then ecInstList ec else ecInstsFamily ec fam
 
 specificInstances : List DtInst -> List DtInst
 specificInstances [] = []
@@ -681,7 +678,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
         args =>
           if anyUnsolvedMetaArg ec args then
             resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-          else if isRigidDictArg ec dom && allInstancesMono (ecInsts ec) then
+          else if isRigidDictArg ec dom && allInstancesMono (ecInstList ec) then
             resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
           else
             case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
@@ -782,7 +779,7 @@ tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
       args =>
         if anyUnsolvedMetaArg ec args then
           Nothing
-        else if isRigidDictArg ec forced && allInstancesMono (ecInsts ec) then
+        else if isRigidDictArg ec forced && allInstancesMono (ecInstList ec) then
           Nothing
         else
           case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
@@ -897,10 +894,10 @@ renderDictTermAt fuel ec depth task =
         in renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TApp fn argTerm r) rest restRigs)
 
 -- 实例字典函数的 Pi 前缀：tele 一律 Rig0（类型参数擦除）、ctx 一律 RigOmega。
--- 先查 `ecInsts`（实例签名的真源），再回退 globals：体阶段 globals 表可能被同名项
+-- 先查 `ecInstList`（实例签名的真源），再回退 globals：体阶段 globals 表可能被同名项
 -- 覆盖（同名值定义）或尚未含实例头；回退顺序能避免把 tele 实参误判成运行期实参。
 piRigsOfInst : Ec -> String -> Maybe (List Rig)
-piRigsOfInst ec g = piRigsOfInstGo g (ecInsts ec)
+piRigsOfInst ec g = piRigsOfInstGo g (ecInstList ec)
 
 piRigsOfInstGo : String -> List DtInst -> Maybe (List Rig)
 piRigsOfInstGo g [] = Nothing

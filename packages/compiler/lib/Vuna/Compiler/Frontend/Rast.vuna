@@ -258,24 +258,6 @@ declSpan (DRecord name params fields derivings viaField repr lin sp) = sp
 declSpan (DTrait name params supers methods sp) = sp
 declSpan (DInstance ctxE head methods sp) = sp
 
-export ctorSpan : Ctor -> Span
-ctorSpan (Ctor name ty arity sp) = sp
-
-export fieldSpan : Field -> Span
-fieldSpan (Field name ty sp) = sp
-
-export fieldName : Field -> String
-fieldName (Field name ty sp) = name
-
-export fieldType : Field -> Expr
-fieldType (Field name ty sp) = ty
-
-export traitMethodName : TraitMethod -> String
-traitMethodName (TraitMethod name ty sp) = name
-
-export traitMethodSpan : TraitMethod -> Span
-traitMethodSpan (TraitMethod name ty sp) = sp
-
 export exportItemSpan : ExportItem -> Span
 exportItemSpan item = Ast.nodeRefSpan (exportItemRef item)
 
@@ -296,9 +278,6 @@ funArity name decls =
     [] => Nothing
     (pats, body) :: _ => Just (natToInt (length pats))
 
-export ctorName : Ctor -> String
-ctorName (Ctor name ty arity _) = name
-
 -- canonical 构造子名的最后一段（短名）。data 构造子的 canonical 形如
 -- `Module.Data.Ctor`（entry 文件是 `Data.Ctor`），短名用于族内查找/OCaml 名字/诊断。
 -- | 短名（canonical 名的最后一段）；族内查找 / OCaml 名字 / 诊断用。
@@ -317,9 +296,6 @@ ctorDisplayName name =
         [] => base
         fam :: rest => "${fam}.${base}"
 
-export ctorType : Ctor -> Expr
-ctorType (Ctor name ty arity _) = ty
-
 export typeArity : Expr -> Int
 typeArity (EApp (EVar (RIntrinsic "->") _) [x, rest] _) = 1 + typeArity rest
 typeArity _ = 0
@@ -329,17 +305,17 @@ lookupCtorArity name [] = Nothing
 lookupCtorArity name (c :: rest) =
   if ctorName c == name then Just c.ctorArity else lookupCtorArity name rest
 
-export ctorArity : String -> List Decl -> Maybe Int
-ctorArity name [] = Nothing
-ctorArity name (d :: rest) =
+export declCtorArity : String -> List Decl -> Maybe Int
+declCtorArity name [] = Nothing
+declCtorArity name (d :: rest) =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
       case lookupCtorArity name ctors of
         Just arity => Just arity
-        Nothing => ctorArity name rest
+        Nothing => declCtorArity name rest
     DRecord dname params fields derivings viaField repr lin sp =>
-      if name == dname then Just (natToInt (length fields)) else ctorArity name rest
-    _ => ctorArity name rest
+      if name == dname then Just (natToInt (length fields)) else declCtorArity name rest
+    _ => declCtorArity name rest
 
 export declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]

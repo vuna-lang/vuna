@@ -540,7 +540,7 @@ mismatchAt depth a b =
 -- 元变量创建深度；未登记时退回当前深度（只可能出现在没有求解路径的 zonk 上下文）。
 metaCreatedDepth : Sols -> Int -> Int -> Int
 metaCreatedDepth sols depth m =
-  case solsDepth m sols of
+  case solsDepthAt m sols of
     Just d => d
     Nothing => depth
 

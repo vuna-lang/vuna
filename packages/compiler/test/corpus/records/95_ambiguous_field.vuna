@@ -2,6 +2,7 @@
 record A where
   x : Int
   y : Int
+deriving (Selectors)
 
 record B where
   x : String

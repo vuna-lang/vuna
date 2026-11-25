@@ -448,21 +448,6 @@ record InstSigInfo where
   instSigArgs : List Term
   instSigHead : Term
 
-instSigClass : InstSigInfo -> String
-instSigClass (InstSigInfo c tele ctxE args head) = c
-
-instSigTele : InstSigInfo -> List (String, Term)
-instSigTele (InstSigInfo c tele ctxE args head) = tele
-
-instSigCtx : InstSigInfo -> List Term
-instSigCtx (InstSigInfo c tele ctxE args head) = ctxE
-
-instSigArgs : InstSigInfo -> List Term
-instSigArgs (InstSigInfo c tele ctxE args head) = args
-
-instSigHead : InstSigInfo -> Term
-instSigHead (InstSigInfo c tele ctxE args head) = head
-
 -- 实例头+约束的类型化：
 --   1. 自由小写名（head 实参与 ctx 实参里）→ tele，kind 按应用次数推断（Sig.arityFun）；
 --   2. 单态实例（tele=[] 且 ctx=[]）走 `closedTypeTerms`（纯语法到核心项的机械转换）；
@@ -1456,7 +1441,7 @@ checkInstanceHeadsGo ((d@(decl, dsp)) :: rest) classes globals ec acc insts seen
                   ikey = instanceKey ec1 (instSigClass info) (instSigTele info) (instSigHead info)
                   ty = instTypeOf info
                   inst = DtInst iname isym ikey (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
-                in case findInstanceClash ec1 iname isym ikey (instSigTele info) (instSigHead info) (append (ecInsts ec1) seen) of
+                in case findInstanceClash ec1 iname isym ikey (instSigTele info) (instSigHead info) (append (ecInstList ec1) seen) of
                   (Just ClashDuplicate, ec2) => tcErr1 msp (DuplicateInstance iname) iname
                   (Just ClashOverlap, ec2) => tcErr1 msp (OverlappingInstances iname) iname
                   (Nothing, ec2) => checkInstanceHeadsGo rest classes globals ec2 ((isym, ty) :: acc) (inst :: insts) (inst :: seen)

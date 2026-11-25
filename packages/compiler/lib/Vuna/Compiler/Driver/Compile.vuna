@@ -838,6 +838,7 @@ export record ClosureMod(..) where
   cmSrc : String
   cmImports : List String
   cmAddr : String
+deriving (Selectors)
 
 -- 包身份：**只要包名**。vuna 的依赖解析是「按名字在闭包里唯一」（同名不同目录会被 loader
 -- 拒绝），所以名字就是身份；目录不进 key 反而是必要的——同一个包在不同入口写法、不同 cwd、

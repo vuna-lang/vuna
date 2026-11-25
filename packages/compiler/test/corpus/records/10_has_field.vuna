@@ -5,6 +5,7 @@ record User where
   name : String
   id : Int
   created : Int
+deriving (Selectors)
 
 record Item where
   id : Int

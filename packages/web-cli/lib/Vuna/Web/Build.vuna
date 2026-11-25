@@ -26,6 +26,7 @@ export record BuildOpts(..) where
   target : String
   -- | 是否发布构建（透传 `--release`）。
   release : Bool
+deriving (Selectors)
 
 -- | 一次构建的布局。
 export record Layout(..) where

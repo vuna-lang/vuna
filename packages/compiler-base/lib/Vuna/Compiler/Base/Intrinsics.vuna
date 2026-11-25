@@ -86,14 +86,6 @@ export record TypeIntrinsic(..) where
   -- | 类型参数个数。
   typeIntrinsicCtorArity : Int
 
--- | 取内建类型构造子的名字。
-export typeIntrinsicCtorName : TypeIntrinsic -> String
-typeIntrinsicCtorName (TypeIntrinsic name arity) = name
-
--- | 取内建类型构造子的类型参数个数。
-export typeIntrinsicCtorArity : TypeIntrinsic -> Int
-typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
-
 -- | 内建类型构造子的源码名（`Elab` / `Lowering` 的判定与渲染共用，避免同一字面串多处手写）。
 export arrayTypeName : String
 arrayTypeName = "Array"
@@ -688,18 +680,6 @@ export record Intrinsic where
   -- | 是否对用户源码可见（`False` = 只供 codegen 映射的内部名 `bi_*`）。
   intrinsicVisible : Bool
 
--- | 取内建的名字。
-export intrinsicName : Intrinsic -> String
-intrinsicName (Intrinsic name sig op visible) = name
-
--- | 取内建的签名形状。
-export intrinsicSignature : Intrinsic -> IType
-intrinsicSignature (Intrinsic name sig op visible) = sig
-
--- | 该内建是否对用户源码可见。
-export intrinsicVisible : Intrinsic -> Bool
-intrinsicVisible (Intrinsic name sig op visible) = visible
-
 -- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
 -- 其它同名声明是非法伪造。
 export canonicalCtorsFor : String -> Maybe (List String)
@@ -817,18 +797,6 @@ export record CanonicalFamily where
   cfName : String
   cfCtors : List String
   cfRepr : FamilyRepr
-
--- | 族的完整符号。
-export cfName : CanonicalFamily -> String
-cfName (CanonicalFamily name _ _) = name
-
--- | 族的固定构造子集合。
-export cfCtors : CanonicalFamily -> List String
-cfCtors (CanonicalFamily _ ctors _) = ctors
-
--- | 族的运行时表示类别。
-export cfRepr : CanonicalFamily -> FamilyRepr
-cfRepr (CanonicalFamily _ _ repr) = repr
 
 -- | canonical 族表：身份、构造子与表示的唯一真源；新增族只改这里。
 export canonicalFamilies : List CanonicalFamily

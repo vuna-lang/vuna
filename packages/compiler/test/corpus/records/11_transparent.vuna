@@ -12,8 +12,8 @@ boxed record Handle where
 u : UserId
 u = UserId { uid = 7 }
 
-h : Handle
-h = Handle { h = 3 }
+hd : Handle
+hd = Handle { h = 3 }
 
 main : Int
-main = u.uid * 10 + h.h + 0
+main = u.uid * 10 + hd.h + 0

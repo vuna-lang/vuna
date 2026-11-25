@@ -139,14 +139,6 @@ record NormState where
   -- | 名字到变量编号的绑定表（新绑定在前）。
   normEnv : List (String, Int)
 
--- | 下一个可分配的变量编号。
-normNext : NormState -> Int
-normNext (NormState n env) = n
-
--- | 名字到变量编号的绑定表。
-normEnv : NormState -> List (String, Int)
-normEnv (NormState n env) = env
-
 -- | 内部：查名字当前绑定的变量编号。
 lookupVar : String -> List (String, Int) -> Maybe Int
 lookupVar name [] = Nothing
@@ -285,10 +277,6 @@ record Subst where
   -- | 已绑定的变量编号与类型（新绑定在前）。
   substList : List (Int, Ty)
 
--- | 已绑定的变量编号与类型。
-substList : Subst -> List (Int, Ty)
-substList (Subst xs) = xs
-
 -- | 内部：查变量已绑定的类型。
 lookupSubst : Int -> List (Int, Ty) -> Maybe Ty
 lookupSubst id [] = Nothing
@@ -304,14 +292,6 @@ record AlphaState where
   alphaEnv : List (Int, Int)
   -- | 下一个可用的出现序号。
   alphaNext : Int
-
--- | 变量编号到出现序号的映射。
-alphaEnv : AlphaState -> List (Int, Int)
-alphaEnv (AlphaState env next) = env
-
--- | 下一个可用的出现序号。
-alphaNext : AlphaState -> Int
-alphaNext (AlphaState env next) = next
 
 -- | 内部：查变量已被分配的出现序号。
 lookupInt : Int -> List (Int, Int) -> Maybe Int

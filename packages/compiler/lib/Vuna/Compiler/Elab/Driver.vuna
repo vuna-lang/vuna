@@ -1053,7 +1053,7 @@ elabProgramCoreWithAux recover startEc startGlobals records decls =
                                                                   -- 运行时位置的 TMeta）。
                                                                   ec3 = obsPure "vuna.elab.dictfix" (\_ => resolveDictGoalsFix globals ec3a 8)
                                                                   defs = obsPure "vuna.elab.rezonk" (\_ => rezonkDefs ec3 defs0)
-                                                                  _ = log! "info" "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${ecPendingCount ec3a} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
+                                                                  _ = log! "info" "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${ecPendingCount ec3a} datas=${length (ecDatas ec3a)} insts=${length (ecInstList ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
                                                                   -- 实例表索引自检（派生索引 == 权威表）。只在 VUNA_LOG=debug 下跑：
                                                                   -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                                                                   _ = log! "debug" (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
@@ -1328,7 +1328,7 @@ finishCore termAux decls core =
                                         -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
                                         -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
                                         _ = log! "info" "termination-done"
-                                      in OkC (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
+                                      in OkC (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInstList ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
                                   )
                             )
                       )
@@ -1592,7 +1592,7 @@ dictCandidatesOf : Ec -> String -> List Candidate
 dictCandidatesOf ec shown =
   let
     fam = dictFamilyOfShown shown
-    insts = if fam == "" then ecInsts ec else ecInstsFamily ec fam
+    insts = if fam == "" then ecInstList ec else ecInstsFamily ec fam
   in sortCandidates (map (instCandidate shown) insts)
 
 -- 诊断候选按名字排序：实例表是 HashMap 桶序，直接输出会让同一错误在不同进程/GC 后

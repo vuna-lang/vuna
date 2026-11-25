@@ -50,18 +50,6 @@ record DocScope where
   -- | `[export].modules` 的模块名列表；`Nothing` 表示不过滤。
   scopeExports : Maybe (List String)
 
--- | 内部：源码根目录。
-scopeDir : DocScope -> String
-scopeDir (DocScope dir name exports) = dir
-
--- | 内部：包名。
-scopeName : DocScope -> String
-scopeName (DocScope dir name exports) = name
-
--- | 内部：导出模块列表。
-scopeExports : DocScope -> Maybe (List String)
-scopeExports (DocScope dir name exports) = exports
-
 -- | 内部：校验目录、发现 scope、收集源文件后进入构建。
 docRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Maybe String -> Eff r Int
 docRun dir out check pkgFilter =

@@ -25,30 +25,6 @@ export record ModuleInfo(..) where
   -- `vuna api` 用它渲染模块标题下的说明。
   modDoc : String
 
--- | `ModuleInfo.modName` 的访问子。
-export modName : ModuleInfo -> String
-modName (ModuleInfo m p path bytes decls doc) = m
-
--- | `ModuleInfo.modPackage` 的访问子。
-export modPackage : ModuleInfo -> String
-modPackage (ModuleInfo m p path bytes decls doc) = p
-
--- | `ModuleInfo.modPath` 的访问子。
-export modPath : ModuleInfo -> String
-modPath (ModuleInfo m p path bytes decls doc) = path
-
--- | `ModuleInfo.modBytes` 的访问子。
-export modBytes : ModuleInfo -> Int
-modBytes (ModuleInfo m p path bytes decls doc) = bytes
-
--- | `ModuleInfo.modDecls` 的访问子。
-export modDecls : ModuleInfo -> Int
-modDecls (ModuleInfo m p path bytes decls doc) = decls
-
--- | `ModuleInfo.modDoc` 的访问子。
-export modDoc : ModuleInfo -> String
-modDoc (ModuleInfo m p path bytes decls doc) = doc
-
 -- | 一个可检索的符号。
 --
 -- 符号既是查找的单位（`vuna map` / `vuna api`），也是引用与影响面分析的端点。
@@ -72,38 +48,6 @@ export record Sym(..) where
   -- | 符号起始列。
   symCol : Int
 
--- | `Sym.symModule` 的访问子。
-export symModule : Sym -> String
-symModule (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod
-
--- | `Sym.symName` 的访问子。
-export symName : Sym -> String
-symName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sName
-
--- | `Sym.symKind` 的访问子。
-export symKind : Sym -> String
-symKind (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sKind
-
--- | `Sym.symSig` 的访问子。
-export symSig : Sym -> String
-symSig (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sSig
-
--- | `Sym.symType` 的访问子。
-export symType : Sym -> String
-symType (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sType
-
--- | `Sym.symDoc` 的访问子。
-export symDoc : Sym -> String
-symDoc (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sDoc
-
--- | `Sym.symLine` 的访问子。
-export symLine : Sym -> Int
-symLine (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sLine
-
--- | `Sym.symCol` 的访问子。
-export symCol : Sym -> Int
-symCol (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sCol
-
 -- | 符号全名 `<模块全名>.<符号名>`（查找与去重的键）。
 export symFullName : Sym -> String
 symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = "${sMod}.${sName}"
@@ -121,14 +65,6 @@ export record Ref(..) where
   -- | 引用出现的列。
   refCol : Int
 
--- | `Ref.refModule` 的访问子。
-export refModule : Ref -> String
-refModule (Ref refMod refNm refLn refCl) = refMod
-
--- | `Ref.refName` 的访问子。
-export refName : Ref -> String
-refName (Ref refMod refNm refLn refCl) = refNm
-
 -- | 整个仓库的索引：模块表 + 符号表 + 引用表。
 --
 -- 引用表就是反向边（引用方模块 → 引用位置），影响面直接读它，不再解析源码。
@@ -139,10 +75,6 @@ export record Index(..) where
   indexSymbols : List Sym
   -- | 全部引用，按源码顺序。
   indexRefs : List Ref
-
--- | `Index.indexModules` 的访问子。
-export indexModules : Index -> List ModuleInfo
-indexModules (Index ms syms refs) = ms
 
 -- | 去重并保持首次出现顺序。
 --

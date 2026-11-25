@@ -20,6 +20,7 @@ record Anf where
   anfLets : List (IrBinder, Ir)
   anfExpr : Ir
   anfNext : Int
+deriving (Selectors)
 
 mkAnf : List (IrBinder, Ir) -> Ir -> Int -> Anf
 mkAnf lets e n = Anf lets e n
@@ -165,7 +166,7 @@ anf fuel next e =
       IrCase caseTy resultTy scrut alts =>
         let
           s = anf (fuel - 1) next scrut
-          alts1 = anfAlts (fuel - 1) s.anfNext alts
+          alts1 = anfAltsOf (fuel - 1) s.anfNext alts
         in mkAnf s.anfLets (IrCase caseTy resultTy s.anfExpr alts1.anfAlts) alts1.anfNext
       IrNatCase scrut fresh zero succ catch =>
         let
@@ -209,8 +210,8 @@ anfFields fuel next fields =
           r = anfFields (fuel - 1) b.boundNext rest
         in AnfFields (append b.boundLets r.anfLets) ((firstOf p, b.boundExpr) :: r.anfValues) r.anfNext
 
-anfAlts : Int -> Int -> List IrAlt -> AnfAlts
-anfAlts fuel next alts =
+anfAltsOf : Int -> Int -> List IrAlt -> AnfAlts
+anfAltsOf fuel next alts =
   if fuel <= 0 then
     AnfAlts alts next
   else
@@ -219,7 +220,7 @@ anfAlts fuel next alts =
       a :: rest =>
         let
           b = anf (fuel - 1) next a.irAltBody
-          r = anfAlts (fuel - 1) b.anfNext rest
+          r = anfAltsOf (fuel - 1) b.anfNext rest
         in AnfAlts (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr) :: r.anfAlts) r.anfNext
 
 anfAltMaybe : Int -> Int -> Maybe IrAlt -> AnfAltM

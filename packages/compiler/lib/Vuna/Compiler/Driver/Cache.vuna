@@ -33,21 +33,6 @@ export record CachedProgram(..) where
   cachedClasses : List DtClass
   cachedOpaque : List String
 
-export cachedDatas : CachedProgram -> List DtData
-cachedDatas (CachedProgram datas defs globals insts classes _) = datas
-
-export cachedDefs : CachedProgram -> List DtDef
-cachedDefs (CachedProgram datas defs globals insts classes _) = defs
-
-export cachedGlobals : CachedProgram -> List (String, Term)
-cachedGlobals (CachedProgram datas defs globals insts classes _) = globals
-
-export cachedInsts : CachedProgram -> List DtInst
-cachedInsts (CachedProgram datas defs globals insts classes _) = insts
-
-export cachedClasses : CachedProgram -> List DtClass
-cachedClasses (CachedProgram datas defs globals insts classes _) = classes
-
 export cachedOpaqueOf : CachedProgram -> List String
 cachedOpaqueOf (CachedProgram datas defs globals insts classes names) = names
 

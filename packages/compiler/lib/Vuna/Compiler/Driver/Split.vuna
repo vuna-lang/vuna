@@ -26,15 +26,7 @@ export record SplitFile(..) where
   splitText : String
   splitDeps : List String
 
-splitName : SplitFile -> String
-splitName (SplitFile name text deps) = name
-
-splitText : SplitFile -> String
-splitText (SplitFile name text deps) = text
-
 -- 该输出文件所在编译单元的直接依赖（单元名 = 模块名 sanitize 后，无扩展名）。
-splitDeps : SplitFile -> List String
-splitDeps (SplitFile name text deps) = deps
 
 -- 落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
 export writeSplitFiles : Member nFs FsOp r => String -> List SplitFile -> Eff r (Check Int)

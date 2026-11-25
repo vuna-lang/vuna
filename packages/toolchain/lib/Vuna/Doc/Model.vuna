@@ -40,30 +40,6 @@ export record DocItem(..) where
   -- | 成员条目（构造子 / 字段 / 方法）；顶层条目为空表。
   itemMembers : List DocItem
 
--- | 条目名。
-export itemName : DocItem -> String
-itemName (DocItem name kind sig doc line members) = name
-
--- | 条目种类。
-export itemKind : DocItem -> String
-itemKind (DocItem name kind sig doc line members) = kind
-
--- | 签名文本。
-export itemSignature : DocItem -> String
-itemSignature (DocItem name kind sig doc line members) = sig
-
--- | docstring 正文。
-export itemDoc : DocItem -> String
-itemDoc (DocItem name kind sig doc line members) = doc
-
--- | 源码起始行号。
-export itemLine : DocItem -> Int
-itemLine (DocItem name kind sig doc line members) = line
-
--- | 成员条目。
-export itemMembers : DocItem -> List DocItem
-itemMembers (DocItem name kind sig doc line members) = members
-
 -- | 一个模块的文档：包名、模块全名、源路径、模块 docstring 与条目列表。
 export record DocModule(..) where
   -- | 所属包名；单目录模式为空串。
@@ -77,34 +53,10 @@ export record DocModule(..) where
   -- | 顶层条目，顺序与源码一致。
   moduleItems : List DocItem
 
--- | 所属包名。
-export modulePackage : DocModule -> String
-modulePackage (DocModule pkg name path doc items) = pkg
-
--- | 模块全名。
-export moduleName : DocModule -> String
-moduleName (DocModule pkg name path doc items) = name
-
--- | 源文件路径。
-export modulePath : DocModule -> String
-modulePath (DocModule pkg name path doc items) = path
-
--- | 模块头 docstring。
-export moduleDoc : DocModule -> String
-moduleDoc (DocModule pkg name path doc items) = doc
-
--- | 顶层条目列表。
-export moduleItems : DocModule -> List DocItem
-moduleItems (DocModule pkg name path doc items) = items
-
 -- | 整份文档：按包与文件顺序排列的模块列表。
 export record DocBook(..) where
   -- | 模块列表；顺序由构建时的 scope 与文件顺序决定。
   bookModules : List DocModule
-
--- | 模块列表。
-export bookModules : DocBook -> List DocModule
-bookModules (DocBook modules) = modules
 
 -- ---------------------------------------------------------------
 -- 构建

@@ -217,8 +217,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   不依赖 body 里 `==` 的隐式字典提升；
 - **Bool 不做字面量搬运**：`if c then True else False` 写 `c`，`if c then e else False` 写
   `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Data.Bool.not`；
-- **单构造器类型用 `record` + 字段访问**：位置访问器在有高阶使用（`map acc`）或终止性
-  投影处保留为函数，其余调用点写 `x.field`；
+- **单构造器类型用 `record` + 字段访问**：需要一等函数形态时用生成的字段选择器
+  （`map Point.x`）或限定名 `R.x`，不再手写位置访问器；
 - **导出有两种互斥写法**：模块头导出列表（`module M (x, T(..)) where`）或逐定义
   `export`；同一模块不能同时写（报 `RN_DuplicateExport`），不写列表时模块默认私有
   （见 [frontend-syntax.md](frontend-syntax.md) §6）。
