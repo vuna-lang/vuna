@@ -22,36 +22,36 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
 （全部生成程序 × ocaml/native/wasm × 三指标），`--check` 只比本次实际跑的 target / benchmark。
 与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
-三口径读数（`--target all --runs 5 --warmup 2`，x86_64 / 16 核 / 生成时 `meta.loadavg ≈ 2`；
-ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm 列与对手写 C 的对照见
-`bench/baselines/programs.json`）：
+三口径读数（`--target all --runs 5 --warmup 2`，x86_64 / 16 核 / 生成时 `meta.loadavg ≈ 2.8`；
+ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全部用例（本次重标
+54 项）、native / wasm 列与对手写 C 的对照见该文件）：
 
 | benchmark | 场景 | wall | cpu | rss | vs_c (w/c/r) |
 | --- | --- | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | 1.21 | 1.23 | 1.69 | 1.77/1.79/2.57 |
-| string_ops | 字符串拼接 / repeat / substring | 1.62 | 1.82 | 1.54 | 3.72/4.07/2.89 |
-| hashmap | 持久哈希表 + 字典派发 | 2.87 | 2.95 | 2.61 | 2.98/3.07/4.97 |
-| list_recursion | List 非尾递归 / fold / append | 0.75 | 0.75 | 1.23 | 1.00/0.99/1.15 |
-| gc_pressure | 分配压力（字符串 churn） | 1.17 | 1.18 | 3.05 | 4.10/4.12/20.04 |
-| array | 不可变 Array（get / set / length） | 0.96 | 0.95 | 1.27 | 6.65/6.74/4.17 |
-| records | record 更新 + variant 分派 | 2.31 | 2.31 | 4.87 | 4.01/4.07/13.28 |
-| closures | 高阶函数 / 每次迭代新建闭包 | 1.29 | 1.28 | 1.50 | 7.91/8.22/7.56 |
-| sorting | 归并排序（List + Pair 拆半） | 1.14 | 1.14 | 3.68 | 0.63/0.62/0.86 |
-| float_math | Float 算术 / sqrt / abs / 转换 | 2.05 | 2.06 | 4.28 | 3.03/3.04/11.47 |
-| text_scan | 逐字节 `strAt` 扫描 | 1.65 | 1.68 | 1.80 | 2.46/2.52/3.52 |
-| nat_bits | Nat 饱和算术 + 63-bit 位运算 | 1.79 | 1.84 | 1.70 | 2.63/2.73/2.64 |
-| tco_mutual | 互递归（`even`/`odd`） | 1.09 | 1.10 | 1.66 | 3.20/3.36/2.80 |
-| tco_wide | 9 参数尾递归（3 个栈参数） | 1.05 | 1.04 | 1.67 | 2.29/2.38/2.60 |
-| micro_tco | 最小自递归尾调用 | 1.06 | 1.06 | 1.66 | 1.97/1.98/2.59 |
-| tco_args | 交叉依赖实参的尾递归 | 1.13 | 1.13 | 1.68 | 1.29/1.29/2.60 |
-| tco_unrotated | 双支自调用 / `&&` 条件 | 0.99 | 0.99 | 1.64 | 1.92/1.93/2.57 |
-| tco_arity6 | 6 参尾递归（全走寄存器） | 1.15 | 1.15 | 1.65 | 2.08/2.09/2.78 |
-| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 1.18 | 1.18 | 1.65 | 4.07/4.27/2.58 |
-| tco_nat | Nat 结构递归尾调用 | 1.92 | 1.94 | 1.65 | 3.23/3.30/2.57 |
-| state_machine | 9 状态 Int 分支链 | 1.72 | 1.75 | 1.65 | 6.28/6.48/2.58 |
-| gc_low_live | 低存活集、大累计分配 | 0.86 | 0.86 | 1.36 | 2.11/2.11/199.33 |
-| gc_array_churn | 大对象 churn（Array COW） | 1.65 | 1.65 | 2.56 | 1.68/1.68/126.55 |
-| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 2.08 | 2.11 | 5.62 | 1.03/1.03/5.51 |
+| arith | Int 算术 + 尾递归 | 1.25 | 1.23 | 1.82 | 1.76/1.77/2.75 |
+| string_ops | 字符串拼接 / repeat / substring | 1.97 | 2.05 | 1.64 | 2.65/2.68/2.92 |
+| hashmap | 持久哈希表 + 字典派发 | 3.38 | 3.54 | 2.64 | 4.83/5.06/4.88 |
+| list_recursion | List 非尾递归 / fold / append | 0.66 | 0.67 | 1.25 | 1.02/1.02/1.17 |
+| gc_pressure | 分配压力（字符串 churn） | 1.24 | 1.25 | 3.06 | 4.43/4.50/19.65 |
+| array | 不可变 Array（get / set / length） | 0.94 | 0.94 | 1.30 | 6.05/6.20/4.23 |
+| records | record 更新 + variant 分派 | 2.52 | 2.56 | 4.89 | 5.07/5.16/12.67 |
+| closures | 高阶函数 / 每次迭代新建闭包 | 1.26 | 1.26 | 1.54 | 9.04/9.41/7.65 |
+| sorting | 归并排序（List + Pair 拆半） | 1.22 | 1.21 | 3.72 | 0.63/0.63/0.86 |
+| float_math | Float 算术 / sqrt / abs / 转换 | 2.38 | 2.39 | 4.30 | 3.28/3.33/10.98 |
+| text_scan | 逐字节 `strAt` 扫描 | 1.73 | 1.75 | 1.91 | 2.66/2.76/3.54 |
+| nat_bits | Nat 饱和算术 + 63-bit 位运算 | 2.07 | 2.07 | 1.78 | 3.29/3.38/2.75 |
+| tco_mutual | 互递归（`even`/`odd`） | 1.09 | 1.08 | 1.82 | 3.34/3.37/2.73 |
+| tco_wide | 9 参数尾递归（3 个栈参数） | 1.25 | 1.25 | 1.83 | 3.04/3.13/2.76 |
+| micro_tco | 最小自递归尾调用 | 1.10 | 1.11 | 1.79 | 2.06/2.08/2.75 |
+| tco_args | 交叉依赖实参的尾递归 | 1.13 | 1.13 | 1.83 | 1.31/1.30/2.75 |
+| tco_unrotated | 双支自调用 / `&&` 条件 | 0.87 | 0.87 | 1.78 | 1.57/1.60/2.65 |
+| tco_arity6 | 6 参尾递归（全走寄存器） | 1.09 | 1.09 | 1.80 | 2.12/2.13/2.88 |
+| tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 1.26 | 1.30 | 1.79 | 7.93/8.76/2.77 |
+| tco_nat | Nat 结构递归尾调用 | 1.53 | 1.54 | 1.79 | 2.90/2.92/2.75 |
+| state_machine | 9 状态 Int 分支链 | 1.72 | 1.73 | 1.79 | 6.43/6.56/2.77 |
+| gc_low_live | 低存活集、大累计分配 | 0.82 | 0.82 | 1.36 | 2.34/2.35/188.93 |
+| gc_array_churn | 大对象 churn（Array COW） | 1.59 | 1.59 | 2.56 | 1.86/1.85/119.17 |
+| gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 2.09 | 2.11 | 5.64 | 1.06/1.07/5.50 |
 
 优化手段（数字见上表；`vs_c` 是同一窗对手写 C 的 wall/cpu/rss 比）：
 
@@ -128,54 +128,54 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
   （自带栈未触碰的虚拟页不提交）；每个样本都同时给墙钟 / CPU / RSS，RSS 取样本最大值；
 - `--runs 5 --warmup 2`：墙钟与 CPU 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
-本机一档（16 核，`--target all --runs 5 --warmup 2`，生成时 `meta.loadavg ≈ 2`，同一窗口；
+本机一档（16 核，`--target all --runs 5 --warmup 2`，生成时 `meta.loadavg ≈ 2.8`，同一窗口；
 数值取 `programs.json`）：
 
 | benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | 3.2 | 3.8 | 3.2 | 1.01x | 0.83x | 0.9 MiB | 2.6 MiB | 0.33x |
-| string_ops | 1.2 | 2.2 | 1.4 | 0.84x | 0.52x | 1 MiB | 3.2 MiB | 0.31x |
-| hashmap | 7.2 | 6.2 | 2.1 | 3.37x | 1.17x | 3.9 MiB | 4 MiB | 0.97x |
-| list_recursion | 20.5 | 7.8 | 10.4 | 1.96x | 2.62x | 19.9 MiB | 11.3 MiB | 1.76x |
-| gc_pressure | 36.8 | 28.5 | 24.3 | 1.51x | 1.29x | 32.8 MiB | 11.3 MiB | 2.90x |
-| array | 18.8 | 13 | 13.6 | 1.38x | 1.44x | 27.5 MiB | 15.5 MiB | 1.77x |
-| records | 18.7 | 11.9 | 5.2 | 3.62x | 1.57x | 1 MiB | 4.7 MiB | 0.21x |
-| closures | 19.1 | 8.5 | 6.6 | 2.92x | 2.26x | 24.4 MiB | 8.7 MiB | 2.81x |
-| sorting | 41.1 | 19.4 | 17.1 | 2.41x | 2.12x | 16.3 MiB | 9.5 MiB | 1.70x |
-| float_math | 10.9 | 11.9 | 5.8 | 1.89x | 0.92x | 1 MiB | 4.6 MiB | 0.22x |
-| text_scan | 4.1 | 4 | 2.4 | 1.69x | 1.02x | 3.4 MiB | 3.6 MiB | 0.94x |
-| nat_bits | 1.8 | 3.2 | 1.8 | 1.03x | 0.57x | 0.9 MiB | 2.7 MiB | 0.32x |
-| tco_mutual | 25.7 | 10.5 | 9.6 | 2.69x | 2.46x | 0.9 MiB | 2.7 MiB | 0.32x |
-| tco_wide | 11 | 5.2 | 5 | 2.21x | 2.11x | 0.9 MiB | 2.7 MiB | 0.32x |
-| gc_low_live | 221.3 | 293 | 339.3 | 0.65x | 0.76x | 2.6 MiB | 244.4 MiB | 0.01x |
-| gc_array_churn | 148.8 | 186 | 112.8 | 1.32x | 0.80x | 3.1 MiB | 82.3 MiB | 0.04x |
-| gc_retain | 173.9 | 78.9 | 38 | 4.58x | 2.20x | 55.3 MiB | 19.5 MiB | 2.83x |
+| arith | 1.7 | 3.4 | 2.7 | 0.63x | 0.50x | 0.9 MiB | 2.7 MiB | 0.35x |
+| string_ops | 1.2 | 2.5 | 1.3 | 0.89x | 0.45x | 0.9 MiB | 3.3 MiB | 0.29x |
+| hashmap | 8.4 | 6.8 | 2.0 | 4.18x | 1.24x | 3.9 MiB | 4.1 MiB | 0.95x |
+| list_recursion | 25.3 | 9.2 | 13.9 | 1.82x | 2.77x | 19.9 MiB | 11.4 MiB | 1.74x |
+| gc_pressure | 41.3 | 32.9 | 26.5 | 1.56x | 1.25x | 32.8 MiB | 11.3 MiB | 2.90x |
+| array | 20.5 | 13.9 | 14.8 | 1.38x | 1.47x | 27.4 MiB | 15.5 MiB | 1.77x |
+| records | 19.3 | 13.7 | 5.4 | 3.57x | 1.41x | 1.0 MiB | 4.7 MiB | 0.21x |
+| closures | 19.4 | 8.9 | 7.1 | 2.74x | 2.17x | 24.4 MiB | 8.8 MiB | 2.78x |
+| sorting | 38.5 | 19.1 | 15.7 | 2.45x | 2.01x | 16.3 MiB | 9.5 MiB | 1.71x |
+| float_math | 3.9 | 13.0 | 5.5 | 0.72x | 0.30x | 0.9 MiB | 4.7 MiB | 0.20x |
+| text_scan | 3.5 | 4.1 | 2.4 | 1.47x | 0.85x | 3.4 MiB | 3.6 MiB | 0.94x |
+| nat_bits | 1.4 | 3.9 | 1.9 | 0.72x | 0.35x | 0.9 MiB | 2.7 MiB | 0.35x |
+| tco_mutual | 7.2 | 10.8 | 10.0 | 0.73x | 0.67x | 0.9 MiB | 2.7 MiB | 0.35x |
+| tco_wide | 4.0 | 5.5 | 4.4 | 0.90x | 0.72x | 0.9 MiB | 2.7 MiB | 0.35x |
+| gc_low_live | 247.2 | 335.2 | 408.8 | 0.60x | 0.74x | 2.8 MiB | 244.5 MiB | 0.01x |
+| gc_array_churn | 161.0 | 214.6 | 134.8 | 1.19x | 0.75x | 3.1 MiB | 82.3 MiB | 0.04x |
+| gc_retain | 185.0 | 85.9 | 41.2 | 4.49x | 2.15x | 55.4 MiB | 19.5 MiB | 2.84x |
 
 
 读法：
 
 - **arith 曾是 67.6x / 412 MiB**：300 万层递归帧不回收，时间花在栈页 fault 而不是指令质量。
   它的递归主体是**直接饱和尾调用**；标量内联、常数除法展开与条件直发分支把循环体压成
-  `cmp` / `jg` + 全内联算术：当前 8 ms / 0.4 MiB（手写 5 ms，1.60x；§1.2）。
-- **native/OCaml 后端 1.0–2.5x 的一档**：`string_ops` / `hashmap` / `list_recursion` / `gc_pressure` / `array` / `records` / `closures` / `sorting` / `text_scan` / `nat_bits`；`closures`（2.09x）与 `records`
-  （1.43x）的差距来自闭包/对象表示、非尾递归与「所有中间值占栈槽」的朴素 codegen
+  `cmp` / `jg` + 全内联算术：当前 1.7 ms / 0.9 MiB（手写 2.7 ms，0.63x；§1.2）。
+- **native/OCaml 后端 0.3–2.8x 的一档**：`string_ops` / `hashmap` / `list_recursion` / `gc_pressure` / `array` / `records` / `closures` / `sorting` / `text_scan` / `nat_bits`；`closures`（2.17x）与 `records`
+  （1.41x）的差距来自闭包/对象表示、非尾递归与「所有中间值占栈槽」的朴素 codegen
   （闭包调用不在尾调用覆盖面内，见 [native.md](native.md) §3）。
 - **相对手写对照 2.5x 以上的一档各有明确的单一来源**：`records` 曾是 80 万层尾递归帧 +
-  每步 record 分配 + 闭包-per-`let`（TCO 后 20 ms / 1.0 MiB，2.86x）；`closures`
-  23 ms（2.56x）是函数参数只能在运行时按 arity 分派；`gc_retain` 在 GC 侧（整堆重扫
+  每步 record 分配 + 闭包-per-`let`（TCO 后 19 ms / 1.0 MiB，3.57x）；`closures`
+  19 ms（2.74x）是函数参数只能在运行时按 arity 分派；`gc_retain` 在 GC 侧（整堆重扫
   存活集，见下）。浮点曾是每次运算的装箱对象（11.43x）：字面量常量化 + 表达式树在
-  `xmm` 上算完、根只装盒一次之后 9 ms（1.29x）。
+  `xmm` 上算完、根只装盒一次之后 3.9 ms（0.72x）。
 - `tco_mutual` / `tco_wide` 曾经几乎全是**栈帧成本**（RSS 与墙钟随递归深度线性增长、
-  `default_stack_ok=false`）；TCO 后 8 / 6 ms、0.4 MiB、`true`（§1.2）。
+  `default_stack_ok=false`）；TCO 后 7 / 4 ms、0.9 MiB、`true`（§1.2）。
 - 零参别名直调（`Nat.plus` / `Nat.mult` / `Nat.toInt` …）、闭包只捕获自由变量与调用点
-  去虚拟化之后，`nat_bits` 的 native / 手写 OCaml 是 1.50x；剩余差距是函数参数这种
-  只能在运行时按 arity 分派的调用面。
+  去虚拟化之后，`nat_bits` 的 native / 手写 OCaml 是 0.72x（对 C 仍 3.29x）；剩余差距
+  是函数参数这种只能在运行时按 arity 分派的调用面。
 - **GC 的主判据已成立**：逐帧保守扫根会把帧内**已死**的指针槽当成根（`gc_low_live` 的
   `churn` 每帧用完 `xs` / `s` 之后递归），`Native.Live` 在递归 / 带回边的函数里对指针槽
   在最后一次读之后写 0（[native.md](native.md) §3），死对象当轮即可回收：
-  `gc_low_live` 221 ms / 2.6 MiB、`gc_array_churn` 149 ms / 3.1 MiB（手写侧 244.4 / 82.3 MiB）；
+  `gc_low_live` 247 ms / 2.8 MiB、`gc_array_churn` 161 ms / 3.1 MiB（手写侧 244.5 / 82.3 MiB）；
   对照「按精确槽集扫描」时期的 231 / 3.6 与 138 / 3.9 MiB，墙钟只差一点、RSS 落回存活集量级。
-  `gc_pressure` 32.8 MiB 与 `gc_retain` 55.3 MiB（live 单调上升到 ~19 MB）仍符合预期，
+  `gc_pressure` 32.8 MiB 与 `gc_retain` 55.4 MiB（live 单调上升到 ~19 MB）仍符合预期，
   是 `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native-runtime.md](native-runtime.md) §1.2）。
 - 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆，C 侧是 malloc 高水位
   （t5 用显式 free，比到 C 就是 GC 元数据与高水位的代价）；wasm 减掉 node 地板后才进入比较。
@@ -190,16 +190,16 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
 
 | 用例 | TCO 前（旧 N） | TCO 后实测（当前 N） | 判定列 |
 | --- | --- | --- | --- |
-| `tco_mutual`（N=20M） | 189 ms / 244 MiB / `default_stack_ok=false` | 30 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `tco_wide`（N=5M） | 343 ms / 442 MiB / `false` | 13 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `arith` | 338 ms / 412 MiB / `false` | 8 ms / 0.4 MiB / `true` | wall, rss, stack |
-| `records` | 151 ms / 151 MiB / `false` | 20 ms / 1.0 MiB / `true` | wall, rss, stack |
+| `tco_mutual`（N=20M） | 189 ms / 244 MiB / `default_stack_ok=false` | 7 ms / 0.9 MiB / `true` | wall, rss, stack |
+| `tco_wide`（N=5M） | 343 ms / 442 MiB / `false` | 4 ms / 0.9 MiB / `true` | wall, rss, stack |
+| `arith` | 338 ms / 412 MiB / `false` | 2 ms / 0.9 MiB / `true` | wall, rss, stack |
+| `records` | 151 ms / 151 MiB / `false` | 19 ms / 1.0 MiB / `true` | wall, rss, stack |
 
 「TCO 前」是旧 N 的历史快照；`tco_mutual` / `tco_wide` 的 N 已抬到 20M / 5M，
 「后」列与当前 fixture 同 N。
 
 - **TCO**：判据是 `default_stack_ok` 由 false 翻为 true，且 RSS 从百 MB 降到进程基线
-  （~0.4 MiB）；上表前四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
+  （~0.9 MiB）；上表前四项都满足。`arith` / `records` 也翻真，说明它们的递归主体同样是
   **直接饱和尾调用**；`tco_wide` 覆盖 9 参（3 个栈实参）的自递归。`tco_narrow_wide`
   现在被尾位置内联折叠成 `acc += 36` 的自循环：它锁内联后的形状，不再量窄调宽回退。
   回退本身仍保留在未被内联消除的 SCC 上（见 [native.md](native.md) §3）。
@@ -214,10 +214,10 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   | `tco_unrotated` | 两支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
   | `tco_arity6` | 6 参全部循环携带 | 5 个热标量槽提升的上限 |
   | `tco_narrow_wide` | 2 参 ↔ 10 参互递归 | 尾位置内联折叠成自循环；不再覆盖回退路径 |
-  | `tco_nat` | Nat `zero` / `Succ` | `IrNatCase` 的尾位置传播 |
+  | `tco_nat` | Nat `zero` / `Succ` | `IrNatCase` 尾位置传播 + 前驱就地更新；饱和加法分支化 |
   | `state_machine` | 9 状态 Int 分派 | 线性比较链 + `_` 兜底臂 |
-- **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 218 ms / 2.8 MiB、
-  `gc_array_churn` 140 ms / 3.1 MiB、`gc_pressure` 32.8 MiB、`gc_retain` 55.2 MiB。
+- **GC**：主判据是 RSS 落在存活集量级，四项都满足——`gc_low_live` 247 ms / 2.8 MiB、
+  `gc_array_churn` 161 ms / 3.1 MiB、`gc_pressure` 32.8 MiB、`gc_retain` 55.4 MiB。
   `gc_low_live` / `gc_array_churn` 此前的不满足来自逐帧保守扫根把陈旧栈槽里的死对象一并留住；
   `Native.Live` 的死槽清零（[native.md](native.md) §3）把两项拉回存活集量级。
   `VUNA_NATIVE_GC_LOG=1` 可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与脏卡片、
@@ -242,30 +242,30 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 
 | benchmark | wasm ms | native ms | OCaml 后端 ms | 手写 ms | wasm/手写（net） | native/手写 |
 | --- | --- | --- | --- | --- | --- | --- |
-| arith | 35.5 | 3.2 | 3.8 | 3.2 | 4.31x | 1.01x |
-| float_math | 36.7 | 10.9 | 11.9 | 5.8 | 2.58x | 1.89x |
-| hashmap | 47.6 | 7.2 | 6.2 | 2.1 | 12.04x | 3.37x |
-| hashmap_remove | 101.7 | 102 | 34.4 | 3.2 | 24.92x | 31.83x |
-| micro_apply | 52.8 | 4 | 7.6 | 6.6 | 4.68x | 0.60x |
-| micro_concat | 70.4 | 16.7 | 26.1 | 13.7 | 3.54x | 1.22x |
-| nat_bits | 30.9 | 1.8 | 3.2 | 1.8 | 5.01x | 1.03x |
-| priority_queue | 56.8 | 22.2 | 14.7 | 7.3 | 4.80x | 3.05x |
-| queue | 44.3 | 6.9 | 5.2 | 1.9 | 11.63x | 3.58x |
-| records | 64.4 | 18.7 | 11.9 | 5.2 | 8.25x | 3.62x |
-| sort_lib | 82.2 | 19.8 | 17.5 | 4.5 | 13.27x | 4.36x |
-| string_ops | 32.9 | 1.2 | 2.2 | 1.4 | 8.11x | 0.84x |
-| micro_tco | 49.3 | 13.3 | 10.2 | 9.6 | 2.85x | 1.38x |
-| tco_mutual | 61.9 | 25.7 | 10.5 | 9.6 | 4.19x | 2.69x |
-| tco_wide | 47.5 | 11 | 5.2 | 5 | 5.17x | 2.21x |
-| tco_args | 44.2 | 28.5 | 16.9 | 14.9 | 1.50x | 1.91x |
-| tco_unrotated | 64.2 | 9.8 | 8.8 | 9 | 4.74x | 1.09x |
-| tco_arity6 | 37.1 | 6.6 | 8.5 | 7.4 | 2.06x | 0.88x |
-| tco_narrow_wide | 35.7 | 139.6 | 3.6 | 3.1 | 4.53x | 45.48x |
-| tco_nat | 36.3 | 7.2 | 11.1 | 5.8 | 2.51x | 1.25x |
-| state_machine | 46.2 | 9.2 | 9.8 | 5.7 | 4.28x | 1.61x |
-| treemap | 109.8 | 42.6 | 25.2 | 9.2 | 9.60x | 4.66x |
-| gc_retain | 357.1 | 173.9 | 78.9 | 38 | 8.82x | 4.58x |
-| array / closures / list_recursion / sorting / text_scan / gc_pressure / gc_array_churn / gc_low_live | `run_ok=false` | 99 / 26 / 19 / 30 / 4 / 31 / 178 / 444 | 16 / 11 / 8 / 12 / 5 / 16 / 96 / 168 | 15 / 7 / 12 / 16 / 4 / 14 / 74 / 190 | — | — |
+| arith | 31.7 | 1.7 | 3.4 | 2.7 | 3.57x | 0.63x |
+| float_math | 41.2 | 3.9 | 13.0 | 5.5 | 3.52x | 0.72x |
+| hashmap | 52.9 | 8.4 | 6.8 | 2.0 | 15.48x | 4.18x |
+| hashmap_remove | 109.5 | 116.1 | 37.3 | 3.8 | 23.29x | 30.89x |
+| micro_apply | 59.3 | 1.8 | 7.4 | 7.3 | 5.12x | 0.25x |
+| micro_concat | 80.1 | 16.7 | 27.7 | 14.0 | 4.17x | 1.19x |
+| nat_bits | 36.2 | 1.4 | 3.9 | 1.9 | 7.57x | 0.72x |
+| priority_queue | 69.1 | 34.5 | 17.4 | 8.4 | 5.59x | 4.08x |
+| queue | 55.6 | 8.3 | 5.8 | 1.8 | 18.61x | 4.59x |
+| records | 75.8 | 19.3 | 13.7 | 5.4 | 9.96x | 3.57x |
+| sort_lib | 65.7 | 19.3 | 16.5 | 4.3 | 10.25x | 4.51x |
+| string_ops | 31.7 | 1.2 | 2.5 | 1.3 | 7.59x | 0.89x |
+| micro_tco | 56.9 | 5.6 | 10.8 | 9.8 | 3.58x | 0.58x |
+| tco_mutual | 64.4 | 7.2 | 10.8 | 10.0 | 4.26x | 0.73x |
+| tco_wide | 41.8 | 4.0 | 5.5 | 4.4 | 4.50x | 0.90x |
+| tco_args | 46.2 | 16.0 | 17.4 | 15.4 | 1.58x | 1.03x |
+| tco_unrotated | 64.3 | 8.0 | 7.3 | 8.3 | 5.08x | 0.96x |
+| tco_arity6 | 41.6 | 4.9 | 8.2 | 7.5 | 2.61x | 0.65x |
+| tco_narrow_wide | 43.2 | 0.7 | 3.9 | 3.1 | 6.80x | 0.22x |
+| tco_nat | 41.2 | 5.2 | 8.4 | 5.5 | 3.51x | 0.94x |
+| state_machine | 45.4 | 4.9 | 10.1 | 5.9 | 4.01x | 0.84x |
+| treemap | 106.1 | 41.9 | 25.4 | 8.8 | 9.52x | 4.74x |
+| gc_retain | 382.6 | 185.0 | 85.9 | 41.2 | 8.76x | 4.49x |
+| array / closures / list_recursion / sorting / text_scan / gc_pressure / gc_array_churn / gc_low_live | `run_ok=false` | 20.5 / 19.4 / 25.3 / 38.5 / 3.5 / 41.3 / 161.0 / 247.2 | 13.9 / 8.9 / 9.2 / 19.1 / 4.1 / 32.9 / 214.6 / 335.2 | 14.8 / 7.1 / 13.9 / 15.7 / 2.4 / 26.5 / 134.8 / 408.8 | — | — |
 
 
 口径（读数前先看）：
