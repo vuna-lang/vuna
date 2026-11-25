@@ -159,7 +159,7 @@ appendPath xs ys = append xs ys
 
 splitLast : List String -> Maybe (List String, String)
 splitLast [] = Nothing
-splitLast ([x]) = Just ([], x)
+splitLast [x] = Just ([], x)
 splitLast (x :: rest) =
   case splitLast rest of
     Nothing => Nothing
@@ -178,12 +178,12 @@ replaceField name node ((k, old) :: rest) =
 -- 最后一个表数组元素（用于 `[a.b]` 中 a 是表数组时取当前元素）。
 lastFields : List (List (String, TomlNode)) -> Maybe (List (String, TomlNode))
 lastFields [] = Nothing
-lastFields ([x]) = Just x
+lastFields [x] = Just x
 lastFields (_ :: rest) = lastFields rest
 
 replaceLastFields : List (String, TomlNode) -> List (List (String, TomlNode)) -> List (List (String, TomlNode))
 replaceLastFields fields [] = [fields]
-replaceLastFields fields ([old]) = [fields]
+replaceLastFields fields [old] = [fields]
 replaceLastFields fields (old :: rest) = old :: replaceLastFields fields rest
 
 kindIsExplicit : TableKind -> Bool

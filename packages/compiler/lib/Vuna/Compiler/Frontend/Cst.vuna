@@ -545,7 +545,7 @@ pushNode node (f :: rest) = pushInto node f :: rest
 -- | 关闭栈顶帧：并入它的父帧。根帧（栈底）不关闭。
 closeTopFrame : List NestFrame -> List NestFrame
 closeTopFrame [] = []
-closeTopFrame ([f]) = [f]
+closeTopFrame [f] = [f]
 closeTopFrame (f :: parent :: rest) = (pushInto (finishFrame f) parent) :: rest
 
 -- | 帧栈长（`List.length` 给 `Nat`，收尾的 fuel 要 `Int`）。

@@ -96,7 +96,7 @@ commentContinuation stripN line = trimRightSpaces (dropSpacesUpTo stripN line)
 -- | 内部：块注释末行：去掉起始列缩进后补 `-}`。
 commentTailLines : Int -> List String -> List String
 commentTailLines stripN [] = ["-}"]
-commentTailLines stripN ([line]) = ["${commentContinuation stripN line}-}"]
+commentTailLines stripN [line] = ["${commentContinuation stripN line}-}"]
 commentTailLines stripN (line :: rest) =
   commentContinuation stripN line :: commentTailLines stripN rest
 

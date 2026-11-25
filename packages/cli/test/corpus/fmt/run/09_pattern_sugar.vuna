@@ -1,0 +1,18 @@
+-- 用户自定义的 `Nil` / `Cons` 与符号名构造子：格式化不得把前两者改写成列表语法糖
+-- `[]` / `::`（会换族解析），也不得丢掉符号名模式里的名字括号。
+data Seq : Type where
+  Nil : Seq
+  Cons : Int -> Seq -> Seq
+
+data Pair2 : Type where
+  (<=>) : Int -> Int -> Pair2
+
+size : Seq -> Int
+size Nil = 0
+size (Cons _ rest) = 1 + size rest
+
+sumPair : Pair2 -> Int
+sumPair ((<=>) x y) = x + y
+
+main : String
+main = strFromInt (size (Cons 1 (Cons 2 Nil))) ++ "/" ++ strFromInt (sumPair ((<=>) 3 4))

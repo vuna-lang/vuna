@@ -437,7 +437,7 @@ resolveImportPrefix imports prefix =
 
 joinCommaNames : List String -> String
 joinCommaNames [] = ""
-joinCommaNames ([x]) = x
+joinCommaNames [x] = x
 joinCommaNames (x :: rest) = "${x}, ${joinCommaNames rest}"
 
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Check (List ExportEntry)
@@ -586,7 +586,7 @@ implicitPreludeFrom roots importerPkg =
 
 implicitPreludeDeps : String -> List (String, Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
-implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing noNodeRef]
+implicitPreludeDeps importerPkg [_] = OkC [Import "Prelude" False Nothing noNodeRef]
 implicitPreludeDeps importerPkg deps =
   onErrDiag
     (withAbsent NsPackageGraph)

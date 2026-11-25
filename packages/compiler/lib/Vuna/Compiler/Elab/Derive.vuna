@@ -233,7 +233,7 @@ deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp =
 
 -- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr
-deriveFieldTypes (EApp (EVar (RIntrinsic "->") _) ([dom, cod]) _) = (::) dom (deriveFieldTypes cod)
+deriveFieldTypes (EApp (EVar (RIntrinsic "->") _) [dom, cod] _) = (::) dom (deriveFieldTypes cod)
 deriveFieldTypes (EPi _ _ _ dom cod _) = dom :: deriveFieldTypes cod
 deriveFieldTypes _ = []
 

@@ -14,7 +14,7 @@ joinWith sep xs = strConcatMany (interpose sep xs)
 
 interpose : String -> List String -> List String
 interpose sep [] = []
-interpose sep ([x]) = [x]
+interpose sep [x] = [x]
 interpose sep (x :: rest) = x :: sep :: interpose sep rest
 
 typeParamName : Int -> String
@@ -29,7 +29,7 @@ typeParamDecl n =
 
 familyTy : String -> List String -> String
 familyTy name [] = name
-familyTy name ([a]) = "${a} ${name}"
+familyTy name [a] = "${a} ${name}"
 familyTy name args = "(${joinWith ", " args}) ${name}"
 
 -- | 渲染类型表达式；`qualFamily` 把族名映射成已限定的类型名。
@@ -103,7 +103,7 @@ renderTerm (OMatch scrut arms fallback) =
     fb = if fallback then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
   in "(match ${renderTerm scrut} with\n${body}${fb})"
 renderTerm (OCtorApp c []) = c
-renderTerm (OCtorApp c ([a])) = "(${c} (${renderTerm a}))"
+renderTerm (OCtorApp c [a]) = "(${c} (${renderTerm a}))"
 renderTerm (OCtorApp c args) = "(${c} (${joinWith ", " (map renderTerm args)}))"
 renderTerm (ORecordCon fields) = "{ ${joinWith "; " (recordFields fields)} }"
 renderTerm (ORecordUpd base fields) =

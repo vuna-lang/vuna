@@ -1795,57 +1795,57 @@ let dtp_obs_sample_stop (_ : int) : int =
 """
 
 inlineText : String -> List String -> Maybe String
-inlineText "+" ([a, b]) = Just "(${a} + ${b})"
-inlineText "-" ([a, b]) = Just "(${a} - ${b})"
-inlineText "*" ([a, b]) = Just "(${a} * ${b})"
-inlineText "/" ([a, b]) = Just "(if ${b} = 0 then failwith \"division by zero\" else ${a} / ${b})"
-inlineText "&&" ([a, b]) = Just "(${a} && ${b})"
-inlineText "||" ([a, b]) = Just "(${a} || ${b})"
+inlineText "+" [a, b] = Just "(${a} + ${b})"
+inlineText "-" [a, b] = Just "(${a} - ${b})"
+inlineText "*" [a, b] = Just "(${a} * ${b})"
+inlineText "/" [a, b] = Just "(if ${b} = 0 then failwith \"division by zero\" else ${a} / ${b})"
+inlineText "&&" [a, b] = Just "(${a} && ${b})"
+inlineText "||" [a, b] = Just "(${a} || ${b})"
 -- 位运算：与 / 或 / 异或 / 取反直接生成 OCaml 位运算符；移位保留 runtime helper
 -- （计数越界返回 0 的语义只写一份）。63-bit 补码语义与 `bi_bit*` 一致。
-inlineText "bitAnd" ([a, b]) = Just "(${a} land ${b})"
-inlineText "bitOr" ([a, b]) = Just "(${a} lor ${b})"
-inlineText "bitXor" ([a, b]) = Just "(${a} lxor ${b})"
-inlineText "bitNot" ([a]) = Just "(lnot ${a})"
-inlineText "bitShl" ([a, b]) = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsl ${b})"
-inlineText "bitShr" ([a, b]) = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsr ${b})"
-inlineText "effectId" ([a]) = Just "(dtp_effectId ${a})"
-inlineText "++" ([a, b]) = Just "(${a} ^ ${b})"
-inlineText "bi_eq_int" ([a, b]) = Just "(${a} = ${b})"
-inlineText "bi_neq_int" ([a, b]) = Just "(${a} <> ${b})"
-inlineText "bi_eq_str" ([a, b]) = Just "(${a} = ${b})"
-inlineText "bi_neq_str" ([a, b]) = Just "(${a} <> ${b})"
-inlineText "bi_lt_int" ([a, b]) = Just "(${a} < ${b})"
-inlineText "bi_le_int" ([a, b]) = Just "(${a} <= ${b})"
-inlineText "bi_gt_int" ([a, b]) = Just "(${a} > ${b})"
-inlineText "bi_ge_int" ([a, b]) = Just "(${a} >= ${b})"
-inlineText "bi_lt_str" ([a, b]) = Just "(${a} < ${b})"
-inlineText "bi_le_str" ([a, b]) = Just "(${a} <= ${b})"
-inlineText "bi_gt_str" ([a, b]) = Just "(${a} > ${b})"
-inlineText "bi_ge_str" ([a, b]) = Just "(${a} >= ${b})"
+inlineText "bitAnd" [a, b] = Just "(${a} land ${b})"
+inlineText "bitOr" [a, b] = Just "(${a} lor ${b})"
+inlineText "bitXor" [a, b] = Just "(${a} lxor ${b})"
+inlineText "bitNot" [a] = Just "(lnot ${a})"
+inlineText "bitShl" [a, b] = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsl ${b})"
+inlineText "bitShr" [a, b] = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsr ${b})"
+inlineText "effectId" [a] = Just "(dtp_effectId ${a})"
+inlineText "++" [a, b] = Just "(${a} ^ ${b})"
+inlineText "bi_eq_int" [a, b] = Just "(${a} = ${b})"
+inlineText "bi_neq_int" [a, b] = Just "(${a} <> ${b})"
+inlineText "bi_eq_str" [a, b] = Just "(${a} = ${b})"
+inlineText "bi_neq_str" [a, b] = Just "(${a} <> ${b})"
+inlineText "bi_lt_int" [a, b] = Just "(${a} < ${b})"
+inlineText "bi_le_int" [a, b] = Just "(${a} <= ${b})"
+inlineText "bi_gt_int" [a, b] = Just "(${a} > ${b})"
+inlineText "bi_ge_int" [a, b] = Just "(${a} >= ${b})"
+inlineText "bi_lt_str" [a, b] = Just "(${a} < ${b})"
+inlineText "bi_le_str" [a, b] = Just "(${a} <= ${b})"
+inlineText "bi_gt_str" [a, b] = Just "(${a} > ${b})"
+inlineText "bi_ge_str" [a, b] = Just "(${a} >= ${b})"
 -- `Bool` 没有 `<`：走 OCaml 的多态 `compare`（`false < true`）。
-inlineText "bi_lt_bool" ([a, b]) = Just "(compare ${a} ${b} < 0)"
-inlineText "bi_le_bool" ([a, b]) = Just "(compare ${a} ${b} <= 0)"
-inlineText "bi_gt_bool" ([a, b]) = Just "(compare ${a} ${b} > 0)"
-inlineText "bi_ge_bool" ([a, b]) = Just "(compare ${a} ${b} >= 0)"
+inlineText "bi_lt_bool" [a, b] = Just "(compare ${a} ${b} < 0)"
+inlineText "bi_le_bool" [a, b] = Just "(compare ${a} ${b} <= 0)"
+inlineText "bi_gt_bool" [a, b] = Just "(compare ${a} ${b} > 0)"
+inlineText "bi_ge_bool" [a, b] = Just "(compare ${a} ${b} >= 0)"
 -- Float：算术/比较直接内联到 OCaml 浮点运算符（除零按 IEEE 语义，不失败）。
-inlineText "bi_add_float" ([a, b]) = Just "(${a} +. ${b})"
-inlineText "bi_sub_float" ([a, b]) = Just "(${a} -. ${b})"
-inlineText "bi_mul_float" ([a, b]) = Just "(${a} *. ${b})"
-inlineText "bi_div_float" ([a, b]) = Just "(${a} /. ${b})"
-inlineText "bi_eq_float" ([a, b]) = Just "(${a} = ${b})"
-inlineText "bi_neq_float" ([a, b]) = Just "(${a} <> ${b})"
-inlineText "bi_lt_float" ([a, b]) = Just "(${a} < ${b})"
-inlineText "bi_le_float" ([a, b]) = Just "(${a} <= ${b})"
-inlineText "bi_gt_float" ([a, b]) = Just "(${a} > ${b})"
-inlineText "bi_ge_float" ([a, b]) = Just "(${a} >= ${b})"
+inlineText "bi_add_float" [a, b] = Just "(${a} +. ${b})"
+inlineText "bi_sub_float" [a, b] = Just "(${a} -. ${b})"
+inlineText "bi_mul_float" [a, b] = Just "(${a} *. ${b})"
+inlineText "bi_div_float" [a, b] = Just "(${a} /. ${b})"
+inlineText "bi_eq_float" [a, b] = Just "(${a} = ${b})"
+inlineText "bi_neq_float" [a, b] = Just "(${a} <> ${b})"
+inlineText "bi_lt_float" [a, b] = Just "(${a} < ${b})"
+inlineText "bi_le_float" [a, b] = Just "(${a} <= ${b})"
+inlineText "bi_gt_float" [a, b] = Just "(${a} > ${b})"
+inlineText "bi_ge_float" [a, b] = Just "(${a} >= ${b})"
 -- Nat 转换恒等/单分支，直接内联；算术用 runtime helper（饱和/截断逻辑只写一份）。
-inlineText "natToInt" ([a]) = Just a
-inlineText "natFromInt" ([a]) = Just "(bi_natFromInt ${a})"
-inlineText "natAdd" ([a, b]) = Just "(bi_natAdd ${a} ${b})"
-inlineText "natSub" ([a, b]) = Just "(bi_natSub ${a} ${b})"
-inlineText "natMul" ([a, b]) = Just "(bi_natMul ${a} ${b})"
-inlineText "natDiv" ([a, b]) = Just "(bi_natDiv ${a} ${b})"
+inlineText "natToInt" [a] = Just a
+inlineText "natFromInt" [a] = Just "(bi_natFromInt ${a})"
+inlineText "natAdd" [a, b] = Just "(bi_natAdd ${a} ${b})"
+inlineText "natSub" [a, b] = Just "(bi_natSub ${a} ${b})"
+inlineText "natMul" [a, b] = Just "(bi_natMul ${a} ${b})"
+inlineText "natDiv" [a, b] = Just "(bi_natDiv ${a} ${b})"
 inlineText _ _ = Nothing
 
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
@@ -2151,7 +2151,7 @@ genIrNode st (IrApp _ f a) =
   case f of
     -- 直接应用 λ 落成 `let`：OCaml 的 `let` 会对**语法上的函数**做泛化，
     -- 而 `(fun x -> …) a` 的形参是单态的。两者都丢弃临时栈帧，语义在 CBV 下相同。
-    IrLam ([b]) _ body =>
+    IrLam [b] _ body =>
       if nonErasedBinderText b == "" then
         genAppNode st f a
       else

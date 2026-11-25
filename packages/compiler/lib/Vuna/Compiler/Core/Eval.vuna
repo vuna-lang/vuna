@@ -148,7 +148,7 @@ applyValueFuel fuel f a =
       -- 表现层 cast 在求值期是恒等：直接消去，不能留成中性应用——否则
       -- `(prim_erase h) k` 会累积成两个实参的中性项，OpIdentity 再也归约不到。
       VNeutral (NGlobal g []) => if g == primEraseName then a else VNeutral (spineAppend (NGlobal g []) a)
-      VNeutral (NGlobal g ([x])) => if g == primEraseName then applyValueFuel (fuel - 1) x a else VNeutral (spineAppend (NGlobal g [x]) a)
+      VNeutral (NGlobal g [x]) => if g == primEraseName then applyValueFuel (fuel - 1) x a else VNeutral (spineAppend (NGlobal g [x]) a)
       VNeutral n => VNeutral (spineAppend n a)
       VMeta m sp => VMeta m (append sp [a])
       _ => VApp f a
@@ -392,14 +392,14 @@ asFloat (VFloat raw) = Just (floatOfRaw raw)
 asFloat _ = Nothing
 
 floatPrim1 : List Value -> (Float -> Float) -> Maybe Value
-floatPrim1 ([a]) f =
+floatPrim1 [a] f =
   case asFloat a of
     Just x => Just (VFloat (showFloatOf (f x)))
     Nothing => Nothing
 floatPrim1 _ = Nothing
 
 floatPrim2 : List Value -> (Float -> Float -> Float) -> Maybe Value
-floatPrim2 ([a, b]) f =
+floatPrim2 [a, b] f =
   case asFloat a of
     Just x =>
       case asFloat b of
@@ -409,7 +409,7 @@ floatPrim2 ([a, b]) f =
 floatPrim2 _ = Nothing
 
 floatBool2 : List Value -> (Float -> Float -> Bool) -> Maybe Value
-floatBool2 ([a, b]) f =
+floatBool2 [a, b] f =
   case asFloat a of
     Just x =>
       case asFloat b of
@@ -427,7 +427,7 @@ asBool (VBool b) = Just b
 asBool _ = Nothing
 
 export intPrim2 : List Value -> (Int -> Int -> Value) -> Maybe Value
-intPrim2 ([a, b]) f =
+intPrim2 [a, b] f =
   case asInt a of
     Just x =>
       case asInt b of
@@ -440,7 +440,7 @@ intPrim2 sp f = Nothing
 -- 抛 `Division_by_zero`），静默返回 0 会与产物/三路对照不一致；不归约让 `main` 报
 -- "does not reduce to a value"，把差异限制在「核心求值器不能表达异常」这条已知边界里。
 export intPrim2Div : List Value -> Maybe Value
-intPrim2Div ([a, b]) =
+intPrim2Div [a, b] =
   case asInt a of
     Just x =>
       case asInt b of
@@ -450,7 +450,7 @@ intPrim2Div ([a, b]) =
 intPrim2Div sp = Nothing
 
 export boolPrim2 : List Value -> (Bool -> Bool -> Value) -> Maybe Value
-boolPrim2 ([a, b]) f =
+boolPrim2 [a, b] f =
   case asBool a of
     Just x =>
       case asBool b of
@@ -465,7 +465,7 @@ primConst [] v = Just v
 primConst sp v = Nothing
 
 export strPrim2 : List Value -> (String -> String -> Value) -> Maybe Value
-strPrim2 ([a, b]) f =
+strPrim2 [a, b] f =
   case asStr a of
     Just x =>
       case asStr b of
@@ -475,21 +475,21 @@ strPrim2 ([a, b]) f =
 strPrim2 sp f = Nothing
 
 export intPrim1 : List Value -> (Int -> Value) -> Maybe Value
-intPrim1 ([a]) f =
+intPrim1 [a] f =
   case asInt a of
     Just x => Just (f x)
     Nothing => Nothing
 intPrim1 sp f = Nothing
 
 natPrim1 : List Value -> (Int -> Maybe Value) -> Maybe Value
-natPrim1 ([a]) f =
+natPrim1 [a] f =
   case asNat a of
     Just x => f x
     Nothing => Nothing
 natPrim1 sp f = Nothing
 
 natPrim2 : List Value -> (Int -> Int -> Maybe Value) -> Maybe Value
-natPrim2 ([a, b]) f =
+natPrim2 [a, b] f =
   case asNat a of
     Just x =>
       case asNat b of
@@ -499,7 +499,7 @@ natPrim2 ([a, b]) f =
 natPrim2 sp f = Nothing
 
 natPrim2Div : List Value -> Maybe Value
-natPrim2Div ([a, b]) =
+natPrim2Div [a, b] =
   case asNat a of
     Just x =>
       case asNat b of
@@ -509,7 +509,7 @@ natPrim2Div ([a, b]) =
 natPrim2Div sp = Nothing
 
 export strPrim1 : List Value -> (String -> Value) -> Maybe Value
-strPrim1 ([a]) f =
+strPrim1 [a] f =
   case asStr a of
     Just x => Just (f x)
     Nothing => Nothing
@@ -538,14 +538,14 @@ export cmpInt : Int -> Int -> Int
 cmpInt a b = if a == b then 0 else if a < b then 0 - 1 else 1
 
 export genericPrim2 : List Value -> (Int -> Bool) -> Maybe Value
-genericPrim2 ([a, b]) pred =
+genericPrim2 [a, b] pred =
   case genericCmp a b of
     Just o => Just (VBool (pred o))
     Nothing => Nothing
 genericPrim2 sp pred = Nothing
 
 export strPrim3 : List Value -> (String -> String -> String -> Value) -> Maybe Value
-strPrim3 ([a, b, c]) f =
+strPrim3 [a, b, c] f =
   case asStr a of
     Just x =>
       case asStr b of
@@ -820,7 +820,7 @@ strHashChars (c :: rest) h = strHashChars rest (h * 33 + c - (h * 33 + c) / 1024
 
 -- `strAt`：按字节取；越界返回 -1（与 runtime `dtp_strAt` 一致）。
 atPrim : List Value -> Maybe Value
-atPrim ([a, b]) =
+atPrim [a, b] =
   case asStr a of
     Just s =>
       case asInt b of
@@ -839,7 +839,7 @@ nthByte (c :: rest) i = if i <= 0 then c else nthByte rest (i - 1)
 -- `strSubstring start len s`：与 runtime `dtp_substring` / `Base.Data.String.substring` 同语义
 -- （start/len 按字节 clamp：负 start 视为 0、负 len 视为 0、越界截断到末尾）。
 substringPrim : List Value -> Maybe Value
-substringPrim ([startV, lenV, strV]) =
+substringPrim [startV, lenV, strV] =
   case asInt startV of
     Just start =>
       case asInt lenV of

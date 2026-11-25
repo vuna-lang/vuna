@@ -1,3 +1,5 @@
+-- 用户自定义的 `Nil` / `Cons` 是普通构造子名：格式化不得改写成列表语法糖
+-- `[]` / `::`（会换族解析）。
 data List a : Type where
   Nil : List a
   Cons : a -> List a -> List a

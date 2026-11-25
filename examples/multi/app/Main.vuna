@@ -15,7 +15,7 @@ main =
 
 showNames : List String -> String
 showNames [] = ""
-showNames ([x]) = x
+showNames [x] = x
 showNames (x :: rest) = x ++ " " ++ showNames rest
 
 names : Int -> List String

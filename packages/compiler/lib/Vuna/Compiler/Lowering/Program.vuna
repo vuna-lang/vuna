@@ -1229,7 +1229,7 @@ externTyIr fuel lvl (VPi name implicit _ dom clo) =
 externTyIr fuel lvl v = if fuel <= 0 then icInternal "extern type is too deep" else externDomIr v
 
 externDomIr : Value -> Check IrTy
-externDomIr (VNeutral (NGlobal "Array" ([elem]))) =
+externDomIr (VNeutral (NGlobal "Array" [elem])) =
   Vuna.Compiler.Base.Common.bind (externBasicIr elem) (\e => OkC (IrTyArray e))
 externDomIr (VNeutral (NGlobal "Array" _)) = icInternal "extern Array needs one type argument"
 externDomIr v = externBasicIr v

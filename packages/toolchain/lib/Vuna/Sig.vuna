@@ -20,7 +20,7 @@ import Vuna.Compiler.Frontend.Lexer
 export renderType : Expr -> String
 renderType (EVar name _) =
   if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
-renderType (ty@(EApp (EVar op _) ([a, b]) _)) =
+renderType (ty@(EApp (EVar op _) [a, b] _)) =
   if op == "->" then
     "${renderTypeArg a} -> ${renderType b}"
   else if isListConsSyntax op then
@@ -40,7 +40,7 @@ renderType ty = renderTypePlain ty
 
 -- | 内部：元组类型（parser 保留名）右嵌套尾段：`(a, b, c)` 的 `, b, c`。
 tupleTailText : Expr -> String
-tupleTailText (ty@(EApp (EVar name _) ([x, y]) _)) =
+tupleTailText (ty@(EApp (EVar name _) [x, y] _)) =
   if isTuplePairSyntax name then ", " ++ renderType x ++ tupleTailText y else ", " ++ renderType ty
 tupleTailText b = ", " ++ renderType b
 
@@ -48,7 +48,7 @@ tupleTailText b = ", " ++ renderType b
 -- （parser 的 `[..]` 形状）；`::` 链不走这里，保持中缀。
 listTailText : Expr -> Maybe String
 listTailText (EVar name _) = if isListNilSyntax name then Just "]" else Nothing
-listTailText (EApp (EVar cons _) ([h, t]) _) =
+listTailText (EApp (EVar cons _) [h, t] _) =
   if isListConsSyntax cons then
     case listTailText t of
       Just rest => Just (", " ++ renderType h ++ rest)
@@ -70,7 +70,7 @@ renderTypeInCtx ctx ty = "${join ", " (map renderType ctx)} => ${renderType ty}"
 
 -- | 内部：通用打印（应用 / 字面量 / 中缀 / section）；其余表达式形状打印成 `_`。
 renderTypePlain : Expr -> String
-renderTypePlain (e@(EApp f ([l, r]) _)) =
+renderTypePlain (e@(EApp f [l, r] _)) =
   case f of
     EVar op _ =>
       if isSymbolName op && op /= "->" && op /= "::" then
@@ -88,7 +88,7 @@ renderTypePlain _ = "_"
 renderTypeArg : Expr -> String
 renderTypeArg (EVar name _) =
   if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
-renderTypeArg (ty@(EApp (EVar cons _) ([_, _]) _)) =
+renderTypeArg (ty@(EApp (EVar cons _) [_, _] _)) =
   if isListConsSyntax cons then
     renderType ty
   else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
@@ -98,7 +98,7 @@ renderTypeArg ty = "(${renderType ty})"
 renderTypeAtom : Expr -> String
 renderTypeAtom (EVar name _) =
   if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
-renderTypeAtom (ty@(EApp (EVar cons _) ([_, _]) _)) =
+renderTypeAtom (ty@(EApp (EVar cons _) [_, _] _)) =
   if isListConsSyntax cons then
     renderType ty
   else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"

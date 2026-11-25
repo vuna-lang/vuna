@@ -95,7 +95,7 @@ modulePathOf name =
 
 dropLast : List a -> List a
 dropLast [] = []
-dropLast ([_]) = []
+dropLast [_] = []
 dropLast (x :: rest) = x :: dropLast rest
 
 -- ---------------------------------------------------------------
@@ -1028,7 +1028,7 @@ floatTree st (x :: rest) ir =
     _ => Nothing
 
 floatTreeBin : FGen -> List Int -> String -> List Ir -> Maybe (Int, List Instr, List Int)
-floatTreeBin st pool sym ([a, b]) =
+floatTreeBin st pool sym [a, b] =
   case floatTree st pool a of
     Just pa =>
       let
@@ -1204,7 +1204,7 @@ floatInline st sym args =
     Nothing
 
 floatBinInline : FGen -> String -> List Ir -> Maybe (List Instr)
-floatBinInline st sym ([a, b]) =
+floatBinInline st sym [a, b] =
   case (floatAtomToXmm st 0 a, floatAtomToXmm st 1 b) of
     (Just la, Just lb) =>
       Just
@@ -1401,7 +1401,7 @@ genScalarOpW bud _ st pool ScalarNatFromInt args =
     _ => Nothing
 -- `band x 常量掩码`：掩码清掉高位（`0 ≤ m ≤ maxInt`），所以 x 不必先 wrap，
 -- 结果也天然落在 `[0, m]` 里。
-genScalarOpW bud _ st pool (ScalarBitOp "and") ([a, IrInt m]) =
+genScalarOpW bud _ st pool (ScalarBitOp "and") [a, IrInt m] =
   if m >= 0 && m <= nativeMaxInt then
     genScalarBinInto
       bud
@@ -1424,7 +1424,7 @@ genScalarOpGeneric _ _ st pool op [] =
         res = scalarInstrs op r r
       in Just (firstOf res, secondOf res, r :: rest)
     [] => Nothing
-genScalarOpGeneric bud wrap st pool op ([a]) =
+genScalarOpGeneric bud wrap st pool op [a] =
   case pool of
     r :: rest =>
       case genScalarIntoW (bud - 1) (childWrap op) st (r :: rest) a of
@@ -1435,7 +1435,7 @@ genScalarOpGeneric bud wrap st pool op ([a]) =
             (firstOf res, append (firstOf (secondOf pa)) (secondOf res), secondOf (secondOf pa))
         Nothing => Nothing
     [] => Nothing
-genScalarOpGeneric bud wrap st pool op ([a, b]) =
+genScalarOpGeneric bud wrap st pool op [a, b] =
   case genScalarBinOrdered bud wrap st pool op a b of
     Just p => Just p
     Nothing => Nothing
@@ -1795,7 +1795,7 @@ boolSelectInstrs BoolInvert r = [IBinReg "xor" r (OpImm 1)]
 --   (装载+`cmp` 指令, 反向 `jcc`)。实参只接受字面量 / 槽变量（求值无副作用，
 --   也不产生新的 GC 点）。
 condBranch : FGen -> Ir -> Maybe (List Instr, String)
-condBranch st (IrRtApp sym ([IrRtApp "-" ([a, IrInt c]), IrInt 0])) =
+condBranch st (IrRtApp sym [IrRtApp "-" [a, IrInt c], IrInt 0]) =
   case branchInverse sym of
     Just inv =>
       if c >= 0 && firstOf (rangeOf st.fgRanges a) >= c then
@@ -2153,8 +2153,8 @@ switchOf (IrIf c t e) =
 switchOf _ = Nothing
 
 eqTag : Ir -> Maybe (IrBinder, Int)
-eqTag (IrRtApp "bi_eq_int" ([IrVar v, IrInt k])) = Just (v, k)
-eqTag (IrRtApp "bi_eq_int" ([IrInt k, IrVar v])) = Just (v, k)
+eqTag (IrRtApp "bi_eq_int" [IrVar v, IrInt k]) = Just (v, k)
+eqTag (IrRtApp "bi_eq_int" [IrInt k, IrVar v]) = Just (v, k)
 eqTag _ = Nothing
 
 switchCollect : IrBinder -> List (Int, Ir) -> Ir -> (List (Int, Ir), Ir)

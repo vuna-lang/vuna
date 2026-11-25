@@ -637,7 +637,7 @@ metaPairText (name, hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
 
 joinJsonList : List String -> String
 joinJsonList [] = ""
-joinJsonList ([x]) = x
+joinJsonList [x] = x
 joinJsonList (x :: rest) = "${x},${joinJsonList rest}"
 
 -- 路径最后一段（`splitPath` 按第一个 `/` 切，不适合取 basename）。
@@ -1723,7 +1723,7 @@ resolveStoredDiag ctx d = mapSpanFile (resolveStoredPath (contextDir ctx)) d
 
 replayFailure : List Diagnostic -> Check (List Diagnostic)
 replayFailure [] = OkC []
-replayFailure ([d]) = ErrC d
+replayFailure [d] = ErrC d
 replayFailure (d :: rest) = ErrC (withChildren rest d)
 
 storeCheckPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CheckOutcome -> Eff r Int

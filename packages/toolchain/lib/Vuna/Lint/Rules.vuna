@@ -231,7 +231,7 @@ splitLinesFrom (c :: rest) acc cur =
 -- | `splitLines` 的逆操作：单元素不追加换行，避免以换行结尾的源码每轮修复都多写一个行尾换行。
 export joinLines : List String -> String
 joinLines [] = ""
-joinLines ([line]) = line
+joinLines [line] = line
 joinLines (line :: rest) = "${line}\n${joinLines rest}"
 
 -- | 内部：取第 n 行（1 基）；越界返回空串。
@@ -1490,7 +1490,7 @@ asPatText src name pat =
 
 -- | 内部：对 `case x of` 单 alt 形式的提升；scrutinee 不是变量或 alt 不止一个时不产出。
 liftCase : LintSrc -> Lane -> Expr -> Expr -> List Alt -> Span -> List Finding
-liftCase src lane caseExpr scrut ([alt]) sp =
+liftCase src lane caseExpr scrut [alt] sp =
   case scrut of
     EVar name _ => liftCaseOk src lane alt.altPat alt.altBody name sp
     _ => []
@@ -1699,7 +1699,7 @@ scanBodyPos fuel src maybeLane expr =
 
 -- | 内部：识别 `handle` 标记载荷（comp / return / op 子句），编码见 `Frontend/Ast.handleSyntax`。
 handlePartsOf : Expr -> Maybe (Expr, Expr, Expr)
-handlePartsOf (EApp (EVar name _) ([comp, ret, opH]) _) =
+handlePartsOf (EApp (EVar name _) [comp, ret, opH] _) =
   if isHandleSyntax name then Just (comp, ret, opH) else Nothing
 handlePartsOf _ = Nothing
 
@@ -1979,7 +1979,7 @@ exprEdit src e replacement =
 
 -- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Expr, Expr)
-consHeadOf (EApp (EVar name _) ([h, t]) _) =
+consHeadOf (EApp (EVar name _) [h, t] _) =
   if name == "::" || name == "Cons" then Just (h, t) else Nothing
 consHeadOf _ = Nothing
 
@@ -2051,7 +2051,7 @@ pairTailElems fuel e =
     lintFuelExhausted "pair chain"
   else
     case e of
-      EApp (EVar name _) ([a, b]) _ => if name == "Pair" || isTuplePairSyntax name then a :: pairTailElems (fuel - 1) b else [e]
+      EApp (EVar name _) [a, b] _ => if name == "Pair" || isTuplePairSyntax name then a :: pairTailElems (fuel - 1) b else [e]
       _ => [e]
 
 -- | 内部：显式 `Pair` 应用的元素表（头部必须是裸 `Pair`）；元组语法本身不报。
@@ -2061,7 +2061,7 @@ pairSugarElems fuel e =
     lintFuelExhausted "pair chain"
   else
     case e of
-      EApp (EVar name _) ([a, b]) _ => if name == "Pair" then Just (a :: pairTailElems (fuel - 1) b) else Nothing
+      EApp (EVar name _) [a, b] _ => if name == "Pair" then Just (a :: pairTailElems (fuel - 1) b) else Nothing
       _ => Nothing
 
 -- | 内部：pair 元素的单行原文。起点取 `startExpr` 的真实起点（中缀 span 从运算符开始），
@@ -2132,7 +2132,7 @@ pairPatTailElems fuel p =
     lintFuelExhausted "pair pattern chain"
   else
     case p of
-      PCon name ([a, b]) _ => if name == "Pair" || isTuplePairSyntax name then a :: pairPatTailElems (fuel - 1) b else [p]
+      PCon name [a, b] _ => if name == "Pair" || isTuplePairSyntax name then a :: pairPatTailElems (fuel - 1) b else [p]
       _ => [p]
 
 -- | 内部：显式 `Pair` 模式应用的元素表（头部必须是裸 `Pair`）；元组模式本身不报。
@@ -2142,7 +2142,7 @@ pairPatSugarElems fuel p =
     lintFuelExhausted "pair pattern chain"
   else
     case p of
-      PCon name ([a, b]) _ => if name == "Pair" then Just (a :: pairPatTailElems (fuel - 1) b) else Nothing
+      PCon name [a, b] _ => if name == "Pair" then Just (a :: pairPatTailElems (fuel - 1) b) else Nothing
       _ => Nothing
 
 -- | 内部：模式的单行原文；按字节偏移切片（span 末尾对空字符串 / 列表模式可能短一位时按
@@ -2222,7 +2222,7 @@ natChainCount fuel e =
   else
     case e of
       EVar name _ => if name == "Zero" then Just 0 else Nothing
-      EApp (EVar name _) ([arg]) _ =>
+      EApp (EVar name _) [arg] _ =>
         if name == "Succ" then
           case natChainCount (fuel - 1) arg of
             Just n => Just (n + 1)
@@ -2254,7 +2254,7 @@ natPatCount fuel p =
   else
     case p of
       PCon name [] _ => if name == "Zero" then Just 0 else Nothing
-      PCon name ([arg]) _ =>
+      PCon name [arg] _ =>
         if name == "Succ" then
           case natPatCount (fuel - 1) arg of
             Just n => Just (n + 1)
@@ -2459,7 +2459,7 @@ laterHasFun name (d :: rest) =
 -- 参数无关，不受影响。
 hasImplicitPi : Expr -> Bool
 hasImplicitPi (EPi name implicit _ dom cod _) = implicit || hasImplicitPi cod
-hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) _) = hasImplicitPi dom || hasImplicitPi cod
+hasImplicitPi (EApp (EVar "->" _) [dom, cod] _) = hasImplicitPi dom || hasImplicitPi cod
 hasImplicitPi _ = False
 
 -- | 内部：按名字查类型签名。

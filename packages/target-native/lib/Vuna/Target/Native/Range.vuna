@@ -137,15 +137,15 @@ divRange (al, ah) d = if d > 0 && al >= 0 then (al / d, ah / d) else fullRange
 
 -- | `IrRtApp` 的区间传播；白名单之外一律全域。
 rangeOfRt : List (Int, Int, Int) -> String -> List Ir -> (Int, Int)
-rangeOfRt env "+" ([a, b]) = addRanges (rangeOf env a) (rangeOf env b)
-rangeOfRt env "-" ([a, b]) = subRanges (rangeOf env a) (rangeOf env b)
-rangeOfRt env "*" ([a, b]) = mulRanges (rangeOf env a) (rangeOf env b)
-rangeOfRt env "/" ([a, IrInt d]) = divRange (rangeOf env a) d
-rangeOfRt env "bitAnd" ([_, IrInt m]) = if m >= 0 then (0, minInt2 m nativeMaxInt) else fullRange
-rangeOfRt env "natFromInt" ([a]) = clampNonNeg (rangeOf env a)
-rangeOfRt env "natToInt" ([a]) = clampNonNeg (rangeOf env a)
-rangeOfRt env "natAdd" ([a, b]) = clampNonNeg (addRanges (rangeOf env a) (rangeOf env b))
-rangeOfRt env "natSub" ([a, b]) = clampNonNeg (subRanges (rangeOf env a) (rangeOf env b))
+rangeOfRt env "+" [a, b] = addRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "-" [a, b] = subRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "*" [a, b] = mulRanges (rangeOf env a) (rangeOf env b)
+rangeOfRt env "/" [a, IrInt d] = divRange (rangeOf env a) d
+rangeOfRt env "bitAnd" [_, IrInt m] = if m >= 0 then (0, minInt2 m nativeMaxInt) else fullRange
+rangeOfRt env "natFromInt" [a] = clampNonNeg (rangeOf env a)
+rangeOfRt env "natToInt" [a] = clampNonNeg (rangeOf env a)
+rangeOfRt env "natAdd" [a, b] = clampNonNeg (addRanges (rangeOf env a) (rangeOf env b))
+rangeOfRt env "natSub" [a, b] = clampNonNeg (subRanges (rangeOf env a) (rangeOf env b))
 rangeOfRt _ _ _ = fullRange
 
 export rangeOf : List (Int, Int, Int) -> Ir -> (Int, Int)
@@ -210,7 +210,7 @@ narrow env binderId new =
     Just r => [(binderId, r)]
 
 export factsThen : List (Int, Int, Int) -> Ir -> List (Int, Int, Int)
-factsThen env (IrRtApp sym ([a, b])) =
+factsThen env (IrRtApp sym [a, b]) =
   case cmpShape sym a b of
     Nothing => []
     Just p =>
@@ -223,7 +223,7 @@ factsThen env (IrRtApp sym ([a, b])) =
 factsThen _ _ = []
 
 export factsElse : List (Int, Int, Int) -> Ir -> List (Int, Int, Int)
-factsElse env (IrRtApp sym ([a, b])) =
+factsElse env (IrRtApp sym [a, b]) =
   case cmpShape sym a b of
     Nothing => []
     Just p =>

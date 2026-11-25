@@ -415,7 +415,7 @@ strClause comp ctors projs p caller facts clause =
 -- 终止性失败的描述（<0>）：两种措辞（单函数 / 递归组）统一到 arity 1 的
 -- `CannotProveTermination`，描述里保留单函数 / 递归组的区分信息。
 groupMessage : List String -> String
-groupMessage ([f]) = "${f} (recursive call does not structurally decrease)"
+groupMessage [f] = "${f} (recursive call does not structurally decrease)"
 groupMessage comp =
   "recursive group {${joinComma comp}} (mutual recursion: no parameter position decreases on every recursive call)"
 
@@ -526,7 +526,7 @@ checkStrictGroup comp defTbl ctors projs facts =
 
 checkComp : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List String) -> List (String, Int) -> Check Int
 checkComp [] defTbl ctors projs g facts = OkC 0
-checkComp (comp@([f])) defTbl ctors projs g facts =
+checkComp (comp@[f]) defTbl ctors projs g facts =
   if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else OkC 0
 checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 

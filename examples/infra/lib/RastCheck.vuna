@@ -21,7 +21,7 @@ fixture =
 export rastConvertOk : Bool
 rastConvertOk =
   case Rast.ofDecls [fixture] of
-    [Rast.DFun name ([Rast.PCon (RastName.RGlobal m c) ([Rast.PVar x _]) _]) (Rast.EApp (Rast.EVar (RastName.RGlobal m2 b) _) ([Rast.EVar (RastName.RLocal x2) _]) _) _] =>
+    [Rast.DFun name [Rast.PCon (RastName.RGlobal m c) [Rast.PVar x _] _] (Rast.EApp (Rast.EVar (RastName.RGlobal m2 b) _) [Rast.EVar (RastName.RLocal x2) _] _) _] =>
       name
         == "f"
         && m

@@ -29,7 +29,7 @@ dedup names = nubNames names
 
 export joinComma : List String -> String
 joinComma [] = ""
-joinComma ([x]) = x
+joinComma [x] = x
 joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
 -- 正数事实表：函数名 + 形参下标。
@@ -492,8 +492,7 @@ guardLT args =
 export varOfExpr : Expr -> Maybe String
 varOfExpr (EVar n sp) = Just (rnameKey n)
 -- Nat → Int 的转换是恒等（只换表示）：守卫变量仍按原变量名识别。
-varOfExpr (EApp (EVar c csp) ([x]) sp) =
-  if isNatCoerceName (rnameKey c) then varOfExpr x else Nothing
+varOfExpr (EApp (EVar c csp) [x] sp) = if isNatCoerceName (rnameKey c) then varOfExpr x else Nothing
 varOfExpr _ = Nothing
 
 isNatCoerceName : String -> Bool
@@ -1150,7 +1149,7 @@ natLitOf (EVar n sp) =
   let
     b = opBaseName (rnameKey n)
   in if b == "Z" || b == "Zero" then Just 0 else Nothing
-natLitOf (EApp (EVar c csp) ([x]) sp) =
+natLitOf (EApp (EVar c csp) [x] sp) =
   let
     b = opBaseName (rnameKey c)
   in if b == "S" || b == "Succ" then
@@ -1254,7 +1253,7 @@ argRelHint p args sizes ctors =
         _ => Just relNoRelation
 
 hintArith : Int -> List Expr -> List (String, Int, Int, List Int) -> Int -> Maybe Int
-hintArith p ([EVar x xsp, EInt k ksp]) sizes mode =
+hintArith p [EVar x xsp, EInt k ksp] sizes mode =
   if k <= 0 then
     Just relNoRelation
   else

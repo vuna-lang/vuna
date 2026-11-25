@@ -75,11 +75,11 @@ mayDirty _ _ (IrLet _ _ _) = True
 mayDirty _ _ _ = False
 
 mayDirtySub : List Int -> List Int -> List Ir -> Bool
-mayDirtySub guards dirty ([a, IrInt 1]) = if isGuardVar guards a then False else True
+mayDirtySub guards dirty [a, IrInt 1] = if isGuardVar guards a then False else True
 mayDirtySub _ _ _ = True
 
 mayDirtyAdd : List Int -> List Int -> List Ir -> Bool
-mayDirtyAdd _ _ ([IrInt _, IrInt _]) = False
+mayDirtyAdd _ _ [IrInt _, IrInt _] = False
 mayDirtyAdd _ _ _ = True
 
 isGuardVar : List Int -> Ir -> Bool
@@ -250,7 +250,7 @@ dirtySafeArg (IrVar _) = True
 dirtySafeArg (IrInt _) = True
 dirtySafeArg (IrCast _ _ inner) = dirtySafeArg inner
 dirtySafeArg (IrTail inner) = dirtySafeArg inner
-dirtySafeArg (IrRtApp "/" ([a, IrInt _])) = dirtySafeArg a
+dirtySafeArg (IrRtApp "/" [a, IrInt _]) = dirtySafeArg a
 dirtySafeArg (IrRtApp sym args) = scalarChainSym sym && allDirtySafe args
 dirtySafeArg _ = False
 

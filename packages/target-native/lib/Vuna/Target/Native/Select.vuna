@@ -278,7 +278,7 @@ floatCompareInstrs sym = floatCompareInstrsAt 0 1 sym
 --   二元/比较指令消费时，把 scratch 折进立即数操作数。
 export peephole : List Instr -> List Instr
 peephole [] = []
-peephole ([one]) = [one]
+peephole [one] = [one]
 peephole (i :: rest) =
   case rest of
     next :: more =>

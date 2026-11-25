@@ -52,7 +52,7 @@ export record RegistryEntry(..) where
 -- | 取最后一个发布（无版本时的默认）。
 lastRelease : List Release -> Maybe Release
 lastRelease [] = Nothing
-lastRelease ([x]) = Just x
+lastRelease [x] = Just x
 lastRelease (_ :: rest) = lastRelease rest
 
 -- | 按版本精确解析；`Nothing` 取索引里的最后一个发布。

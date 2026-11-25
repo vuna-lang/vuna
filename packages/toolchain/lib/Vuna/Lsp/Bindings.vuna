@@ -802,7 +802,7 @@ truncateValue s =
 -- ---------------------------------------------------------------
 -- | 内部：把类型表达式拆成参数 domain 列表，沿 `->` / 非隐式 `EPi` 逐段剥。
 arrowDomains : Expr -> List Expr
-arrowDomains (EApp (EVar "->" _) ([a, b]) _) = a :: arrowDomains b
+arrowDomains (EApp (EVar "->" _) [a, b] _) = a :: arrowDomains b
 arrowDomains (EPi n implicit qty dom cod _) =
   if implicit then arrowDomains cod else dom :: arrowDomains cod
 arrowDomains ty = []

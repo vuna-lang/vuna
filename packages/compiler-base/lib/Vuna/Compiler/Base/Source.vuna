@@ -201,13 +201,13 @@ prefixOfName name =
 -- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
 export joinSlashes : List String -> String
 joinSlashes [] = ""
-joinSlashes ([x]) = x
+joinSlashes [x] = x
 joinSlashes (x :: rest) = "${x}/${joinSlashes rest}"
 
 -- | 用 ` -> ` 拼接类型/签名片段（展示用）；空列表得空串，单段原样返回。
 export joinArrows : List String -> String
 joinArrows [] = ""
-joinArrows ([x]) = x
+joinArrows [x] = x
 joinArrows (x :: rest) = "${x} -> ${joinArrows rest}"
 
 -- | 路径拆分：返回去掉最后一段的目录与最后一段（无 "/" 时目录为 ""）。

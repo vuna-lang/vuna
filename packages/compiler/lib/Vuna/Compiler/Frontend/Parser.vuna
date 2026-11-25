@@ -1969,7 +1969,7 @@ parseParenTupleRest fuel st blockCol acc =
 -- 元组右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
 foldPairExprs : NodeRef -> List Expr -> Expr
 foldPairExprs sp [] = EVar tupleUnitSyntax sp
-foldPairExprs sp ([e]) = e
+foldPairExprs sp [e] = e
 foldPairExprs sp (a :: rest) = EApp (EVar tuplePairSyntax sp) [a, foldPairExprs sp rest] sp
 
 -- section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
@@ -2783,7 +2783,7 @@ parsePatternTupleRest fuel st blockCol acc =
 -- 元组模式右嵌套：`(a, b, c)` ≡ pair(a, pair(b, c))。
 foldPairPats : NodeRef -> List Pat -> Pat
 foldPairPats sp [] = PCon tupleUnitSyntax [] sp
-foldPairPats sp ([p]) = p
+foldPairPats sp [p] = p
 foldPairPats sp (p :: rest) = PCon tuplePairSyntax [p, foldPairPats sp rest] sp
 
 -- 文件加载专用：开启解析恢复（收集多个语法错误），调用范围外恢复短路。

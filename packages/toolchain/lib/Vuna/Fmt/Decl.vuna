@@ -223,7 +223,7 @@ renderInstanceCtx env at ctxE = "${joinTexts ", " (map (renderOneCtx env at) ctx
 -- | 内部：用分隔串连接字符串列表（单元素不追加分隔串）。
 joinTexts : String -> List String -> String
 joinTexts sep [] = ""
-joinTexts sep ([x]) = x
+joinTexts sep [x] = x
 joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
 
 -- | 内部：单条上下文文本；渲不出单行时给占位 `…`。
@@ -299,7 +299,7 @@ renderExplicitModDecl at name sorted =
 -- | 内部：导出项逐个用 `, ` 连接（展平用）。
 commaItems : FmtCtx -> List ExportItem -> Doc
 commaItems at [] = empty
-commaItems at ([item]) = renderExportItemDoc at item
+commaItems at [item] = renderExportItemDoc at item
 commaItems at (item :: rest) =
   appendDoc
     (renderExportItemDoc at item)
@@ -509,7 +509,7 @@ sectionsDoc sections = sectionsDocGo (filter (\d => not (isDocEmpty d)) sections
 
 sectionsDocGo : List Doc -> Doc
 sectionsDocGo [] = empty
-sectionsDocGo ([d]) = d
+sectionsDocGo [d] = d
 sectionsDocGo (d :: rest) = appendDoc d (appendDoc hard (appendDoc hard (sectionsDocGo rest)))
 
 -- | 内部：表达式是否以块结构开头（绑定值要另起一行，缩进才稳定）。

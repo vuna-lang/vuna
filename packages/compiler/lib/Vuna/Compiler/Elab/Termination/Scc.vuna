@@ -735,7 +735,7 @@ weakEdgeText e = "${e.edgeFrom}->${e.edgeTo}"
 
 edgesText : List ScEdge -> String
 edgesText [] = ""
-edgesText ([e]) = edgeText e
+edgesText [e] = edgeText e
 edgesText (e :: rest) = "${edgeText e},${edgesText rest}"
 
 badGraphText : String -> List (List ScEdge) -> List String

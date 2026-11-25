@@ -75,10 +75,10 @@ renderTyGlobal fuel levels table dataTbl g sp =
 -- 族直接返回 `Nothing`，不碰实参。传「已渲染的实参表」会先把整棵内层类型算完再丢弃，
 -- 数据族每层嵌套就重复渲染一次（`renderFamilyArgs` 之后还会再渲染）。
 renderTyIntrinsicWith : (Value -> IrTy) -> String -> List Value -> Maybe IrTy
-renderTyIntrinsicWith render "Array" ([a]) = Just (IrTyArray (render a))
-renderTyIntrinsicWith render "@vuna@Cell" ([a]) = Just (IrTyRef (render a))
-renderTyIntrinsicWith render "@vuna@MArray" ([a]) = Just (IrTyArray (render a))
-renderTyIntrinsicWith render "@vuna@MDynArray" ([a]) = Just (IrTyRef IrTyOpaque)
+renderTyIntrinsicWith render "Array" [a] = Just (IrTyArray (render a))
+renderTyIntrinsicWith render "@vuna@Cell" [a] = Just (IrTyRef (render a))
+renderTyIntrinsicWith render "@vuna@MArray" [a] = Just (IrTyArray (render a))
+renderTyIntrinsicWith render "@vuna@MDynArray" [a] = Just (IrTyRef IrTyOpaque)
 renderTyIntrinsicWith render "@vuna@MBuffer" [] = Just (IrTyRef IrTyOpaque)
 renderTyIntrinsicWith render _ _ = Nothing
 

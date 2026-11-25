@@ -516,7 +516,7 @@ export ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
 
 export typeArity : Expr -> Int
-typeArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + typeArity rest
+typeArity (EApp (EVar "->" _) [x, rest] _) = 1 + typeArity rest
 typeArity _ = 0
 
 export lookupCtorArity : String -> List Ctor -> Maybe Int

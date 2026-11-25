@@ -152,7 +152,7 @@ blockLast b = lastOf b.blkInstrs
 
 lastOf : List a -> Maybe a
 lastOf [] = Nothing
-lastOf ([x]) = Just x
+lastOf [x] = Just x
 lastOf (_ :: rest) = lastOf rest
 
 atIdx : Int -> List a -> Maybe a

@@ -44,8 +44,8 @@ isInfixStep at e =
     Just _ => False
     Nothing =>
       case e of
-        EApp (EVar op _) ([_, _]) _ => isSymbolName op || backtickMark at e
-        EApp (EVar _ _) ([_, _]) _ => backtickMark at e
+        EApp (EVar op _) [_, _] _ => isSymbolName op || backtickMark at e
+        EApp (EVar _ _) [_, _] _ => backtickMark at e
         _ => False
 
 -- | 内部：链步当时是否反引号写法（``a `f` b``）。
@@ -87,11 +87,11 @@ sectionValueParts at (ELam _ body sp) =
       case shape of
         SectionLeft _ =>
           case body of
-            EApp _ ([_, operand]) _ => Just (shape, operand)
+            EApp _ [_, operand] _ => Just (shape, operand)
             _ => Nothing
         SectionRight _ =>
           case body of
-            EApp _ ([operand, _]) _ => Just (shape, operand)
+            EApp _ [operand, _] _ => Just (shape, operand)
             _ => Nothing
         SectionOp _ => Nothing
     Nothing => Nothing
@@ -322,14 +322,20 @@ interpPiecesInline fuel env at multi parts =
 -- ---------------------------------------------------------------
 -- 模式（模式没有块结构，统一输出单行，必要时加括号）
 -- ---------------------------------------------------------------
--- | 内部：是否列表 cons 拼写：中缀 `::`、`Cons`，或 parser 的列表语法形式。
+-- | 内部：是否列表 cons 拼写：中缀 `::`，或 parser 的列表语法保留名。
+-- 裸 `Cons` 是普通构造子名（可以是用户 data 的构造子），不能当列表糖。
 consPatName : String -> Bool
-consPatName name = name == "Cons" || name == "::" || isListConsSyntax name
+consPatName name = name == "::" || isListConsSyntax name
 
--- | 内部：把 cons / `Nil` 形式展开成元素列表（不是列表形式则为 `Nothing`）。
+-- | 内部：模式里构造子名的写法：符号名必须括号化，否则前缀写法无法回读
+-- （`(<=>) x y` 会被读成括号模式加多余原子）。
+conPatNameText : String -> String
+conPatNameText name = if isSymbolName name then "(${name})" else name
+
+-- | 内部：把 cons / nil 保留名形式展开成元素列表（不是列表字面量语法则为 `Nothing`）。
 patListElemsOf : String -> List Pat -> Maybe (List Pat)
 patListElemsOf name pats =
-  if name == "Nil" || isListNilSyntax name then
+  if isListNilSyntax name then
     if isNilList pats then Just [] else Nothing
   else if consPatName name then
     case pats of
@@ -391,33 +397,50 @@ renderPatGo fuel pat =
       PWild _ => "_"
       PInt n _ => strFromInt n
       PStr s _ => renderStr s
-      PCon name pats _ => renderConPatGo (fuel - 1) name pats
+      PCon name pats _ => firstOf (renderConPatPair (fuel - 1) name pats)
       PRecord name fields _ => renderRecPatGo (fuel - 1) name fields
 
--- | 内部：构造子模式（`[a, b]` 列表形式 / `(a, b)` 元组形式 / 中缀 cons / 前缀应用）。
-renderConPatGo : Int -> String -> List Pat -> String
-renderConPatGo fuel name pats =
+-- | 内部：构造子模式：文本 + 是否已是原子（自带定界符，或已带外层括号）。
+-- 括号规则与渲染共用这一处判定：`[a, b]` / `(a, b)` / `()` 自带定界符；符号名的
+-- 前缀应用（`(<=>) x y`）必须整体括号化，否则重新解析会把名字当成完整模式。
+renderConPatPair : Int -> String -> List Pat -> (String, Bool)
+renderConPatPair fuel name pats =
   if fuel <= 0 then
-    ""
+    ("", True)
   else if isTupleUnitSyntax name then
-    "()"
+    ("()", True)
   else
     case tuplePatElemsOf name pats of
-      Just elems => "(${renderPatElemsGo (fuel - 1) elems})"
+      Just elems => ("(${renderPatElemsGo (fuel - 1) elems})", True)
       Nothing =>
         case patListElemsOf name pats of
-          Just elems => "[${renderPatElemsGo (fuel - 1) elems}]"
-          Nothing => if consPatName name then renderConsPatGo (fuel - 1) pats else if (name == "Nil" || isListNilSyntax name) && isNilList pats then "[]" else if isNilList pats then name else name ++ renderPatAtomsSpacedGo (fuel - 1) pats
+          Just elems => ("[${renderPatElemsGo (fuel - 1) elems}]", True)
+          Nothing =>
+            if isNilList pats then
+              (conPatNameText name, True)
+            else if consPatName name then
+              case pats of
+                [_, _] => (renderConsPatGo name (fuel - 1) pats, False)
+                _ => prefixPatPair name (renderPatAtomsSpacedGo (fuel - 1) pats)
+            else
+              prefixPatPair name (renderPatAtomsSpacedGo (fuel - 1) pats)
+
+-- | 内部：前缀构造子模式 `Name a b`；符号名自带括号，整段已是原子。
+prefixPatPair : String -> String -> (String, Bool)
+prefixPatPair name args =
+  let
+    core = conPatNameText name ++ args
+  in if isSymbolName name then ("(${core})", True) else (core, False)
 
 -- | 内部：cons 模式 `a :: b`（两个实参）；其它实参数按前缀形式渲染。
-renderConsPatGo : Int -> List Pat -> String
-renderConsPatGo fuel pats =
+renderConsPatGo : String -> Int -> List Pat -> String
+renderConsPatGo name fuel pats =
   if fuel <= 0 then
     ""
   else
     case pats of
       [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
-      _ => "Cons${renderPatAtomsSpacedGo (fuel - 1) pats}"
+      _ => conPatNameText name ++ renderPatAtomsSpacedGo (fuel - 1) pats
 
 -- | 内部：cons 链的尾部（右结合，继续展开成 `a :: b :: ...`）。
 renderPatConsTailGo : Int -> Pat -> String
@@ -447,14 +470,11 @@ renderPatAtomGo fuel pat =
       PWild _ => "_"
       PInt n _ => strFromInt n
       PStr s _ => renderStr s
-      PCon name [] _ => if isTupleUnitSyntax name then "()" else if name == "Nil" || isListNilSyntax name then "[]" else name
+      PCon name [] _ => if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else conPatNameText name
       PCon name pats _ =>
-        if isTupleUnitSyntax name then
-          "()"
-        else
-          case tuplePatElemsOf name pats of
-            Just elems => "(${renderPatElemsGo (fuel - 1) elems})"
-            Nothing => "(${renderConPatGo (fuel - 1) name pats})"
+        let
+          plan = renderConPatPair (fuel - 1) name pats
+        in if secondOf plan then firstOf plan else "(${firstOf plan})"
       PRecord name fields _ => "(${renderRecPatGo (fuel - 1) name fields})"
 
 -- | 内部：记录模式 `Name { f = p }`（无字段时 `Name { }`）。
@@ -505,7 +525,7 @@ backtickLabel name = "`${name}`"
 
 -- | 内部：`perform <op>` 的保留名编码还原出 `<op>`（不是该形态则为 `Nothing`）。
 performOperand : Expr -> Maybe Expr
-performOperand (EApp (EVar name _) ([op]) _) = if isPerformSyntax name then Just op else Nothing
+performOperand (EApp (EVar name _) [op] _) = if isPerformSyntax name then Just op else Nothing
 performOperand _ = Nothing
 
 -- | 内部：行字面量的实例名文本。合法的标识符可以去掉引号（`@"audit"` 与 `@audit` 同义），
@@ -537,7 +557,7 @@ identNameOkDot (c :: rest) = if isIdentStart c then identNameOkGo rest else Fals
 
 -- | 内部：行字面量 `X@name` 的 (类型, 实例名)（不是该形态则为 `Nothing`）。
 rowAtParts : Expr -> Maybe (Expr, Expr)
-rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (e, n) else Nothing
+rowAtParts (EApp (EVar name _) [e, n] _) = if isRowAtSyntax name then Just (e, n) else Nothing
 rowAtParts _ = Nothing
 
 -- | 内部：实例名调用糖 `f@name args` 的 (函数, (实例名, 实参列表))；
@@ -565,8 +585,8 @@ renderHandlePatsTail fuel [] = ""
 renderHandlePatsTail fuel (p :: rest) = " ${renderPatGo fuel p}${renderHandlePatsTail fuel rest}"
 
 listExprElems : Expr -> Maybe (List Expr)
-listExprElems (EVar name _) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
-listExprElems (EApp (EVar name _) ([a, rest]) _) =
+listExprElems (EVar name _) = if isListNilSyntax name then Just [] else Nothing
+listExprElems (EApp (EVar name _) [a, rest] _) =
   if isListConsSyntax name then listExprCons a rest else Nothing
 listExprElems _ = Nothing
 
@@ -579,7 +599,7 @@ listExprCons a rest =
 
 -- 元组语法（parser 保留名）右嵌套展开成元素表；`Nothing` = 不是元组语法。
 tupleExprElems : Expr -> Maybe (List Expr)
-tupleExprElems (EApp (EVar name _) ([a, b]) _) =
+tupleExprElems (EApp (EVar name _) [a, b] _) =
   if isTuplePairSyntax name then
     case tupleExprElems b of
       Just rest => Just (a :: rest)
@@ -590,7 +610,7 @@ tupleExprElems _ = Nothing
 
 -- 类型标注 `(e : T)` 的保留名展开。
 ascribeParts : Expr -> Maybe (Expr, Expr)
-ascribeParts (EApp (EVar name _) ([v, t]) _) = if isAscribeSyntax name then Just (v, t) else Nothing
+ascribeParts (EApp (EVar name _) [v, t] _) = if isAscribeSyntax name then Just (v, t) else Nothing
 ascribeParts _ = Nothing
 
 -- 元组模式（parser 保留名）右嵌套展开成元素表。
@@ -650,7 +670,7 @@ inlineBareCore fuel env at minPrec e =
         case macroNameOf name of
           -- 内置宏标记回渲染成 `name!`（编码见 `Frontend/Ast.macroSyntaxName`）。
           Just macroName => Just "${macroName}!"
-          Nothing => if isTupleUnitSyntax name then Just "()" else if name == "Nil" || isListNilSyntax name then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
+          Nothing => if isTupleUnitSyntax name then Just "()" else if isListNilSyntax name then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
       EInt n _ => Just (strFromInt n)
       EStr s _ => Just (renderStr s)
       EFloat raw _ => Just raw
@@ -1016,7 +1036,7 @@ operandDoc fuel env at minPrec e =
 -- | 内部：逗号分隔的文档列表（展平时 `, `，断行时逗号留在行尾）。
 commaDocs : List Doc -> Doc
 commaDocs [] = empty
-commaDocs ([d]) = d
+commaDocs [d] = d
 commaDocs (d :: rest) = appendDoc d (appendDoc (text ",") (appendDoc line (commaDocs rest)))
 
 -- | 表达式文档；调用方决定是否用 `group` 把整段当作可展平区域。源码括号在**外面**
@@ -1173,7 +1193,7 @@ applyDoc fuel env at fn args =
 -- parser 把链步降级成 `EApp (EVar op) [l, r]`，这里按表面形状认出来；源码括号是链的
 -- 边界：被括号包住的子链整体作为一个操作数（括号由它自己的渲染打出来）。
 sourceInfixParts : FmtCtx -> Expr -> (List Expr, List String)
-sourceInfixParts at (e@(EApp (EVar op _) ([l, r]) _)) =
+sourceInfixParts at (e@(EApp (EVar op _) [l, r] _)) =
   if isInfixStep at e then
     let
       lp = infixPartsOperand at l
@@ -1231,7 +1251,7 @@ chainHasTail _ = True
 -- | 内部：链上除最后一项外是否有块结构操作数（这类链不能按「运算符续行」排版）。
 chainHasBlockBeforeLast : List Expr -> Bool
 chainHasBlockBeforeLast [] = False
-chainHasBlockBeforeLast ([_]) = False
+chainHasBlockBeforeLast [_] = False
 chainHasBlockBeforeLast (e :: rest) = multilineExpr e || chainHasBlockBeforeLast rest
 
 -- | 内部：链操作数。后面还有链步时块结构必须加括号：块的最后一行（`case` 的最后一条
@@ -1456,7 +1476,7 @@ handleDoc fuel env at comp ret op =
       headD = appendDoc (text "handle ") (appendDoc (handleCompDoc (fuel - 1) env at comp) (text " {"))
       retDs =
         case ret of
-          ELam ([(x, _)]) body r => [handleRetDoc (fuel - 1) env at x body r]
+          ELam [(x, _)] body r => [handleRetDoc (fuel - 1) env at x body r]
           _ => []
       opDs =
         case op of

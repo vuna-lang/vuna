@@ -67,7 +67,7 @@ dropNamePrefix p name =
 -- | 用 `@` 连接多个名字。
 export joinWithAt : List String -> String
 joinWithAt [] = ""
-joinWithAt ([x]) = x
+joinWithAt [x] = x
 joinWithAt (x :: rest) = "${x}@${joinWithAt rest}"
 
 -- | 由短名与候选 target 生成重载构造子标记名。

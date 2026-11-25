@@ -11,7 +11,7 @@ import Vuna.Compiler.Frontend.Ast
 -- | `handle comp { ... }` 的合成标记分解（`@vuna@handle` + `[comp, ret, opH]`）；
 -- 不是 handle 块时 `Nothing`。
 export handleParts : Expr -> Maybe (Expr, Expr, Expr)
-handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
+handleParts (EApp (EVar name _) [comp, ret, opH] _) =
   if isHandleSyntax name then Just (comp, ret, opH) else Nothing
 handleParts _ = Nothing
 
@@ -27,7 +27,7 @@ concatStrings (s :: rest) = s ++ concatStrings rest
 -- | 用 `, ` 连接字符串列表。
 export joinComma : List String -> String
 joinComma [] = ""
-joinComma ([x]) = x
+joinComma [x] = x
 joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
 -- | 每项前加一个空格再拼接（用于把参数 / 实参串在标识符之后）；空列表为空串。
@@ -38,7 +38,7 @@ joinSpace (x :: rest) = " ${x}${joinSpace rest}"
 -- | 用换行连接字符串列表。
 export joinLines : List String -> String
 joinLines [] = ""
-joinLines ([l]) = l
+joinLines [l] = l
 joinLines (l :: rest) = "${l}\n${joinLines rest}"
 
 -- | 列表首项；空列表为空串。
@@ -59,7 +59,7 @@ prefixFirst pre (l :: rest) = (pre ++ l) :: rest
 -- | 在末项后追加 `suffix`；空列表得到只含 `suffix` 的单元素列表。
 export appendLast : String -> List String -> List String
 appendLast suffix [] = [suffix]
-appendLast suffix ([l]) = [l ++ suffix]
+appendLast suffix [l] = [l ++ suffix]
 appendLast suffix (l :: rest) = l :: appendLast suffix rest
 
 -- | 把 `argLines` 接到 `lines` 的最后一行之后：首段前置 `sep` 紧跟该行，后续段各自成为
@@ -106,5 +106,5 @@ fitsLine indent text = indent + strWidth text <= maxWidth
 -- | 列表末项；空列表为空串。
 export lastLineOf : List String -> String
 lastLineOf [] = ""
-lastLineOf ([x]) = x
+lastLineOf [x] = x
 lastLineOf (x :: rest) = lastLineOf rest

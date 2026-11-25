@@ -466,7 +466,7 @@ projectionShape (Just body) =
 
 peelToCase : Term -> Maybe CaseAlt
 peelToCase (TLam _ _ _ _ body) = peelToCase body
-peelToCase (TCase _ ([alt])) = Just alt
+peelToCase (TCase _ [alt]) = Just alt
 peelToCase _ = Nothing
 
 appHeadVar : Term -> Maybe String

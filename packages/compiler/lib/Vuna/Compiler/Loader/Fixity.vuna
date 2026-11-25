@@ -138,8 +138,8 @@ isChainNode t e =
     Just _ => False
     Nothing =>
       case e of
-        EApp (EVar op _) ([_, _]) _ => isSymbolName op || chainBacktick t e
-        EApp (EVar _ _) ([_, _]) _ => chainBacktick t e
+        EApp (EVar op _) [_, _] _ => isSymbolName op || chainBacktick t e
+        EApp (EVar _ _) [_, _] _ => chainBacktick t e
         _ => False
 
 -- 链步是否反引号写法（表面事实；普通符号中缀不在表里）。
@@ -149,7 +149,7 @@ chainBacktick t e = backtickOfFacts t.fixFacts (nodeRefId (exprRef e))
 -- 把右嵌套的链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子作为边界操作数
 -- （先递归重排）。
 collectChain : FixityTable -> Expr -> Check (Expr, List ChainOp)
-collectChain t (e@(EApp (EVar op _) ([l, r]) sp)) =
+collectChain t (e@(EApp (EVar op _) [l, r] sp)) =
   if isChainNode t e then
     Vuna.Compiler.Base.Common.bind
       (reorderExpr t l)
@@ -313,7 +313,7 @@ applySectionRight t op opSp operand (a :: rest) sp =
 
 -- | 表达式重排入口：中缀 / backtick 链交给 `reorderChain`，其余交给 `reorderNonChain`。
 export reorderExpr : FixityTable -> Expr -> Check Expr
-reorderExpr t (e@(EApp (EVar _ _) ([_, _]) _)) =
+reorderExpr t (e@(EApp (EVar _ _) [_, _] _)) =
   if isChainNode t e then reorderChain t e else reorderNonChain t e
 reorderExpr t e = reorderNonChain t e
 

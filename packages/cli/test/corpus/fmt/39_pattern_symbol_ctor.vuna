@@ -1,0 +1,17 @@
+-- 符号名构造子：声明位带括号；模式位要两层括号——名字自身的 `(<=>)` 与整段的
+-- `((<=>) x y)`。漏掉任一层，重新解析都会把名字当成完整模式（PS_ExpectedPattern）。
+data Pair2 : Type where
+  (<=>) : Int -> Int -> Pair2
+
+pick : Pair2 -> Int
+pick p = case p of
+  ((<=>) x y) => x + y
+
+unpack : Pair2 -> Int
+unpack ((<=>) x y) = x * 10 + y
+
+nested : Pair2 -> Pair2 -> Int
+nested ((<=>) a b) ((<=>) c d) = a + b + c + d
+
+main : Int
+main = pick ((<=>) 1 2) + unpack ((<=>) 3 4) + nested ((<=>) 1 2) ((<=>) 3 4)

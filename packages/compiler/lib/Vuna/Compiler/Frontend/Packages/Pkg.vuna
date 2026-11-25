@@ -170,7 +170,7 @@ joinPath base rel = if startsWith "/" rel then normalizeDir rel else normalizeDi
 
 joinPathsText : List String -> String
 joinPathsText [] = ""
-joinPathsText ([path]) = path
+joinPathsText [path] = path
 joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 
 -- ---------------------------------------------------------------- manifest

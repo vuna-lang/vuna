@@ -941,7 +941,7 @@ isMachineFormat f = f == "json" || f == "sarif"
 
 checkPackages : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
 checkPackages [] code o = pure (code, o)
-checkPackages ([pkg]) code o = checkPackageSeq pkg code o
+checkPackages [pkg] code o = checkPackageSeq pkg code o
 -- 成员在父进程内逐个检查，诊断进同一个 optSarifItems，stdout 只在最后的
 -- flushSarif 输出一次（多进程各打一份会得到非法 JSON / 多份 SARIF）。
 checkPackages pkgs code o =
@@ -1231,7 +1231,7 @@ workspaceMultiOut workspace =
 -- 单包目录且是库包（没有 app/Main.vuna）→ build 必须报错（不是静默 skip）。
 -- workspace 根里的库成员仍走 skip（构建单元覆盖全部可执行成员）。
 isSingleLibraryPackage : Member nFs FsOp r => List Package -> Eff r Bool
-isSingleLibraryPackage ([pkg]) =
+isSingleLibraryPackage [pkg] =
   do
     exists <- fsFileExists (packageEntry pkg)
     pure (not exists)

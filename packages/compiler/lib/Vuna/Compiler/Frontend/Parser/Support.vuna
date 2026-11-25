@@ -520,7 +520,7 @@ minusLiteralAt p st =
     _ => False
 
 export countArrows : Expr -> Int
-countArrows (EApp (EVar "->" _) ([x, rest]) _) = 1 + countArrows rest
+countArrows (EApp (EVar "->" _) [x, rest] _) = 1 + countArrows rest
 countArrows _ = 0
 
 export terminatesExpression : PTok -> Bool

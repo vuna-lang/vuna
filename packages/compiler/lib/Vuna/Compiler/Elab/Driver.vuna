@@ -167,7 +167,7 @@ isMemberConstraintExpr _ = False
 
 -- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
-memberSugarExpr ec (e@(EApp (EVar g a) ([n, x, r]) sp)) =
+memberSugarExpr ec (e@(EApp (EVar g a) [n, x, r] sp)) =
   if rnameKey g == effMemberFamilyName then
     EApp (EVar g a) [EApp (EVar (classifyName effNamedName) sp) [n, x] sp, r] sp
   else

@@ -60,7 +60,7 @@ usageTextIn cmds path =
 -- | 内部：命令路径用空格拼接。
 joinWords : List String -> String
 joinWords [] = ""
-joinWords ([one]) = one
+joinWords [one] = one
 joinWords (one :: rest) = "${one} ${joinWords rest}"
 
 -- | 未知子命令：打印候选建议与帮助入口，返回 2。

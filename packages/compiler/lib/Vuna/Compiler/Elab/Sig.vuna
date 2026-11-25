@@ -123,7 +123,7 @@ memberDomainOverrides [] = []
 memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
 
 memberDomainOverridesOne : Expr -> List (String, Expr)
-memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) =
+memberDomainOverridesOne (EApp (EVar g _) [nExpr, _, rExpr] sp) =
   if rnameKey g == effMemberFamilyName then
     let
       nPart =

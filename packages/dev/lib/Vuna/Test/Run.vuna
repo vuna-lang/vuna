@@ -1713,7 +1713,7 @@ stripTrailingSlash text =
 -- | 内部：列表最后一个元素；空列表给空串。
 lastSegment : List String -> String
 lastSegment [] = ""
-lastSegment ([x]) = x
+lastSegment [x] = x
 lastSegment (x :: rest) = lastSegment rest
 
 -- | 内部：路径 basename（丢弃空段）。

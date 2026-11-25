@@ -2025,7 +2025,7 @@ spineOf ir = (ir, [])
 
 -- | 单构造子 op 的字段：`FsFail e` 的 `e`。
 opFieldOf : Ir -> Ir
-opFieldOf (IrCtor _ _ _ ([x])) = x
+opFieldOf (IrCtor _ _ _ [x]) = x
 opFieldOf ir = ir
 
 -- | 纯动作续延：`MkEff (\\_ => runMain (opH op pureK))`。

@@ -130,10 +130,14 @@ data Age : Type where
 deriving (FromInt)
 
 main : String
-main = case (MkEmail "x@y") of
-    MkEmail s => s
-  ++ "/" ++ case (MkAge 42) of
-    MkAge n => strFromInt n
+main =
+  (
+    case (MkEmail "x@y") of
+      MkEmail s => s
+  )
+    ++ "/"
+    ++ case (MkAge 42) of
+      MkAge n => strFromInt n
 ```
 
 生成的是 `instance C T where fromX sx = C sx`（不递归调用 trait，因此没有自引用/终止性

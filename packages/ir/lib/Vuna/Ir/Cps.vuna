@@ -586,8 +586,7 @@ isEffContLambda = isEffResultTy
 
 -- | λ 体已经是 `MkEff (\u K -> …)`（mCps 已包过），避免后处理重复包一层。
 isEffThunkBody : Ir -> Bool
-isEffThunkBody (IrCtor family ctor _ ([IrLam _ _ _])) =
-  family == irEffTypeName && ctor == irEffMkCtor
+isEffThunkBody (IrCtor family ctor _ [IrLam _ _ _]) = family == irEffTypeName && ctor == irEffMkCtor
 isEffThunkBody _ = False
 
 -- | 用续延 K 跑一个 Eff 值：`case eff of MkEff th => runEff th K`。
@@ -1363,7 +1362,7 @@ mMarked fuel e =
     case e of
       IrLam bs rt body => if isEffContLambda rt && not (isEffThunkBody body) then mEffContLambda (fuel - 1) mNoResumption bs rt body else IrLam bs rt (mMarked (fuel - 1) body)
       -- `handleScoped`：`self th id` 的值语义边界 => `run (self th doneCont)`
-      IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt irMRunName) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
+      IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam [_] _ _) => IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt irMRunName) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
       IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
       IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mMarkedList (fuel - 1) args)
       IrRecord fam _ fs => IrRecord fam (Just IrTyOpaque) (mMarkedFields (fuel - 1) fs)

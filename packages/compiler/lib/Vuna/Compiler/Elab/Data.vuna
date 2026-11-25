@@ -91,7 +91,7 @@ checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
 
 countSurfacePis : Expr -> Int
 countSurfacePis (EPi _ _ _ _ cod _) = 1 + countSurfacePis cod
-countSurfacePis (EApp (EVar (RIntrinsic "->") _) ([_, b]) _) = 1 + countSurfacePis b
+countSurfacePis (EApp (EVar (RIntrinsic "->") _) [_, b] _) = 1 + countSurfacePis b
 countSurfacePis _ = 0
 
 -- 已精化构造子类型的 Pi 层数（与表面形态同构；见 checkCtorFieldSorts 的防御）。
@@ -102,7 +102,7 @@ countTelePis _ = 0
 ctorFieldSortsGo : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Check Ec
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ _ dom cod _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar (RIntrinsic "->") _) ([a, b]) _) =
+ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar (RIntrinsic "->") _) [a, b] _) =
   ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
 ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp _ = OkC ec
 

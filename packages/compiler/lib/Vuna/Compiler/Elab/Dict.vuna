@@ -230,7 +230,7 @@ blanketInstances (i :: rest) =
 
 finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Check (Term, Ec)
 finishInstanceSearch dom sp [] ec = missingInstance ec dom sp
-finishInstanceSearch dom sp ([m]) ec = OkC (m.instMatchTerm, ec)
+finishInstanceSearch dom sp [m] ec = OkC (m.instMatchTerm, ec)
 finishInstanceSearch dom sp matches ec =
   let
     _ =

@@ -24,7 +24,7 @@ lenIntGo acc (_ :: xs) = lenIntGo (acc + 1) xs
 -- | 内部：相邻两两按 `le` 比较是否已有序；空表与单元素恒真。
 sortedBy : (a -> a -> Bool) -> List a -> Bool
 sortedBy le [] = True
-sortedBy le ([_]) = True
+sortedBy le [_] = True
 sortedBy le (x :: y :: rest) = le x y && sortedBy le (y :: rest)
 
 -- | 内部：长度是否不超过 `k`（最多走 `k` 步；走满仍未到表尾即 `False`）。

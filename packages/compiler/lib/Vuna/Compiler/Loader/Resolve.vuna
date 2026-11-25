@@ -272,7 +272,7 @@ memPathKey key (p :: rest) = pathKey p == key || memPathKey key rest
 
 commaJoin : List String -> String
 commaJoin [] = ""
-commaJoin ([x]) = x
+commaJoin [x] = x
 commaJoin (x :: rest) = "${x}, ${commaJoin rest}"
 
 lastSegmentOf : String -> String
@@ -712,7 +712,7 @@ pickValueOrOver name pairs =
 -- | 从候选 target 里选唯一名；0 个或多个都编码成重载候选名。
 pickCtorOrOver : String -> List String -> String
 pickCtorOrOver name [] = overCtorName name []
-pickCtorOrOver name ([t]) = t
+pickCtorOrOver name [t] = t
 pickCtorOrOver name cands = overCtorName name cands
 
 -- 构造子位置（模式、record 构造、以及类型位置的索引构造子退化）：候选集 = 本地
@@ -995,7 +995,7 @@ hiddenRef name sp =
 normalizeSyntaxNames : Expr -> Maybe Expr
 normalizeSyntaxNames (EVar name sp) =
   if isTupleUnitSyntax name then Just (EVar "MkUnit" sp) else Nothing
-normalizeSyntaxNames (EApp (EVar name sp) ([a, b]) asp) =
+normalizeSyntaxNames (EApp (EVar name sp) [a, b] asp) =
   if isTuplePairSyntax name then Just (EApp (EVar "Pair" sp) [a, b] asp) else Nothing
 normalizeSyntaxNames _ = Nothing
 

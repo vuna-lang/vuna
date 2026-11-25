@@ -124,7 +124,7 @@ parentDirOf path =
 
 dropLast : List a -> List a
 dropLast [] = []
-dropLast ([_]) = []
+dropLast [_] = []
 dropLast (x :: rest) = x :: dropLast rest
 
 -- | 读回插件写出的产物（缓存 miss 时用它填充产物表）。

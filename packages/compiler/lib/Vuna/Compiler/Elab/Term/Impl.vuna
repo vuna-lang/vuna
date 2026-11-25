@@ -532,13 +532,13 @@ perfFamilyOfValue ec v =
 
 -- `perform` 标记：`EApp (EVar @vuna@perform sp) [op] sp`。
 performOperand : Expr -> Maybe (Expr, Span)
-performOperand (EApp (EVar name sp) ([op]) asp) =
+performOperand (EApp (EVar name sp) [op] asp) =
   if isPerformSyntax (rnameKey name) then Just (op, asp) else Nothing
 performOperand _ = Nothing
 
 -- `@` 降级后的隐式实参标记：`EApp (EVar @vuna@inst@arg sp) [payload] sp`。
 instArgOperand : Expr -> Maybe Expr
-instArgOperand (EApp (EVar name _) ([payload]) _) =
+instArgOperand (EApp (EVar name _) [payload] _) =
   if isInstArgSyntax (rnameKey name) then Just payload else Nothing
 instArgOperand _ = Nothing
 
@@ -684,7 +684,7 @@ performCallExpr globals ec opTy op sp =
 -- 两版都按 `<Op> : <params…> -> Type -> Type` 推族参数个数（State/Reader k = 1；
 -- 标签/签名按 k 补洞，结果索引由构造子匹配收窄）。
 handleOperand : Expr -> Maybe (Expr, Expr, Expr)
-handleOperand (EApp (EVar name _) ([comp, ret, opH]) _) =
+handleOperand (EApp (EVar name _) [comp, ret, opH] _) =
   if isHandleSyntax (rnameKey name) then Just (comp, ret, opH) else Nothing
 handleOperand _ = Nothing
 
@@ -1435,7 +1435,7 @@ inferArgsFuel fuel globals ctx ec ty args sp hint =
 -- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/Cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
 listLitElems : Expr -> Maybe (List Expr)
 listLitElems (EVar name sp) = if isListNilSyntax (rnameKey name) then Just [] else Nothing
-listLitElems (EApp (EVar name csp) ([h, t]) sp) =
+listLitElems (EApp (EVar name csp) [h, t] sp) =
   if isListConsSyntax (rnameKey name) then listLitConsTail h t else Nothing
 listLitElems _ = Nothing
 
@@ -1473,7 +1473,7 @@ expandListLitGo nilName consName (e :: rest) sp =
 --     parser 已把裸标识符名字转成字符串字面量（`[Op@audit]` → 名字 "audit"），
 --     变量名必须写 `Cons n label tail`。
 rowAtParts : Expr -> Maybe (Expr, Expr)
-rowAtParts (EApp (EVar name _) ([e, n]) _) =
+rowAtParts (EApp (EVar name _) [e, n] _) =
   if isRowAtSyntax (rnameKey name) then Just (e, n) else Nothing
 rowAtParts _ = Nothing
 
@@ -1530,7 +1530,7 @@ rowConsArgs : Expr -> Expr -> Span -> List Expr
 rowConsArgs e t sp = [rowConsEntry e sp, t]
 
 rowConsEntry : Expr -> Span -> Expr
-rowConsEntry (e@(EApp (EVar n _) ([_, _]) _)) sp =
+rowConsEntry (e@(EApp (EVar n _) [_, _] _)) sp =
   if rnameKey n == effNamedName then e else wrapRowEntry e sp
 rowConsEntry e sp = wrapRowEntry e sp
 
@@ -3684,7 +3684,7 @@ decodeDoChain fuel canonical acc expr =
               Nothing
             else
               case args of
-                [e, ELam ([(binder, binderSp)]) rest lsp] => decodeDoChain (fuel - 1) canonical2 (DoChainStep binder e sp binderSp :: acc) rest
+                [e, ELam [(binder, binderSp)] rest lsp] => decodeDoChain (fuel - 1) canonical2 (DoChainStep binder e sp binderSp :: acc) rest
                 _ => Nothing
       _ => Just (reverse acc, expr)
 

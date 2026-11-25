@@ -502,7 +502,7 @@ resolveOverCtorGo ec sp (Just fam) short targets =
 -- 与其他族都有同名构造子时，猜 List 会把错误藏到后面（或静默选错族）；多候选一律报
 -- `TC_AmbiguousCtor`，由用户补期望类型消歧。单候选可直接选。
 defaultOrOver : Ec -> Span -> String -> List String -> Check String
-defaultOrOver ec sp short ([t]) = OkC t
+defaultOrOver ec sp short [t] = OkC t
 defaultOrOver ec sp short targets =
   tcErr2 sp (AmbiguousCtor short (overCandidatesText targets)) short (overCandidatesText targets)
 

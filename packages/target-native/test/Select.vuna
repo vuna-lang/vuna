@@ -33,7 +33,7 @@ problems =
 wrapProblems : List String
 wrapProblems =
   case scalarInstrs (ScalarWrap "add") R11 R10 of
-    Pair R11 ([IBinReg "add" R11 (OpReg R10), IBinReg "shl" R11 (OpImm 1), IBinReg "sar" R11 (OpImm 1)]) =>
+    Pair R11 [IBinReg "add" R11 (OpReg R10), IBinReg "shl" R11 (OpImm 1), IBinReg "sar" R11 (OpImm 1)] =>
       []
     Pair r is => ["wrap add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
@@ -44,13 +44,13 @@ bitProblems = append xorBitProblems bitNotProblems
 xorBitProblems : List String
 xorBitProblems =
   case scalarInstrs (ScalarBitOp "xor") R11 R10 of
-    Pair R11 ([IBinReg "xor" R11 (OpReg R10)]) => []
+    Pair R11 [IBinReg "xor" R11 (OpReg R10)] => []
     Pair r is => ["bit xor: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 bitNotProblems : List String
 bitNotProblems =
   case scalarInstrs ScalarBitNot R11 R10 of
-    Pair R11 ([IBinReg "xor" R11 (OpImm m)]) =>
+    Pair R11 [IBinReg "xor" R11 (OpImm m)] =>
       if m == 0 - 1 then [] else ["bit not: imm " ++ strFromInt m]
     Pair r is => ["bit not: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
@@ -58,13 +58,13 @@ bitNotProblems =
 noWrapProblems : List String
 noWrapProblems =
   case scalarInstrsNoWrap (ScalarWrap "imul") R11 R10 of
-    Pair R11 ([IBinReg "imul" R11 (OpReg R10)]) => []
+    Pair R11 [IBinReg "imul" R11 (OpReg R10)] => []
     Pair r is => ["nowrap imul: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 cmpProblems : List String
 cmpProblems =
   case scalarInstrs (ScalarCmp "setl") R11 R10 of
-    Pair Rax ([ICmp (OpReg R11) (OpReg R10), ISetcc "setl" Rax]) => []
+    Pair Rax [ICmp (OpReg R11) (OpReg R10), ISetcc "setl" Rax] => []
     Pair r is => ["cmp setl: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natProblems : List String
@@ -76,14 +76,14 @@ natProblems =
 natAddProblems : List String
 natAddProblems =
   case scalarInstrs ScalarNatAdd R11 R10 of
-    Pair R11 ([IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpImm m), ICmp (OpReg R11) (OpReg R10), ICmov "cmovg" R11 (OpReg R10)]) =>
+    Pair R11 [IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpImm m), ICmp (OpReg R11) (OpReg R10), ICmov "cmovg" R11 (OpReg R10)] =>
       if m == nativeMaxInt then [] else ["nat add: saturation constant drifted"]
     Pair r is => ["nat add: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natMulProblems : List String
 natMulProblems =
   case scalarInstrs ScalarNatMul R11 R10 of
-    Pair R11 ([IBinReg "imul" R11 (OpReg R10), IMov (OpReg R10) (OpImm m1), ICmov "cmovno" R10 (OpReg R11), IMov (OpReg R11) (OpImm m2), ICmp (OpReg R10) (OpReg R11), ICmov "cmovle" R11 (OpReg R10)]) =>
+    Pair R11 [IBinReg "imul" R11 (OpReg R10), IMov (OpReg R10) (OpImm m1), ICmov "cmovno" R10 (OpReg R11), IMov (OpReg R11) (OpImm m2), ICmp (OpReg R10) (OpReg R11), ICmov "cmovle" R11 (OpReg R10)] =>
       if m1 == nativeMaxInt && m2 == nativeMaxInt then
         []
       else
@@ -93,14 +93,14 @@ natMulProblems =
 natSubProblems : List String
 natSubProblems =
   case scalarInstrs ScalarNatSub R11 R10 of
-    Pair R11 ([IBinReg "sub" R11 (OpReg R10), IMov (OpReg R10) (OpImm 0), ICmov "cmovl" R11 (OpReg R10)]) =>
+    Pair R11 [IBinReg "sub" R11 (OpReg R10), IMov (OpReg R10) (OpImm 0), ICmov "cmovl" R11 (OpReg R10)] =>
       []
     Pair r is => ["nat sub: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 natFromProblems : List String
 natFromProblems =
   case scalarInstrs ScalarNatFromInt R11 R10 of
-    Pair R11 ([IMov (OpReg R10) (OpImm 0), ICmp (OpReg R11) (OpReg R10), ICmov "cmovl" R11 (OpReg R10)]) =>
+    Pair R11 [IMov (OpReg R10) (OpImm 0), ICmp (OpReg R11) (OpReg R10), ICmov "cmovl" R11 (OpReg R10)] =>
       []
     Pair r is => ["nat from int: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
@@ -113,7 +113,7 @@ natToProblems =
 constProblems : List String
 constProblems =
   case scalarInstrs (ScalarConst 7) Rax R11 of
-    Pair Rax ([IMov (OpReg Rax) (OpImm 7)]) => []
+    Pair Rax [IMov (OpReg Rax) (OpImm 7)] => []
     Pair r is => ["const 7: reg " ++ regText r ++ ", " ++ strFromInt (length is) ++ " instrs"]
 
 -- | 内联计划必须指向同一个运行时实现；`RuntimeTable` 也从契约符号方向做同一校验。
@@ -356,14 +356,14 @@ floatProblems =
 orderedFloatCase : String -> String -> String -> String
 orderedFloatCase label sym cc =
   case floatCompareInstrsAt 4 5 sym of
-    Just ([IXmmCmp 4 5, ISetcc "setnp" Rax, IMovzxAl, ISetcc cc1 Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "and" Rax (OpReg Rdx)]) =>
+    Just [IXmmCmp 4 5, ISetcc "setnp" Rax, IMovzxAl, ISetcc cc1 Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "and" Rax (OpReg Rdx)] =>
       if cc1 == cc then "" else label ++ ": cc " ++ cc1
     _ => label ++ ": unexpected sequence"
 
 neqFloatCase : String
 neqFloatCase =
   case floatCompareInstrsAt 0 1 "bi_neq_float" of
-    Just ([IXmmCmp 0 1, ISetcc "setne" Rax, IMovzxAl, ISetcc "setp" Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "or" Rax (OpReg Rdx)]) =>
+    Just [IXmmCmp 0 1, ISetcc "setne" Rax, IMovzxAl, ISetcc "setp" Rdx, IBinReg "and" Rdx (OpImm 1), IBinReg "or" Rax (OpReg Rdx)] =>
       ""
     _ => "neq: unexpected sequence"
 

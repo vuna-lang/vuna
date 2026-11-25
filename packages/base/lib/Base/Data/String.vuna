@@ -57,7 +57,7 @@ join sep xs = strConcatMany (_interleave sep xs)
 -- | 内部：把 `sep` 插到相邻元素之间，结果交给一次 `strConcatMany`。
 _interleave : String -> List String -> List String
 _interleave sep [] = []
-_interleave sep ([x]) = [x]
+_interleave sep [x] = [x]
 _interleave sep (x :: rest) = x :: sep :: _interleave sep rest
 
 -- | 按 `\n` 切分成行；与 `split` 一致，末尾换行会产生一个空串尾元素。

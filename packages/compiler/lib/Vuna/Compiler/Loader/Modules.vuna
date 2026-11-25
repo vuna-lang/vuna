@@ -319,7 +319,7 @@ reexportedImportNamesOfHeader imports _ = []
 
 _joinNames : List String -> String
 _joinNames [] = ""
-_joinNames ([x]) = x
+_joinNames [x] = x
 _joinNames (x :: rest) = "${x}, ${_joinNames rest}"
 
 -- 查一个**必须已加载**的模块。把「模块未加载」当成「空表」（`moduleDecls` /

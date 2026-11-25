@@ -1689,7 +1689,7 @@ bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo binderSp sp =
 -- 变量/通配汇成兜底）。产物是纯 lambda + case，交给既有精化路径，覆盖/索引/擦除全自动。
 elabFunDefIn : List (String, Term) -> Ctx -> Ec -> List (List Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 elabFunDefIn globals ctx0 ec [] expected sp = tcErr0 sp FunctionNoClauses
-elabFunDefIn globals ctx0 ec ([(pats, body)]) expected sp =
+elabFunDefIn globals ctx0 ec [(pats, body)] expected sp =
   if allVarPats pats then
     obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec pats body expected sp)
   else

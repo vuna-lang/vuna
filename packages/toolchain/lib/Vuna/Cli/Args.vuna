@@ -137,7 +137,7 @@ joinSlashParts parts = joinSlashPartsGo (reverse parts)
 -- | 内部：`joinSlashParts` 的正序拼接。
 joinSlashPartsGo : List String -> String
 joinSlashPartsGo [] = ""
-joinSlashPartsGo ([part]) = part
+joinSlashPartsGo [part] = part
 joinSlashPartsGo (part :: rest) = "${part}/${joinSlashPartsGo rest}"
 
 -- | 递归创建所有缺失的目录；已存在返回 0，fuel 耗尽返回 1（`fsMakeDir` 对已存在路径返回 0）。

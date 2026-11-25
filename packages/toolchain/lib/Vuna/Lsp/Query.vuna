@@ -715,7 +715,7 @@ resolveTypeSplit sf roots curMod tyText =
 -- | 内部：构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
 ctorPatArity : Expr -> Int
-ctorPatArity (EApp (EVar "->" _) ([x, rest]) _) = 1 + ctorPatArity rest
+ctorPatArity (EApp (EVar "->" _) [x, rest] _) = 1 + ctorPatArity rest
 ctorPatArity (EPi n implicit qty dom cod _) = (if implicit then 0 else 1) + ctorPatArity cod
 ctorPatArity ty = 0
 

@@ -240,7 +240,7 @@ orFalse (Just b) = b
 
 -- 依赖表 section：`[dependencies.<alias>]`（长度恰为 2，首段固定）。
 isDepTableSection : List String -> Bool
-isDepTableSection ([first, second]) = first == "dependencies"
+isDepTableSection [first, second] = first == "dependencies"
 isDepTableSection _ = False
 
 -- `[lint]` 是工具侧配置：编译器只做 TOML 结构解析并放行，不认规则/键的语义；
@@ -250,7 +250,7 @@ isLintSection ("lint" :: _) = True
 isLintSection _ = False
 
 depAliasOfSection : List String -> String
-depAliasOfSection ([first, second]) = second
+depAliasOfSection [first, second] = second
 depAliasOfSection _ = ""
 
 isDepSourceKey : String -> Bool

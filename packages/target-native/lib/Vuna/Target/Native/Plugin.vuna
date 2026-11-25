@@ -135,7 +135,7 @@ parentDirOf path =
 
 dropLast : List a -> List a
 dropLast [] = []
-dropLast ([_]) = []
+dropLast [_] = []
 dropLast (x :: rest) = x :: dropLast rest
 
 -- | 递归建目录（`fsMakeDir` 只建一层）。

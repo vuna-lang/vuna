@@ -325,7 +325,7 @@ isDivLike "mod" = True
 isDivLike _ = False
 
 divisorSafe : List Ir -> Bool
-divisorSafe ([_, IrInt d]) = d /= 0
+divisorSafe [_, IrInt d] = d /= 0
 divisorSafe _ = False
 
 trivialArg : Ir -> Bool
@@ -581,9 +581,9 @@ simplifyIr (IrCase ty k scrut alts) = IrCase ty k (simplifyIr scrut) (map simpli
 simplifyIr (IrNatCase scrut f z s c) =
   IrNatCase (simplifyIr scrut) f (simplifyAltM z) (simplifyAltM s) (simplifyAltM c)
 simplifyIr (IrApp ty f a) = IrApp ty (simplifyIr f) (simplifyIr a)
-simplifyIr (IrRtApp "+" ([a, b])) = foldAdd (simplifyIr a) (simplifyIr b)
-simplifyIr (IrRtApp "-" ([a, b])) = foldSub (simplifyIr a) (simplifyIr b)
-simplifyIr (IrRtApp "*" ([a, b])) = foldMul (simplifyIr a) (simplifyIr b)
+simplifyIr (IrRtApp "+" [a, b]) = foldAdd (simplifyIr a) (simplifyIr b)
+simplifyIr (IrRtApp "-" [a, b]) = foldSub (simplifyIr a) (simplifyIr b)
+simplifyIr (IrRtApp "*" [a, b]) = foldMul (simplifyIr a) (simplifyIr b)
 simplifyIr (IrRtApp sym args) = IrRtApp sym (map simplifyIr args)
 simplifyIr (IrConcatMany parts) = IrConcatMany (map simplifyIr parts)
 simplifyIr ir = ir
@@ -591,18 +591,18 @@ simplifyIr ir = ir
 -- | 常量折叠加结合：`(x + a) + b -> x + (a+b)`，`(x - a) - b -> x - (a+b)`；
 --   字面量对直接算。三者在 63-bit 模语义下等价；用于把尾内联带进来的常量链压成一条。
 foldAdd : Ir -> Ir -> Ir
-foldAdd (IrRtApp "+" ([x, IrInt a])) (IrInt b) = IrRtApp "+" [x, IrInt (a + b)]
+foldAdd (IrRtApp "+" [x, IrInt a]) (IrInt b) = IrRtApp "+" [x, IrInt (a + b)]
 foldAdd (IrInt a) (IrInt b) = IrInt (a + b)
 foldAdd a b = IrRtApp "+" [a, b]
 
 foldSub : Ir -> Ir -> Ir
-foldSub (IrRtApp "-" ([x, IrInt a])) (IrInt b) = IrRtApp "-" [x, IrInt (a + b)]
+foldSub (IrRtApp "-" [x, IrInt a]) (IrInt b) = IrRtApp "-" [x, IrInt (a + b)]
 foldSub (IrInt a) (IrInt b) = IrInt (a - b)
 foldSub a (IrInt 0) = a
 foldSub a b = IrRtApp "-" [a, b]
 
 foldMul : Ir -> Ir -> Ir
-foldMul (IrRtApp "*" ([x, IrInt a])) (IrInt b) = IrRtApp "*" [x, IrInt (a * b)]
+foldMul (IrRtApp "*" [x, IrInt a]) (IrInt b) = IrRtApp "*" [x, IrInt (a * b)]
 foldMul (IrInt a) (IrInt b) = IrInt (a * b)
 foldMul a (IrInt 1) = a
 foldMul a b = IrRtApp "*" [a, b]
@@ -646,9 +646,8 @@ sameCond : Ir -> Ir -> Bool
 sameCond (IrVar a) (IrVar b) = sameBinderId a b
 sameCond (IrInt a) (IrInt b) = a == b
 sameCond (IrBool a) (IrBool b) = a == b
-sameCond (IrRtApp s1 ([a1, b1])) (IrRtApp s2 ([a2, b2])) =
-  s1 == s2 && sameCond a1 a2 && sameCond b1 b2
-sameCond (IrRtApp s1 ([a1])) (IrRtApp s2 ([a2])) = s1 == s2 && sameCond a1 a2
+sameCond (IrRtApp s1 [a1, b1]) (IrRtApp s2 [a2, b2]) = s1 == s2 && sameCond a1 a2 && sameCond b1 b2
+sameCond (IrRtApp s1 [a1]) (IrRtApp s2 [a2]) = s1 == s2 && sameCond a1 a2
 sameCond (IrRtApp s1 []) (IrRtApp s2 []) = s1 == s2
 sameCond _ _ = False
 
@@ -670,7 +669,7 @@ inlineFloatLetsDef (IrDef nm ar deps ty body recOk guard span) =
   IrDef nm ar deps ty (floatLetsIr body) recOk guard span
 
 floatLetsIr : Ir -> Ir
-floatLetsIr (IrLet ([b]) scrut body) =
+floatLetsIr (IrLet [b] scrut body) =
   let
     scrut2 = floatLetsIr scrut
     body2 = floatLetsIr body
@@ -689,7 +688,7 @@ floatLetsIr (IrRecUpd base f fields ty) =
 floatLetsIr (IrRtApp sym args) = IrRtApp sym (map floatLetsIr args)
 floatLetsIr (IrCast a b inner) = IrCast a b (floatLetsIr inner)
 floatLetsIr (IrLam bs ty inner) = IrLam bs ty (floatLetsIr inner)
-floatLetsIr (IrApp ty (IrLam ([b]) lamTy body) a) =
+floatLetsIr (IrApp ty (IrLam [b] lamTy body) a) =
   let
     a2 = floatLetsIr a
     body2 = floatLetsIr body
