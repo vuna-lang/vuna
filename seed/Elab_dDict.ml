@@ -443,26 +443,26 @@ let v_solveRowMeta = (fun (ec : Elab_dTypes.t_Ec) (depth : int) (m : int) (v : C
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 690 "Vuna/Compiler/Elab/Dict.vuna"
+# 698 "Vuna/Compiler/Elab/Dict.vuna"
 let v_pendingBucket = (fun (n : int) -> (if (n <= 0) then "0" else (if (n <= 4) then "1-4" else (if (n <= 16) then "5-16" else (if (n <= 64) then "17-64" else "65+")))))
 
-# 889 "Vuna/Compiler/Elab/Dict.vuna"
+# 897 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_piRigsOfInstGo = (fun (mc0 : string) (mc1 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__133, dtb__134) -> (if ((Elab_dTypes.v_dtInstSym dtb__133) = mc0) then (B_dData_dMaybe.C_Maybe_Just (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> Core_dTerm.C_Rig_Rig0)) (dtb__133).Elab_dTypes.f_DtInst_dtInstTele)) ((B_dData_dList.v_map (fun (t : Core_dTerm.t_Term) -> Core_dTerm.C_Rig_RigOmega)) (dtb__133).Elab_dTypes.f_DtInst_dtInstCtx)))) else ((v_piRigsOfInstGo mc0) dtb__134))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 886 "Vuna/Compiler/Elab/Dict.vuna"
+# 894 "Vuna/Compiler/Elab/Dict.vuna"
 let v_piRigsOfInst = (fun (ec : Elab_dTypes.t_Ec) (g : string) -> ((v_piRigsOfInstGo g) (Elab_dTypes.v_ecInsts ec)))
 
-# 906 "Vuna/Compiler/Elab/Dict.vuna"
+# 914 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_piRigs = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
   | Core_dTerm.C_Term_TPi (dtb__135, dtb__136, dtb__137, dtb__138, dtb__139) -> (B_dData_dList.C_List__x58__x58_ (dtb__137, (v_piRigs dtb__139)))
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 897 "Vuna/Compiler/Elab/Dict.vuna"
+# 905 "Vuna/Compiler/Elab/Dict.vuna"
 let v_piRigsOfGlobal = (fun (ec : Elab_dTypes.t_Ec) (g : string) -> (match ((v_piRigsOfInst ec) g) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__140) -> dtb__140
   | B_dData_dMaybe.C_Maybe_Nothing -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) g) (Elab_dTypes.v_ecGlobalsTbl ec)) with
@@ -473,7 +473,7 @@ let v_piRigsOfGlobal = (fun (ec : Elab_dTypes.t_Ec) (g : string) -> (match ((v_p
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 847 "Vuna/Compiler/Elab/Dict.vuna"
+# 855 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_renderDictTermAt = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (depth : int) (task : t_DictTermTask) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut4 = task in (match nd_uscrut4 with
   | C_DictTermTask_DictTermSpine (dtb__142, dtb__143, dtb__144) -> (match dtb__143 with
   | B_dData_dList.C_List__x58__x58_ (dtb__145, dtb__146) -> (let argTerm = (match ((((v_renderDictTermAt (fuel - 1)) ec) depth) (C_DictTermTask_DictTermValue (dtb__145))) with
@@ -508,10 +508,10 @@ let rec v_renderDictTermAt = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (depth : 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 844 "Vuna/Compiler/Elab/Dict.vuna"
+# 852 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictTermOfValueAt = (fun (ec : Elab_dTypes.t_Ec) (depth : int) (v : Core_dTerm.t_Value) -> ((((v_renderDictTermAt 64) ec) depth) (C_DictTermTask_DictTermValue (v))))
 
-# 786 "Vuna/Compiler/Elab/Dict.vuna"
+# 794 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_substDictTermGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : int) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
   | Core_dTerm.C_Term_TIf (dtb__159, dtb__160, dtb__161) -> (Core_dTerm.C_Term_TIf ((((v_substDictTermGo mc0) mc1) dtb__159), (((v_substDictTermGo mc0) mc1) dtb__160), (((v_substDictTermGo mc0) mc1) dtb__161)))
   | Core_dTerm.C_Term_TCase (dtb__162, dtb__163) -> (Core_dTerm.C_Term_TCase ((((v_substDictTermGo mc0) mc1) dtb__162), ((B_dData_dList.v_map (fun (alt : Core_dTerm.t_CaseAlt) -> (((v_substDictTermAlt mc0) mc1) alt))) dtb__163)))
@@ -550,39 +550,39 @@ let rec v_substDictTermGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : int) (mc2 : Cor
 )
   | _ -> mc2
 ))
-# 831 "Vuna/Compiler/Elab/Dict.vuna"
+# 839 "Vuna/Compiler/Elab/Dict.vuna"
 and v_substDictTermAlt = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : int) (mc2 : Core_dTerm.t_CaseAlt) -> (match mc2 with
   | { Core_dTerm.f_CaseAlt_caseAltName = dtb__193; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__194; Core_dTerm.f_CaseAlt_caseAltBody = dtb__195 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__193; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__194; Core_dTerm.f_CaseAlt_caseAltBody = (((v_substDictTermGo mc0) (mc1 + (B_dData_dList.v_length dtb__194))) dtb__195) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 783 "Vuna/Compiler/Elab/Dict.vuna"
+# 791 "Vuna/Compiler/Elab/Dict.vuna"
 let v_substDictTerm = (fun (ec : Elab_dTypes.t_Ec) (t : Core_dTerm.t_Term) -> (((v_substDictTermGo ec) 0) t))
 
-# 914 "Vuna/Compiler/Elab/Dict.vuna"
+# 922 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_joinRestInstNames = (fun (mc0 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__196, dtb__197) -> (String.concat "" [", "; (Elab_dTypes.v_dtInstName dtb__196); (v_joinRestInstNames dtb__197)])
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 910 "Vuna/Compiler/Elab/Dict.vuna"
+# 918 "Vuna/Compiler/Elab/Dict.vuna"
 let v_joinInstNames = (fun (mc0 : Elab_dTypes.t_DtInst B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__198, dtb__199) -> ((Elab_dTypes.v_dtInstName dtb__198) ^ (v_joinRestInstNames dtb__199))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 936 "Vuna/Compiler/Elab/Dict.vuna"
+# 944 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_ctorParamKindsFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) (lvl : int) (acc : Core_dTerm.t_Value B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.v_reverse acc) else (match v with
   | Core_dTerm.C_Value_VPi (dtb__200, dtb__201, dtb__202, dtb__203, dtb__204) -> (if dtb__201 then (((((v_ctorParamKindsFuel (fuel - 1)) ec) ((Elab_dTypes.v_forceVal ec) ((Core_dEval.v_applyClosure dtb__204) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__200, lvl, B_dData_dList.C_List_Nil))))))) (lvl + 1)) (B_dData_dList.C_List__x58__x58_ (dtb__203, acc))) else (B_dData_dList.v_reverse acc))
   | _ -> (B_dData_dList.v_reverse acc)
 )))
 
-# 933 "Vuna/Compiler/Elab/Dict.vuna"
+# 941 "Vuna/Compiler/Elab/Dict.vuna"
 let v_ctorParamKinds = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) (lvl : int) (acc : Core_dTerm.t_Value B_dData_dList.t_List) -> (((((v_ctorParamKindsFuel 64) ec) v) lvl) acc))
 
-# 952 "Vuna/Compiler/Elab/Dict.vuna"
+# 960 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictFamilyNameOf = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (let nd_uscrut2 = ((Elab_dTypes.v_forceVal ec) dom) in (match nd_uscrut2 with
   | Core_dTerm.C_Value_VNeutral (dtb__205) -> (match dtb__205 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__206, dtb__207) -> (B_dData_dMaybe.C_Maybe_Just (dtb__206))
@@ -591,7 +591,7 @@ let v_dictFamilyNameOf = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 920 "Vuna/Compiler/Elab/Dict.vuna"
+# 928 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictArgKinds = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (match ((v_dictFamilyNameOf ec) dom) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__208) -> (match ((Elab_dMeta.v_dtDataLookup dtb__208) (Elab_dTypes.v_ecDatas ec)) with
@@ -606,7 +606,7 @@ let v_dictArgKinds = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 946 "Vuna/Compiler/Elab/Dict.vuna"
+# 954 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictArgKind = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (let nd_uscrut2 = ((v_dictArgKinds ec) dom) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__212) -> (match dtb__212 with
   | B_dData_dList.C_List__x58__x58_ (dtb__213, dtb__214) -> (B_dData_dMaybe.C_Maybe_Just (dtb__213))
@@ -615,7 +615,7 @@ let v_dictArgKind = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 973 "Vuna/Compiler/Elab/Dict.vuna"
+# 981 "Vuna/Compiler/Elab/Dict.vuna"
 let v_neutralHeadOrSelf = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | Core_dTerm.C_Value_VNeutral (dtb__215) -> (match dtb__215 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__216, dtb__217) -> (match dtb__217 with
@@ -627,7 +627,7 @@ let v_neutralHeadOrSelf = (fun (mc0 : Core_dTerm.t_Value) -> (match mc0 with
   | _ -> mc0
 ))
 
-# 960 "Vuna/Compiler/Elab/Dict.vuna"
+# 968 "Vuna/Compiler/Elab/Dict.vuna"
 let v_argHeadMatchesKind = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec : Elab_dTypes.t_Ec) (ctx : Elab_dTypes.t_Ctx) (forced : Core_dTerm.t_Value) (argKind : Core_dTerm.t_Value) -> (let nd_uscrut5 = (v_neutralHeadOrSelf forced) in (match nd_uscrut5 with
   | Core_dTerm.C_Value_VNeutral (dtb__220) -> (match dtb__220 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__221, dtb__222) -> (match dtb__222 with
@@ -647,7 +647,7 @@ let v_argHeadMatchesKind = (fun (globals : (string, Core_dTerm.t_Term) B_dData_d
   | _ -> false
 )))
 
-# 979 "Vuna/Compiler/Elab/Dict.vuna"
+# 987 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictClassArgs = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (let nd_uscrut2 = ((Elab_dTypes.v_forceVal ec) dom) in (match nd_uscrut2 with
   | Core_dTerm.C_Value_VNeutral (dtb__226) -> (match dtb__226 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__227, dtb__228) -> dtb__228
@@ -656,7 +656,7 @@ let v_dictClassArgs = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) ->
   | _ -> B_dData_dList.C_List_Nil
 )))
 
-# 985 "Vuna/Compiler/Elab/Dict.vuna"
+# 993 "Vuna/Compiler/Elab/Dict.vuna"
 let v_dictClassArg = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (match ((v_dictClassArgs ec) dom) with
   | B_dData_dList.C_List__x58__x58_ (dtb__229, dtb__230) -> (B_dData_dMaybe.C_Maybe_Just (dtb__229))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -701,7 +701,7 @@ let rec v_firstUnsolvedInterpGoalGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_
 # 267 "Vuna/Compiler/Elab/Dict.vuna"
 let v_firstUnsolvedInterpGoal = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedInterpGoalGo ec) (Elab_dTypes.v_ecPendingList ec)))
 
-# 1006 "Vuna/Compiler/Elab/Dict.vuna"
+# 1014 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_valueHasRigidNVar = (fun (ec : Elab_dTypes.t_Ec) (fuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then false else (match ((Elab_dTypes.v_forceVal ec) v) with
   | Core_dTerm.C_Value_VNeutral (dtb__244) -> (match dtb__244 with
   | Core_dTerm.C_Neutral_NVar (dtb__245, dtb__246, dtb__247) -> true
@@ -714,24 +714,24 @@ let rec v_valueHasRigidNVar = (fun (ec : Elab_dTypes.t_Ec) (fuel : int) (v : Cor
   | Core_dTerm.C_Value_VIf (dtb__256, dtb__257, dtb__258) -> (if (if (((v_valueHasRigidNVar ec) (fuel - 1)) dtb__256) then true else (((v_valueHasRigidNVar ec) (fuel - 1)) dtb__257)) then true else (((v_valueHasRigidNVar ec) (fuel - 1)) dtb__258))
   | _ -> false
 )))
-# 1022 "Vuna/Compiler/Elab/Dict.vuna"
+# 1030 "Vuna/Compiler/Elab/Dict.vuna"
 and v_anyValueHasRigidNVar = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : int) (mc2 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (if (((v_valueHasRigidNVar mc0) mc1) dtb__259) then true else (((v_anyValueHasRigidNVar mc0) mc1) dtb__260))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1003 "Vuna/Compiler/Elab/Dict.vuna"
+# 1011 "Vuna/Compiler/Elab/Dict.vuna"
 let v_isRigidClassArg = (fun (ec : Elab_dTypes.t_Ec) (arg : Core_dTerm.t_Value) -> (((v_valueHasRigidNVar ec) 64) arg))
 
-# 998 "Vuna/Compiler/Elab/Dict.vuna"
+# 1006 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_anyRigidClassArg = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__261, dtb__262) -> (if ((v_isRigidClassArg mc0) dtb__261) then true else ((v_anyRigidClassArg mc0) dtb__262))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 995 "Vuna/Compiler/Elab/Dict.vuna"
+# 1003 "Vuna/Compiler/Elab/Dict.vuna"
 let v_isRigidDictArg = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> ((v_anyRigidClassArg ec) ((v_dictClassArgs ec) dom)))
 
 # 313 "Vuna/Compiler/Elab/Dict.vuna"
@@ -831,121 +831,121 @@ let v_searchInstanceIn = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPa
 # 48 "Vuna/Compiler/Elab/Dict.vuna"
 let v_searchInstance = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) (sp : Base_dSource.t_Span) -> (((((v_searchInstanceIn B_dData_dList.C_List_Nil) Elab_dTypes.v_emptyCtx) ec) dom) sp))
 
-# 1028 "Vuna/Compiler/Elab/Dict.vuna"
+# 1036 "Vuna/Compiler/Elab/Dict.vuna"
 let v_eqClassName = "Base.Trait.Eq.Eq"
 
-# 1031 "Vuna/Compiler/Elab/Dict.vuna"
+# 1039 "Vuna/Compiler/Elab/Dict.vuna"
 let v_ordClassName = "Base.Trait.Ord.Ord"
 
-# 1034 "Vuna/Compiler/Elab/Dict.vuna"
+# 1042 "Vuna/Compiler/Elab/Dict.vuna"
 let v_numClassName = "Base.Trait.Num.Num"
 
-# 1040 "Vuna/Compiler/Elab/Dict.vuna"
+# 1048 "Vuna/Compiler/Elab/Dict.vuna"
 let v_classHasProjection = (fun (fullClassName : string) (short : string) (name : string) (ec : Elab_dTypes.t_Ec) -> (match ((v_findClass fullClassName) (Elab_dTypes.v_ecClasses ec)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__296) -> (((Elab_dPrelude.v_classMethodProjection (dtb__296).Elab_dTypes.f_DtClass_dtClassMethods) short) = name)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1048 "Vuna/Compiler/Elab/Dict.vuna"
+# 1056 "Vuna/Compiler/Elab/Dict.vuna"
 let v_findEqClass = (fun (name : string) (ec : Elab_dTypes.t_Ec) -> (match ((Elab_dMeta.v_findClassByMethod name) (Elab_dTypes.v_ecClasses ec)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__297) -> (B_dData_dMaybe.C_Maybe_Just (dtb__297))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_findClass v_eqClassName) (Elab_dTypes.v_ecClasses ec))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1054 "Vuna/Compiler/Elab/Dict.vuna"
+# 1062 "Vuna/Compiler/Elab/Dict.vuna"
 let v_findOrdClass = (fun (name : string) (ec : Elab_dTypes.t_Ec) -> (match ((Elab_dMeta.v_findClassByMethod name) (Elab_dTypes.v_ecClasses ec)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__298) -> (B_dData_dMaybe.C_Maybe_Just (dtb__298))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_findClass v_ordClassName) (Elab_dTypes.v_ecClasses ec))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1061 "Vuna/Compiler/Elab/Dict.vuna"
+# 1069 "Vuna/Compiler/Elab/Dict.vuna"
 let v_methodShortOf = (fun (name : string) -> (B_dData_dPair.v_secondOf (Base_dSource.v_splitLastDot (Base_dSource.v_splitOnDot name))))
 
-# 1075 "Vuna/Compiler/Elab/Dict.vuna"
+# 1083 "Vuna/Compiler/Elab/Dict.vuna"
 let v_builtinOpShort = (fun (mc0 : t_BuiltinOp) -> (match mc0 with
   | { f_BuiltinOp_boShort = dtb__299; f_BuiltinOp_boOp = dtb__300; f_BuiltinOp_boRuntime = dtb__301 } -> dtb__299
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1078 "Vuna/Compiler/Elab/Dict.vuna"
+# 1086 "Vuna/Compiler/Elab/Dict.vuna"
 let v_builtinOpName = (fun (mc0 : t_BuiltinOp) -> (match mc0 with
   | { f_BuiltinOp_boShort = dtb__302; f_BuiltinOp_boOp = dtb__303; f_BuiltinOp_boRuntime = dtb__304 } -> dtb__303
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1081 "Vuna/Compiler/Elab/Dict.vuna"
+# 1089 "Vuna/Compiler/Elab/Dict.vuna"
 let v_builtinOpRuntime = (fun (mc0 : t_BuiltinOp) -> (match mc0 with
   | { f_BuiltinOp_boShort = dtb__305; f_BuiltinOp_boOp = dtb__306; f_BuiltinOp_boRuntime = dtb__307 } -> dtb__307
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1084 "Vuna/Compiler/Elab/Dict.vuna"
+# 1092 "Vuna/Compiler/Elab/Dict.vuna"
 let v_eqMethodOps = (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "=="; f_BuiltinOp_boOp = "=="; f_BuiltinOp_boRuntime = "eq" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "/="; f_BuiltinOp_boOp = "/="; f_BuiltinOp_boRuntime = "neq" }, B_dData_dList.C_List_Nil))))
 
-# 1087 "Vuna/Compiler/Elab/Dict.vuna"
+# 1095 "Vuna/Compiler/Elab/Dict.vuna"
 let v_ordMethodOps = (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "<"; f_BuiltinOp_boOp = "<"; f_BuiltinOp_boRuntime = "lt" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "<="; f_BuiltinOp_boOp = "<="; f_BuiltinOp_boRuntime = "le" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = ">"; f_BuiltinOp_boOp = ">"; f_BuiltinOp_boRuntime = "gt" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = ">="; f_BuiltinOp_boOp = ">="; f_BuiltinOp_boRuntime = "ge" }, B_dData_dList.C_List_Nil))))))))
 
-# 1096 "Vuna/Compiler/Elab/Dict.vuna"
+# 1104 "Vuna/Compiler/Elab/Dict.vuna"
 let v_numMethodOps = (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "+"; f_BuiltinOp_boOp = "+"; f_BuiltinOp_boRuntime = "add" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "-"; f_BuiltinOp_boOp = "-"; f_BuiltinOp_boRuntime = "sub" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "*"; f_BuiltinOp_boOp = "*"; f_BuiltinOp_boRuntime = "mul" }, (B_dData_dList.C_List__x58__x58_ ({ f_BuiltinOp_boShort = "/"; f_BuiltinOp_boOp = "/"; f_BuiltinOp_boRuntime = "div" }, B_dData_dList.C_List_Nil))))))))
 
-# 1114 "Vuna/Compiler/Elab/Dict.vuna"
+# 1122 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_lookupBuiltinOpShort = (fun (mc0 : string) (mc1 : t_BuiltinOp B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__308, dtb__309) -> (if ((v_builtinOpShort dtb__308) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__308)) else ((v_lookupBuiltinOpShort mc0) dtb__309))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1119 "Vuna/Compiler/Elab/Dict.vuna"
+# 1127 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_lookupBuiltinOpProjection = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : string) (mc2 : string) (mc3 : t_BuiltinOp B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__310, dtb__311) -> (if ((((v_classHasProjection mc1) (v_builtinOpShort dtb__310)) mc2) mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__310)) else ((((v_lookupBuiltinOpProjection mc0) mc1) mc2) dtb__311))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1108 "Vuna/Compiler/Elab/Dict.vuna"
+# 1116 "Vuna/Compiler/Elab/Dict.vuna"
 let v_builtinOpOf = (fun (ec : Elab_dTypes.t_Ec) (className : string) (name : string) (ops : t_BuiltinOp B_dData_dList.t_List) -> (match ((v_lookupBuiltinOpShort (v_methodShortOf name)) ops) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__312) -> (B_dData_dMaybe.C_Maybe_Just (dtb__312))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_lookupBuiltinOpProjection ec) className) name) ops)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1129 "Vuna/Compiler/Elab/Dict.vuna"
+# 1137 "Vuna/Compiler/Elab/Dict.vuna"
 let v_isEqMethod = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (match ((((v_builtinOpOf ec) v_eqClassName) name) v_eqMethodOps) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__313) -> true
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1135 "Vuna/Compiler/Elab/Dict.vuna"
+# 1143 "Vuna/Compiler/Elab/Dict.vuna"
 let v_isCmpMethod = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (match ((((v_builtinOpOf ec) v_ordClassName) name) v_ordMethodOps) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__314) -> true
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1142 "Vuna/Compiler/Elab/Dict.vuna"
+# 1150 "Vuna/Compiler/Elab/Dict.vuna"
 let v_numMethodOpName = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (match ((((v_builtinOpOf ec) v_numClassName) name) v_numMethodOps) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__315) -> (B_dData_dMaybe.C_Maybe_Just ((v_builtinOpName dtb__315)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1149 "Vuna/Compiler/Elab/Dict.vuna"
+# 1157 "Vuna/Compiler/Elab/Dict.vuna"
 let v_projectionFor = (fun (cls : Elab_dTypes.t_DtClass) (short : string) -> ((Elab_dPrelude.v_classMethodProjection (cls).Elab_dTypes.f_DtClass_dtClassMethods) short))
 
-# 1192 "Vuna/Compiler/Elab/Dict.vuna"
+# 1200 "Vuna/Compiler/Elab/Dict.vuna"
 let v_deferEqDict = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (mname : string) (tyTerm : Core_dTerm.t_Term) (aTerm : Core_dTerm.t_Term) (bTerm : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) (dictTy : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) -> (let m = (Elab_dTypes.v_ecNext ec) in (match (((Elab_dMetaSpans.v_newMetaAt sp) ctx) ec) with
   | { B_dData_dPair.f_Pair_first = dtb__316; B_dData_dPair.f_Pair_second = dtb__317 } -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (mname)), tyTerm, Core_dTerm.C_Rig_Rig0)), dtb__316, Core_dTerm.C_Rig_RigOmega)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = ((((((Elab_dTypes.v_ecAddConstraint dtb__317) Elab_dTypes.C_ConstraintKind_CkDict) m) dictTy) (B_dData_dMaybe.C_Maybe_Just (sp))) (Elab_dTypes.v_ctxDepth ctx)) } }))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1211 "Vuna/Compiler/Elab/Dict.vuna"
+# 1219 "Vuna/Compiler/Elab/Dict.vuna"
 let v_cmpTypeTag = (fun (mc0 : string) -> (if (mc0 = "Int") then (B_dData_dMaybe.C_Maybe_Just ("int")) else (if (mc0 = "String") then (B_dData_dMaybe.C_Maybe_Just ("str")) else (if (mc0 = "Float") then (B_dData_dMaybe.C_Maybe_Just ("float")) else (if (Base_dIntrinsics.v_isBoolCanonical mc0) then (B_dData_dMaybe.C_Maybe_Just ("bool")) else B_dData_dMaybe.C_Maybe_Nothing)))))
 
-# 1218 "Vuna/Compiler/Elab/Dict.vuna"
+# 1226 "Vuna/Compiler/Elab/Dict.vuna"
 let v_cmpRuntimeName = (fun (sp : Base_dSource.t_Span) (method_ : string) (tyName : string) -> (match ((v_lookupBuiltinOpShort (v_methodShortOf method_)) v_ordMethodOps) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__318) -> (match (v_cmpTypeTag tyName) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__319) -> (Base_dDiag.C_Check_OkC ((String.concat "" ["bi_"; (v_builtinOpRuntime dtb__318); "_"; dtb__319])))
@@ -956,30 +956,308 @@ let v_cmpRuntimeName = (fun (sp : Base_dSource.t_Span) (method_ : string) (tyNam
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1237 "Vuna/Compiler/Elab/Dict.vuna"
+# 1245 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_anyUnsolvedMetaArg = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__320, dtb__321) -> (if ((Core_dTerm.v_hasUnsolvedMetaValue (Elab_dTypes.v_ecSolsP mc0)) ((Elab_dTypes.v_forceVal mc0) dtb__320)) then true else ((v_anyUnsolvedMetaArg mc0) dtb__321))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 756 "Vuna/Compiler/Elab/Dict.vuna"
+let v_tryResolveDictGoal = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Elab_dTypes.t_Ec) (mc2 : Elab_dTypes.t_Constraint) (mc3 : Core_dTerm.t_Value) -> (match mc2 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__322; Elab_dTypes.f_Constraint_conKind = dtb__323; Elab_dTypes.f_Constraint_conMeta = dtb__324; Elab_dTypes.f_Constraint_conDom = dtb__325; Elab_dTypes.f_Constraint_conSpan = dtb__326; Elab_dTypes.f_Constraint_conDepth = dtb__327 } -> (if (dtb__327 > 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((v_isMemberDomain mc1) dtb__325) then (match ((((v_memberLookup 64) 0) mc1) dtb__325) with
+  | C_MemberLookup_MemberFound (dtb__328, dtb__329) -> (match ((((v_solveRowMeta dtb__329) dtb__327) dtb__324) dtb__328) with
+  | Base_dDiag.C_Check_OkC (dtb__330) -> (B_dData_dMaybe.C_Maybe_Just (dtb__330))
+  | Base_dDiag.C_Check_ErrC (dtb__331) -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+)
+  | C_MemberLookup_MemberAbsent -> B_dData_dMaybe.C_Maybe_Nothing
+  | C_MemberLookup_MemberAmbiguous (dtb__332) -> B_dData_dMaybe.C_Maybe_Nothing
+  | C_MemberLookup_MemberStuck -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+) else (match ((v_dictClassArgs mc1) mc3) with
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | dtb__333 -> (if ((v_anyUnsolvedMetaArg mc1) dtb__333) then B_dData_dMaybe.C_Maybe_Nothing else (if (if ((v_isRigidDictArg mc1) mc3) then (v_allInstancesMono (Elab_dTypes.v_ecInsts mc1)) else false) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut11 = (((v_searchInstance mc1) mc3) { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }) in (match nd_uscrut11 with
+  | Base_dDiag.C_Check_ErrC (dtb__334) -> B_dData_dMaybe.C_Maybe_Nothing
+  | Base_dDiag.C_Check_OkC (dtb__335) -> (match dtb__335 with
+  | { B_dData_dPair.f_Pair_first = dtb__336; B_dData_dPair.f_Pair_second = dtb__337 } -> (match ((((((Core_dConv.v_solveMeta (Elab_dTypes.v_ecDefTbl dtb__337)) (Elab_dTypes.v_ecSolsP dtb__337)) dtb__327) dtb__324) B_dData_dList.C_List_Nil) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__336)) with
+  | Base_dDiag.C_Check_OkC (dtb__338) -> (B_dData_dMaybe.C_Maybe_Just (((Elab_dTypes.v_ecPutSols dtb__337) (Core_dTerm.v_solsList dtb__338))))
+  | Base_dDiag.C_Check_ErrC (dtb__339) -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))
+)))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 707 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_resolveDictGoalsFuel = (fun (fuel : int) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec0 : Elab_dTypes.t_Ec) -> (if (fuel <= 0) then ec0 else (let nd_uscrut3 = (Elab_dTypes.v_ecPopPending ec0) in (match nd_uscrut3 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__340) -> (match dtb__340 with
+  | { B_dData_dPair.f_Pair_first = dtb__341; B_dData_dPair.f_Pair_second = dtb__342 } -> (match dtb__341 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__343; Elab_dTypes.f_Constraint_conKind = dtb__344; Elab_dTypes.f_Constraint_conMeta = dtb__345; Elab_dTypes.f_Constraint_conDom = dtb__346; Elab_dTypes.f_Constraint_conSpan = dtb__347; Elab_dTypes.f_Constraint_conDepth = dtb__348 } -> (let ec1 = ((Elab_dTypes.v_ecBump dtb__342) "elab.dict.round") in (match ((Core_dTerm.v_metaLookup dtb__345) (Elab_dTypes.v_ecSolTbl ec1)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__349) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let solsNow = (Elab_dTypes.v_ecSolsCountOf ec1) in (match ((Elab_dTypes.v_ecTriedAt ec1) dtb__343) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__350) -> (if (dtb__350 = solsNow) then (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in ((Elab_dTypes.v_ecPushPending ec2) dtb__341)) else (let forced = ((Elab_dTypes.v_forceVal ec1) dtb__346) in (let kept = { Elab_dTypes.f_Constraint_conId = dtb__343; Elab_dTypes.f_Constraint_conKind = dtb__344; Elab_dTypes.f_Constraint_conMeta = dtb__345; Elab_dTypes.f_Constraint_conDom = (if ((v_isMemberDomain ec1) dtb__346) then dtb__346 else forced); Elab_dTypes.f_Constraint_conSpan = dtb__347; Elab_dTypes.f_Constraint_conDepth = dtb__348 } in (let solsTried = (Elab_dTypes.v_ecSolsCountOf ec1) in (match ((((v_tryResolveDictGoal globals) ec1) dtb__341) forced) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__351) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) dtb__351)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in (let ec3 = (((Elab_dTypes.v_ecRecordTried ec2) dtb__343) solsTried) in ((Elab_dTypes.v_ecPushPending ec3) kept)))
+  | _ -> failwith "DT: impossible branch"
+)))))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal ec1) dtb__346) in (let kept = { Elab_dTypes.f_Constraint_conId = dtb__343; Elab_dTypes.f_Constraint_conKind = dtb__344; Elab_dTypes.f_Constraint_conMeta = dtb__345; Elab_dTypes.f_Constraint_conDom = (if ((v_isMemberDomain ec1) dtb__346) then dtb__346 else forced); Elab_dTypes.f_Constraint_conSpan = dtb__347; Elab_dTypes.f_Constraint_conDepth = dtb__348 } in (let solsTried = (B_dData_dList.v_length (Elab_dTypes.v_ecSols ec1)) in (match ((((v_tryResolveDictGoal globals) ec1) dtb__341) forced) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__352) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) dtb__352)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in (let ec3 = (((Elab_dTypes.v_ecRecordTried ec2) dtb__343) solsTried) in ((Elab_dTypes.v_ecPushPending ec3) kept)))
+  | _ -> failwith "DT: impossible branch"
+))))
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dMaybe.C_Maybe_Nothing -> ec0
+  | _ -> failwith "DT: impossible branch"
+))))
+
+# 686 "Vuna/Compiler/Elab/Dict.vuna"
+let v_resolveDictGoals = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec : Elab_dTypes.t_Ec) -> (let n = (Elab_dTypes.v_ecPendingCount ec) in (if (Elab_dTypes.v_ecDictPassIdle ec) then ec else (Elab_dTypes.v_ecPutPassMarker (((v_resolveDictGoalsFuel (n + 1)) globals) ((Elab_dTypes.v_ecBump ec) ("elab.dict.pending.b" ^ (v_pendingBucket n))))))))
+
+# 1239 "Vuna/Compiler/Elab/Dict.vuna"
+let v_dictArgUnsolvedMeta = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> ((v_anyUnsolvedMetaArg ec) ((v_dictClassArgs ec) dom)))
+
+# 1170 "Vuna/Compiler/Elab/Dict.vuna"
+let v_specializeEqTy = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (name : string) (aTerm : Core_dTerm.t_Term) (bTerm : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) (aTy : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) -> (match (Elab_dPrelude.v_builtinEqTyName ((Elab_dTypes.v_forceVal ec) aTy)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__353) -> ((Base_dCommon.v_bind ((Elab_dPrelude.v_eqRuntimeName (v_methodShortOf name)) dtb__353)) (fun (rt : string) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (rt)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = ec } }))))))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_findEqClass name) ec) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let st = (Core_dEval.v_showValue ((Elab_dTypes.v_forceVal ec) aTy)) in (((Base_dDiagnostics_dTc.v_tcErr1 sp) (Base_dDiagnostics_dTc.C_TcErr_EqRequiresEvidence (st))) st))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__354) -> (let mname = (if (if (name = "==") then true else (name = "/=")) then ((v_projectionFor dtb__354) (v_methodShortOf name)) else name) in (let tyTerm = ((Core_dEval.v_quote (Elab_dTypes.v_ctxDepth ctx)) aTy) in (let dictTy = (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Elab_dMeta.v_dictTypeName (Elab_dTypes.v_dtClassName dtb__354)), (B_dData_dList.C_List__x58__x58_ (aTy, B_dData_dList.C_List_Nil)))))) in (if ((v_dictArgUnsolvedMeta ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (let nd_uscrut14 = (((((v_searchInstanceIn globals) ctx) ec) dictTy) sp) in (match nd_uscrut14 with
+  | Base_dDiag.C_Check_ErrC (dtb__355) -> (if ((v_isRigidDictArg ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (Base_dDiag.C_Check_ErrC (dtb__355)))
+  | Base_dDiag.C_Check_OkC (dtb__356) -> (match dtb__356 with
+  | { B_dData_dPair.f_Pair_first = dtb__357; B_dData_dPair.f_Pair_second = dtb__358 } -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (mname)), tyTerm, Core_dTerm.C_Rig_Rig0)), dtb__357, Core_dTerm.C_Rig_RigOmega)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = dtb__358 } }))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1254 "Vuna/Compiler/Elab/Dict.vuna"
+let v_specializeCmpTy = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (name : string) (aTerm : Core_dTerm.t_Term) (bTerm : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) (aTy : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) -> (match (Elab_dPrelude.v_cmpBuiltinTyName ((Elab_dTypes.v_forceVal ec) aTy)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__359) -> ((Base_dCommon.v_bind (((v_cmpRuntimeName sp) (v_methodShortOf name)) dtb__359)) (fun (rt : string) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (rt)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = ec } }))))))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_findOrdClass name) ec) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let st = (Core_dEval.v_showValue ((Elab_dTypes.v_forceVal ec) aTy)) in ((((Base_dDiagnostics_dTc.v_tcErr2 sp) (Base_dDiagnostics_dTc.C_TcErr_OpNotDefinedFor ((v_methodShortOf name), st))) (v_methodShortOf name)) st))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__360) -> (let mname = (if (if (if (if (name = "<") then true else (name = "<=")) then true else (name = ">")) then true else (name = ">=")) then ((v_projectionFor dtb__360) (v_methodShortOf name)) else name) in (let tyTerm = ((Core_dEval.v_quote (Elab_dTypes.v_ctxDepth ctx)) aTy) in (let dictTy = (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Elab_dMeta.v_dictTypeName (Elab_dTypes.v_dtClassName dtb__360)), (B_dData_dList.C_List__x58__x58_ (aTy, B_dData_dList.C_List_Nil)))))) in (if ((v_dictArgUnsolvedMeta ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (let nd_uscrut14 = (((((v_searchInstanceIn globals) ctx) ec) dictTy) sp) in (match nd_uscrut14 with
+  | Base_dDiag.C_Check_ErrC (dtb__361) -> (if ((v_isRigidDictArg ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (Base_dDiag.C_Check_ErrC (dtb__361)))
+  | Base_dDiag.C_Check_OkC (dtb__362) -> (match dtb__362 with
+  | { B_dData_dPair.f_Pair_first = dtb__363; B_dData_dPair.f_Pair_second = dtb__364 } -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (mname)), tyTerm, Core_dTerm.C_Rig_Rig0)), dtb__363, Core_dTerm.C_Rig_RigOmega)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = dtb__364 } }))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1283 "Vuna/Compiler/Elab/Dict.vuna"
+let v_boolShortCircuit = (fun (name : string) (a : Core_dTerm.t_Term) (b : Core_dTerm.t_Term) -> (if (name = "&&") then (Core_dTerm.C_Term_TIf (a, b, (Core_dTerm.C_Term_TBool (false)))) else (Core_dTerm.C_Term_TIf (a, (Core_dTerm.C_Term_TBool (true)), b))))
+
+# 1290 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedMemberGoalGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__365, dtb__366) -> (match dtb__365 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__367; Elab_dTypes.f_Constraint_conKind = dtb__368; Elab_dTypes.f_Constraint_conMeta = dtb__369; Elab_dTypes.f_Constraint_conDom = dtb__370; Elab_dTypes.f_Constraint_conSpan = dtb__371; Elab_dTypes.f_Constraint_conDepth = dtb__372 } -> (if ((v_isMemberDomain mc0) dtb__370) then (match ((Core_dTerm.v_metaLookup dtb__369) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dMaybe.C_Maybe_Just ((Core_dEval.v_showValue ((Elab_dTypes.v_forceVal mc0) dtb__370))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__373) -> ((v_firstUnsolvedMemberGoalGo mc0) dtb__366)
+  | _ -> failwith "DT: impossible branch"
+) else ((v_firstUnsolvedMemberGoalGo mc0) dtb__366))
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1287 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedMemberGoal = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedMemberGoalGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1307 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedDictGoalGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__374, dtb__375) -> (match dtb__374 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__376; Elab_dTypes.f_Constraint_conKind = dtb__377; Elab_dTypes.f_Constraint_conMeta = dtb__378; Elab_dTypes.f_Constraint_conDom = dtb__379; Elab_dTypes.f_Constraint_conSpan = dtb__380; Elab_dTypes.f_Constraint_conDepth = dtb__381 } -> (match ((Core_dTerm.v_metaLookup dtb__378) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__382) -> ((v_firstUnsolvedDictGoalGo mc0) dtb__375)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__379) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictGoalGo mc0) dtb__375) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictGoalGo mc0) dtb__375) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictGoalGo mc0) dtb__375) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictGoalGo mc0) dtb__375) else (B_dData_dMaybe.C_Maybe_Just (((v_showResolvedValue mc0) forced))))))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1304 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedDictGoal = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictGoalGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1334 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedInterpSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__383, dtb__384) -> (match dtb__383 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__385; Elab_dTypes.f_Constraint_conKind = dtb__386; Elab_dTypes.f_Constraint_conMeta = dtb__387; Elab_dTypes.f_Constraint_conDom = dtb__388; Elab_dTypes.f_Constraint_conSpan = dtb__389; Elab_dTypes.f_Constraint_conDepth = dtb__390 } -> (match ((Core_dTerm.v_metaLookup dtb__387) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__391) -> ((v_firstUnsolvedInterpSpanGo mc0) dtb__384)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__388) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then dtb__389 else ((v_firstUnsolvedInterpSpanGo mc0) dtb__384)))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1330 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedInterpGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedInterpSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1352 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedMemberSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__392, dtb__393) -> (match dtb__392 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__394; Elab_dTypes.f_Constraint_conKind = dtb__395; Elab_dTypes.f_Constraint_conMeta = dtb__396; Elab_dTypes.f_Constraint_conDom = dtb__397; Elab_dTypes.f_Constraint_conSpan = dtb__398; Elab_dTypes.f_Constraint_conDepth = dtb__399 } -> (if ((v_isMemberDomain mc0) dtb__397) then (match ((Core_dTerm.v_metaLookup dtb__396) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> dtb__398
+  | B_dData_dMaybe.C_Maybe_Just (dtb__400) -> ((v_firstUnsolvedMemberSpanGo mc0) dtb__393)
+  | _ -> failwith "DT: impossible branch"
+) else ((v_firstUnsolvedMemberSpanGo mc0) dtb__393))
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1348 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedMemberGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedMemberSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1367 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedDictSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__401, dtb__402) -> (match dtb__401 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__403; Elab_dTypes.f_Constraint_conKind = dtb__404; Elab_dTypes.f_Constraint_conMeta = dtb__405; Elab_dTypes.f_Constraint_conDom = dtb__406; Elab_dTypes.f_Constraint_conSpan = dtb__407; Elab_dTypes.f_Constraint_conDepth = dtb__408 } -> (match ((Core_dTerm.v_metaLookup dtb__405) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__409) -> ((v_firstUnsolvedDictSpanGo mc0) dtb__402)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__406) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictSpanGo mc0) dtb__402) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictSpanGo mc0) dtb__402) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictSpanGo mc0) dtb__402) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictSpanGo mc0) dtb__402) else dtb__407)))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1363 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedDictGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1388 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_firstUnsolvedDictGoalMetaGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__410, dtb__411) -> (match dtb__410 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__412; Elab_dTypes.f_Constraint_conKind = dtb__413; Elab_dTypes.f_Constraint_conMeta = dtb__414; Elab_dTypes.f_Constraint_conDom = dtb__415; Elab_dTypes.f_Constraint_conSpan = dtb__416; Elab_dTypes.f_Constraint_conDepth = dtb__417 } -> (match ((Core_dTerm.v_metaLookup dtb__414) (Elab_dTypes.v_ecSolTbl mc0)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__418) -> ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__411)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__415) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__411) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__411) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__411) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__411) else (B_dData_dMaybe.C_Maybe_Just (dtb__414)))))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1384 "Vuna/Compiler/Elab/Dict.vuna"
+let v_firstUnsolvedDictGoalMeta = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictGoalMetaGo ec) (Elab_dTypes.v_ecPendingList ec)))
+
+# 1437 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_memberWeakenProof = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (depth : int) (eGoal : Core_dTerm.t_Value) (rGoal : Core_dTerm.t_Value) (rAssump : Core_dTerm.t_Value) (acc : Core_dTerm.t_Value) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (match ((((Elab_dMeta.v_convEc ec) depth) rGoal) rAssump) with
+  | Base_dDiag.C_Check_OkC (dtb__419) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = acc; B_dData_dPair.f_Pair_second = dtb__419 }))
+  | Base_dDiag.C_Check_ErrC (dtb__420) -> (match ((Elab_dTypes.v_forceVal ec) rGoal) with
+  | Core_dTerm.C_Value_VCon (dtb__421, dtb__422) -> (if (dtb__421 = Base_dIntrinsics.v_effRowConsCtor) then (let nd_uscrut11 = dtb__422 in (match nd_uscrut11 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__423, dtb__424) -> (match dtb__424 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__425, dtb__426) -> (let nd_uscrut18 = (((((((v_memberWeakenProof (fuel - 1)) ec) depth) eGoal) dtb__425) rAssump) acc) in (match nd_uscrut18 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Just (dtb__427) -> (match dtb__427 with
+  | { B_dData_dPair.f_Pair_first = dtb__428; B_dData_dPair.f_Pair_second = dtb__429 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (((v_ctorValue dtb__429) v_thereCtorName) (B_dData_dList.C_List__x58__x58_ (eGoal, (B_dData_dList.C_List__x58__x58_ (dtb__423, (B_dData_dList.C_List__x58__x58_ (dtb__425, (B_dData_dList.C_List__x58__x58_ (dtb__428, B_dData_dList.C_List_Nil))))))))); B_dData_dPair.f_Pair_second = dtb__429 }))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> B_dData_dMaybe.C_Maybe_Nothing
+)
+  | _ -> B_dData_dMaybe.C_Maybe_Nothing
+)) else B_dData_dMaybe.C_Maybe_Nothing)
+  | _ -> B_dData_dMaybe.C_Maybe_Nothing
+)
+  | _ -> failwith "DT: impossible branch"
+)))
+
+# 1416 "Vuna/Compiler/Elab/Dict.vuna"
+let rec v_ctxMemberWeakenGo = (fun (mc0 : Elab_dTypes.t_Ctx) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : int) (mc3 : Elab_dTypes.t_Ec) (mc4 : Core_dTerm.t_Value) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__430, dtb__431) -> (match dtb__430 with
+  | { B_dData_dPair.f_Pair_first = dtb__432; B_dData_dPair.f_Pair_second = dtb__433 } -> (let olderDepth = (B_dData_dList.v_length dtb__431) in (let tyVal = ((Core_dEval.v_eval ((B_dData_dList.v_map ((Elab_dTypes.v_refineValue (mc0).Elab_dTypes.f_Ctx_ctxRefVals) Core_dTerm.v_defaultFuel)) (((Elab_dTypes.v_ctxEnvAt dtb__431) 0) olderDepth))) dtb__433) in (let nd_uscrut14 = (v_memberSpine mc4) in (match nd_uscrut14 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__434) -> (match dtb__434 with
+  | { B_dData_dPair.f_Pair_first = dtb__435; B_dData_dPair.f_Pair_second = dtb__436 } -> (let nd_uscrut21 = (v_memberSpine tyVal) in (match nd_uscrut21 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__437) -> (match dtb__437 with
+  | { B_dData_dPair.f_Pair_first = dtb__438; B_dData_dPair.f_Pair_second = dtb__439 } -> (match ((((Elab_dMeta.v_convEc mc3) (Elab_dTypes.v_ctxDepth mc0)) dtb__435) dtb__438) with
+  | Base_dDiag.C_Check_ErrC (dtb__440) -> (((((v_ctxMemberWeakenGo mc0) dtb__431) (mc2 + 1)) mc3) mc4)
+  | Base_dDiag.C_Check_OkC (dtb__441) -> (let nd_uscrut30 = (((((((v_memberWeakenProof 64) dtb__441) (Elab_dTypes.v_ctxDepth mc0)) dtb__435) dtb__436) dtb__439) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__432, mc2, B_dData_dList.C_List_Nil))))) in (match nd_uscrut30 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__442) -> (match dtb__442 with
+  | { B_dData_dPair.f_Pair_first = dtb__443; B_dData_dPair.f_Pair_second = dtb__444 } -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ((Core_dEval.v_quote (Elab_dTypes.v_ctxDepth mc0)) dtb__443); B_dData_dPair.f_Pair_second = dtb__444 }))
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_ctxMemberWeakenGo mc0) dtb__431) (mc2 + 1)) mc3) mc4)
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_ctxMemberWeakenGo mc0) dtb__431) (mc2 + 1)) mc3) mc4)
+  | _ -> failwith "DT: impossible branch"
+))
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))))
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1413 "Vuna/Compiler/Elab/Dict.vuna"
+let v_ctxMemberWeaken = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (((((v_ctxMemberWeakenGo ctx) (ctx).Elab_dTypes.f_Ctx_ctxItems) 0) ec) dom))
+
 # 637 "Vuna/Compiler/Elab/Dict.vuna"
 let rec v_resolveRowGoalsCtxGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Elab_dTypes.t_Ctx) (mc2 : Base_dSource.t_Span) (mc3 : Elab_dTypes.t_Constraint B_dData_dList.t_List) (mc4 : Elab_dTypes.t_Ec) (mc5 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__322, dtb__323) -> (match dtb__322 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__324; Elab_dTypes.f_Constraint_conKind = dtb__325; Elab_dTypes.f_Constraint_conMeta = dtb__326; Elab_dTypes.f_Constraint_conDom = dtb__327; Elab_dTypes.f_Constraint_conSpan = dtb__328; Elab_dTypes.f_Constraint_conDepth = dtb__329 } -> (if ((v_isMemberDomain mc4) dtb__327) then (match ((((v_memberLookup 64) (Elab_dTypes.v_ctxDepth mc1)) mc4) dtb__327) with
-  | C_MemberLookup_MemberFound (dtb__330, dtb__331) -> (match ((((v_solveRowMeta dtb__331) (Elab_dTypes.v_ctxDepth mc1)) dtb__326) dtb__330) with
-  | Base_dDiag.C_Check_OkC (dtb__332) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) dtb__332) mc5)
-  | Base_dDiag.C_Check_ErrC (dtb__333) -> (Base_dDiag.C_Check_ErrC (dtb__333))
+  | B_dData_dList.C_List__x58__x58_ (dtb__445, dtb__446) -> (match dtb__445 with
+  | { Elab_dTypes.f_Constraint_conId = dtb__447; Elab_dTypes.f_Constraint_conKind = dtb__448; Elab_dTypes.f_Constraint_conMeta = dtb__449; Elab_dTypes.f_Constraint_conDom = dtb__450; Elab_dTypes.f_Constraint_conSpan = dtb__451; Elab_dTypes.f_Constraint_conDepth = dtb__452 } -> (if ((v_isMemberDomain mc4) dtb__450) then (match ((((v_memberLookup 64) (Elab_dTypes.v_ctxDepth mc1)) mc4) dtb__450) with
+  | C_MemberLookup_MemberFound (dtb__453, dtb__454) -> (match ((((v_solveRowMeta dtb__454) (Elab_dTypes.v_ctxDepth mc1)) dtb__449) dtb__453) with
+  | Base_dDiag.C_Check_OkC (dtb__455) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) dtb__455) mc5)
+  | Base_dDiag.C_Check_ErrC (dtb__456) -> (Base_dDiag.C_Check_ErrC (dtb__456))
   | _ -> failwith "DT: impossible branch"
 )
   | C_MemberLookup_MemberAbsent -> (((Base_dDiagnostics_dTc.v_tcErr1 mc2) (Base_dDiagnostics_dTc.C_TcErr_NoInstanceFound ("row membership"))) "row membership")
-  | C_MemberLookup_MemberAmbiguous (dtb__334) -> ((((Base_dDiagnostics_dTc.v_tcErr2 mc2) (Base_dDiagnostics_dTc.C_TcErr_AmbiguousInstance ("effect instance", ((B_dData_dString.v_join ", ") dtb__334)))) "effect instance") ((B_dData_dString.v_join ", ") dtb__334))
-  | C_MemberLookup_MemberStuck -> (let nd_uscrut15 = (((v_ctxMemberProofUnify mc1) mc4) dtb__327) in (match nd_uscrut15 with
+  | C_MemberLookup_MemberAmbiguous (dtb__457) -> ((((Base_dDiagnostics_dTc.v_tcErr2 mc2) (Base_dDiagnostics_dTc.C_TcErr_AmbiguousInstance ("effect instance", ((B_dData_dString.v_join ", ") dtb__457)))) "effect instance") ((B_dData_dString.v_join ", ") dtb__457))
+  | C_MemberLookup_MemberStuck -> (let nd_uscrut15 = (((v_ctxMemberProofUnify mc1) mc4) dtb__450) in (match nd_uscrut15 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let nd_uscrut17 = (((v_ctxMemberWeaken mc1) mc4) dtb__450) in (match nd_uscrut17 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (((Base_dDiagnostics_dTc.v_tcErr1 mc2) (Base_dDiagnostics_dTc.C_TcErr_NoInstanceFound ("row membership"))) "row membership")
-  | B_dData_dMaybe.C_Maybe_Just (dtb__335) -> (match dtb__335 with
-  | { B_dData_dPair.f_Pair_first = dtb__336; B_dData_dPair.f_Pair_second = dtb__337 } -> (match ((((v_solveRowMeta dtb__337) (Elab_dTypes.v_ctxDepth mc1)) dtb__326) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv mc1)) dtb__336)) with
-  | Base_dDiag.C_Check_OkC (dtb__338) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) dtb__338) mc5)
-  | Base_dDiag.C_Check_ErrC (dtb__339) -> (Base_dDiag.C_Check_ErrC (dtb__339))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__458) -> (match dtb__458 with
+  | { B_dData_dPair.f_Pair_first = dtb__459; B_dData_dPair.f_Pair_second = dtb__460 } -> (match ((((v_solveRowMeta dtb__460) (Elab_dTypes.v_ctxDepth mc1)) dtb__449) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv mc1)) dtb__459)) with
+  | Base_dDiag.C_Check_OkC (dtb__461) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) dtb__461) mc5)
+  | Base_dDiag.C_Check_ErrC (dtb__462) -> (Base_dDiag.C_Check_ErrC (dtb__462))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__463) -> (match dtb__463 with
+  | { B_dData_dPair.f_Pair_first = dtb__464; B_dData_dPair.f_Pair_second = dtb__465 } -> (match ((((v_solveRowMeta dtb__465) (Elab_dTypes.v_ctxDepth mc1)) dtb__449) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv mc1)) dtb__464)) with
+  | Base_dDiag.C_Check_OkC (dtb__466) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) dtb__466) mc5)
+  | Base_dDiag.C_Check_ErrC (dtb__467) -> (Base_dDiag.C_Check_ErrC (dtb__467))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -987,14 +1265,14 @@ let rec v_resolveRowGoalsCtxGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
-) else (match ((v_dictClassArgs mc4) dtb__327) with
-  | B_dData_dList.C_List_Nil -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__322, mc5)))
-  | dtb__340 -> (if ((v_anyUnsolvedMetaArg mc4) dtb__340) then ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__322, mc5))) else (if (if ((v_isRigidDictArg mc4) dtb__327) then (v_allInstancesMono (Elab_dTypes.v_ecInsts mc4)) else false) then ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__322, mc5))) else (let nd_uscrut16 = (((((v_searchInstanceIn mc0) mc1) mc4) ((Elab_dTypes.v_forceVal mc4) dtb__327)) mc2) in (match nd_uscrut16 with
-  | Base_dDiag.C_Check_ErrC (dtb__341) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__322, mc5)))
-  | Base_dDiag.C_Check_OkC (dtb__342) -> (match dtb__342 with
-  | { B_dData_dPair.f_Pair_first = dtb__343; B_dData_dPair.f_Pair_second = dtb__344 } -> (match ((((((Core_dConv.v_solveMeta (Elab_dTypes.v_ecDefTbl dtb__344)) (Elab_dTypes.v_ecSolsP dtb__344)) (Elab_dTypes.v_ctxDepth mc1)) dtb__326) B_dData_dList.C_List_Nil) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv mc1)) dtb__343)) with
-  | Base_dDiag.C_Check_OkC (dtb__345) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) ((Elab_dTypes.v_ecPutSols dtb__344) (Core_dTerm.v_solsList dtb__345))) mc5)
-  | Base_dDiag.C_Check_ErrC (dtb__346) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__323) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__322, mc5)))
+) else (match ((v_dictClassArgs mc4) dtb__450) with
+  | B_dData_dList.C_List_Nil -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__445, mc5)))
+  | dtb__468 -> (if ((v_anyUnsolvedMetaArg mc4) dtb__468) then ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__445, mc5))) else (if (if ((v_isRigidDictArg mc4) dtb__450) then (v_allInstancesMono (Elab_dTypes.v_ecInsts mc4)) else false) then ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__445, mc5))) else (let nd_uscrut16 = (((((v_searchInstanceIn mc0) mc1) mc4) ((Elab_dTypes.v_forceVal mc4) dtb__450)) mc2) in (match nd_uscrut16 with
+  | Base_dDiag.C_Check_ErrC (dtb__469) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__445, mc5)))
+  | Base_dDiag.C_Check_OkC (dtb__470) -> (match dtb__470 with
+  | { B_dData_dPair.f_Pair_first = dtb__471; B_dData_dPair.f_Pair_second = dtb__472 } -> (match ((((((Core_dConv.v_solveMeta (Elab_dTypes.v_ecDefTbl dtb__472)) (Elab_dTypes.v_ecSolsP dtb__472)) (Elab_dTypes.v_ctxDepth mc1)) dtb__449) B_dData_dList.C_List_Nil) ((Core_dEval.v_eval (Elab_dTypes.v_ctxEnv mc1)) dtb__471)) with
+  | Base_dDiag.C_Check_OkC (dtb__473) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) ((Elab_dTypes.v_ecPutSols dtb__472) (Core_dTerm.v_solsList dtb__473))) mc5)
+  | Base_dDiag.C_Check_ErrC (dtb__474) -> ((((((v_resolveRowGoalsCtxGo mc0) mc1) mc2) dtb__446) mc4) (B_dData_dList.C_List__x58__x58_ (dtb__445, mc5)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1010,209 +1288,3 @@ let rec v_resolveRowGoalsCtxGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData
 
 # 634 "Vuna/Compiler/Elab/Dict.vuna"
 let v_resolveRowGoalsCtx = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) -> ((((((v_resolveRowGoalsCtxGo globals) ctx) sp) (Elab_dTypes.v_ecPendingList ec)) ec) B_dData_dList.C_List_Nil))
-
-# 748 "Vuna/Compiler/Elab/Dict.vuna"
-let v_tryResolveDictGoal = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Elab_dTypes.t_Ec) (mc2 : Elab_dTypes.t_Constraint) (mc3 : Core_dTerm.t_Value) -> (match mc2 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__347; Elab_dTypes.f_Constraint_conKind = dtb__348; Elab_dTypes.f_Constraint_conMeta = dtb__349; Elab_dTypes.f_Constraint_conDom = dtb__350; Elab_dTypes.f_Constraint_conSpan = dtb__351; Elab_dTypes.f_Constraint_conDepth = dtb__352 } -> (if (dtb__352 > 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((v_isMemberDomain mc1) dtb__350) then (match ((((v_memberLookup 64) 0) mc1) dtb__350) with
-  | C_MemberLookup_MemberFound (dtb__353, dtb__354) -> (match ((((v_solveRowMeta dtb__354) dtb__352) dtb__349) dtb__353) with
-  | Base_dDiag.C_Check_OkC (dtb__355) -> (B_dData_dMaybe.C_Maybe_Just (dtb__355))
-  | Base_dDiag.C_Check_ErrC (dtb__356) -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-)
-  | C_MemberLookup_MemberAbsent -> B_dData_dMaybe.C_Maybe_Nothing
-  | C_MemberLookup_MemberAmbiguous (dtb__357) -> B_dData_dMaybe.C_Maybe_Nothing
-  | C_MemberLookup_MemberStuck -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-) else (match ((v_dictClassArgs mc1) mc3) with
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | dtb__358 -> (if ((v_anyUnsolvedMetaArg mc1) dtb__358) then B_dData_dMaybe.C_Maybe_Nothing else (if (if ((v_isRigidDictArg mc1) mc3) then (v_allInstancesMono (Elab_dTypes.v_ecInsts mc1)) else false) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut11 = (((v_searchInstance mc1) mc3) { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }) in (match nd_uscrut11 with
-  | Base_dDiag.C_Check_ErrC (dtb__359) -> B_dData_dMaybe.C_Maybe_Nothing
-  | Base_dDiag.C_Check_OkC (dtb__360) -> (match dtb__360 with
-  | { B_dData_dPair.f_Pair_first = dtb__361; B_dData_dPair.f_Pair_second = dtb__362 } -> (match ((((((Core_dConv.v_solveMeta (Elab_dTypes.v_ecDefTbl dtb__362)) (Elab_dTypes.v_ecSolsP dtb__362)) dtb__352) dtb__349) B_dData_dList.C_List_Nil) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__361)) with
-  | Base_dDiag.C_Check_OkC (dtb__363) -> (B_dData_dMaybe.C_Maybe_Just (((Elab_dTypes.v_ecPutSols dtb__362) (Core_dTerm.v_solsList dtb__363))))
-  | Base_dDiag.C_Check_ErrC (dtb__364) -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))))
-)))
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 699 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_resolveDictGoalsFuel = (fun (fuel : int) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec0 : Elab_dTypes.t_Ec) -> (if (fuel <= 0) then ec0 else (let nd_uscrut3 = (Elab_dTypes.v_ecPopPending ec0) in (match nd_uscrut3 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__365) -> (match dtb__365 with
-  | { B_dData_dPair.f_Pair_first = dtb__366; B_dData_dPair.f_Pair_second = dtb__367 } -> (match dtb__366 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__368; Elab_dTypes.f_Constraint_conKind = dtb__369; Elab_dTypes.f_Constraint_conMeta = dtb__370; Elab_dTypes.f_Constraint_conDom = dtb__371; Elab_dTypes.f_Constraint_conSpan = dtb__372; Elab_dTypes.f_Constraint_conDepth = dtb__373 } -> (let ec1 = ((Elab_dTypes.v_ecBump dtb__367) "elab.dict.round") in (match ((Core_dTerm.v_metaLookup dtb__370) (Elab_dTypes.v_ecSolTbl ec1)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__374) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let solsNow = (Elab_dTypes.v_ecSolsCountOf ec1) in (match ((Elab_dTypes.v_ecTriedAt ec1) dtb__368) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__375) -> (if (dtb__375 = solsNow) then (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in ((Elab_dTypes.v_ecPushPending ec2) dtb__366)) else (let forced = ((Elab_dTypes.v_forceVal ec1) dtb__371) in (let kept = { Elab_dTypes.f_Constraint_conId = dtb__368; Elab_dTypes.f_Constraint_conKind = dtb__369; Elab_dTypes.f_Constraint_conMeta = dtb__370; Elab_dTypes.f_Constraint_conDom = (if ((v_isMemberDomain ec1) dtb__371) then dtb__371 else forced); Elab_dTypes.f_Constraint_conSpan = dtb__372; Elab_dTypes.f_Constraint_conDepth = dtb__373 } in (let solsTried = (Elab_dTypes.v_ecSolsCountOf ec1) in (match ((((v_tryResolveDictGoal globals) ec1) dtb__366) forced) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__376) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) dtb__376)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in (let ec3 = (((Elab_dTypes.v_ecRecordTried ec2) dtb__368) solsTried) in ((Elab_dTypes.v_ecPushPending ec3) kept)))
-  | _ -> failwith "DT: impossible branch"
-)))))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal ec1) dtb__371) in (let kept = { Elab_dTypes.f_Constraint_conId = dtb__368; Elab_dTypes.f_Constraint_conKind = dtb__369; Elab_dTypes.f_Constraint_conMeta = dtb__370; Elab_dTypes.f_Constraint_conDom = (if ((v_isMemberDomain ec1) dtb__371) then dtb__371 else forced); Elab_dTypes.f_Constraint_conSpan = dtb__372; Elab_dTypes.f_Constraint_conDepth = dtb__373 } in (let solsTried = (B_dData_dList.v_length (Elab_dTypes.v_ecSols ec1)) in (match ((((v_tryResolveDictGoal globals) ec1) dtb__366) forced) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (((v_resolveDictGoalsFuel (fuel - 1)) globals) dtb__377)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let ec2 = (((v_resolveDictGoalsFuel (fuel - 1)) globals) ec1) in (let ec3 = (((Elab_dTypes.v_ecRecordTried ec2) dtb__368) solsTried) in ((Elab_dTypes.v_ecPushPending ec3) kept)))
-  | _ -> failwith "DT: impossible branch"
-))))
-  | _ -> failwith "DT: impossible branch"
-))
-  | _ -> failwith "DT: impossible branch"
-))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dMaybe.C_Maybe_Nothing -> ec0
-  | _ -> failwith "DT: impossible branch"
-))))
-
-# 678 "Vuna/Compiler/Elab/Dict.vuna"
-let v_resolveDictGoals = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ec : Elab_dTypes.t_Ec) -> (let n = (Elab_dTypes.v_ecPendingCount ec) in (if (Elab_dTypes.v_ecDictPassIdle ec) then ec else (Elab_dTypes.v_ecPutPassMarker (((v_resolveDictGoalsFuel (n + 1)) globals) ((Elab_dTypes.v_ecBump ec) ("elab.dict.pending.b" ^ (v_pendingBucket n))))))))
-
-# 1231 "Vuna/Compiler/Elab/Dict.vuna"
-let v_dictArgUnsolvedMeta = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> ((v_anyUnsolvedMetaArg ec) ((v_dictClassArgs ec) dom)))
-
-# 1162 "Vuna/Compiler/Elab/Dict.vuna"
-let v_specializeEqTy = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (name : string) (aTerm : Core_dTerm.t_Term) (bTerm : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) (aTy : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) -> (match (Elab_dPrelude.v_builtinEqTyName ((Elab_dTypes.v_forceVal ec) aTy)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__378) -> ((Base_dCommon.v_bind ((Elab_dPrelude.v_eqRuntimeName (v_methodShortOf name)) dtb__378)) (fun (rt : string) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (rt)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = ec } }))))))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_findEqClass name) ec) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let st = (Core_dEval.v_showValue ((Elab_dTypes.v_forceVal ec) aTy)) in (((Base_dDiagnostics_dTc.v_tcErr1 sp) (Base_dDiagnostics_dTc.C_TcErr_EqRequiresEvidence (st))) st))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__379) -> (let mname = (if (if (name = "==") then true else (name = "/=")) then ((v_projectionFor dtb__379) (v_methodShortOf name)) else name) in (let tyTerm = ((Core_dEval.v_quote (Elab_dTypes.v_ctxDepth ctx)) aTy) in (let dictTy = (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Elab_dMeta.v_dictTypeName (Elab_dTypes.v_dtClassName dtb__379)), (B_dData_dList.C_List__x58__x58_ (aTy, B_dData_dList.C_List_Nil)))))) in (if ((v_dictArgUnsolvedMeta ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (let nd_uscrut14 = (((((v_searchInstanceIn globals) ctx) ec) dictTy) sp) in (match nd_uscrut14 with
-  | Base_dDiag.C_Check_ErrC (dtb__380) -> (if ((v_isRigidDictArg ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (Base_dDiag.C_Check_ErrC (dtb__380)))
-  | Base_dDiag.C_Check_OkC (dtb__381) -> (match dtb__381 with
-  | { B_dData_dPair.f_Pair_first = dtb__382; B_dData_dPair.f_Pair_second = dtb__383 } -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (mname)), tyTerm, Core_dTerm.C_Rig_Rig0)), dtb__382, Core_dTerm.C_Rig_RigOmega)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = dtb__383 } }))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1246 "Vuna/Compiler/Elab/Dict.vuna"
-let v_specializeCmpTy = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (name : string) (aTerm : Core_dTerm.t_Term) (bTerm : Core_dTerm.t_Term) (sp : Base_dSource.t_Span) (aTy : Core_dTerm.t_Value) (ec : Elab_dTypes.t_Ec) -> (match (Elab_dPrelude.v_cmpBuiltinTyName ((Elab_dTypes.v_forceVal ec) aTy)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__384) -> ((Base_dCommon.v_bind (((v_cmpRuntimeName sp) (v_methodShortOf name)) dtb__384)) (fun (rt : string) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (rt)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = ec } }))))))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((v_findOrdClass name) ec) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let st = (Core_dEval.v_showValue ((Elab_dTypes.v_forceVal ec) aTy)) in ((((Base_dDiagnostics_dTc.v_tcErr2 sp) (Base_dDiagnostics_dTc.C_TcErr_OpNotDefinedFor ((v_methodShortOf name), st))) (v_methodShortOf name)) st))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__385) -> (let mname = (if (if (if (if (name = "<") then true else (name = "<=")) then true else (name = ">")) then true else (name = ">=")) then ((v_projectionFor dtb__385) (v_methodShortOf name)) else name) in (let tyTerm = ((Core_dEval.v_quote (Elab_dTypes.v_ctxDepth ctx)) aTy) in (let dictTy = (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Elab_dMeta.v_dictTypeName (Elab_dTypes.v_dtClassName dtb__385)), (B_dData_dList.C_List__x58__x58_ (aTy, B_dData_dList.C_List_Nil)))))) in (if ((v_dictArgUnsolvedMeta ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (let nd_uscrut14 = (((((v_searchInstanceIn globals) ctx) ec) dictTy) sp) in (match nd_uscrut14 with
-  | Base_dDiag.C_Check_ErrC (dtb__386) -> (if ((v_isRigidDictArg ec) dictTy) then (((((((((v_deferEqDict globals) ctx) mname) tyTerm) aTerm) bTerm) sp) dictTy) ec) else (Base_dDiag.C_Check_ErrC (dtb__386)))
-  | Base_dDiag.C_Check_OkC (dtb__387) -> (match dtb__387 with
-  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal (mname)), tyTerm, Core_dTerm.C_Rig_Rig0)), dtb__388, Core_dTerm.C_Rig_RigOmega)), aTerm, Core_dTerm.C_Rig_Rig1)), bTerm, Core_dTerm.C_Rig_Rig1)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = Elab_dPrelude.v_boolTyValue; B_dData_dPair.f_Pair_second = dtb__389 } }))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1275 "Vuna/Compiler/Elab/Dict.vuna"
-let v_boolShortCircuit = (fun (name : string) (a : Core_dTerm.t_Term) (b : Core_dTerm.t_Term) -> (if (name = "&&") then (Core_dTerm.C_Term_TIf (a, b, (Core_dTerm.C_Term_TBool (false)))) else (Core_dTerm.C_Term_TIf (a, (Core_dTerm.C_Term_TBool (true)), b))))
-
-# 1282 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedMemberGoalGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__390, dtb__391) -> (match dtb__390 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__392; Elab_dTypes.f_Constraint_conKind = dtb__393; Elab_dTypes.f_Constraint_conMeta = dtb__394; Elab_dTypes.f_Constraint_conDom = dtb__395; Elab_dTypes.f_Constraint_conSpan = dtb__396; Elab_dTypes.f_Constraint_conDepth = dtb__397 } -> (if ((v_isMemberDomain mc0) dtb__395) then (match ((Core_dTerm.v_metaLookup dtb__394) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dMaybe.C_Maybe_Just ((Core_dEval.v_showValue ((Elab_dTypes.v_forceVal mc0) dtb__395))))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__398) -> ((v_firstUnsolvedMemberGoalGo mc0) dtb__391)
-  | _ -> failwith "DT: impossible branch"
-) else ((v_firstUnsolvedMemberGoalGo mc0) dtb__391))
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1279 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedMemberGoal = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedMemberGoalGo ec) (Elab_dTypes.v_ecPendingList ec)))
-
-# 1299 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedDictGoalGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__399, dtb__400) -> (match dtb__399 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__401; Elab_dTypes.f_Constraint_conKind = dtb__402; Elab_dTypes.f_Constraint_conMeta = dtb__403; Elab_dTypes.f_Constraint_conDom = dtb__404; Elab_dTypes.f_Constraint_conSpan = dtb__405; Elab_dTypes.f_Constraint_conDepth = dtb__406 } -> (match ((Core_dTerm.v_metaLookup dtb__403) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__407) -> ((v_firstUnsolvedDictGoalGo mc0) dtb__400)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__404) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictGoalGo mc0) dtb__400) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictGoalGo mc0) dtb__400) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictGoalGo mc0) dtb__400) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictGoalGo mc0) dtb__400) else (B_dData_dMaybe.C_Maybe_Just (((v_showResolvedValue mc0) forced))))))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1296 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedDictGoal = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictGoalGo ec) (Elab_dTypes.v_ecPendingList ec)))
-
-# 1326 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedInterpSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__408, dtb__409) -> (match dtb__408 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__410; Elab_dTypes.f_Constraint_conKind = dtb__411; Elab_dTypes.f_Constraint_conMeta = dtb__412; Elab_dTypes.f_Constraint_conDom = dtb__413; Elab_dTypes.f_Constraint_conSpan = dtb__414; Elab_dTypes.f_Constraint_conDepth = dtb__415 } -> (match ((Core_dTerm.v_metaLookup dtb__412) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__416) -> ((v_firstUnsolvedInterpSpanGo mc0) dtb__409)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__413) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then dtb__414 else ((v_firstUnsolvedInterpSpanGo mc0) dtb__409)))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1322 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedInterpGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedInterpSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
-
-# 1344 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedMemberSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__417, dtb__418) -> (match dtb__417 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__419; Elab_dTypes.f_Constraint_conKind = dtb__420; Elab_dTypes.f_Constraint_conMeta = dtb__421; Elab_dTypes.f_Constraint_conDom = dtb__422; Elab_dTypes.f_Constraint_conSpan = dtb__423; Elab_dTypes.f_Constraint_conDepth = dtb__424 } -> (if ((v_isMemberDomain mc0) dtb__422) then (match ((Core_dTerm.v_metaLookup dtb__421) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> dtb__423
-  | B_dData_dMaybe.C_Maybe_Just (dtb__425) -> ((v_firstUnsolvedMemberSpanGo mc0) dtb__418)
-  | _ -> failwith "DT: impossible branch"
-) else ((v_firstUnsolvedMemberSpanGo mc0) dtb__418))
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1340 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedMemberGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedMemberSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
-
-# 1359 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedDictSpanGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__426, dtb__427) -> (match dtb__426 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__428; Elab_dTypes.f_Constraint_conKind = dtb__429; Elab_dTypes.f_Constraint_conMeta = dtb__430; Elab_dTypes.f_Constraint_conDom = dtb__431; Elab_dTypes.f_Constraint_conSpan = dtb__432; Elab_dTypes.f_Constraint_conDepth = dtb__433 } -> (match ((Core_dTerm.v_metaLookup dtb__430) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__434) -> ((v_firstUnsolvedDictSpanGo mc0) dtb__427)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__431) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictSpanGo mc0) dtb__427) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictSpanGo mc0) dtb__427) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictSpanGo mc0) dtb__427) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictSpanGo mc0) dtb__427) else dtb__432)))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1355 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedDictGoalSpan = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictSpanGo ec) (Elab_dTypes.v_ecPendingList ec)))
-
-# 1380 "Vuna/Compiler/Elab/Dict.vuna"
-let rec v_firstUnsolvedDictGoalMetaGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : Elab_dTypes.t_Constraint B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__435, dtb__436) -> (match dtb__435 with
-  | { Elab_dTypes.f_Constraint_conId = dtb__437; Elab_dTypes.f_Constraint_conKind = dtb__438; Elab_dTypes.f_Constraint_conMeta = dtb__439; Elab_dTypes.f_Constraint_conDom = dtb__440; Elab_dTypes.f_Constraint_conSpan = dtb__441; Elab_dTypes.f_Constraint_conDepth = dtb__442 } -> (match ((Core_dTerm.v_metaLookup dtb__439) (Elab_dTypes.v_ecSolTbl mc0)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__443) -> ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__436)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (let forced = ((Elab_dTypes.v_forceVal mc0) dtb__440) in (if ((v_valueDictFamily forced) = (Elab_dMeta.v_dictTypeName Base_dIntrinsics.v_interpTypeName)) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__436) else (if ((v_isMemberDomain mc0) forced) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__436) else (if ((v_anyUnsolvedMetaArg mc0) ((v_dictClassArgs mc0) forced)) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__436) else (if ((v_isRigidDictArg mc0) forced) then ((v_firstUnsolvedDictGoalMetaGo mc0) dtb__436) else (B_dData_dMaybe.C_Maybe_Just (dtb__439)))))))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1376 "Vuna/Compiler/Elab/Dict.vuna"
-let v_firstUnsolvedDictGoalMeta = (fun (ec : Elab_dTypes.t_Ec) -> ((v_firstUnsolvedDictGoalMetaGo ec) (Elab_dTypes.v_ecPendingList ec)))

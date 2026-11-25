@@ -145,77 +145,131 @@ let rec v_mutRowEntriesOfTyGo = (fun (fuel : int) (t : Core_dTerm.t_Term) -> (if
 # 196 "Vuna/Compiler/Elab/Mut.vuna"
 let v_mutRowEntriesOfTy = (fun (t : Core_dTerm.t_Term) -> ((v_mutRowEntriesOfTyGo 256) t))
 
-# 273 "Vuna/Compiler/Elab/Mut.vuna"
-let rec v_nthTerm = (fun (i : int) (xs : Core_dTerm.t_Term B_dData_dList.t_List) -> (if (i < 0) then B_dData_dMaybe.C_Maybe_Nothing else (match xs with
-  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (if (i = 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__49)) else ((v_nthTerm (i - 1)) dtb__50))
+# 319 "Vuna/Compiler/Elab/Mut.vuna"
+let rec v_mutHasHandleBinder = (fun (mc0 : string) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (match dtb__49 with
+  | { B_dData_dPair.f_Pair_first = dtb__51; B_dData_dPair.f_Pair_second = dtb__52 } -> (if (mc0 = dtb__51) then true else ((v_mutHasHandleBinder mc0) dtb__50))
   | _ -> failwith "DT: impossible branch"
-)))
+)
+  | B_dData_dList.C_List_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
 
-# 257 "Vuna/Compiler/Elab/Mut.vuna"
-let rec v_mutHandleParamsGo = (fun (mc0 : t_MutRowEntry B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (match (v_mutFamilyOfOpFamily (dtb__51).f_MutRowEntry_mutRowEntryFamily) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__53) -> (let binder = ((v_mutBinderName dtb__53) (dtb__51).f_MutRowEntry_mutRowEntryName) in (if ((dtb__53).f_MutFamily_mutFamHandleArity <= 0) then ((v_mutHandleParamsGo dtb__52) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = binder; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TGlobal ((dtb__53).f_MutFamily_mutFamHandleType)) }, mc1))) else (match ((v_nthTerm (dtb__53).f_MutFamily_mutFamPayloadIndex) (dtb__51).f_MutRowEntry_mutRowEntryArgs) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__54) -> ((v_mutHandleParamsGo dtb__52) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = binder; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ((dtb__53).f_MutFamily_mutFamHandleType)), dtb__54, Core_dTerm.C_Rig_Rig0)) }, mc1)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_mutHandleParamsGo dtb__52) mc1)
-  | _ -> failwith "DT: impossible branch"
-)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_mutHandleParamsGo dtb__52) mc1)
+# 311 "Vuna/Compiler/Elab/Mut.vuna"
+let rec v_mutHandleParamsDedupe = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__53, dtb__54) -> (match dtb__53 with
+  | { B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = dtb__56 } -> (if ((v_mutHasHandleBinder dtb__55) mc1) then ((v_mutHandleParamsDedupe dtb__54) mc1) else ((v_mutHandleParamsDedupe dtb__54) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = dtb__56 }, mc1))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 254 "Vuna/Compiler/Elab/Mut.vuna"
-let v_mutHandleParamsOf = (fun (ty : Core_dTerm.t_Term) -> ((v_mutHandleParamsGo (v_mutRowEntriesOfTy ty)) B_dData_dList.C_List_Nil))
+# 324 "Vuna/Compiler/Elab/Mut.vuna"
+let rec v_nthTerm = (fun (i : int) (xs : Core_dTerm.t_Term B_dData_dList.t_List) -> (if (i < 0) then B_dData_dMaybe.C_Maybe_Nothing else (match xs with
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (if (i = 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__57)) else ((v_nthTerm (i - 1)) dtb__58))
+  | _ -> failwith "DT: impossible branch"
+)))
 
-# 304 "Vuna/Compiler/Elab/Mut.vuna"
+# 268 "Vuna/Compiler/Elab/Mut.vuna"
+let v_mutRowEntryHandle = (fun (e : t_MutRowEntry) -> (match (v_mutFamilyOfOpFamily (e).f_MutRowEntry_mutRowEntryFamily) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__59) -> (let binder = ((v_mutBinderName dtb__59) (e).f_MutRowEntry_mutRowEntryName) in (if ((dtb__59).f_MutFamily_mutFamHandleArity <= 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = binder; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TGlobal ((dtb__59).f_MutFamily_mutFamHandleType)) })) else (match ((v_nthTerm (dtb__59).f_MutFamily_mutFamPayloadIndex) (e).f_MutRowEntry_mutRowEntryArgs) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__60) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = binder; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TApp ((Core_dTerm.C_Term_TGlobal ((dtb__59).f_MutFamily_mutFamHandleType)), dtb__60, Core_dTerm.C_Rig_Rig0)) }))
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 260 "Vuna/Compiler/Elab/Mut.vuna"
+let rec v_mutHandleParamsGo = (fun (mc0 : t_MutRowEntry B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__61, dtb__62) -> (match (v_mutRowEntryHandle dtb__61) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> ((v_mutHandleParamsGo dtb__62) (B_dData_dList.C_List__x58__x58_ (dtb__63, mc1)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_mutHandleParamsGo dtb__62) mc1)
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc1)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 293 "Vuna/Compiler/Elab/Mut.vuna"
+let v_mutMemberHandleParamOf = (fun (dom : Core_dTerm.t_Term) -> (let nd_uscrut1 = (v_mutHeadArgs dom) in (match nd_uscrut1 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
+  | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match dtb__64 with
+  | { B_dData_dPair.f_Pair_first = dtb__65; B_dData_dPair.f_Pair_second = dtb__66 } -> (if (dtb__65 = "Base.Effect.Core.Member") then (match dtb__66 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__67, dtb__68) -> (match (v_mutEntryOf dtb__67) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (match (v_mutRowEntryHandle dtb__69) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__70) -> (B_dData_dList.C_List__x58__x58_ (dtb__70, B_dData_dList.C_List_Nil))
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
+  | _ -> failwith "DT: impossible branch"
+)
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> B_dData_dList.C_List_Nil
+) else B_dData_dList.C_List_Nil)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))
+
+# 284 "Vuna/Compiler/Elab/Mut.vuna"
+let rec v_mutMemberHandleParams = (fun (fuel : int) (ty : Core_dTerm.t_Term) (acc : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.v_reverse acc) else (match ty with
+  | Core_dTerm.C_Term_TPi (dtb__71, dtb__72, dtb__73, dtb__74, dtb__75) -> (((v_mutMemberHandleParams (fuel - 1)) dtb__75) ((B_dData_dList.v_append (v_mutMemberHandleParamOf dtb__74)) acc))
+  | _ -> (B_dData_dList.v_reverse acc)
+)))
+
+# 254 "Vuna/Compiler/Elab/Mut.vuna"
+let v_mutHandleParamsOf = (fun (ty : Core_dTerm.t_Term) -> ((v_mutHandleParamsDedupe ((B_dData_dList.v_append ((v_mutHandleParamsGo (v_mutRowEntriesOfTy ty)) B_dData_dList.C_List_Nil)) (((v_mutMemberHandleParams 256) ty) B_dData_dList.C_List_Nil))) B_dData_dList.C_List_Nil))
+
+# 355 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_mutPiCount = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
-  | Core_dTerm.C_Term_TPi (dtb__55, dtb__56, dtb__57, dtb__58, dtb__59) -> (1 + (v_mutPiCount dtb__59))
+  | Core_dTerm.C_Term_TPi (dtb__76, dtb__77, dtb__78, dtb__79, dtb__80) -> (1 + (v_mutPiCount dtb__80))
   | _ -> 0
 ))
 
-# 300 "Vuna/Compiler/Elab/Mut.vuna"
+# 351 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_mutSuffixBinderCount = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
-  | Core_dTerm.C_Term_TPi (dtb__60, dtb__61, dtb__62, dtb__63, dtb__64) -> (if dtb__61 then (v_mutSuffixBinderCount dtb__64) else (v_mutPiCount mc0))
+  | Core_dTerm.C_Term_TPi (dtb__81, dtb__82, dtb__83, dtb__84, dtb__85) -> (if dtb__82 then (v_mutSuffixBinderCount dtb__85) else (v_mutPiCount mc0))
   | _ -> (v_mutPiCount mc0)
 ))
 
-# 314 "Vuna/Compiler/Elab/Mut.vuna"
+# 365 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_mutWrapHandleParams = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Core_dTerm.t_Term) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__65, dtb__66) -> (match dtb__65 with
-  | { B_dData_dPair.f_Pair_first = dtb__67; B_dData_dPair.f_Pair_second = dtb__68 } -> (Core_dTerm.C_Term_TPi (dtb__67, true, Core_dTerm.C_Rig_RigOmega, (((Core_dTerm.v_shift 0) mc0) dtb__68), (((v_mutWrapHandleParams (mc0 + 1)) dtb__66) mc2)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> (match dtb__86 with
+  | { B_dData_dPair.f_Pair_first = dtb__88; B_dData_dPair.f_Pair_second = dtb__89 } -> (Core_dTerm.C_Term_TPi (dtb__88, true, Core_dTerm.C_Rig_RigOmega, (((Core_dTerm.v_shift 0) mc0) dtb__89), (((v_mutWrapHandleParams (mc0 + 1)) dtb__87) mc2)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (((Core_dTerm.v_shift 0) mc0) mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 308 "Vuna/Compiler/Elab/Mut.vuna"
+# 359 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_mutAddHandleParamsTyped = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> (match mc1 with
-  | Core_dTerm.C_Term_TPi (dtb__69, dtb__70, dtb__71, dtb__72, dtb__73) -> (if dtb__70 then (Core_dTerm.C_Term_TPi (dtb__69, true, dtb__71, dtb__72, ((v_mutAddHandleParamsTyped mc0) dtb__73))) else (((v_mutWrapHandleParams 0) mc0) mc1))
+  | Core_dTerm.C_Term_TPi (dtb__90, dtb__91, dtb__92, dtb__93, dtb__94) -> (if dtb__91 then (Core_dTerm.C_Term_TPi (dtb__90, true, dtb__92, dtb__93, ((v_mutAddHandleParamsTyped mc0) dtb__94))) else (((v_mutWrapHandleParams 0) mc0) mc1))
   | _ -> (((v_mutWrapHandleParams 0) mc0) mc1)
 )
 ))
 
-# 292 "Vuna/Compiler/Elab/Mut.vuna"
+# 343 "Vuna/Compiler/Elab/Mut.vuna"
 let v_mutAddHandleParams = (fun (ty : Core_dTerm.t_Term) -> (let skipped = (v_mutSuffixBinderCount ty) in (let params = ((B_dData_dList.v_map (fun (p : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = (((Core_dTerm.v_shift 0) (0 - skipped)) (B_dData_dPair.v_secondOf p)) })) (v_mutHandleParamsOf ty)) in ((v_mutAddHandleParamsTyped params) ty))))
 
-# 326 "Vuna/Compiler/Elab/Mut.vuna"
+# 377 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_rowKeys = (fun (mc0 : t_MutRowEntry B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (dtb__74).f_MutRowEntry_mutRowEntryFamily; B_dData_dPair.f_Pair_second = (dtb__74).f_MutRowEntry_mutRowEntryName }, (v_rowKeys dtb__75)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__95, dtb__96) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (dtb__95).f_MutRowEntry_mutRowEntryFamily; B_dData_dPair.f_Pair_second = (dtb__95).f_MutRowEntry_mutRowEntryName }, (v_rowKeys dtb__96)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 335 "Vuna/Compiler/Elab/Mut.vuna"
+# 386 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_memKey = (fun (mc0 : (string, string) B_dData_dPair.t_Pair) (mc1 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
-  | { B_dData_dPair.f_Pair_first = dtb__76; B_dData_dPair.f_Pair_second = dtb__77 } -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__78, dtb__79) -> (match dtb__78 with
-  | { B_dData_dPair.f_Pair_first = dtb__80; B_dData_dPair.f_Pair_second = dtb__81 } -> (if (if (dtb__76 = dtb__80) then (dtb__77 = dtb__81) else false) then true else ((v_memKey { B_dData_dPair.f_Pair_first = dtb__76; B_dData_dPair.f_Pair_second = dtb__77 }) dtb__79))
+  | { B_dData_dPair.f_Pair_first = dtb__97; B_dData_dPair.f_Pair_second = dtb__98 } -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__99, dtb__100) -> (match dtb__99 with
+  | { B_dData_dPair.f_Pair_first = dtb__101; B_dData_dPair.f_Pair_second = dtb__102 } -> (if (if (dtb__97 = dtb__101) then (dtb__98 = dtb__102) else false) then true else ((v_memKey { B_dData_dPair.f_Pair_first = dtb__97; B_dData_dPair.f_Pair_second = dtb__98 }) dtb__100))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> false
@@ -224,24 +278,24 @@ let rec v_memKey = (fun (mc0 : (string, string) B_dData_dPair.t_Pair) (mc1 : (st
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 330 "Vuna/Compiler/Elab/Mut.vuna"
+# 381 "Vuna/Compiler/Elab/Mut.vuna"
 let rec v_duplicateKeysGo = (fun (mc0 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__82, dtb__83) -> (if ((v_memKey dtb__82) mc1) then (B_dData_dList.C_List__x58__x58_ (dtb__82, ((v_duplicateKeysGo dtb__83) mc1))) else ((v_duplicateKeysGo dtb__83) (B_dData_dList.C_List__x58__x58_ (dtb__82, mc1))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__103, dtb__104) -> (if ((v_memKey dtb__103) mc1) then (B_dData_dList.C_List__x58__x58_ (dtb__103, ((v_duplicateKeysGo dtb__104) mc1))) else ((v_duplicateKeysGo dtb__104) (B_dData_dList.C_List__x58__x58_ (dtb__103, mc1))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 323 "Vuna/Compiler/Elab/Mut.vuna"
+# 374 "Vuna/Compiler/Elab/Mut.vuna"
 let v_mutDuplicateRowKeys = (fun (ty : Core_dTerm.t_Term) -> ((v_duplicateKeysGo (v_rowKeys (v_mutRowEntriesOfTy ty))) B_dData_dList.C_List_Nil))
 
-# 343 "Vuna/Compiler/Elab/Mut.vuna"
+# 394 "Vuna/Compiler/Elab/Mut.vuna"
 let v_mutOpExpr = (fun (fam : t_MutFamily) (op : t_MutOp) (sp : Base_dSource.t_Span) (name : string) (args : Frontend_dRast.t_Expr B_dData_dList.t_List) -> (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RGlobal ((fam).f_MutFamily_mutFamModule, (op).f_MutOp_mutOpInternal)), sp)), ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RIntrinsic (Frontend_dReserved.v_instArgSyntax)), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EStr (name, sp)), B_dData_dList.C_List_Nil)), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RLocal (((v_mutBinderName fam) name))), sp)), B_dData_dList.C_List_Nil))))) args), sp)))
 
-# 352 "Vuna/Compiler/Elab/Mut.vuna"
+# 403 "Vuna/Compiler/Elab/Mut.vuna"
 let v_mutIntroExpr = (fun (fam : t_MutFamily) (pure : bool) (sp : Base_dSource.t_Span) (nExpr : Frontend_dRast.t_Expr) (extraArgs : Frontend_dRast.t_Expr B_dData_dList.t_List) (body : Frontend_dRast.t_Expr) (name : string) -> (let lam = (Frontend_dRast.C_Expr_ELam ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((v_mutBinderName fam) name); B_dData_dPair.f_Pair_second = Base_dSource.v_spanEmpty }, B_dData_dList.C_List_Nil)), body, sp)) in (let core = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RGlobal ((fam).f_MutFamily_mutFamModule, (if pure then (fam).f_MutFamily_mutFamWithPureInternal else (fam).f_MutFamily_mutFamWithInternal))), sp)), ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ (nExpr, B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append extraArgs) (B_dData_dList.C_List__x58__x58_ (lam, B_dData_dList.C_List_Nil)))), sp)) in (if pure then (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RGlobal ("Base.Effect.Core", "runPure")), sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RGlobal ("Base.Effect.Core", "dropEffHead")), sp)), (B_dData_dList.C_List__x58__x58_ (core, B_dData_dList.C_List_Nil)), sp)), B_dData_dList.C_List_Nil)), sp)) else (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.C_RName_RGlobal ("Base.Effect.Core", "dropEffHead")), sp)), (B_dData_dList.C_List__x58__x58_ (core, B_dData_dList.C_List_Nil)), sp))))))
 
-# 370 "Vuna/Compiler/Elab/Mut.vuna"
+# 421 "Vuna/Compiler/Elab/Mut.vuna"
 let v_stringLitOf = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
-  | Frontend_dRast.C_Expr_EStr (dtb__84, dtb__85) -> (B_dData_dMaybe.C_Maybe_Just (dtb__84))
+  | Frontend_dRast.C_Expr_EStr (dtb__105, dtb__106) -> (B_dData_dMaybe.C_Maybe_Just (dtb__105))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
