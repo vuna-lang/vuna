@@ -143,7 +143,7 @@ let v_splitDataOwnerOf = (fun (meta : t_SplitMeta) (d : Elab_dTypes.t_DtData) ->
 ))
 
 # 208 "Vuna/Compiler/Driver/Owner.vuna"
-let v_isSyntheticInternalName = (fun (name : string) -> (if (name = Base_dIntrinsics.v_mainShowDefName) then true else ((B_dData_dString.v_startsWith "@vuna@") name)))
+let v_isSyntheticInternalName = (fun (name : string) -> (if (name = Base_dIntrinsics.v_mainShowDefName) then true else (Frontend_dReserved.v_isInternalSyntaxName name)))
 
 # 211 "Vuna/Compiler/Driver/Owner.vuna"
 let v_splitDefOwnerOf = (fun (meta : t_SplitMeta) (name : string) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) (meta).f_SplitMeta_smDefOwnerT) with

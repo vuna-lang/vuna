@@ -18,7 +18,7 @@ and v_toAstPatField = (fun (mc0 : (string, Frontend_dRast.t_Pat) B_dData_dPair.t
 
 # 14 "Vuna/Compiler/Frontend/Rast/Bridge.vuna"
 let rec v_toAstExpr = (fun (mc0 : Frontend_dRast.t_Expr) -> (match mc0 with
-  | Frontend_dRast.C_Expr_EAnn (dtb__18, dtb__19, dtb__20) -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Frontend_dReserved.v_ascribeSyntax, (Frontend_dAst.v_detachedNodeRef dtb__20))), (B_dData_dList.C_List__x58__x58_ ((v_toAstExpr dtb__18), (B_dData_dList.C_List__x58__x58_ ((v_toAstExpr dtb__19), B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef dtb__20)))
+  | Frontend_dRast.C_Expr_EAnn (dtb__18, dtb__19, dtb__20) -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsAscribe), (Frontend_dAst.v_detachedNodeRef dtb__20))), (B_dData_dList.C_List__x58__x58_ ((v_toAstExpr dtb__18), (B_dData_dList.C_List__x58__x58_ ((v_toAstExpr dtb__19), B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef dtb__20)))
   | Frontend_dRast.C_Expr_EDo (dtb__21, dtb__22) -> (Frontend_dAst.C_Expr_EDo (((B_dData_dList.v_map v_toAstStmt) dtb__21), (Frontend_dAst.v_detachedNodeRef dtb__22)))
   | Frontend_dRast.C_Expr_ERecUpdate (dtb__23, dtb__24, dtb__25) -> (Frontend_dAst.C_Expr_ERecUpdate ((v_toAstExpr dtb__23), ((B_dData_dList.v_map v_toAstFieldValue) dtb__24), (Frontend_dAst.v_detachedNodeRef dtb__25)))
   | Frontend_dRast.C_Expr_ERecord (dtb__26, dtb__27, dtb__28) -> (Frontend_dAst.C_Expr_ERecord ((Frontend_dRast_dName.v_rnameKey dtb__26), ((B_dData_dList.v_map v_toAstFieldValue) dtb__27), (Frontend_dAst.v_detachedNodeRef dtb__28)))

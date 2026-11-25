@@ -121,7 +121,7 @@ let v_familyOfShortCtors = (fun (table : (string, (bool, (string, int) B_dData_d
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )))
 
-# 133 "Vuna/Compiler/Elab/Coverage.vuna"
+# 134 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_findShortCtor = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__41, dtb__42) -> (if ((B_dData_dList.v_memName (Frontend_dRast.v_ctorShortName (B_dData_dPair.v_firstOf dtb__41))) mc1) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_firstOf dtb__41))) else ((v_findShortCtor dtb__42) mc1))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -129,47 +129,54 @@ let rec v_findShortCtor = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData
 ))
 
 # 127 "Vuna/Compiler/Elab/Coverage.vuna"
-let v_sentinelCtorIn = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (h : string) -> (if (Frontend_dReserved.v_isListNilSyntax h) then ((v_findShortCtor ctors) (B_dData_dList.C_List__x58__x58_ ("Nil", B_dData_dList.C_List_Nil))) else (if (Frontend_dReserved.v_isListConsSyntax h) then ((v_findShortCtor ctors) (B_dData_dList.C_List__x58__x58_ ("::", (B_dData_dList.C_List__x58__x58_ ("Cons", B_dData_dList.C_List_Nil))))) else (B_dData_dMaybe.C_Maybe_Just (h)))))
+let v_sentinelCtorIn = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (h : string) -> (let nd_uscrut2 = (Frontend_dReserved.v_classify h) in (match nd_uscrut2 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__43) -> (match dtb__43 with
+  | Frontend_dReserved.C_Reserved_RsListCons -> ((v_findShortCtor ctors) (B_dData_dList.C_List__x58__x58_ ("::", (B_dData_dList.C_List__x58__x58_ ("Cons", B_dData_dList.C_List_Nil)))))
+  | Frontend_dReserved.C_Reserved_RsListNil -> ((v_findShortCtor ctors) (B_dData_dList.C_List__x58__x58_ ("Nil", B_dData_dList.C_List_Nil)))
+  | _ -> (B_dData_dMaybe.C_Maybe_Just (h))
+)
+  | _ -> (B_dData_dMaybe.C_Maybe_Just (h))
+)))
 
-# 139 "Vuna/Compiler/Elab/Coverage.vuna"
+# 140 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_orderedCtors = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (heads : string B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads)))) ctors)) ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads))) ctors)))
 
-# 145 "Vuna/Compiler/Elab/Coverage.vuna"
+# 146 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_takePats = (fun (n : int) (xs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
-  | B_dData_dList.C_List__x58__x58_ (dtb__43, dtb__44) -> (B_dData_dList.C_List__x58__x58_ (dtb__43, ((v_takePats (n - 1)) dtb__44)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__44, dtb__45) -> (B_dData_dList.C_List__x58__x58_ (dtb__44, ((v_takePats (n - 1)) dtb__45)))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 154 "Vuna/Compiler/Elab/Coverage.vuna"
+# 155 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_dropPats = (fun (n : int) (xs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (if (n <= 0) then xs else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
-  | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> ((v_dropPats (n - 1)) dtb__46)
+  | B_dData_dList.C_List__x58__x58_ (dtb__46, dtb__47) -> ((v_dropPats (n - 1)) dtb__47)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 169 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_coverageWitness = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (pending : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List B_dData_dMaybe.t_Maybe) (rows : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (qs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (let dtnat__47 = fuel in (if (dtnat__47 = 0) then B_dData_dMaybe.C_Maybe_Nothing else (let dtb__48 = (dtnat__47 - 1) in (match pending with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__49) -> (match dtb__49 with
+# 170 "Vuna/Compiler/Elab/Coverage.vuna"
+let rec v_coverageWitness = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (pending : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List B_dData_dMaybe.t_Maybe) (rows : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (qs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (let dtnat__48 = fuel in (if (dtnat__48 = 0) then B_dData_dMaybe.C_Maybe_Nothing else (let dtb__49 = (dtnat__48 - 1) in (match pending with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__50) -> (match dtb__50 with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__50, dtb__51) -> (let ar = (B_dData_dPair.v_secondOf dtb__50) in (let specialized = (((v_specializeCtor ar) (B_dData_dPair.v_firstOf dtb__50)) rows) in (let deeper = (((((v_coverageWitness table) dtb__48) B_dData_dMaybe.C_Maybe_Nothing) specialized) ((B_dData_dList.v_append (v_wilds ar)) qs)) in (match deeper with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_coverageWitness table) dtb__48) (B_dData_dMaybe.C_Maybe_Just (dtb__51))) rows) qs)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__52) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName (B_dData_dPair.v_firstOf dtb__50)), ((v_takePats ar) dtb__52), v_emptyPatSpan)), ((v_dropPats ar) dtb__52)))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (let ar = (B_dData_dPair.v_secondOf dtb__51) in (let specialized = (((v_specializeCtor ar) (B_dData_dPair.v_firstOf dtb__51)) rows) in (let deeper = (((((v_coverageWitness table) dtb__49) B_dData_dMaybe.C_Maybe_Nothing) specialized) ((B_dData_dList.v_append (v_wilds ar)) qs)) in (match deeper with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_coverageWitness table) dtb__49) (B_dData_dMaybe.C_Maybe_Just (dtb__52))) rows) qs)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__53) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName (B_dData_dPair.v_firstOf dtb__51)), ((v_takePats ar) dtb__53), v_emptyPatSpan)), ((v_dropPats ar) dtb__53)))))
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (match qs with
   | B_dData_dList.C_List_Nil -> (if (v_hasNilRow rows) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (B_dData_dList.C_List_Nil)))
-  | B_dData_dList.C_List__x58__x58_ (dtb__53, dtb__54) -> (let heads = (v_ctorHeadsOf rows) in (match heads with
-  | B_dData_dList.C_List_Nil -> (match (((((v_coverageWitness table) dtb__48) B_dData_dMaybe.C_Maybe_Nothing) (v_defaultRows rows)) dtb__54) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__54, dtb__55) -> (let heads = (v_ctorHeadsOf rows) in (match heads with
+  | B_dData_dList.C_List_Nil -> (match (((((v_coverageWitness table) dtb__49) B_dData_dMaybe.C_Maybe_Nothing) (v_defaultRows rows)) dtb__55) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__55) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PWild (v_emptyPatSpan)), dtb__55))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__56) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PWild (v_emptyPatSpan)), dtb__56))))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dList.C_List__x58__x58_ (dtb__56, dtb__57) -> (match ((v_familyCtors table) dtb__56) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (match ((v_familyCtors table) dtb__57) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__58) -> (((((v_coverageWitness table) dtb__48) (B_dData_dMaybe.C_Maybe_Just (((v_orderedCtors dtb__58) heads)))) rows) dtb__54)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__59) -> (((((v_coverageWitness table) dtb__49) (B_dData_dMaybe.C_Maybe_Just (((v_orderedCtors dtb__59) heads)))) rows) dtb__55)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -179,19 +186,19 @@ let rec v_coverageWitness = (fun (table : (string, (bool, (string, int) B_dData_
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 230 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_clauseCover = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (rows : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (qs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (let dtnat__59 = fuel in (if (dtnat__59 = 0) then C_ClauseCover_CovUnknown else (let dtb__60 = (dtnat__59 - 1) in (match qs with
+# 231 "Vuna/Compiler/Elab/Coverage.vuna"
+let rec v_clauseCover = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (rows : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (qs : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (let dtnat__60 = fuel in (if (dtnat__60 = 0) then C_ClauseCover_CovUnknown else (let dtb__61 = (dtnat__60 - 1) in (match qs with
   | B_dData_dList.C_List_Nil -> (if (v_hasNilRow rows) then C_ClauseCover_CovCovered else C_ClauseCover_CovUncovered)
-  | B_dData_dList.C_List__x58__x58_ (dtb__61, dtb__62) -> (match (v_patHead dtb__61) with
-  | Frontend_dRast.C_Pat_PCon (dtb__63, dtb__64, dtb__65) -> ((((v_clauseCover table) dtb__60) (((v_specializeCtor (B_dData_dList.v_length dtb__64)) (Frontend_dRast_dName.v_rnameKey dtb__63)) rows)) ((B_dData_dList.v_append dtb__64) dtb__62))
-  | Frontend_dRast.C_Pat_PRecord (dtb__66, dtb__67, dtb__68) -> C_ClauseCover_CovUnknown
-  | Frontend_dRast.C_Pat_PInt (dtb__69, dtb__70) -> ((((v_clauseCover table) dtb__60) (v_defaultRows rows)) dtb__62)
-  | Frontend_dRast.C_Pat_PStr (dtb__71, dtb__72) -> ((((v_clauseCover table) dtb__60) (v_defaultRows rows)) dtb__62)
+  | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> (match (v_patHead dtb__62) with
+  | Frontend_dRast.C_Pat_PCon (dtb__64, dtb__65, dtb__66) -> ((((v_clauseCover table) dtb__61) (((v_specializeCtor (B_dData_dList.v_length dtb__65)) (Frontend_dRast_dName.v_rnameKey dtb__64)) rows)) ((B_dData_dList.v_append dtb__65) dtb__63))
+  | Frontend_dRast.C_Pat_PRecord (dtb__67, dtb__68, dtb__69) -> C_ClauseCover_CovUnknown
+  | Frontend_dRast.C_Pat_PInt (dtb__70, dtb__71) -> ((((v_clauseCover table) dtb__61) (v_defaultRows rows)) dtb__63)
+  | Frontend_dRast.C_Pat_PStr (dtb__72, dtb__73) -> ((((v_clauseCover table) dtb__61) (v_defaultRows rows)) dtb__63)
   | _ -> (match (v_ctorHeadsOf rows) with
-  | B_dData_dList.C_List_Nil -> ((((v_clauseCover table) dtb__60) (v_defaultRows rows)) dtb__62)
-  | B_dData_dList.C_List__x58__x58_ (dtb__73, dtb__74) -> (match ((v_familyCtors table) dtb__73) with
+  | B_dData_dList.C_List_Nil -> ((((v_clauseCover table) dtb__61) (v_defaultRows rows)) dtb__63)
+  | B_dData_dList.C_List__x58__x58_ (dtb__74, dtb__75) -> (match ((v_familyCtors table) dtb__74) with
   | B_dData_dMaybe.C_Maybe_Nothing -> C_ClauseCover_CovUnknown
-  | B_dData_dMaybe.C_Maybe_Just (dtb__75) -> ((((((v_clauseCoverCtorsGo table) dtb__60) ((v_orderedCtors dtb__75) (v_ctorHeadsOf rows))) rows) dtb__62) C_ClauseCover_CovCovered)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__76) -> ((((((v_clauseCoverCtorsGo table) dtb__61) ((v_orderedCtors dtb__76) (v_ctorHeadsOf rows))) rows) dtb__63) C_ClauseCover_CovCovered)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -199,116 +206,116 @@ let rec v_clauseCover = (fun (table : (string, (bool, (string, int) B_dData_dPai
 )
   | _ -> failwith "DT: impossible branch"
 )))))
-# 270 "Vuna/Compiler/Elab/Coverage.vuna"
+# 271 "Vuna/Compiler/Elab/Coverage.vuna"
 and v_clauseCoverCtorsGo = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc3 : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (mc4 : Frontend_dRast.t_Pat B_dData_dList.t_List) (mc5 : t_ClauseCover) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__76, dtb__77) -> (let ar = (B_dData_dPair.v_secondOf dtb__76) in (match ((((v_clauseCover mc0) mc1) (((v_specializeCtor ar) (B_dData_dPair.v_firstOf dtb__76)) mc3)) ((B_dData_dList.v_append (v_wilds ar)) mc4)) with
+  | B_dData_dList.C_List__x58__x58_ (dtb__77, dtb__78) -> (let ar = (B_dData_dPair.v_secondOf dtb__77) in (match ((((v_clauseCover mc0) mc1) (((v_specializeCtor ar) (B_dData_dPair.v_firstOf dtb__77)) mc3)) ((B_dData_dList.v_append (v_wilds ar)) mc4)) with
   | C_ClauseCover_CovUncovered -> C_ClauseCover_CovUncovered
-  | C_ClauseCover_CovUnknown -> ((((((v_clauseCoverCtorsGo mc0) mc1) dtb__77) mc3) mc4) C_ClauseCover_CovUnknown)
-  | C_ClauseCover_CovCovered -> ((((((v_clauseCoverCtorsGo mc0) mc1) dtb__77) mc3) mc4) mc5)
+  | C_ClauseCover_CovUnknown -> ((((((v_clauseCoverCtorsGo mc0) mc1) dtb__78) mc3) mc4) C_ClauseCover_CovUnknown)
+  | C_ClauseCover_CovCovered -> ((((((v_clauseCoverCtorsGo mc0) mc1) dtb__78) mc3) mc4) mc5)
   | _ -> failwith "DT: impossible branch"
 ))
   | B_dData_dList.C_List_Nil -> mc5
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 281 "Vuna/Compiler/Elab/Coverage.vuna"
+# 282 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_patNodes = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
-  | Frontend_dRast.C_Pat_PRecord (dtb__78, dtb__79, dtb__80) -> (1 + (v_patNodesFields dtb__79))
-  | Frontend_dRast.C_Pat_PAs (dtb__81, dtb__82, dtb__83) -> (1 + (v_patNodes dtb__82))
-  | Frontend_dRast.C_Pat_PCon (dtb__84, dtb__85, dtb__86) -> (1 + (v_patNodesList dtb__85))
+  | Frontend_dRast.C_Pat_PRecord (dtb__79, dtb__80, dtb__81) -> (1 + (v_patNodesFields dtb__80))
+  | Frontend_dRast.C_Pat_PAs (dtb__82, dtb__83, dtb__84) -> (1 + (v_patNodes dtb__83))
+  | Frontend_dRast.C_Pat_PCon (dtb__85, dtb__86, dtb__87) -> (1 + (v_patNodesList dtb__86))
   | _ -> 1
 ))
-# 287 "Vuna/Compiler/Elab/Coverage.vuna"
+# 288 "Vuna/Compiler/Elab/Coverage.vuna"
 and v_patNodesList = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__87, dtb__88) -> ((v_patNodes dtb__87) + (v_patNodesList dtb__88))
+  | B_dData_dList.C_List__x58__x58_ (dtb__88, dtb__89) -> ((v_patNodes dtb__88) + (v_patNodesList dtb__89))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
-# 291 "Vuna/Compiler/Elab/Coverage.vuna"
+# 292 "Vuna/Compiler/Elab/Coverage.vuna"
 and v_patNodesFields = (fun (mc0 : (string, Frontend_dRast.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__89, dtb__90) -> (match dtb__89 with
-  | { B_dData_dPair.f_Pair_first = dtb__91; B_dData_dPair.f_Pair_second = dtb__92 } -> ((v_patNodes dtb__92) + (v_patNodesFields dtb__90))
+  | B_dData_dList.C_List__x58__x58_ (dtb__90, dtb__91) -> (match dtb__90 with
+  | { B_dData_dPair.f_Pair_first = dtb__92; B_dData_dPair.f_Pair_second = dtb__93 } -> ((v_patNodes dtb__93) + (v_patNodesFields dtb__91))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 295 "Vuna/Compiler/Elab/Coverage.vuna"
+# 296 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_matrixNodes = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__93, dtb__94) -> ((v_patNodesList dtb__93) + (v_matrixNodes dtb__94))
+  | B_dData_dList.C_List__x58__x58_ (dtb__94, dtb__95) -> ((v_patNodesList dtb__94) + (v_matrixNodes dtb__95))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 306 "Vuna/Compiler/Elab/Coverage.vuna"
+# 307 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_coverageFuelMax = 1000000
 
-# 300 "Vuna/Compiler/Elab/Coverage.vuna"
+# 301 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_coverageFuelFor = (fun (clauses : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (let scaled = (256 + (4 * (v_matrixNodes clauses))) in (if (scaled > v_coverageFuelMax) then v_coverageFuelMax else scaled)))
 
-# 314 "Vuna/Compiler/Elab/Coverage.vuna"
+# 315 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_allSameLen = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__95, dtb__96) -> (if ((B_dData_dList.v_length dtb__95) = mc0) then ((v_allSameLen mc0) dtb__96) else false)
+  | B_dData_dList.C_List__x58__x58_ (dtb__96, dtb__97) -> (if ((B_dData_dList.v_length dtb__96) = mc0) then ((v_allSameLen mc0) dtb__97) else false)
   | B_dData_dList.C_List_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 310 "Vuna/Compiler/Elab/Coverage.vuna"
+# 311 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_uniformArity = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__97, dtb__98) -> ((v_allSameLen (B_dData_dList.v_length dtb__97)) dtb__98)
+  | B_dData_dList.C_List__x58__x58_ (dtb__98, dtb__99) -> ((v_allSameLen (B_dData_dList.v_length dtb__98)) dtb__99)
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 318 "Vuna/Compiler/Elab/Coverage.vuna"
+# 319 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_matrixArity = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__99, dtb__100) -> (B_dData_dList.v_length dtb__99)
+  | B_dData_dList.C_List__x58__x58_ (dtb__100, dtb__101) -> (B_dData_dList.v_length dtb__100)
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 207 "Vuna/Compiler/Elab/Coverage.vuna"
+# 208 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_matrixWitness = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (if (v_uniformArity clauses) then (((((v_coverageWitness table) (bi_natFromInt (v_coverageFuelFor clauses))) B_dData_dMaybe.C_Maybe_Nothing) clauses) (v_wilds (v_matrixArity clauses))) else B_dData_dMaybe.C_Maybe_Nothing))
 
-# 351 "Vuna/Compiler/Elab/Coverage.vuna"
+# 352 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_witnessNamesCtor = (fun (mc0 : Frontend_dRast.t_Pat B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__101, dtb__102) -> (match (v_patHead dtb__101) with
-  | Frontend_dRast.C_Pat_PCon (dtb__103, dtb__104, dtb__105) -> true
+  | B_dData_dList.C_List__x58__x58_ (dtb__102, dtb__103) -> (match (v_patHead dtb__102) with
+  | Frontend_dRast.C_Pat_PCon (dtb__104, dtb__105, dtb__106) -> true
   | _ -> false
 )
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 363 "Vuna/Compiler/Elab/Coverage.vuna"
+# 364 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_renderPatIn = (fun (fuel : int) (paren : bool) (p : Frontend_dRast.t_Pat) -> (if (fuel <= 0) then "_" else (match (v_patHead p) with
-  | Frontend_dRast.C_Pat_PCon (dtb__106, dtb__107, dtb__108) -> (if ((B_dData_dList.v_length dtb__107) = 0) then (Frontend_dRast_dName.v_rnameKey dtb__106) else (let body = (String.concat "" [(Frontend_dRast_dName.v_rnameKey dtb__106); " "; ((B_dData_dString.v_join " ") ((B_dData_dList.v_map ((v_renderPatIn (fuel - 1)) true)) dtb__107))]) in (if paren then (String.concat "" ["("; body; ")"]) else body)))
-  | Frontend_dRast.C_Pat_PVar (dtb__109, dtb__110) -> "_"
-  | Frontend_dRast.C_Pat_PWild (dtb__111) -> "_"
-  | Frontend_dRast.C_Pat_PInt (dtb__112, dtb__113) -> (bi_strFromInt dtb__112)
-  | Frontend_dRast.C_Pat_PStr (dtb__114, dtb__115) -> (String.concat "" ["\""; dtb__114; "\""])
-  | Frontend_dRast.C_Pat_PRecord (dtb__116, dtb__117, dtb__118) -> (String.concat "" ["{ "; (Frontend_dRast_dName.v_rnameKey dtb__116); " }"])
-  | Frontend_dRast.C_Pat_PAs (dtb__119, dtb__120, dtb__121) -> (((v_renderPatIn (fuel - 1)) paren) dtb__120)
+  | Frontend_dRast.C_Pat_PCon (dtb__107, dtb__108, dtb__109) -> (if ((B_dData_dList.v_length dtb__108) = 0) then (Frontend_dRast_dName.v_rnameKey dtb__107) else (let body = (String.concat "" [(Frontend_dRast_dName.v_rnameKey dtb__107); " "; ((B_dData_dString.v_join " ") ((B_dData_dList.v_map ((v_renderPatIn (fuel - 1)) true)) dtb__108))]) in (if paren then (String.concat "" ["("; body; ")"]) else body)))
+  | Frontend_dRast.C_Pat_PVar (dtb__110, dtb__111) -> "_"
+  | Frontend_dRast.C_Pat_PWild (dtb__112) -> "_"
+  | Frontend_dRast.C_Pat_PInt (dtb__113, dtb__114) -> (bi_strFromInt dtb__113)
+  | Frontend_dRast.C_Pat_PStr (dtb__115, dtb__116) -> (String.concat "" ["\""; dtb__115; "\""])
+  | Frontend_dRast.C_Pat_PRecord (dtb__117, dtb__118, dtb__119) -> (String.concat "" ["{ "; (Frontend_dRast_dName.v_rnameKey dtb__117); " }"])
+  | Frontend_dRast.C_Pat_PAs (dtb__120, dtb__121, dtb__122) -> (((v_renderPatIn (fuel - 1)) paren) dtb__121)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 360 "Vuna/Compiler/Elab/Coverage.vuna"
+# 361 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_renderPat = (fun (p : Frontend_dRast.t_Pat) -> (((v_renderPatIn 64) false) p))
 
-# 383 "Vuna/Compiler/Elab/Coverage.vuna"
+# 384 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_renderWitness = (fun (ws : Frontend_dRast.t_Pat B_dData_dList.t_List) -> ((B_dData_dString.v_join " ") ((B_dData_dList.v_map ((v_renderPatIn 64) true)) ws)))
 
-# 334 "Vuna/Compiler/Elab/Coverage.vuna"
+# 335 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_improveDiag = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (clauses : Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (sp : Base_dSource.t_Span) (d : Base_dDiag.t_Diagnostic) -> (if ((d).Base_dDiag.f_Diagnostic_diagCode <> "TC_NotExhaustive") then d else (match ((v_matrixWitness table) clauses) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__122) -> (if (v_witnessNamesCtor dtb__122) then (let rx = (v_renderWitness dtb__122) in ((Base_dDiag.v_withFallbackSpan sp) ((Base_dDiagnostics_dTc.v_tcMsg (Base_dDiagnostics_dTc.C_TcErr_NotExhaustive (rx))) (B_dData_dVec.C_Vec_VCons (rx, B_dData_dVec.C_Vec_Nil))))) else d)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__123) -> (if (v_witnessNamesCtor dtb__123) then (let rx = (v_renderWitness dtb__123) in ((Base_dDiag.v_withFallbackSpan sp) ((Base_dDiagnostics_dTc.v_tcMsg (Base_dDiagnostics_dTc.C_TcErr_NotExhaustive (rx))) (B_dData_dVec.C_Vec_VCons (rx, B_dData_dVec.C_Vec_Nil))))) else d)
   | B_dData_dMaybe.C_Maybe_Nothing -> d
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 330 "Vuna/Compiler/Elab/Coverage.vuna"
+# 331 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_improveExhaustive = (fun (mc0 : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (int) -> Frontend_dRast.t_Pat B_dData_dList.t_List B_dData_dList.t_List) (mc2 : Base_dSource.t_Span) mc3 -> (match mc3 with
-  | Base_dDiag.C_Check_ErrC (dtb__123) -> (Base_dDiag.C_Check_ErrC (((((v_improveDiag mc0) (mc1 0)) mc2) dtb__123)))
-  | Base_dDiag.C_Check_OkC (dtb__124) -> (Base_dDiag.C_Check_OkC (dtb__124))
+  | Base_dDiag.C_Check_ErrC (dtb__124) -> (Base_dDiag.C_Check_ErrC (((((v_improveDiag mc0) (mc1 0)) mc2) dtb__124)))
+  | Base_dDiag.C_Check_OkC (dtb__125) -> (Base_dDiag.C_Check_OkC (dtb__125))
   | _ -> failwith "DT: impossible branch"
 ))

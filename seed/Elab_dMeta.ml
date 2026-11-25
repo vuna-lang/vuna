@@ -622,7 +622,7 @@ let v_isBlanketInst = (fun (mc0 : Elab_dTypes.t_DtInst) -> (match mc0 with
 let v_substClassParam = (fun (pname : string) (arg : Core_dTerm.t_Term) (ty : Core_dTerm.t_Term) -> (((Core_dTerm.v_substVarAt 0) arg) ty))
 
 # 794 "Vuna/Compiler/Elab/Meta.vuna"
-let v_litEqName = (fun (tyName : string) -> (if (tyName = "String") then "bi_eq_str" else "bi_eq_int"))
+let v_litEqName = (fun (tyName : string) -> (if (tyName = Base_dIntrinsics.v_strTypeName) then "bi_eq_str" else "bi_eq_int"))
 
 # 836 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isStringImplicitDomain = (fun (ec : Elab_dTypes.t_Ec) (dom : Core_dTerm.t_Value) -> (let nd_uscrut2 = ((Elab_dTypes.v_forceVal ec) dom) in (match nd_uscrut2 with

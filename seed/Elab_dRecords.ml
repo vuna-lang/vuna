@@ -101,7 +101,7 @@ let v_recordRetType = (fun (dname : string) (params : string B_dData_dList.t_Lis
 
 # 120 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_recordArrowTypeGo = (fun (mc0 : int) (mc1 : Frontend_dRast.t_Field B_dData_dList.t_List) (mc2 : Frontend_dRast.t_Expr) (mc3 : Base_dSource.t_Span) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> (Frontend_dRast.C_Expr_EPi (("@vuna@record@arg" ^ (bi_strFromInt mc0)), false, B_dData_dMaybe.C_Maybe_Nothing, (Frontend_dRast.v_fieldType dtb__29), ((((v_recordArrowTypeGo (mc0 + 1)) dtb__30) mc2) mc3), mc3))
+  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> (Frontend_dRast.C_Expr_EPi ((Frontend_dReserved.v_recordArgBinderName mc0), false, B_dData_dMaybe.C_Maybe_Nothing, (Frontend_dRast.v_fieldType dtb__29), ((((v_recordArrowTypeGo (mc0 + 1)) dtb__30) mc2) mc3), mc3))
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
@@ -148,20 +148,17 @@ and v_desugarRecordPatternFieldsFuel = (fun (fuel : int) (records : t_RecordMeta
 # 160 "Vuna/Compiler/Elab/Records.vuna"
 let v_desugarPattern = (fun (records : t_RecordMeta B_dData_dList.t_List) (pat : Frontend_dRast.t_Pat) -> (((v_desugarPatternFuel ((Frontend_dRast.v_patBudget 64) pat)) records) pat))
 
-# 305 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordInstanceVar = (fun (i : int) -> ("@vuna@record@hf" ^ (bi_strFromInt i)))
-
-# 313 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordInstancePatsFrom = (fun (i : int) (remaining : int) (sp : Base_dSource.t_Span) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PVar ((v_recordInstanceVar i), sp)), (((v_recordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
-
 # 309 "Vuna/Compiler/Elab/Records.vuna"
+let rec v_recordInstancePatsFrom = (fun (i : int) (remaining : int) (sp : Base_dSource.t_Span) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PVar ((Frontend_dReserved.v_recordHiddenFieldBinderName i), sp)), (((v_recordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
+
+# 305 "Vuna/Compiler/Elab/Records.vuna"
 let v_recordInstancePats = (fun (n : int) (sp : Base_dSource.t_Span) -> (((v_recordInstancePatsFrom 0) n) sp))
 
-# 321 "Vuna/Compiler/Elab/Records.vuna"
+# 317 "Vuna/Compiler/Elab/Records.vuna"
 let v_hasFieldInstanceDecl = (fun (rname : string) (params : string B_dData_dList.t_List) (ctor : string) (n : int) (fi : int) (fname : string) (fty : Frontend_dRast.t_Expr) -> (let fsp = (Frontend_dRast.v_exprSpan fty) in (let recType = (match params with
   | B_dData_dList.C_List_Nil -> (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName rname), fsp))
   | _ -> (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName rname), fsp)), ((B_dData_dList.v_map (fun (p : string) -> (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName p), fsp)))) params), fsp))
-) in (let label = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_hasFieldLabelName), fsp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EStr (fname, fsp)), B_dData_dList.C_List_Nil)), fsp)) in (let head = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_hasFieldTraitName), fsp)), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (recType, (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), fsp)) in (let pats = ((v_recordInstancePats n) fsp) in (let body = (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "p"), fsp)), (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName ctor), pats, fsp)); B_dData_dPair.f_Pair_second = (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName (v_recordInstanceVar fi)), fsp)) }, B_dData_dList.C_List_Nil)), fsp)) in (let meth = (Frontend_dRast.C_Decl_DFun (Base_dIntrinsics.v_hasFieldMethodName, (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PVar ("p", fsp)), B_dData_dList.C_List_Nil)), body, fsp)) in (Frontend_dRast.C_Decl_DInstance (B_dData_dList.C_List_Nil, head, (B_dData_dList.C_List__x58__x58_ (meth, B_dData_dList.C_List_Nil)), fsp))))))))))
+) in (let label = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_hasFieldLabelName), fsp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Expr_EStr (fname, fsp)), B_dData_dList.C_List_Nil)), fsp)) in (let head = (Frontend_dRast.C_Expr_EApp ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName Base_dIntrinsics.v_hasFieldTraitName), fsp)), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (recType, (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), fsp)) in (let pats = ((v_recordInstancePats n) fsp) in (let body = (Frontend_dRast.C_Expr_ECase ((Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName "p"), fsp)), (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PCon ((Frontend_dRast_dName.v_classifyName ctor), pats, fsp)); B_dData_dPair.f_Pair_second = (Frontend_dRast.C_Expr_EVar ((Frontend_dRast_dName.v_classifyName (Frontend_dReserved.v_recordHiddenFieldBinderName fi)), fsp)) }, B_dData_dList.C_List_Nil)), fsp)) in (let meth = (Frontend_dRast.C_Decl_DFun (Base_dIntrinsics.v_hasFieldMethodName, (B_dData_dList.C_List__x58__x58_ ((Frontend_dRast.C_Pat_PVar ("p", fsp)), B_dData_dList.C_List_Nil)), body, fsp)) in (Frontend_dRast.C_Decl_DInstance (B_dData_dList.C_List_Nil, head, (B_dData_dList.C_List__x58__x58_ (meth, B_dData_dList.C_List_Nil)), fsp))))))))))
 
 # 298 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_recordHasFieldInstancesGo = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : string) (mc3 : int) (mc4 : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : int) -> (match mc4 with
@@ -183,7 +180,7 @@ let rec v_recordHasFieldInstances = (fun (mc0 : t_RecordMeta B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 359 "Vuna/Compiler/Elab/Records.vuna"
+# 355 "Vuna/Compiler/Elab/Records.vuna"
 let v_ctorName = (fun (dname : string) -> dname)
 
 # 90 "Vuna/Compiler/Elab/Records.vuna"
@@ -196,13 +193,13 @@ let rec v_recordsOfDecls = (fun (mc0 : Frontend_dRast.t_Decl B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 370 "Vuna/Compiler/Elab/Records.vuna"
+# 366 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_expandCaseAsGo = (fun (mc0 : Frontend_dRast.t_Expr) (mc1 : Frontend_dRast.t_Pat) (mc2 : Frontend_dRast.t_Expr) -> (match mc1 with
   | Frontend_dRast.C_Pat_PAs (dtb__69, dtb__70, dtb__71) -> (((v_expandCaseAsGo mc0) dtb__70) (Frontend_dRast.C_Expr_ELet ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Frontend_dRast.C_Pat_PVar (dtb__69, dtb__71)); B_dData_dPair.f_Pair_second = mc0 }, B_dData_dList.C_List_Nil)), mc2, false, dtb__71)))
   | _ -> { B_dData_dPair.f_Pair_first = mc1; B_dData_dPair.f_Pair_second = mc2 }
 ))
 
-# 367 "Vuna/Compiler/Elab/Records.vuna"
+# 363 "Vuna/Compiler/Elab/Records.vuna"
 let v_expandCaseAs = (fun (mc0 : Frontend_dRast.t_Expr) (mc1 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__72; B_dData_dPair.f_Pair_second = dtb__73 } -> (((v_expandCaseAsGo mc0) dtb__72) dtb__73)
   | _ -> failwith "DT: impossible branch"
@@ -267,7 +264,7 @@ and v_desugarAltFuel = (fun (mc0 : int) (mc1 : t_RecordMeta B_dData_dList.t_List
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 362 "Vuna/Compiler/Elab/Records.vuna"
+# 358 "Vuna/Compiler/Elab/Records.vuna"
 let v_desugarExpr = (fun (a1 : t_RecordMeta B_dData_dList.t_List) (a2 : Frontend_dRast.t_Expr) -> (((v_desugarExprFuel ((Frontend_dRast.v_exprBudget 512) a2)) a1) a2))
 
 # 140 "Vuna/Compiler/Elab/Records.vuna"
@@ -286,8 +283,8 @@ let rec v_desugarRecordDecl = (fun (records : t_RecordMeta B_dData_dList.t_List)
 # 137 "Vuna/Compiler/Elab/Records.vuna"
 let v_desugarRecords = (fun (records : t_RecordMeta B_dData_dList.t_List) (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (v_desugarRecordDecl records)) decls))
 
-# 349 "Vuna/Compiler/Elab/Records.vuna"
+# 345 "Vuna/Compiler/Elab/Records.vuna"
 let v_prepareDeclsWith = (fun (auxDecls : Frontend_dRast.t_Decl B_dData_dList.t_List) (decls0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (let records = ((B_dData_dList.v_append (v_recordsOfDecls auxDecls)) (v_recordsOfDecls decls0)) in ((Base_dCommon.v_bind ((v_desugarRecords records) decls0)) (fun (ds : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = records; B_dData_dPair.f_Pair_second = ds }))))))
 
-# 344 "Vuna/Compiler/Elab/Records.vuna"
+# 340 "Vuna/Compiler/Elab/Records.vuna"
 let v_prepareDecls = (fun (decls0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((v_prepareDeclsWith B_dData_dList.C_List_Nil) decls0))

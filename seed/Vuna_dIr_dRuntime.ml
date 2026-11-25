@@ -43,53 +43,56 @@ let v_irRtBridgedNames = (B_dData_dList.C_List__x58__x58_ ("strUnpack", (B_dData
 # 262 "Vuna/Ir/Runtime.vuna"
 let v_irRtThreadNames = (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadSpawn", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadJoin", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadYield", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadId", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadParallelism", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_mutexNew", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_mutexLock", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_mutexTryLock", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_mutexUnlock", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_condvarNew", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_condvarWait", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_condvarSignal", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_condvarBroadcast", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicNew", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicLoad", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicStore", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicFetchAdd", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicExchange", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_atomicCompareExchange", B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))))))))))
 
-# 287 "Vuna/Ir/Runtime.vuna"
-let v_irRtAllTargets = (B_dData_dList.C_List__x58__x58_ ("ocaml", (B_dData_dList.C_List__x58__x58_ ("native", (B_dData_dList.C_List__x58__x58_ ("wasm", B_dData_dList.C_List_Nil))))))
-
-# 291 "Vuna/Ir/Runtime.vuna"
-let v_irRtTargets = (fun (sym : string) -> (if ((B_dData_dList.v_memName sym) v_irRtThreadNames) then (B_dData_dList.C_List__x58__x58_ ("ocaml", (B_dData_dList.C_List__x58__x58_ ("native", B_dData_dList.C_List_Nil)))) else v_irRtAllTargets))
-
-# 295 "Vuna/Ir/Runtime.vuna"
-let v_irRtSupports = (fun (target : string) (sym : string) -> ((B_dData_dList.v_memName target) (v_irRtTargets sym)))
+# 288 "Vuna/Ir/Runtime.vuna"
+let v_irRtWasmSeqThreadNames = (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadSpawn", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadJoin", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadYield", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadId", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_threadParallelism", B_dData_dList.C_List_Nil))))))))))
 
 # 299 "Vuna/Ir/Runtime.vuna"
-let v_irRtNames = ((B_dData_dList.v_append v_irRtPlainNames) ((B_dData_dList.v_append v_irRtThreadNames) ((B_dData_dList.v_append v_irRtBridgedNames) v_irRtSyntheticNames)))
+let v_irRtAllTargets = (B_dData_dList.C_List__x58__x58_ ("ocaml", (B_dData_dList.C_List__x58__x58_ ("native", (B_dData_dList.C_List__x58__x58_ ("wasm", B_dData_dList.C_List_Nil))))))
 
 # 304 "Vuna/Ir/Runtime.vuna"
+let v_irRtTargets = (fun (sym : string) -> (if ((B_dData_dList.v_memName sym) v_irRtWasmSeqThreadNames) then v_irRtAllTargets else (if ((B_dData_dList.v_memName sym) v_irRtThreadNames) then (B_dData_dList.C_List__x58__x58_ ("ocaml", (B_dData_dList.C_List__x58__x58_ ("native", B_dData_dList.C_List_Nil)))) else v_irRtAllTargets)))
+
+# 311 "Vuna/Ir/Runtime.vuna"
+let v_irRtSupports = (fun (target : string) (sym : string) -> ((B_dData_dList.v_memName target) (v_irRtTargets sym)))
+
+# 315 "Vuna/Ir/Runtime.vuna"
+let v_irRtNames = ((B_dData_dList.v_append v_irRtPlainNames) ((B_dData_dList.v_append v_irRtThreadNames) ((B_dData_dList.v_append v_irRtBridgedNames) v_irRtSyntheticNames)))
+
+# 320 "Vuna/Ir/Runtime.vuna"
 let v_irRtContract = ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { f_IrRtSym_irRtSymName = n; f_IrRtSym_irRtSymBridgesList = false })) ((B_dData_dList.v_append v_irRtPlainNames) v_irRtThreadNames))) ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { f_IrRtSym_irRtSymName = n; f_IrRtSym_irRtSymBridgesList = true })) v_irRtBridgedNames)) ((B_dData_dList.v_map (fun (n : string) -> { f_IrRtSym_irRtSymName = n; f_IrRtSym_irRtSymBridgesList = false })) v_irRtSyntheticNames)))
 
-# 310 "Vuna/Ir/Runtime.vuna"
+# 326 "Vuna/Ir/Runtime.vuna"
 let rec v_irRtLookupGo = (fun (mc0 : string) (mc1 : t_IrRtSym B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> (if ((v_irRtSymNameOf dtb__4) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__4)) else ((v_irRtLookupGo mc0) dtb__5))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 315 "Vuna/Ir/Runtime.vuna"
+# 331 "Vuna/Ir/Runtime.vuna"
 let v_irRtLookup = (fun (name : string) -> ((v_irRtLookupGo name) v_irRtContract))
 
-# 319 "Vuna/Ir/Runtime.vuna"
+# 335 "Vuna/Ir/Runtime.vuna"
 let v_irRtIsKnown = (fun (name : string) -> (match (v_irRtLookup name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__6) -> true
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 326 "Vuna/Ir/Runtime.vuna"
+# 342 "Vuna/Ir/Runtime.vuna"
 let v_irRtBridgesList = (fun (name : string) -> (match (v_irRtLookup name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__7) -> (v_irRtSymBridgesOf dtb__7)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 339 "Vuna/Ir/Runtime.vuna"
+# 355 "Vuna/Ir/Runtime.vuna"
 let rec v_irListLength = (fun mc0 -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (1 + (v_irListLength dtb__9))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 344 "Vuna/Ir/Runtime.vuna"
+# 360 "Vuna/Ir/Runtime.vuna"
 let rec v_irSymbolsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
   | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__10, dtb__11, dtb__12) -> B_dData_dList.C_List_Nil
   | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__13, dtb__14, dtb__15, dtb__16, dtb__17) -> (v_irSymbolsOf dtb__17)
@@ -116,30 +119,30 @@ let rec v_irSymbolsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
   | Vuna_dIr_dModel.C_Ir_IrVar (dtb__67) -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
-# 374 "Vuna/Ir/Runtime.vuna"
+# 390 "Vuna/Ir/Runtime.vuna"
 and v_irSymbolsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irSymbolsOf (B_dData_dPair.v_secondOf p)))
-# 377 "Vuna/Ir/Runtime.vuna"
+# 393 "Vuna/Ir/Runtime.vuna"
 and v_irSymbolsOfAlt = (fun (alt : Vuna_dIr_dModel.t_IrAlt) -> (v_irSymbolsOf (Vuna_dIr_dModel.v_irAltBodyOf alt)))
-# 380 "Vuna/Ir/Runtime.vuna"
+# 396 "Vuna/Ir/Runtime.vuna"
 and v_irSymbolsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__68) -> (v_irSymbolsOfAlt dtb__68)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 384 "Vuna/Ir/Runtime.vuna"
+# 400 "Vuna/Ir/Runtime.vuna"
 let v_irSymbolsOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (v_irSymbolsOf dtb__69)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 397 "Vuna/Ir/Runtime.vuna"
+# 413 "Vuna/Ir/Runtime.vuna"
 let v_irSymbolsOfEntry = (fun (mc0 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__70) -> (v_irSymbolsOf (Vuna_dIr_dModel.v_irEntryShowOf dtb__70))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 391 "Vuna/Ir/Runtime.vuna"
+# 407 "Vuna/Ir/Runtime.vuna"
 let v_irSymbolsOfUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_irSymbolsOfDef) ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups))) (v_irSymbolsOfEntry (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry)))
