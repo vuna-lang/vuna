@@ -131,6 +131,7 @@ renderInstr (IXmmFromReg n r) = "movq xmm${strFromInt n}, ${regText r}"
 renderInstr IRet = "ret"
 renderInstr ISyscall = "syscall"
 renderInstr (IPush r) = "push ${regText r}"
+renderInstr (ITrunc32 r) = "mov ${reg32Text r}, ${reg32Text r}"
 renderInstr (IPop r) = "pop ${regText r}"
 renderInstr INop = "nop"
 

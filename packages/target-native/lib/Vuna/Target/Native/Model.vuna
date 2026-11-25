@@ -69,6 +69,25 @@ regText R13 = "r13"
 regText R14 = "r14"
 regText R15 = "r15"
 
+-- | 32 位别名（`mov r32, r32` 就是零扩展到 32 位，用于 `& 0xFFFF_FFFF`）。
+export reg32Text : Reg -> String
+reg32Text Rax = "eax"
+reg32Text Rcx = "ecx"
+reg32Text Rdx = "edx"
+reg32Text Rsi = "esi"
+reg32Text Rdi = "edi"
+reg32Text Rbp = "ebp"
+reg32Text Rsp = "esp"
+reg32Text R8 = "r8d"
+reg32Text R9 = "r9d"
+reg32Text R10 = "r10d"
+reg32Text R11 = "r11d"
+reg32Text Rbx = "ebx"
+reg32Text R12 = "r12d"
+reg32Text R13 = "r13d"
+reg32Text R14 = "r14d"
+reg32Text R15 = "r15d"
+
 -- | 8-bit 别名（`setcc` / 字节存储用）。
 export reg8Text : Reg -> String
 reg8Text Rax = "al"
@@ -175,6 +194,8 @@ export data Instr(..) : Type where
   IXmmCmp : Int -> Int -> Instr
   -- | `<op>sd xmm<dst>, qword ptr <op>`：右操作数直接取自 `.rodata` 常量，省掉一次装填。
   IXmmBinMem : String -> Int -> Operand -> Instr
+  -- | `mov r32, r32`：写低 32 位并零扩展，等价于 `and r, 0xFFFF_FFFF`。
+  ITrunc32 : Reg -> Instr
   -- | `movq <reg>, xmm<n>`（按位搬 64 位）。
   IXmmToReg : Reg -> Int -> Instr
   -- | `movq xmm<n>, <reg>`（按位搬 64 位）。

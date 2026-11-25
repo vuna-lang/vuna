@@ -438,6 +438,13 @@ cleanupOnce (i :: rest) =
           case leaScaleOf k of
             Just scale => ILeaScale d d scale 0 :: cleanupOnce rest
             Nothing => i :: cleanupOnce rest
+        -- `and dst, 0xFFFF_FFFF`：`and r64, imm32` 编码不了 4G-1，改用一次 32 位写
+        -- （`mov dst32, dst32`）——写低 32 位并零扩展，等价且更短。
+        (IMov (OpReg m) (OpImm mask), IBinReg "and" dst (OpReg src)) =>
+          if sameReg src m && not (sameReg dst m) && mask == 4294967295 then
+            ITrunc32 dst :: cleanupOnce more
+          else
+            i :: cleanupOnce rest
         (IMov (OpReg Rax) (OpImm k), IMov (OpReg r) (OpReg Rax)) =>
           if sameReg r Rax then
             i :: cleanupOnce rest
@@ -580,6 +587,7 @@ instrReadsReg r (ICallReg x) = sameReg r x
 instrReadsReg r (IPush x) = sameReg r x
 instrReadsReg r (IXmmLoad _ op) = operandReadsReg r op
 instrReadsReg r (IXmmBinMem _ _ op) = operandReadsReg r op
+instrReadsReg r (ITrunc32 x) = sameReg r x
 instrReadsReg r (IXmmStore op _) = operandReadsReg r op
 instrReadsReg r (IXmmFromInt _ x) = sameReg r x
 instrReadsReg r (IXmmFromReg _ x) = sameReg r x
@@ -589,6 +597,7 @@ export instrWritesReg : Reg -> Instr -> Bool
 instrWritesReg r (IMov (OpReg dst) _) = sameReg r dst
 instrWritesReg r (ILeaMem dst _ _) = sameReg r dst
 instrWritesReg r (ILeaScale dst _ _ _) = sameReg r dst
+instrWritesReg r (ITrunc32 x) = sameReg r x
 instrWritesReg r (IMovzx dst _) = sameReg r dst
 instrWritesReg r (IBinReg _ dst _) = sameReg r dst
 instrWritesReg r (ISetcc _ dst) = sameReg r dst

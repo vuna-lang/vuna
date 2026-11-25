@@ -219,7 +219,7 @@ leaProblems : List String
 leaProblems =
   append
     leaScaleFoldProblems
-    (append leaAddFoldProblems (append leaOtherFactorProblems (append leaKeepNextProblems leaScale8Problems)))
+    (append leaAddFoldProblems (append leaOtherFactorProblems (append leaKeepNextProblems (append leaScale8Problems trunc32Problems))))
 
 leaScaleFoldProblems : List String
 leaScaleFoldProblems =
@@ -251,6 +251,19 @@ leaScale8Problems =
   case cleanup [IMov (OpReg R11) (OpReg Rbx), IBinReg "imul" R11 (OpImm 9), INop] of
     [ILeaScale R11 Rbx 8 0, INop] => []
     is => ["lea scale 8: " ++ strFromInt (length is) ++ " instrs"]
+
+-- | `and dst, 0xFFFF_FFFF` 折成一次 32 位写（`mov dst32, dst32`）。
+trunc32Problems : List String
+trunc32Problems =
+  append (
+      case cleanup [IMov (OpReg R11) (OpImm 4294967295), IBinReg "and" R12 (OpReg R11), INop] of
+        [ITrunc32 R12, INop] => []
+        is => ["trunc32 fold: " ++ strFromInt (length is) ++ " instrs"]
+    ) (
+      case cleanup [IMov (OpReg R11) (OpImm 65535), IBinReg "and" R12 (OpReg R11), INop] of
+        [IMov (OpReg R11) (OpImm 65535), IBinReg "and" R12 (OpReg R11), INop] => []
+        is => ["trunc32 keeps other masks: " ++ strFromInt (length is) ++ " instrs"]
+    )
 
 cleanupDropProblems : List String
 cleanupDropProblems =
