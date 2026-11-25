@@ -1,23 +1,26 @@
 -- 效应基准：每轮 bracket 的 use 都 abort，release（cleanup）恰好执行一次。
 -- 手写 OCaml 对照见 eff_abort.ml（异常 + Fun.protect，同算法）。
+-- 计数器用 MutRef 单元（作用域在整轮循环外，cleanup 写它）。
 import Base.Effect.Core as Eff
+import Base.Effect.Types
 import Base.Effect.Exn as EffExn
-import Base.Effect.Pure.IORef as IORef
+import Base.Effect.MutRef as MutRef
 import Base.Data.Nat as Nat
 import Base.Data.Result as Result
 
-bump : {r : Row} -> IORef Int -> Int -> Eff r Int
-bump ref k =
+bump : {r : Row} -> {w : Member (Named "n" (MutRefOp Int)) r} -> Int -> Eff r Int
+bump k =
   do
-    _ <- modifyRef ref (\x => x + 1)
+    v <- MutRef.read@n
+    MutRef.write@n (v + 1)
     pure k
 
-abortOnce : {r : Row} -> IORef Int -> Int -> Eff r Int
-abortOnce ref k =
+abortOnce : {r : Row} -> {w : Member (Named "n" (MutRefOp Int)) r} -> Int -> Eff r Int
+abortOnce k =
   do
     _ <-
       runExn "boom" (
-          bracket (pure 0) (\_ => bump ref 0) (
+          bracket (pure 0) (\_ => bump 0) (
               \_ =>
                 do
                   _ <- throwExn "boom" "x"
@@ -26,18 +29,19 @@ abortOnce ref k =
         )
     pure k
 
-loop : IORef Int -> Nat -> Eff [] Int
-loop ref 0 = pure 0
-loop ref (Succ m) =
-  do
-    _ <- abortOnce ref m
-    loop ref m
+loop : Nat -> Eff [Named "n" (MutRefOp Int)] Int
+loop n =
+  case n of
+    Zero => pure 0
+    Succ m =>
+      do
+        _ <- abortOnce m
+        loop m
 
 main : Int
 main =
-  runPure (
+  MutRef.withMutRefPure "n" 0 (
       do
-        ref <- newRef 0
-        _ <- loop ref (natFromInt 2000)
-        readRef ref
+        _ <- loop (natFromInt 2000)
+        MutRef.read
     )
