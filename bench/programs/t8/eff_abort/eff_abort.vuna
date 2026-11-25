@@ -30,13 +30,11 @@ abortOnce k =
     pure k
 
 loop : Nat -> Eff [Named "n" (MutRefOp Int)] Int
-loop n =
-  case n of
-    Zero => pure 0
-    Succ m =>
-      do
-        _ <- abortOnce m
-        loop m
+loop 0 = pure 0
+loop (Succ m) =
+  do
+    _ <- abortOnce m
+    loop m
 
 main : Int
 main =
