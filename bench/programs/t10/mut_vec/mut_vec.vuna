@@ -1,0 +1,43 @@
+-- MutVec 原地读写：Vec.tabulate 按位置生成种子，Fin 下标遍历整条向量；第一遍
+-- 读出加十写回并累加旧值，第二遍读出写回后的值。
+-- 手写 OCaml 对照见 mut_vec.ml（Array.init + 两遍下标循环，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutVec as MutVec
+import Base.Data.Vec as Vec
+import Base.Data.Fin as Fin
+import Base.Data.Nat as Nat
+import Base.Trait.Monad
+
+sweep : {n : Nat} -> {r : Row} -> {w : Member MutOp r} -> MutVec n Int -> List (Fin n) -> Int -> Eff r Int
+sweep v fs acc =
+  case fs of
+    [] => pure acc
+    f :: rest =>
+      do
+        x <- MutVec.get v f
+        MutVec.set v f (x + 10)
+        sweep v rest (acc + x)
+
+total : {n : Nat} -> {r : Row} -> {w : Member MutOp r} -> MutVec n Int -> List (Fin n) -> Int -> Eff r Int
+total v fs acc =
+  case fs of
+    [] => pure acc
+    f :: rest =>
+      do
+        x <- MutVec.get v f
+        total v rest (acc + x)
+
+main : Int
+main =
+  let
+    n = natFromInt 1000
+    seed = Vec.tabulate n (\i => natToInt (finToNat i))
+    fs = vecToList (Vec.tabulate n (\i => i))
+  in MutVec.withMutVecPure seed (
+      \v =>
+        do
+          a <- sweep v fs 0
+          b <- total v fs 0
+          pure (a + b)
+    )

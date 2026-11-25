@@ -1,0 +1,3 @@
+targets=ocaml,native
+ops=2000
+n=2000

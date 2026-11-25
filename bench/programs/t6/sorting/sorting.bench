@@ -1,3 +1,4 @@
 ops=40000
 n=40000
 cc_flags=-fwrapv
+targets=ocaml,native

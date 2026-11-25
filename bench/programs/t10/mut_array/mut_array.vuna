@@ -1,0 +1,35 @@
+-- MutArray 原地读写：先用下标值填满 N 个槽，再逐槽读出、加一写回并累加旧值。
+-- 手写 OCaml 对照见 mut_array.ml（Array.init + 逐槽读改写，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutArray as MutArray
+import Base.Trait.Monad
+
+fill : {r : Row} -> {w : Member MutOp r} -> MutArray Int -> Int -> Int -> Eff r Unit
+fill a k n =
+  if k <= 0 then
+    pure MkUnit
+  else
+    do
+      MutArray.set a (natFromInt (n - k)) (n - k)
+      fill a (k - 1) n
+
+sweep : {r : Row} -> {w : Member MutOp r} -> MutArray Int -> Int -> Int -> Int -> Eff r Int
+sweep a k n acc =
+  if k <= 0 then
+    pure acc
+  else
+    do
+      let i = n - k
+      v <- MutArray.get a (natFromInt i)
+      MutArray.set a (natFromInt i) (v + 1)
+      sweep a (k - 1) n (acc + v)
+
+main : Int
+main =
+  MutArray.withMutArrayPure (natFromInt 2000) 0 (
+      \a =>
+        do
+          fill a 2000 2000
+          sweep a 2000 2000 0
+    )

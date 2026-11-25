@@ -1,0 +1,5 @@
+ops=6208512
+n=2048
+targets=ocaml,native,wasm
+cc_flags=-pthread
+timeout_ms=30000

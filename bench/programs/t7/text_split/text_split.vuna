@@ -1,0 +1,24 @@
+-- 文本切分：按行 / 逗号拆词，trim 后按前后缀过滤，再用 Ord String 排序并 join。
+-- 手写 OCaml 对照见 text_split.ml（split_on_char / List.sort / String.concat）。
+import Base.Data.Sort as Sort
+
+-- 保留以 "w" 开头或以 "ha" 结尾的词（即 w<i> 与 alpha）。
+keep : String -> Bool
+keep w = startsWith "w" w || endsWith "ha" w
+
+addLine : List String -> String -> List String
+addLine acc line = foldl (\a, w => if keep w then w :: a else a) acc (split "," (trim line))
+
+-- 全部保留词（逆序累积后翻转一次）。
+textWords : List String -> List String
+textWords ls = reverse (foldl addLine [] ls)
+
+main : Int
+main =
+  let
+    text = strConcatMany (map (\i => "  w${i},alpha  \n") (range 0 2000))
+    ls = lines text
+    ws = textWords ls
+    sorted = Sort.mergeSort ws
+    joined = join ":" sorted
+  in foldl (\a, _ => a + 1) 0 ws + strLength joined + strLength (unlines ls)

@@ -27,11 +27,13 @@
   （`--c-ref on` 则要求每个用例都有 `<name>.c`）。
 - 超时用于**首次 golden 校验**：`timeout_x × t_ref + 200ms`，夹在 `--timeout-min-ms`
   （1000）与 `--timeout-max-ms`（30000）之间；`t_ref` 取两个参照里**较慢**的那个（C 普遍比
-  OCaml 快，取最快参照会把正常后端判成超时）。`timeout_x` 缺省按 tier（t5/t6 为 5，其余 3），
+  OCaml 快，取最快参照会把正常后端判成超时）。`timeout_x` 缺省按 tier（t5/t6/t10 为 5，其余 3），
   sidecar 的 `timeout_x=` / `timeout_ms=` 覆盖。超时记 `skip_reason=timeout`，是硬失败而不是慢。
   同一二进制、同一 N 通过校验之后，计时与采样跑裸程序（C 对照直接以 `n=` 作 argv，
   不经 shim；wrapper 的 fork 会污染小项与 RSS）。
 - `--tier t1` 只跑某一层（可重复）；`--list` 的输出带 tier 列。
+- tier 从 t0 到 t12；深栈 / 线程 / Fs / FFI 用例用 `targets=` 显式声明非 wasm 目标，
+  不要让 wasm 在 golden 校验阶段静默 `run_ok=false`（清单见 [`programs/TIERS.md`](programs/TIERS.md)）。
 - 三个指标由 `bench/lib/timestat.c` 在**同一次运行**里采：墙钟 `CLOCK_MONOTONIC`、
   CPU `wait4` 的 `ru_utime+ru_stime`（微秒级）、峰值 RSS `ru_maxrss`。GNU time 的 `%U/%S`
   只有 10ms 量化、bash 内建 time 是 1ms，5ms 量级的项不够用，所以自带一个 80 行的小工具；
@@ -109,8 +111,8 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
   直接失败。不为跨机器/环境差异改阈值，只有确认是生成程序质量的真实变化才重标。
   三个指标都可 FAIL；宿主繁忙时墙钟会整体抬升，先看 `cpu` 行确认是否是真实回退。
 - 每个 benchmark 可用同名 `.bench` sidecar 覆盖默认口径：`repeat=N`（一次采样内重复）、
-  `targets=a,b`（限定后端）、`c=path`（参与链接的 C 源）、`n=...`（C 对照的 argv）、
-  `cc_flags=...`、`skip=1`。
+  `targets=a,b`（限定后端）、`c=path`（参与 OCaml 对照链接的 C 源；vuna 侧 FFI 走包根
+  `ffi/*.c`）、`n=...`（C 对照的 argv）、`cc_flags=...`、`skip=1`。
 
 ## 产物基线
 

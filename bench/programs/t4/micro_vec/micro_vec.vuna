@@ -1,0 +1,43 @@
+-- 长度索引 Vec + Fin 下标：索引在运行时擦除，读取只走构造子投影。
+-- 手写 OCaml 对照见 micro_vec.ml（固定 8 元素数组）。
+import Base.Data.Fin as Fin
+import Base.Data.Vec as Vec
+
+v : Vec 8 Int
+v = [1, 2, 3, 4, 5, 6, 7, 8]
+
+i0 : Fin 8
+i0 = FZero
+
+i1 : Fin 8
+i1 = FSucc FZero
+
+i2 : Fin 8
+i2 = FSucc (FSucc FZero)
+
+i3 : Fin 8
+i3 = FSucc (FSucc (FSucc FZero))
+
+i4 : Fin 8
+i4 = FSucc (FSucc (FSucc (FSucc FZero)))
+
+i5 : Fin 8
+i5 = FSucc (FSucc (FSucc (FSucc (FSucc FZero))))
+
+i6 : Fin 8
+i6 = FSucc (FSucc (FSucc (FSucc (FSucc (FSucc FZero)))))
+
+i7 : Fin 8
+i7 = FSucc (FSucc (FSucc (FSucc (FSucc (FSucc (FSucc FZero))))))
+
+readAll : Vec 8 Int -> Int
+readAll xs =
+  Vec.get xs i0
+    + Vec.get xs i1
+    + Vec.get xs i2 + Vec.get xs i3 + Vec.get xs i4 + Vec.get xs i5 + Vec.get xs i6 + Vec.get xs i7
+
+go : Int -> Int -> Int
+go k acc = if k <= 0 then acc else go (k - 1) (acc + readAll v)
+
+main : Int
+main = go 1000000 0

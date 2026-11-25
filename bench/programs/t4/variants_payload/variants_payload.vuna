@@ -1,0 +1,30 @@
+-- 带 payload 的递归 variant：平衡表达式树 + 逐 tag 求值（深度 17，wasm 栈安全）。
+-- 手写 OCaml 对照见 variants_payload.ml（同构造 / 同求值）。
+data Expr : Type where
+  Lit : Int -> Expr
+  Add : Expr -> Expr -> Expr
+  Mul : Expr -> Expr -> Expr
+  Max : Expr -> Expr -> Expr
+  Min : Expr -> Expr -> Expr
+
+bound : Int -> Int
+bound x = x - x / 1000003 * 1000003
+
+build : Int -> Int -> Expr
+build d seed =
+  if d <= 0 then
+    Lit (bound seed)
+  else
+    Add
+      (build (d - 1) (seed * 2 + 1))
+      (Max (Mul (build (d - 1) (seed * 3 + 1)) (Lit (seed + 7))) (Min (Lit seed) (Lit 7)))
+
+eval : Expr -> Int
+eval (Lit n) = n
+eval (Add a b) = bound (eval a + eval b)
+eval (Mul a b) = bound (bound (eval a) * bound (eval b))
+eval (Max a b) = if eval a > eval b then eval a else eval b
+eval (Min a b) = if eval a < eval b then eval a else eval b
+
+main : Int
+main = eval (build 16 1)

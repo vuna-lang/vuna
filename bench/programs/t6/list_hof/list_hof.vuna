@@ -1,0 +1,25 @@
+-- 高阶组合：map / filter / zip / concatMap / foldr 串在一条尾构造的 2000 元素列表上
+-- （foldr 非尾递归，深度与列表长度同阶）。手写 OCaml 对照见 list_hof.ml（同算法）。
+-- ops = 各段处理的元素个数之和（map / filter / zip / concatMap / foldr）。
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+
+isEven : Int -> Bool
+isEven x = x - x / 2 * 2 == 0
+
+rangeTail : Int -> Int -> List Int -> List Int
+rangeTail i k acc = if k <= 0 then reverse acc else rangeTail (i + 1) (k - 1) (i :: acc)
+
+pairSum : List (Int, Int) -> Int
+pairSum ps = foldl (\a, p => a + firstOf p + secondOf p) 0 ps
+
+main : Int
+main =
+  let
+    n = 2000
+    xs = rangeTail 0 n []
+    ys = map (\x => x * 3 - 7) xs
+    zs = filter isEven xs
+    pairs = zip ys zs
+    expanded = concatMap (\x => [x, x + 1]) zs
+  in pairSum pairs + foldr (\x, a => x - a) 0 expanded + natToInt (length pairs)

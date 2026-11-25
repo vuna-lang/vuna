@@ -1,0 +1,24 @@
+-- 效应基准：每轮把捕获线性 Token 的一次性闭包装进 Cont，再恰好 resume 一次；
+-- 测线性续延的构造与一次性消费成本。
+-- 手写 OCaml 对照见 eff_linear.ml（一次性闭包，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+linear data Token : Type where
+  MkToken : (1 n : Int) -> Token
+
+useToken : (1 t : Token) -> Int
+useToken (MkToken n) = n
+
+mkContI : (1 k : Int -> Int) -> Cont Int Int
+mkContI k = mkCont k
+
+makeCont : (1 t : Token) -> Cont Int Int
+makeCont t = mkContI (\n => useToken t + n)
+
+step : Nat -> Int -> Int
+step 0 acc = acc
+step (Succ m) acc = step m (acc + resumeCont (makeCont (MkToken 1)) 1)
+
+main : Int
+main = step (natFromInt 10000) 0

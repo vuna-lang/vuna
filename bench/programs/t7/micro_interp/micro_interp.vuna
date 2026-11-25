@@ -1,0 +1,7 @@
+-- 模板插值：每轮把两个整数嵌进 `"v=${n};w=${n * 3};"`（降级为 interp + 拼接），累加长度。
+-- 手写 OCaml 对照见 micro_interp.ml（`^` + string_of_int，同算法）。
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (acc + strLength "v=${n};w=${n * 3};")
+
+main : Int
+main = loop 300000 0

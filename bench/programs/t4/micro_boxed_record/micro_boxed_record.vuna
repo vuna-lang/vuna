@@ -1,0 +1,10 @@
+-- 强制装箱的单字段 record：每轮构造一个新 Handle，和 micro_alias_record 对照。
+-- 手写 OCaml 对照见 micro_boxed_record.ml（单构造子 variant）。
+boxed record Handle where
+  h : Int
+
+go : Int -> Handle -> Int
+go k h = if k <= 0 then h.h else go (k - 1) (Handle { h = h.h + 1 })
+
+main : Int
+main = go 500000 (Handle { h = 0 })

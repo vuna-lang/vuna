@@ -1,0 +1,23 @@
+-- effectful 并行 map：parMapEff 用 identity runner 把纯 `Eff []` 体收成 `Eff []`，
+-- 结果按输入顺序合并后求和。wasm 上 parallelism=1，自动走同一份顺序路径。
+import Base.Data.List
+import Base.Effect.Core
+import Base.Thread.Par as Par
+
+tri : Int -> Int -> Int
+tri acc n = if n <= 0 then acc else tri (acc + n) (n - 1)
+
+work : Int -> Eff [] Int
+work _ = pure (tri 0 1500000)
+
+runId : Eff [] Int -> Eff [] Int
+runId act = act
+
+sumList : List Int -> Int
+sumList xs = foldl (\acc, x => acc + x) 0 xs
+
+main : Eff [] Int
+main =
+  do
+    xs <- Par.parMapEff runId work (range 0 4)
+    pure (sumList xs)

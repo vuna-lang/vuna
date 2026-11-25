@@ -1,0 +1,18 @@
+-- 大对象：每轮 Array.make 分配 8192 个槽位（64 KB，直接进 major 堆），
+-- 读一个槽位与长度后丢弃——测大对象的直接分配与回收，不经过年轻代。
+-- 手写 OCaml 对照见 gc_large_obj.ml（同算法）。
+-- ops = 分配的 Array 槽位：每轮 8192 个。
+import Base.Container.Array as Array
+import Base.Data.Nat as Nat
+
+step : Int -> Int -> Int
+step i acc =
+  let
+    a = Array.make (Nat.fromIntClamp 8192) i
+  in acc + Array.get a (Nat.fromIntClamp 4096) + natToInt (Array.length a)
+
+loop : Int -> Int -> Int
+loop i acc = if i <= 0 then acc else loop (i - 1) (step i acc)
+
+main : Int
+main = loop 2000 0

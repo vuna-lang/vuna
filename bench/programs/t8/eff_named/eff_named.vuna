@@ -1,0 +1,25 @@
+-- 效应基准：同一 Reader op 的两个命名实例（"left" / "right"）各装一个 handler，
+-- 每轮顺序 ask 两个实例，测命名实例路由的成本。
+-- 手写 OCaml 对照见 eff_named.ml（两个显式参数，同算法）。
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
+import Base.Data.Nat as Nat
+
+loop : Nat -> Int -> Eff [ReaderOp Int@left, ReaderOp Int@right] Int
+loop 0 acc = pure acc
+loop (Succ m) acc =
+  do
+    a <- ask "left" Int
+    b <- ask "right" Int
+    loop m (acc + a * 10 + b)
+
+leftH : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
+leftH i Ask k = k 3
+
+rightH : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
+rightH i Ask k = k 4
+
+main : Int
+main =
+  runPure
+    (handleReader "left" Int (\a => a) leftH (handleReader "right" Int (\a => a) rightH (loop (natFromInt 20000) 0)))

@@ -1,0 +1,3 @@
+targets=ocaml,native,wasm
+ops=200000
+n=200000

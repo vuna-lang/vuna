@@ -1,0 +1,24 @@
+-- HasField 泛型字段访问：两个不同 record 都有 `id : Int`，同一份 getId 约束在两者上使用。
+import Base.Trait.Record as Record
+
+record User where
+  id : Int
+  rank : Int
+deriving (Selectors)
+
+record Item where
+  id : Int
+  qty : Int
+
+getId : HasField (Field "id") a Int => a -> Int
+getId x = x.id
+
+-- 单轮贡献；拆出循环体，让 loop 保持直接尾调用（wasm 栈只占常量帧）。
+step : Int -> Int
+step j = getId (User { id = j, rank = j / 3 }) + getId (Item { id = j * 2, qty = j / 5 })
+
+loop : Int -> Int -> Int
+loop j acc = if j <= 0 then acc else loop (j - 1) (acc + step j)
+
+main : Int
+main = loop 200000 0

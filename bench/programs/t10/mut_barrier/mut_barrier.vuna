@@ -1,0 +1,34 @@
+-- 老年代数组 + 年轻对象：常驻 MutArray 有 512 个槽（整块直接进 major 堆），每轮
+-- 分配一个新 Cell 写进槽里，再读回该槽；写指针槽触发 old->young 写屏障。
+-- 手写 OCaml 对照见 mut_barrier.ml（Array.make 512 + 每轮新 record，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutArray as MutArray
+import Base.Trait.Monad
+
+record Cell where
+  a : Int
+  b : Int
+
+churn : {r : Row} -> {w : Member MutOp r} -> MutArray Cell -> Int -> Int -> Int -> Eff r Int
+churn arr k n acc =
+  if k <= 0 then
+    pure acc
+  else
+    do
+      let i = n - k
+      let slot = i - i / 512 * 512
+      MutArray.set arr (natFromInt slot) Cell { a = i, b = i + 1 }
+      c <- MutArray.get arr (natFromInt slot)
+      churn arr (k - 1) n (if i - i / 64 * 64 == 0 then acc + c.a else acc)
+
+main : Int
+main =
+  MutArray.withMutArrayPure (natFromInt 512) Cell { a = 0, b = 0 } (
+      \arr =>
+        do
+          s <- churn arr 2000 2000 0
+          first <- MutArray.get arr (natFromInt 0)
+          last <- MutArray.get arr (natFromInt 511)
+          pure (s + first.a + last.b)
+    )

@@ -1,0 +1,24 @@
+-- MutRef 原地读写：同一块存储上 read / write N 次（每次都是读-改-写）。
+-- 手写 OCaml 对照见 micro_mut_ref.ml（ref 原地累加，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
+import Base.Data.Nat as Nat
+import Base.Trait.Monad
+
+bump : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Nat -> Eff r Int
+bump cell 0 = MutRef.read cell
+bump cell (Succ m) =
+  do
+    v <- MutRef.read cell
+    MutRef.write cell (v + 1)
+    bump cell m
+
+main : Int
+main =
+  MutRef.withMutRefPure 0 (
+      \cell =>
+        do
+          _ <- bump cell (natFromInt 200000)
+          MutRef.read cell
+    )

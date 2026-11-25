@@ -1,0 +1,15 @@
+-- host_clock：宿主 Clock 效应。每轮读一次时间戳并丢弃，输出循环次数。
+-- Clock.Now 在 ocaml / native / wasm 三端都有真实 handler；这里不睡，只读。
+import Base.Effect.Core as Eff
+import Base.Effect.Clock as EffClock
+import Base.Data.Nat as Nat
+
+loop : Nat -> Int -> Eff [ClockOp] Int
+loop 0 acc = pure acc
+loop (Succ m) acc =
+  do
+    _ <- clockNow
+    loop m (acc + 1)
+
+main : Eff [ClockOp] Int
+main = loop (natFromInt 200000) 0

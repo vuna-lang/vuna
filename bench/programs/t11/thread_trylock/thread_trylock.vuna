@@ -1,0 +1,40 @@
+-- tryLock 争用：4 个线程各成功自增 20000 次；抢不到就 yieldNow 后重试。
+-- Nat 燃料按尝试次数递减，重试风暴也不会让循环无界。
+import Base.Data.Nat
+import Base.Effect.Core
+import Base.Thread as Thread
+
+bump : Mutex -> Atomic -> Nat -> Int -> Eff [] Int
+bump m r 0 n = pure 0
+bump m r (Succ k) n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      got <- Thread.tryLockMutex m
+      if got then
+        do
+          x <- Thread.atomicLoad r
+          _ <- Thread.atomicStore r (x + 1)
+          _ <- Thread.unlockMutex m
+          bump m r k (n - 1)
+      else
+        do
+          _ <- Thread.yieldNow
+          bump m r k n
+
+main : Eff [] Int
+main =
+  do
+    m <- Thread.newMutex
+    r <- Thread.newAtomic 0
+    let fuel = fromIntClamp 100000000
+    a <- Thread.spawn (bump m r fuel 20000)
+    b <- Thread.spawn (bump m r fuel 20000)
+    c <- Thread.spawn (bump m r fuel 20000)
+    d <- Thread.spawn (bump m r fuel 20000)
+    _ <- Thread.join a
+    _ <- Thread.join b
+    _ <- Thread.join c
+    _ <- Thread.join d
+    Thread.atomicLoad r

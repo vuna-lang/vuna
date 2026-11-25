@@ -1,0 +1,38 @@
+-- TreeSet 基准：Int 键的 insert / member / remove / 升序遍历（AVL 有序集合）。
+-- 键序列 scramble(k) = k*7919 mod 100003（7919 与 100003 互素，N 内无重复）。
+-- 手写 OCaml 对照用标准库 Set（同算法上限，见 treeset.ml）。
+-- ops = 容器操作次数（insert N + member N + remove N + 升序遍历 N/2）。
+import Base.Container.TreeSet as TreeSet
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+insertAll : Int -> TreeSet Int -> TreeSet Int
+insertAll k s = if k <= 0 then s else insertAll (k - 1) (TreeSet.insert (scramble k) s)
+
+removeEven : Int -> TreeSet Int -> TreeSet Int
+removeEven k s = if k <= 0 then s else removeEven (k - 1) (TreeSet.remove (scramble (k * 2)) s)
+
+hitSum : Int -> TreeSet Int -> Int -> Int
+hitSum k s acc =
+  if k <= 0 then
+    acc
+  else
+    hitSum (k - 1) s (if TreeSet.member (scramble k) s then acc * 31 + k else acc)
+
+ascSum : List Int -> Int
+ascSum xs = foldl (\a, x => a * 31 + x) 0 xs
+
+main : Int
+main =
+  let
+    n = 10000
+    s0 = insertAll n TreeSet.empty
+    s1 = removeEven n s0
+  in hitSum n s1 0 + ascSum (TreeSet.toAscList s1) + natToInt (TreeSet.size s1)

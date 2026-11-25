@@ -1,0 +1,28 @@
+-- 高阶 kind 管线：同一份 `Monad m =>` 泛型函数（fmap / liftA2 / bind / pure，父类
+-- Applicative / Functor）在 Maybe 与 List 上各跑 N 轮，最后把两条管线的累加值相加。
+maybeVal : Maybe Int -> Int
+maybeVal Nothing = 0
+maybeVal (Just v) = v
+
+listVal : List Int -> Int
+listVal xs = foldl (\a, x => a + x) 0 xs
+
+pipe : Monad m => m Int -> m Int
+pipe m =
+  let
+    a = fmap (\x => x * 2 + 1) m
+    b = liftA2 (\x, y => x + y) a a
+  in b >>= (\x => pure (x + 3))
+
+loop : Int -> Int -> Int -> (Int, Int)
+loop j am al =
+  if j <= 0 then
+    (am, al)
+  else
+    loop (j - 1) (am + maybeVal (pipe (Just j))) (al + listVal (pipe [j, j + 1]))
+
+main : Int
+main =
+  let
+    (am, al) = loop 200000 0 0
+  in am + al

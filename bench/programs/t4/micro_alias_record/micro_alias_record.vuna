@@ -1,0 +1,23 @@
+-- 零成本单字段 record：`alias` 与自动去装箱的构造 / 投影 / 更新都不分配。
+-- 手写 OCaml 对照见 micro_alias_record.ml（两者都退化成 int）。
+alias record UserId where
+  uid : Int
+
+record Wrap where
+  w : Int
+
+applySel : (UserId -> Int) -> UserId -> Int
+applySel f u = f u
+
+go : Int -> UserId -> Wrap -> Int
+go k userId wrap =
+  if k <= 0 then
+    applySel UserId.uid userId + wrap.w
+  else
+    let
+      u2 = UserId { uid = userId.uid + 1 }
+      w2 = Wrap { w = wrap.w + 2 }
+    in go (k - 1) u2 w2
+
+main : Int
+main = go 1000000 (UserId { uid = 0 }) (Wrap { w = 0 })

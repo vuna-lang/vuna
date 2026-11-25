@@ -1,2 +1,4 @@
 ops=200000
 n=200000
+
+targets=ocaml,native

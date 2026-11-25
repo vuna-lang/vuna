@@ -1,0 +1,41 @@
+-- MutDynArray：push N 个值（容量按倍数增长），再逐项读出、加一写回，最后 clear。
+-- 手写 OCaml 对照见 mut_dyn.ml（Dynarray.add_last + get/set + clear，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutDynArray as MutDynArray
+import Base.Trait.Monad
+
+pushAll : {r : Row} -> {w : Member MutOp r} -> MutDynArray Int -> Int -> Int -> Eff r Unit
+pushAll xs k n =
+  if k <= 0 then
+    pure MkUnit
+  else
+    do
+      MutDynArray.push xs (n - k)
+      pushAll xs (k - 1) n
+
+bump : {r : Row} -> {w : Member MutOp r} -> MutDynArray Int -> Int -> Int -> Int -> Eff r Int
+bump xs k n acc =
+  if k <= 0 then
+    pure acc
+  else
+    do
+      let i = n - k
+      v <- MutDynArray.get xs (natFromInt i)
+      MutDynArray.set xs (natFromInt i) (v + 1)
+      bump xs (k - 1) n (acc + v + 1)
+
+main : Int
+main =
+  runPure (
+      MutDynArray.withMutDynArray (
+          \xs =>
+            do
+              pushAll xs 2000 2000
+              s <- bump xs 2000 2000 0
+              n1 <- MutDynArray.size xs
+              MutDynArray.clear xs
+              m <- MutDynArray.size xs
+              pure (s + natToInt n1 + natToInt m)
+        )
+    )

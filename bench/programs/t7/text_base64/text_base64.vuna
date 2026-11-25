@@ -1,0 +1,22 @@
+-- Base64 往返：每轮把 3 个确定性字节编码再严格解码，累加字节校验和与编码长度。
+-- 手写 OCaml 对照见 text_base64.ml（同算法的编码 / 解码）。
+import Base.Data.Base64 as Base64
+
+-- 三个确定性字节（各在 0..255）。
+chunk : Int -> List Int
+chunk i = [i - i / 256 * 256, i * 7 - i * 7 / 256 * 256, i * 13 - i * 13 / 256 * 256]
+
+-- 编码 → 严格解码 → 字节乘法校验和 + 编码长度；解码失败（不应发生）记 -1。
+step : Int -> Int
+step i =
+  let
+    enc = Base64.base64Encode (chunk i)
+  in case Base64.base64Decode enc of
+    Nothing => 0 - 1
+    Just bs => foldl (\acc, b => acc * 31 + b) 0 bs + strLength enc
+
+loop : Int -> Int -> Int
+loop j acc = if j <= 0 then acc else loop (j - 1) (acc + step j)
+
+main : Int
+main = loop 20000 0

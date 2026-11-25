@@ -1,0 +1,49 @@
+-- 图搜索：N 个节点、每节点 2 条有向边（(7i+3) mod N、(13i+5) mod N），从 0 做 BFS。
+-- Queue 保存 (节点, 距离)、HashSet 去重，输出所有可达节点的距离和 + 节点数。
+-- 手写 OCaml 对照见 graph_bfs.ml（邻接数组 + Hashtbl + Queue，同算法）。
+-- ops = 图规模（N 节点 + 2N 条边 + N 次去重判定）。
+import Base.Container.Array as Array
+import Base.Container.HashSet as HashSet
+import Base.Container.Queue as Queue
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+
+modN : Int -> Int -> Int
+modN x n = x - x / n * n
+
+neighborsOf : Int -> Int -> List Int
+neighborsOf n i = [modN (i * 7 + 3) n, modN (i * 13 + 5) n]
+
+-- 邻接表按节点升序：从 n-1 递减排到 0，前插后正好是 0..n-1（尾递归，深 N 也不吃栈）。
+adjList : Int -> Int -> List (List Int) -> List (List Int)
+adjList n i acc = if i <= 0 then acc else adjList n (i - 1) (neighborsOf n (i - 1) :: acc)
+
+adjacency : Int -> Array (List Int)
+adjacency n = Array.fromList (adjList n n [])
+
+pushAll : Int -> List Int -> Queue (Int, Int) -> HashSet Int -> (Queue (Int, Int), HashSet Int)
+pushAll depth [] q seen = (q, seen)
+pushAll depth (u :: rest) q seen =
+  if HashSet.member u seen then
+    pushAll depth rest q seen
+  else
+    pushAll depth rest (Queue.push (u, depth) q) (HashSet.insert u seen)
+
+bfs : Array (List Int) -> Int -> Queue (Int, Int) -> HashSet Int -> Int -> Int
+bfs adj fuel q seen acc =
+  if fuel <= 0 then
+    acc
+  else
+    case Queue.pop q of
+      Nothing => acc
+      Just ((v, d), rest) =>
+        let
+          (q2, seen2) = pushAll (d + 1) (Array.get adj (Nat.fromIntClamp v)) rest seen
+        in bfs adj (fuel - 1) q2 seen2 (acc + d + 1)
+
+main : Int
+main =
+  let
+    n = 5000
+    adj = adjacency n
+  in bfs adj n (Queue.push (0, 0) Queue.empty) (HashSet.insert 0 HashSet.empty) 0

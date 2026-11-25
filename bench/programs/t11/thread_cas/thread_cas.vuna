@@ -1,0 +1,31 @@
+-- CAS 自增吞吐：4 个线程各 50000 次 compareExchange 重试循环，输出总计数。
+-- 每次尝试消耗一格 Nat 燃料，重试风暴也不会让循环无界。
+import Base.Data.Nat
+import Base.Effect.Core
+import Base.Thread as Thread
+
+bump : Atomic -> Nat -> Int -> Eff [] Int
+bump cell 0 n = pure 0
+bump cell (Succ k) n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      old <- Thread.atomicLoad cell
+      ok <- Thread.atomicCas cell old (old + 1)
+      if ok then bump cell k (n - 1) else bump cell k n
+
+main : Eff [] Int
+main =
+  do
+    cell <- Thread.newAtomic 0
+    let fuel = fromIntClamp 100000000
+    a <- Thread.spawn (bump cell fuel 50000)
+    b <- Thread.spawn (bump cell fuel 50000)
+    c <- Thread.spawn (bump cell fuel 50000)
+    d <- Thread.spawn (bump cell fuel 50000)
+    _ <- Thread.join a
+    _ <- Thread.join b
+    _ <- Thread.join c
+    _ <- Thread.join d
+    Thread.atomicLoad cell

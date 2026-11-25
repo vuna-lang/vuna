@@ -1,0 +1,5 @@
+ops=200000
+n=50000
+targets=ocaml,native
+cc_flags=-pthread
+timeout_ms=30000

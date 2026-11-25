@@ -1,0 +1,7 @@
+# ffi_arith 自带包上下文：extern 的 C 实现放在包根 ffi/*.c，由 codegen 复制进产物并链接
+# （共享的 bench/programs 上下文没有 ffi/，且 run.sh 的 c= 只参与链接、不会被 codegen 拷贝）。
+[package]
+name = "vuna-bench-ffi-arith"
+
+[dependencies]
+vuna-base = "../../../../packages/base"

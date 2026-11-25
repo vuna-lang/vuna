@@ -1,0 +1,46 @@
+-- 效应基准：循环里 tryWith / catchExn / bracketExn 按 m 的奇偶走正常与抛出路径；
+-- release 在两条路径上都恰好执行一次。每轮 3–4 次 perform（catchExn / tryWith /
+-- bracketExn 各一次；抛出路径多一次 throwExn），测 scoped Try 与 cleanup 的成本。
+-- 手写 OCaml 对照见 eff_exn.ml（try/with + Fun.protect，同算法）。
+import Base.Effect.Core as Eff
+import Base.Effect.Mut
+import Base.Container.MutRef as MutRef
+import Base.Effect.Exn as EffExn
+import Base.Data.Nat as Nat
+
+release : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Eff r Int
+release counter = MutRef.modify counter (\c => c + 1) >> pure 0
+
+step : {r : Row} -> {w : Member MutOp r} -> MutRef Int -> Nat -> Int -> Eff (Named "default" ExnOp :: r) Int
+step counter 0 acc = pure acc
+step counter (Succ m) acc =
+  do
+    res <-
+      catchExn "default" (
+          tryWith "default" (
+              bracketExn "default" (pure 0) (\_ => release counter) (
+                  \_ =>
+                    if m - m / 2 * 2 == 0 then
+                      do
+                        _ <- throwExn "default" "even"
+                        pure 1
+                    else
+                      pure 1
+                )
+            )
+        ) (\_ => pure (Ok 0))
+    case res of
+      Ok a => step counter m (acc + a + 1)
+      Err _ => step counter m (acc + 1)
+
+main : Int
+main =
+  MutRef.withMutRefPure 0 (
+      \counter =>
+        do
+          res <- runExn "default" (step counter (natFromInt 4000) 0)
+          c <- MutRef.read counter
+          case res of
+            Ok a => pure (a * 100000 + c)
+            Err _ => pure (0 - c)
+    )

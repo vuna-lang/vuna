@@ -1,0 +1,41 @@
+-- 哈希碰撞：常量哈希的 record 键全部落在同一个桶里，insert / lookup / remove 退化成
+-- 桶内链表上的线性扫描——测碰撞路径（键相等判定 + 桶遍历），而不是哈希分布。
+-- 手写 OCaml 对照见 hashmap_collide.ml（单桶 assoc list，同算法）。
+-- ops = 容器操作次数（insert N + lookup N + remove N/2，每次退化成桶内线性扫描）。
+import Base.Container.HashMap as HashMap
+import Base.Data.Int as Int
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Trait.Hashable
+
+record Key where
+  keyId : Int
+
+instance Eq Key where
+  (==) a b = a.keyId == b.keyId
+  (/=) a b = a.keyId /= b.keyId
+
+instance Hashable Key where
+  hash _ = 7
+
+insertAll : Int -> HashMap Key Int -> HashMap Key Int
+insertAll k t = if k <= 0 then t else insertAll (k - 1) (HashMap.insert (Key { keyId = k }) k t)
+
+lookupSum : Int -> HashMap Key Int -> Int -> Int
+lookupSum k t acc =
+  if k <= 0 then
+    acc
+  else
+    case HashMap.lookup (Key { keyId = k }) t of
+      Nothing => lookupSum (k - 1) t acc
+      Just v => lookupSum (k - 1) t (acc * 31 + v)
+
+removeHalf : Int -> HashMap Key Int -> HashMap Key Int
+removeHalf k t = if k <= 0 then t else removeHalf (k - 1) (HashMap.remove (Key { keyId = k * 2 }) t)
+
+main : Int
+main =
+  let
+    n = 1500
+    t0 = insertAll n (HashMap.fromList [])
+  in lookupSum n t0 0 + natToInt (HashMap.size (removeHalf (n / 2) t0))

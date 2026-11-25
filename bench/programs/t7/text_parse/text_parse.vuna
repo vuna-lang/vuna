@@ -1,0 +1,22 @@
+-- 十进制往返：strFromInt 生成、parseInt / parseNat 解析、再格式化；累加解析值之和与长度。
+-- 手写 OCaml 对照见 text_parse.ml（string_of_int / int_of_string）。
+import Base.Data.Nat as Nat
+
+-- 单个值的往返；拆出循环体，让 loop 保持直接尾调用（wasm 栈只占常量帧）。
+step : Int -> Int
+step i =
+  let
+    s = strFromInt (i * 37 + 7)
+    a = parseIntOr 0 s
+    b =
+      case parseNat s of
+        Just k => Nat.toInt k
+        Nothing => 0
+  in a + b + strLength (strFromInt a)
+
+-- `j` 从 n 递减到 1；值仍取 (n - j) * 37 + 7。
+loop : Int -> Int -> Int -> Int
+loop j n acc = if j <= 0 then acc else loop (j - 1) n (acc + step (n - j))
+
+main : Int
+main = loop 200000 200000 0

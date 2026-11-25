@@ -1,0 +1,48 @@
+-- 嵌套 spawn：4 个工作线程各起 4 个子线程并 join（共 16 个子线程），
+-- 每块做同一段纯累加，总和与调度顺序无关。
+import Base.Data.List
+import Base.Effect.Core
+import Base.Thread as Thread
+
+tri : Int -> Int -> Int
+tri acc n = if n <= 0 then acc else tri (acc + n) (n - 1)
+
+child : Eff [] Int
+child = pure (tri 0 250000)
+
+spawnAll : Int -> Eff [] (List (Thread Int))
+spawnAll m =
+  if m <= 0 then
+    pure []
+  else
+    do
+      t <- Thread.spawn child
+      ts <- spawnAll (m - 1)
+      pure (t :: ts)
+
+joinAll : List (Thread Int) -> Eff [] Int
+joinAll [] = pure 0
+joinAll (t :: rest) =
+  do
+    x <- Thread.join t
+    y <- joinAll rest
+    pure (x + y)
+
+worker : Eff [] Int
+worker =
+  do
+    ts <- spawnAll 4
+    joinAll ts
+
+main : Eff [] Int
+main =
+  do
+    w0 <- Thread.spawn worker
+    w1 <- Thread.spawn worker
+    w2 <- Thread.spawn worker
+    w3 <- Thread.spawn worker
+    a <- Thread.join w0
+    b <- Thread.join w1
+    c <- Thread.join w2
+    d <- Thread.join w3
+    pure (a + b + c + d)

@@ -1,0 +1,12 @@
+-- ffi_arith：受限 FFI。每轮经 extern 调一次 C 侧加法，累加 i + i，输出 N(N+1)。
+-- C 实现随包走：case 目录下的 ffi/ffi_impl.c；本用例只允许 ocaml 目标。
+import Base.Data.Nat as Nat
+
+extern c_add "vuna_add" : Int -> Int -> Int
+
+loop : Nat -> Int -> Int
+loop 0 acc = acc
+loop (Succ m) acc = loop m (acc + c_add (natToInt m + 1) (natToInt m + 1))
+
+main : Int
+main = loop (natFromInt 1000000) 0

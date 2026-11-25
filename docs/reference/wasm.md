@@ -338,10 +338,10 @@ Component Model 的运行链路，而产物是核心模块，且测试宿主需�
 放大这个上限（`sorting` 在默认栈 trap，`--stack-size=4000` 仍 trap、`5000` 跑过），浏览器
 没有对应开关，所以非尾深递归的生成程序在浏览器路径上按默认值以
 `Maximum call stack size exceeded` 收口；尾调用（`return_call`）的形状不受影响。这个上限
-**不受 `wasm-opt` 影响**：`array` /
-`closures` / `list_recursion` / `sorting` / `text_scan` / `gc_pressure` / `gc_array_churn` /
-`gc_low_live` 这 8 个非尾深程序在优化后仍然 trap——那是栈深问题，不是性能问题，
-优化器不修它。生成程序在浏览器路径上的读数与判定见 [benchmarks.md](benchmarks.md) §1.3。
+**不受 `wasm-opt` 影响**：`closures` / `list_recursion` / `sorting` / `gc_pressure` /
+`gc_array_churn` 这 6 个非尾深程序在优化后仍然 trap——那是栈深问题，不是性能问题，
+优化器不修它；`array` / `text_scan` / `gc_low_live` 已改为尾递归 / 有界构造，回到
+三端可跑面。生成程序在浏览器路径上的读数与判定见 [benchmarks.md](benchmarks.md) §1.3。
 
 ### 8.1 浏览器 wasm 能力矩阵
 
@@ -456,7 +456,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   规则 trap。
 - 栈：V8 的 wasm 栈约 1 MB 且没有开关；长列表上的非尾辅助函数（`append` 之类
   `1 + f rest`）栈深与列表长度成正比，超出后以 `Maximum call stack size exceeded` 收口
-  （§8 执行边界）；`wasm-opt` 优化后仍然如此（8 个非尾深基准照旧 trap）。
+  （§8 执行边界）；`wasm-opt` 优化后仍然如此（6 个非尾深基准照旧 trap）。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
 - 多单元链接、WAT 缓存、wasm seed（不做，见
   [architecture-target](../architecture-target.md) D7）、Component Model / WASI 0.2/0.3

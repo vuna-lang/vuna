@@ -12,7 +12,8 @@
 #       repeat=N      每次计时采样内重复运行 N 次（默认 1；小项 / 启动成本用）
 #       ops=N         该程序一次运行的代表性操作数（默认 0 = 不报 ns/op）
 #       targets=a,b   只在这些 target 上跑（ocaml / native / wasm；默认全部）
-#       c=path        额外参与链接的 C 源（FFI；相对 case 所在目录）
+#       c=path        额外参与 OCaml 对照链接的 C 源（相对 case 所在目录）；
+#                     vuna 侧 FFI 走用例私有 vuna.toml + 包根 ffi/*.c
 #       n=N           C 对照的 argv（有 <name>.c 时用）
 #       cc_flags=...  C 对照的额外 cc 参数
 #       timeout_x=N   运行超时 = N × 参照耗时（缺省按 tier）
@@ -75,7 +76,7 @@ options:
   --only NAME            只跑一个基准（可重复）
   --tier T               只跑某个机制层（如 t1；可重复）
   --c-ref MODE           手写 C 对照：auto（有 <name>.c 就跑，默认）/ on / off
-  --timeout-x N          golden 校验超时 = N × 参照实现耗时（默认按 tier：t5/t6 为 5，其余 3）
+  --timeout-x N          golden 校验超时 = N × 参照实现耗时（默认按 tier：t5/t6/t10 为 5，其余 3）
   --timeout-min-ms N     超时下限（默认 1000）
   --timeout-max-ms N     超时上限（默认 30000）
   --probe-timeout-ms N   参照实现自身的探测超时（默认 10000）
@@ -465,7 +466,7 @@ probe_ref() { # label target prog golden
 # 超时倍数：缺省按 tier 的目标比给（目标的 2 倍），sidecar 的 timeout_x 覆盖。
 tier_timeout_x() { # tier
   case $1 in
-    t5|t6) printf '5' ;;
+    t5|t6|t10) printf '5' ;;
     *) printf '3' ;;
   esac
 }

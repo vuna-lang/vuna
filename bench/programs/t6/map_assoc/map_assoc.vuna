@@ -1,0 +1,36 @@
+-- assoc Map：Base.Container.Map（内部就是 List (Pair k v)）的 insert / lookup /
+-- remove / size——每次操作线性扫描，测小表的简单语义与内存开销。
+-- 手写 OCaml 对照见 map_assoc.ml（assoc list，同算法）。
+-- ops = 容器操作次数（insert N + lookup N + remove N/2，size 线性计数）。
+import Base.Container.Map as Map
+import Base.Data.Int as Int
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+
+scramble : Int -> Int
+scramble i =
+  let
+    x = i * 7919
+  in x - x / 100003 * 100003
+
+insertAll : Int -> Map Int Int -> Map Int Int
+insertAll k m = if k <= 0 then m else insertAll (k - 1) (Map.insert (scramble k) k m)
+
+lookupSum : Int -> Map Int Int -> Int -> Int
+lookupSum k m acc =
+  if k <= 0 then
+    acc
+  else
+    case Map.lookup (scramble k) m of
+      Nothing => lookupSum (k - 1) m acc
+      Just v => lookupSum (k - 1) m (acc * 31 + v)
+
+removeHalf : Int -> Map Int Int -> Map Int Int
+removeHalf k m = if k <= 0 then m else removeHalf (k - 1) (Map.remove (scramble (k * 2)) m)
+
+main : Int
+main =
+  let
+    n = 800
+    m0 = insertAll n Map.empty
+  in lookupSum n m0 0 + natToInt (Map.size (removeHalf (n / 2) m0))

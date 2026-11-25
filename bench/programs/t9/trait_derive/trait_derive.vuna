@@ -1,0 +1,35 @@
+-- 派生实例：record 的 Show / Eq / Ord / Hashable 全部由 deriving 生成；循环里展示、比较、
+-- 求哈希并插入 HashSet，输出只取稳定量（集合大小 / 比较计数 / 展示长度）。
+import Base.Container.HashSet as HashSet
+import Base.Data.Nat as Nat
+
+record Key where
+  a : Int
+  b : Int
+deriving (Show, Eq, Ord, Hashable)
+
+-- 键空间 13 × 17 个值，重复插入用于触发 Eq / Hashable 命中。
+keyOf : Int -> Key
+keyOf j =
+  let
+    g = j / 13
+  in Key { a = j - g * 13, b = g - g / 17 * 17 }
+
+-- 单键稳定贡献：show 长度 + 一次 Ord 比较 + 一次 Eq 比较。
+step : Key -> Key -> Int
+step prev k = strLength (show k) + (if k < prev then 1 else 0) + (if k == prev then 1 else 0)
+
+loop : Int -> Key -> HashSet Key -> Int -> (Int, HashSet Key)
+loop j prev set acc =
+  if j <= 0 then
+    (acc, set)
+  else
+    let
+      k = keyOf j
+    in loop (j - 1) k (HashSet.insert k set) (acc + step prev k)
+
+main : Int
+main =
+  let
+    (acc, set) = loop 20000 (Key { a = 0, b = 0 }) HashSet.empty 0
+  in acc + Nat.toInt (HashSet.size set)

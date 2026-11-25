@@ -1,0 +1,41 @@
+-- 自定义 Num / FromInt：record Mod 上的 + - * / 与整数字面量都走实例方法（无 Int 特化路径）。
+record Mod where
+  v : Int
+
+instance Num Mod where
+  (+) a b = Mod { v = a.v + b.v }
+  (-) a b = Mod { v = a.v - b.v }
+  (*) a b = Mod { v = a.v * b.v }
+  (/) a b = Mod { v = a.v / b.v }
+
+instance FromInt Mod where
+  fromInt n = Mod { v = n }
+
+instance Eq Mod where
+  (==) a b = a.v == b.v
+  (/=) a b = a.v /= b.v
+
+instance Ord Mod where
+  (<) a b = a.v < b.v
+  (<=) a b = a.v <= b.v
+  (>) a b = a.v > b.v
+  (>=) a b = a.v >= b.v
+
+instance Show Mod where
+  show a = "Mod ${a.v}"
+
+-- 有界递推：先 *5+3，再减去对 2^20 的整数倍，值域 [0, 2^20)，不会 63 位回绕。
+step : Num a, FromInt a => a -> a
+step x =
+  let
+    y = x * 5 + 3
+  in y - y / 1048576 * 1048576
+
+run : Num a, FromInt a => Int -> a -> a
+run n x = if n <= 0 then x else run (n - 1) (step x)
+
+main : Int
+main =
+  let
+    r = run 300000 (Mod { v = 1 })
+  in r.v + strLength (show r)

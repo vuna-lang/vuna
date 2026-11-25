@@ -1,0 +1,27 @@
+-- deriving via field：单字段 alias record 的 Show / Eq / Ord / Hashable 全部委托给 Int 实例。
+-- 循环里展示、比较、求哈希并插入 HashSet，输出只取稳定量（集合大小 / 比较计数 / 展示长度）。
+import Base.Container.HashSet as HashSet
+import Base.Data.Nat as Nat
+
+alias record Uid where
+  uid : Int
+deriving via field (Show, Eq, Ord, Hashable)
+
+-- 单值稳定贡献：show 长度 + 一次 Ord 比较 + 一次 Eq 比较。
+step : Uid -> Uid -> Int
+step prev u = strLength (show u) + (if u < prev then 1 else 0) + (if u == prev then 1 else 0)
+
+loop : Int -> Uid -> HashSet Uid -> Int -> (Int, HashSet Uid)
+loop j prev set acc =
+  if j <= 0 then
+    (acc, set)
+  else
+    let
+      u = Uid { uid = j - j / 23 * 23 }
+    in loop (j - 1) u (HashSet.insert u set) (acc + step prev u)
+
+main : Int
+main =
+  let
+    (acc, set) = loop 20000 (Uid { uid = 0 }) HashSet.empty 0
+  in acc + Nat.toInt (HashSet.size set)

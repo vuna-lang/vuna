@@ -1,0 +1,28 @@
+-- 效应基准：自定义 op 携带三字段 record，handler 投影字段后 resume；测带 payload 的
+-- perform/resume 成本。
+-- 手写 OCaml 对照见 eff_payload.ml（variant payload，同算法）。
+import Base.Effect.Core as Eff
+import Base.Data.Nat as Nat
+
+record Span where
+  lo : Int
+  hi : Int
+  step : Int
+
+data SpanOp : Type -> Type where
+  AskSpan : Span -> SpanOp Int
+
+loop : Nat -> Int -> Eff [SpanOp] Int
+loop 0 acc = pure acc
+loop (Succ m) acc =
+  do
+    v <- perform (AskSpan (Span { lo = 1, hi = 2, step = 3 }))
+    loop m (acc + v)
+
+main : Int
+main =
+  runPure (
+      handle (loop (natFromInt 20000) 0) {
+        AskSpan p k -> k (p.lo * 100 + p.hi * 10 + p.step)
+      }
+    )

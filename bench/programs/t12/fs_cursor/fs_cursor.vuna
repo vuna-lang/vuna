@@ -1,0 +1,43 @@
+-- fs_cursor：宿主 Fs 分块游标。写入 64 KiB 确定内容，再按 4 KiB 块读 N 遍并累加字节和。
+-- 路径取 ${TMPDIR:-/tmp} 下的临时文件，不写仓库；输出与 N 成正比。
+import Base.Effect.Core as Eff
+import Base.Effect.Cursor as EffCursor
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Data.Nat as Nat
+import Base.Data.String as Str
+
+content : String
+content = Str.repeat (natFromInt 16) (Str.repeat (natFromInt 256) "0123456789abcdef")
+
+byteSum : String -> Nat -> Int -> Int
+byteSum _ 0 acc = acc
+byteSum s (Succ m) acc = byteSum s m (acc + strAt s (natToInt m))
+
+chunkSum : String -> Int -> Int
+chunkSum s acc = byteSum s (natFromInt (strLength s)) acc
+
+pass : Member n FsOp r => String -> Int -> Eff r Int
+pass path acc =
+  do
+    cur <- fsFileCursor path 4096
+    (total, _) <- EffCursor.foldC 16 (\a, chunk => chunkSum chunk a) acc cur
+    pure total
+
+passes : Member n FsOp r => Nat -> String -> Int -> Eff r Int
+passes 0 _ acc = pure acc
+passes (Succ m) path acc =
+  do
+    next <- pass path acc
+    passes m path next
+
+main : Eff [EnvOp, FsOp] Int
+main =
+  do
+    d <- envGetEnv "TMPDIR"
+    let base = if d == "" then "/tmp" else d
+    let path = "${base}/vuna-bench-fs-cursor.tmp"
+    _ <- fsWriteFile path content
+    total <- passes (natFromInt 100) path 0
+    _ <- fsRemoveFile path
+    pure total

@@ -11,8 +11,13 @@ scan fuel s i n acc =
       next = acc * 31 + strAt s i
     in scan (fuel - 1) s (i + 1) n (next - next / 1000003 * 1000003)
 
+-- 尾递归累积分片，再用一次 strConcatMany；避免 `repeat` 的非尾 `range`/`map` 在
+-- wasm 的 1 MB 栈上溢出（`repeat` 本身仍由 string_ops 覆盖）。
+chunks : Int -> List String -> List String
+chunks k acc = if k <= 0 then acc else chunks (k - 1) ("0123456789" :: acc)
+
 main : Int
 main =
   let
-    s = repeat 16000 "0123456789"
+    s = strConcatMany (chunks 16000 [])
   in scan (strLength s) s 0 (strLength s) 0

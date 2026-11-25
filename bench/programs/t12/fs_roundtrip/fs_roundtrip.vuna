@@ -1,0 +1,25 @@
+-- fs_roundtrip：宿主 Fs 往返。每轮写入固定内容、读回、删除；输出读回字节数之和。
+-- 路径取 ${TMPDIR:-/tmp} 下的临时文件，不写仓库。
+import Base.Effect.Core as Eff
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Data.Nat as Nat
+
+content : String
+content = "vuna-bench-fs-roundtrip"
+
+rounds : Member n FsOp r => Nat -> String -> Int -> Eff r Int
+rounds 0 _ acc = pure acc
+rounds (Succ m) path acc =
+  do
+    _ <- fsWriteFile path content
+    back <- fsReadFile path
+    _ <- fsRemoveFile path
+    rounds m path (acc + strLength back)
+
+main : Eff [EnvOp, FsOp] Int
+main =
+  do
+    d <- envGetEnv "TMPDIR"
+    let base = if d == "" then "/tmp" else d
+    rounds (natFromInt 2000) "${base}/vuna-bench-fs-roundtrip.tmp" 0

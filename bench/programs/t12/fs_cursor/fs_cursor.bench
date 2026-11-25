@@ -1,0 +1,3 @@
+targets=ocaml,native
+ops=6553600
+n=100

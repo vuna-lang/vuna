@@ -1,0 +1,19 @@
+-- 并行分块 foldMap：用 Nat 加法 Monoid 求和，块内 foldMap、块间 mappend。
+-- OCaml / native 分块并发；wasm 上 parallelism=1，自动走同一份顺序路径。
+import Base.Data.List
+import Base.Data.Nat
+import Base.Effect.Core
+import Base.Thread.Par as Par
+
+tri : Int -> Int -> Int
+tri acc n = if n <= 0 then acc else tri (acc + n) (n - 1)
+
+-- 每个元素做 3000..3063 次加法，工作量随下标变化。
+work : Int -> Nat
+work i = fromIntClamp (tri 0 (3000 + i - i / 64 * 64))
+
+main : Eff [] Int
+main =
+  do
+    s <- Par.parFoldMap work (range 0 2048)
+    pure (toInt s)

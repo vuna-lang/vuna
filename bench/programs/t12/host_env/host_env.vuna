@@ -1,0 +1,15 @@
+-- host_env：宿主 Env 效应。每轮读一次 HOME（结果丢弃）并计数，输出循环次数。
+-- wasm 宿主没有环境变量，envGetEnv 返回空串；ocaml / native 返回真实值。
+import Base.Effect.Core as Eff
+import Base.Effect.Env as EffEnv
+import Base.Data.Nat as Nat
+
+loop : Nat -> Int -> Eff [EnvOp] Int
+loop 0 acc = pure acc
+loop (Succ m) acc =
+  do
+    _ <- envGetEnv "HOME"
+    loop m (acc + 1)
+
+main : Eff [EnvOp] Int
+main = loop (natFromInt 200000) 0

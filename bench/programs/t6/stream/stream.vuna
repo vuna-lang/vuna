@@ -1,0 +1,22 @@
+-- 拉式流：fromList → map → filter → take → foldl；输入是尾构造的 4000 元素列表。
+-- 每步显式推进（thunk 分配），take 取前 500 个产出后再 foldl 一遍。
+-- 手写 OCaml 对照见 stream.ml（同算法：unit -> step 的惰性序列）。
+-- ops = 流推进步数（fromList / map / filter 各一遍 + take 500 再一遍）。
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.Stream as Stream
+
+isEven : Int -> Bool
+isEven x = x - x / 2 * 2 == 0
+
+rangeTail : Int -> Int -> List Int -> List Int
+rangeTail i k acc = if k <= 0 then reverse acc else rangeTail (i + 1) (k - 1) (i :: acc)
+
+main : Int
+main =
+  let
+    n = 10000
+    s = Stream.filter isEven (Stream.map (\x => x * 3) (Stream.fromList (rangeTail 0 n [])))
+    total = Stream.foldl (\a, x => a + x) 0 s
+    prefix = Stream.take 500 s
+  in total + List.foldl (\a, x => a + x) 0 prefix + natToInt (length prefix)

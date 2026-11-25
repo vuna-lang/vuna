@@ -4,8 +4,9 @@ import Base.Container.Array as Array
 import Base.Data.List as List
 import Base.Data.Nat as Nat
 
-build : Int -> Int -> List Int
-build i k = if k <= 0 then [] else i :: build (i + 1) (k - 1)
+-- 尾递归构造 + reverse，wasm 的 1 MB 栈也能跑完整 N。
+build : Int -> Int -> List Int -> List Int
+build i k acc = if k <= 0 then List.reverse acc else build (i + 1) (k - 1) (i :: acc)
 
 sumGet : Array Int -> Int -> Int -> Int -> Int
 sumGet a i k acc =
@@ -14,7 +15,7 @@ sumGet a i k acc =
 main : Int
 main =
   let
-    xs = build 0 200000
+    xs = build 0 200000 []
     a = Array.fromList xs
     b = Array.set a 0 7
   in sumGet b 0 (Array.length b) 0 + natToInt (Array.length a)

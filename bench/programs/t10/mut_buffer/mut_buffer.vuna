@@ -1,0 +1,33 @@
+-- MutBuffer 字节构建：追加 8 字节分片 N 次（容量按倍数增长），取快照后清空，
+-- 再把快照追加回去；输出各阶段的字节数。
+-- 手写 OCaml 对照见 mut_buffer.ml（Buffer.add_string + contents + clear，同算法）。
+import Base.Effect.Core
+import Base.Effect.Mut
+import Base.Container.MutBuffer as MutBuffer
+import Base.Trait.Monad
+
+fill : {r : Row} -> {w : Member MutOp r} -> MutBuffer -> Int -> Eff r Unit
+fill out k =
+  if k <= 0 then
+    pure MkUnit
+  else
+    do
+      MutBuffer.append out "abcdefgh"
+      fill out (k - 1)
+
+main : Int
+main =
+  runPure (
+      MutBuffer.withMutBuffer (
+          \out =>
+            do
+              fill out 2000
+              n1 <- MutBuffer.size out
+              s1 <- MutBuffer.toString out
+              MutBuffer.clear out
+              n2 <- MutBuffer.size out
+              MutBuffer.append out s1
+              n3 <- MutBuffer.size out
+              pure (natToInt n1 + strLength s1 + natToInt n2 + natToInt n3 + strAt s1 0 + strAt s1 (strLength s1 - 1))
+        )
+    )

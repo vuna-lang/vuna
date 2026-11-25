@@ -1,0 +1,34 @@
+-- 晋升压力：每轮新建一个 16 元素 List，只保留最近 128 个（存活集恒为 2048 个单元），
+-- 最旧的被丢弃——年轻代每次回收都要把跨代存活的同一批对象晋升进 major。
+-- 手写 OCaml 对照见 gc_promote.ml（同算法）。
+-- ops = 分配的 List 单元：每轮 145 个（16 个数据单元 + 129 个保留环骨架）。
+import Base.Data.List as List
+
+add : Int -> Int -> Int
+add a x = a + x
+
+rangeTail : Int -> Int -> List Int -> List Int
+rangeTail i k acc = if k <= 0 then reverse acc else rangeTail (i + 1) (k - 1) (i :: acc)
+
+sumList : List Int -> Int
+sumList xs = foldl add 0 xs
+
+keep : Int -> List (List Int) -> List (List Int)
+keep k [] = []
+keep k (y :: rest) = if k <= 0 then [] else y :: keep (k - 1) rest
+
+ringSum : List (List Int) -> Int
+ringSum ring = foldl (\a, ys => a + sumList ys) 0 ring
+
+loop : Int -> Int -> List (List Int) -> Int
+loop i acc held =
+  if i <= 0 then
+    acc + ringSum held
+  else
+    let
+      xs = rangeTail i 16 []
+      held2 = keep 128 (xs :: held)
+    in loop (i - 1) (acc + sumList xs) held2
+
+main : Int
+main = loop 50000 0 []

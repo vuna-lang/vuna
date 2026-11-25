@@ -1,0 +1,100 @@
+-- 有界环形缓冲的生产者/消费者：Mutex 保护 4 槽环，两个 Condvar 交接 notEmpty/notFull，
+-- N 项全部消费后的总和与调度顺序无关。等待带燃料，耗尽即失败返回，不会无限阻塞。
+import Base.Effect.Core
+import Base.Thread as Thread
+
+record Ring where
+  s0 : Atomic
+  s1 : Atomic
+  s2 : Atomic
+  s3 : Atomic
+
+slot : Ring -> Int -> Atomic
+slot r 0 = r.s0
+slot r 1 = r.s1
+slot r 2 = r.s2
+slot r _ = r.s3
+
+next : Int -> Int
+next i = if i >= 3 then 0 else i + 1
+
+-- 持锁等到 lo < count < hi；lo = -1 / hi = 5 表示该侧无界。燃料耗尽返回 False。
+await : Mutex -> Condvar -> Atomic -> Int -> Int -> Int -> Eff [] Bool
+await m c count lo hi fuel =
+  if fuel <= 0 then
+    pure False
+  else
+    do
+      k <- Thread.atomicLoad count
+      if k > lo && k < hi then
+        pure True
+      else
+        do
+          _ <- Thread.condWait c m
+          await m c count lo hi (fuel - 1)
+
+produce : Ring -> Mutex -> Condvar -> Condvar -> Atomic -> Atomic -> Int -> Int -> Eff [] Int
+produce r m notFull notEmpty count tail fuel total =
+  if fuel <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.lockMutex m
+      ok <- await m notFull count (-1) 4 4096
+      if ok then
+        do
+          t <- Thread.atomicLoad tail
+          _ <- Thread.atomicStore (slot r t) (total - fuel + 1)
+          _ <- Thread.atomicStore tail (next t)
+          k <- Thread.atomicLoad count
+          _ <- Thread.atomicStore count (k + 1)
+          _ <- Thread.condSignal notEmpty
+          _ <- Thread.unlockMutex m
+          produce r m notFull notEmpty count tail (fuel - 1) total
+      else
+        do
+          _ <- Thread.unlockMutex m
+          pure 0
+
+consume : Ring -> Mutex -> Condvar -> Condvar -> Atomic -> Atomic -> Int -> Int -> Eff [] Int
+consume r m notFull notEmpty count head acc n =
+  if n <= 0 then
+    pure acc
+  else
+    do
+      _ <- Thread.lockMutex m
+      ok <- await m notEmpty count 0 5 4096
+      if ok then
+        do
+          h <- Thread.atomicLoad head
+          v <- Thread.atomicLoad (slot r h)
+          _ <- Thread.atomicStore head (next h)
+          k <- Thread.atomicLoad count
+          _ <- Thread.atomicStore count (k - 1)
+          _ <- Thread.condSignal notFull
+          _ <- Thread.unlockMutex m
+          consume r m notFull notEmpty count head (acc + v) (n - 1)
+      else
+        do
+          _ <- Thread.unlockMutex m
+          pure acc
+
+main : Eff [] Int
+main =
+  do
+    m <- Thread.newMutex
+    notEmpty <- Thread.newCondvar
+    notFull <- Thread.newCondvar
+    count <- Thread.newAtomic 0
+    head <- Thread.newAtomic 0
+    tail <- Thread.newAtomic 0
+    s0 <- Thread.newAtomic 0
+    s1 <- Thread.newAtomic 0
+    s2 <- Thread.newAtomic 0
+    s3 <- Thread.newAtomic 0
+    r <- pure Ring { s0 = s0, s1 = s1, s2 = s2, s3 = s3 }
+    p <- Thread.spawn (produce r m notFull notEmpty count tail 50000 50000)
+    c <- Thread.spawn (consume r m notFull notEmpty count head 0 50000)
+    _ <- Thread.join p
+    s <- Thread.join c
+    pure s
