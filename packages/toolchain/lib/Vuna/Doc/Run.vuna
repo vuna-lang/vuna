@@ -134,23 +134,47 @@ filesOf pairs = concatMap secondOf pairs
 
 -- | 内部：按 scope 构建模块并应用 `[export]` 过滤，最后组装成 `DocBook`。
 buildBook : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (DocScope, List String) -> Eff r (Check DocBook)
-buildBook scopes files = buildBookGo scopes files []
+buildBook scopes files =
+  do
+    let
+      kept = filter (\s => scopeHasFiles s files) scopes
+      inputs = map (\s => docScopeInputOf files s) kept
+    groupsR <- buildScopeModules inputs
+    case groupsR of
+      ErrC e => pure (ErrC e)
+      OkC groups => pure (docBookOf kept groups)
 
--- | 内部：逐 scope 构建；没有文件表的 scope 跳过，首个错误即返回。
-buildBookGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScope -> List (DocScope, List String) -> List DocModule -> Eff r (Check DocBook)
-buildBookGo [] files acc = pure (OkC (DocBook (reverse acc)))
-buildBookGo (scope :: restScopes) files acc =
+-- | 内部：scope 的构建输入；没有文件表的 scope 已在上层过滤掉。
+docScopeInputOf : List (DocScope, List String) -> DocScope -> DocScopeInput
+docScopeInputOf files scope = DocScopeInput (scopeName scope) (scopePathsOf files scope)
+
+-- | 内部：scope 在文件表里是否有条目（没有条目的 scope 整组跳过）。
+scopeHasFiles : DocScope -> List (DocScope, List String) -> Bool
+scopeHasFiles scope files =
   case lookupScopeFiles scope files of
-    Nothing => buildBookGo restScopes files acc
-    Just paths =>
-      do
-        modulesR <- buildModules (scopeName scope) paths
-        case modulesR of
-          ErrC e => pure (ErrC e)
-          OkC modules0 =>
-            case selectModules (scopeExports scope) modules0 of
-              ErrC e => pure (ErrC e)
-              OkC modules1 => buildBookGo restScopes files (append modules1 acc)
+    Just _ => True
+    Nothing => False
+
+-- | 内部：scope 的源文件；缺条目给空表（调用方已过滤）。
+scopePathsOf : List (DocScope, List String) -> DocScope -> List String
+scopePathsOf files scope =
+  case lookupScopeFiles scope files of
+    Just paths => paths
+    Nothing => []
+
+-- | 内部：按 scope 顺序应用 `[export]` 过滤并拼成 `DocBook`；首个错误即返回。
+docBookOf : List DocScope -> List (List DocModule) -> Check DocBook
+docBookOf [] _ = OkC (DocBook [])
+docBookOf (scope :: restScopes) groups =
+  case groups of
+    [] => OkC (DocBook [])
+    mods :: restGroups =>
+      case selectModules (scopeExports scope) mods of
+        ErrC e => ErrC e
+        OkC mods1 =>
+          case docBookOf restScopes restGroups of
+            ErrC e => ErrC e
+            OkC book => OkC (DocBook (append mods1 (bookModules book)))
 
 -- | 内部：按 scope 身份（名字 + 目录）查源文件表。
 lookupScopeFiles : DocScope -> List (DocScope, List String) -> Maybe (List String)

@@ -12,6 +12,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Doc.Comments
 import Vuna.Doc.Types
@@ -21,6 +22,8 @@ import Base.Effect.Types as EffTypes
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
+import Base.Data.Sort
+import Base.Thread.Par as Par
 
 -- ---------------------------------------------------------------
 -- 数据模型
@@ -61,39 +64,301 @@ export record DocBook(..) where
 -- ---------------------------------------------------------------
 -- 构建
 -- ---------------------------------------------------------------
--- | 包名 + 源文件列表 -> 模块列表（按输入文件顺序）；调用方负责 `[export]` 过滤。
-export buildModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r (Check (List DocModule))
-buildModules pkg files =
-  do
-    built <- buildModulesGo emptyFixityEnv pkg files []
-    pure (secondOf built)
+-- | 一个 scope 的构建输入：展示用包名（单目录模式为空串）与源文件。
+export record DocScopeInput(..) where
+  docScopeInputPackage : String
+  docScopeInputPaths : List String
 
--- | 内部：逐个文件构建模块并串接 fixity 环境；首个错误即返回。
-buildModulesGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> List String -> List DocModule -> Eff r (FixityEnv, Check (List DocModule))
-buildModulesGo env pkg [] acc = pure (env, OkC (reverse acc))
-buildModulesGo env pkg (path :: rest) acc =
-  do
-    stepped <- buildModule env pkg path
-    case stepped of
-      (env2, result) =>
-        case result of
-          ErrC e => pure (env2, ErrC e)
-          OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
+-- | 内部：单个文件的构建输入（已展开 scope / 文件下标）。
+record DocPending where
+  docPendingScope : Int
+  docPendingIndex : Int
+  docPendingPackage : String
+  docPendingPath : String
 
--- | 内部：读一个源文件，算出它的 fixity 上下文后构建模块。
-buildModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, Check DocModule)
-buildModule env pkg path =
+-- | 内部：目录上下文已解析、权重已测好的文件目标。
+record DocTarget where
+  docTargetScope : Int
+  docTargetIndex : Int
+  docTargetPackage : String
+  docTargetPath : String
+  docTargetGroup : String
+  docTargetCtx : Check PackageContext
+  docTargetSize : Int
+
+-- | 内部：一个 worker 单元（同一包上下文的连续文件）。
+record DocUnit where
+  docUnitTargets : List DocTarget
+
+-- | 内部：一个 worker 的装载。
+record DocBin where
+  docBinWeight : Int
+  docBinUnits : List DocUnit
+
+-- | 内部：每单元文件数上限。单包过大时切开，避免一个包钉住一个 worker；切块各自加载一次
+-- 模块图，所以上限远大于常见包大小（与 lint 同口径）。
+docUnitFiles : Int
+docUnitFiles = 128
+
+-- | 内部：worker 数上限。并行度再高时每个 worker 重载自己的上下文模块图、GC 并行开销
+-- 会抵消收益（与 lint 同口径）。
+docMaxWorkers : Int
+docMaxWorkers = 8
+
+-- | 内部：每个单元加载一次模块图的固定开销（折算成字节，参与装箱）。
+docContextWeight : Int
+docContextWeight = 200000
+
+-- | 并行构建全部 scope 的模块：结果与输入一一对应且保持 scope / 文件顺序；按该顺序的
+-- 首个错误返回。上下文解析在父线程完成，worker 只读文件（`runFsResult` 收口）。
+export buildScopeModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List DocScopeInput -> Eff r (Check (List (List DocModule)))
+buildScopeModules inputs =
   do
-    textR <- readText path
+    targets <- resolveDocTargets (flattenDocInputs inputs)
+    let
+      units = concatMap docUnitsOfGroup (docGroupTargets targets)
+      bins = docAssignUnits docMaxWorkers units
+    in do
+      if length bins == 0 then
+        pure (OkC (map docEmptyGroup inputs))
+      else
+        do
+          ran <- Par.parMapEff runFsResult docBin bins
+          case docJoinResults ran of
+            ErrC e => pure (ErrC e)
+            OkC rows => pure (assembleDocGroups (map docCountOfInput inputs) (Sort.sortBy docResultLe rows))
+
+-- | 内部：每个输入的源文件数（结果按 scope 切分）。
+docCountOfInput : DocScopeInput -> Int
+docCountOfInput input = natToInt (length input.docScopeInputPaths)
+
+-- | 内部：空分组（所有 scope 都没有源文件时）。
+docEmptyGroup : DocScopeInput -> List DocModule
+docEmptyGroup _ = []
+
+-- | 内部：把 scope 输入展开成带下标的目标。
+flattenDocInputs : List DocScopeInput -> List DocPending
+flattenDocInputs inputs = flattenDocInputsGo 0 inputs []
+
+flattenDocInputsGo : Int -> List DocScopeInput -> List DocPending -> List DocPending
+flattenDocInputsGo _ [] acc = reverse acc
+flattenDocInputsGo scopeIdx (input :: rest) acc =
+  flattenDocInputsGo (scopeIdx + 1) rest (append acc (pendingsOfScope scopeIdx input))
+
+pendingsOfScope : Int -> DocScopeInput -> List DocPending
+pendingsOfScope scopeIdx input =
+  pendingsOfFiles scopeIdx input.docScopeInputPackage 0 input.docScopeInputPaths
+
+pendingsOfFiles : Int -> String -> Int -> List String -> List DocPending
+pendingsOfFiles _ _ _ [] = []
+pendingsOfFiles scopeIdx pkg index (path :: rest) =
+  DocPending scopeIdx index pkg path :: pendingsOfFiles scopeIdx pkg (index + 1) rest
+
+-- | 内部：按目录缓存 `contextForFile`，逐文件解析包上下文并测源字节数（只影响装箱权重）。
+resolveDocTargets : Member nFs FsOp r, Member nEnv EnvOp r => List DocPending -> Eff r (List DocTarget)
+resolveDocTargets pending = resolveDocTargetsGo pending [] []
+
+resolveDocTargetsGo : Member nFs FsOp r, Member nEnv EnvOp r => List DocPending -> List (String, Check PackageContext) -> List DocTarget -> Eff r (List DocTarget)
+resolveDocTargetsGo [] _ acc = pure (reverse acc)
+resolveDocTargetsGo (p :: rest) cache acc =
+  let
+    dir = parentOf p.docPendingPath
+  in case lookupDocContext dir cache of
+    Just ctxR =>
+      do
+        size <- docFileSize p.docPendingPath
+        resolveDocTargetsGo rest cache (mkDocTarget p ctxR size :: acc)
+    Nothing =>
+      do
+        ctxR <- contextForFile p.docPendingPath
+        size <- docFileSize p.docPendingPath
+        resolveDocTargetsGo rest ((dir, ctxR) :: cache) (mkDocTarget p ctxR size :: acc)
+
+lookupDocContext : String -> List (String, Check PackageContext) -> Maybe (Check PackageContext)
+lookupDocContext _ [] = Nothing
+lookupDocContext key ((k, v) :: rest) = if k == key then Just v else lookupDocContext key rest
+
+docFileSize : Member nFs FsOp r => String -> Eff r Int
+docFileSize path =
+  do
+    sizeR <- fsFileSize path
+    pure (
+        case sizeR of
+          Just n => natToInt n
+          Nothing => 0
+      )
+
+mkDocTarget : DocPending -> Check PackageContext -> Int -> DocTarget
+mkDocTarget p ctxR size =
+  let
+    dir = parentOf p.docPendingPath
+    key =
+      case ctxR of
+        OkC ctx => "ctx:${contextDir ctx}"
+        ErrC _ => "dir:${dir}"
+  in DocTarget
+    p.docPendingScope
+    p.docPendingIndex
+    p.docPendingPackage
+    p.docPendingPath
+    key
+    ctxR
+    size
+
+-- | 内部：按分组键聚合（保持首次出现顺序与组内输入顺序）。
+docGroupTargets : List DocTarget -> List (String, List DocTarget)
+docGroupTargets targets = foldl docAddGroup [] targets
+
+docAddGroup : List (String, List DocTarget) -> DocTarget -> List (String, List DocTarget)
+docAddGroup [] t = [(t.docTargetGroup, [t])]
+docAddGroup ((k, ts) :: rest) t =
+  if k == t.docTargetGroup then (k, append ts [t]) :: rest else (k, ts) :: docAddGroup rest t
+
+-- | 内部：组 → 单元（每单元 ≤ `docUnitFiles` 个文件，保持输入顺序）。
+docUnitsOfGroup : (String, List DocTarget) -> List DocUnit
+docUnitsOfGroup pair = map (\chunk => DocUnit chunk) (docChunkTargets docUnitFiles (secondOf pair))
+
+-- | 内部：切块；`fuel` 是剩余块数上界。
+docChunkTargets : Int -> List DocTarget -> List (List DocTarget)
+docChunkTargets size xs =
+  let
+    width = if size < 1 then 1 else size
+  in docChunkTargetsGo width (natToInt (length xs)) xs
+
+docChunkTargetsGo : Int -> Int -> List DocTarget -> List (List DocTarget)
+docChunkTargetsGo size fuel xs =
+  if fuel <= 0 || length xs == 0 then
+    []
+  else
+    take size xs :: docChunkTargetsGo size (fuel - 1) (drop size xs)
+
+-- | 内部：装箱权重 = 源字节数 + 每个上下文的固定开销。
+docUnitWeight : DocUnit -> Int
+docUnitWeight u = foldl (\n, t => n + docTargetWeight t) 0 u.docUnitTargets + docContextWeight
+
+docTargetWeight : DocTarget -> Int
+docTargetWeight t = t.docTargetSize
+
+docEmptyBins : Int -> List DocBin
+docEmptyBins n = if n <= 0 then [] else DocBin 0 [] :: docEmptyBins (n - 1)
+
+docMinBinWeight : List DocBin -> Int
+docMinBinWeight [] = 0
+docMinBinWeight (b :: rest) = docMinBinWeightGo b.docBinWeight rest
+
+docMinBinWeightGo : Int -> List DocBin -> Int
+docMinBinWeightGo m [] = m
+docMinBinWeightGo m (b :: rest) =
+  docMinBinWeightGo (if b.docBinWeight < m then b.docBinWeight else m) rest
+
+docPlaceUnitAt : Int -> Int -> DocUnit -> List DocBin -> List DocBin
+docPlaceUnitAt _ _ _ [] = []
+docPlaceUnitAt target weight u (b :: rest) =
+  if b.docBinWeight == target then
+    DocBin (b.docBinWeight + weight) (append b.docBinUnits [u]) :: rest
+  else
+    b :: docPlaceUnitAt target weight u rest
+
+docPlaceUnit : DocUnit -> List DocBin -> List DocBin
+docPlaceUnit u bins = docPlaceUnitAt (docMinBinWeight bins) (docUnitWeight u) u bins
+
+docHasUnits : DocBin -> Bool
+docHasUnits b =
+  case b.docBinUnits of
+    [] => False
+    _ => True
+
+-- | 内部：LPT 装箱：大块优先，放进当前最轻的 bin。
+docAssignUnits : Int -> List DocUnit -> List DocBin
+docAssignUnits jobs units =
+  let
+    sorted = Sort.sortBy (\a, b => docUnitWeight a >= docUnitWeight b) units
+    bins = foldl (\bs, u => docPlaceUnit u bs) (docEmptyBins jobs) sorted
+  in filter docHasUnits bins
+
+-- | 内部：一个 worker——单元与单元内文件都顺序执行，`FixityEnv` 在文件之间串接
+-- （同包模块图只加载一次，与 lint 的 bin 同形）。
+docBin : DocBin -> Eff [FsOp] (List (Int, Int, Check DocModule))
+docBin b = docBinGo b.docBinUnits emptyFixityEnv []
+
+docBinGo : List DocUnit -> FixityEnv -> List (Int, Int, Check DocModule) -> Eff [FsOp] (List (Int, Int, Check DocModule))
+docBinGo [] _ acc = pure (reverse acc)
+docBinGo (u :: rest) env acc =
+  case u.docUnitTargets of
+    [] => docBinGo rest env acc
+    _ =>
+      do
+        stepped <- docUnitGo u.docUnitTargets env acc
+        docBinGo rest (firstOf stepped) (secondOf stepped)
+
+docUnitGo : List DocTarget -> FixityEnv -> List (Int, Int, Check DocModule) -> Eff [FsOp] (FixityEnv, List (Int, Int, Check DocModule))
+docUnitGo [] env acc = pure (env, acc)
+docUnitGo (t :: rest) env acc =
+  do
+    stepped <- docTargetBuild t env
+    docUnitGo rest (firstOf stepped) ((t.docTargetScope, t.docTargetIndex, secondOf stepped) :: acc)
+
+-- | 内部：一个文件——读盘、解析、按已解析上下文取 fixity，再交给纯构建。
+docTargetBuild : DocTarget -> FixityEnv -> Eff [FsOp] (FixityEnv, Check DocModule)
+docTargetBuild t env =
+  do
+    textR <- readText t.docTargetPath
     case textR of
       ErrC e => pure (env, ErrC e)
       OkC source =>
-        case parseSourceDetailed path source of
-          ErrC e => pure (env, err "${path}: ${diagText e}")
+        case parseSourceDetailed t.docTargetPath source of
+          ErrC e => pure (env, err "${t.docTargetPath}: ${diagText e}")
           OkC parsed =>
-            do
-              looked <- fixitiesForParsed env path parsed.parsedFile
-              pure (buildModuleWith pkg path source parsed looked)
+            case t.docTargetCtx of
+              ErrC e => pure (buildModuleWith t.docTargetPackage t.docTargetPath source parsed (env, ErrC e))
+              OkC ctx =>
+                do
+                  looked <- fixitiesForCtx env ctx t.docTargetPath parsed.parsedFile
+                  pure (buildModuleWith t.docTargetPackage t.docTargetPath source parsed looked)
+
+-- | 内部：worker 级失败（host 读写）与逐文件错误分开：前者按 bin 顺序取第一个。
+docJoinResults : List (Result (List (Int, Int, Check DocModule))) -> Check (List (Int, Int, Check DocModule))
+docJoinResults [] = OkC []
+docJoinResults (r :: rest) =
+  case r of
+    Err msg => err msg
+    Ok rows =>
+      case docJoinResults rest of
+        ErrC e => ErrC e
+        OkC more => OkC (append rows more)
+
+-- | 内部：结果按（scope, 文件）下标排序，再做稳定拆分。
+docResultLe : (Int, Int, Check DocModule) -> (Int, Int, Check DocModule) -> Bool
+docResultLe a b =
+  let
+    sa = firstOf a
+    sb = firstOf b
+    ia = firstOf (secondOf a)
+    ib = firstOf (secondOf b)
+  in if sa < sb then True else if sa > sb then False else ia <= ib
+
+-- | 内部：按每个 scope 的文件数切回分组；按该顺序的首个错误返回。
+assembleDocGroups : List Int -> List (Int, Int, Check DocModule) -> Check (List (List DocModule))
+assembleDocGroups [] _ = OkC []
+assembleDocGroups (n :: rest) rows =
+  case takeDocModules n rows [] of
+    ErrC e => ErrC e
+    OkC (mods, more) =>
+      case assembleDocGroups rest more of
+        ErrC e => ErrC e
+        OkC groups => OkC (mods :: groups)
+
+takeDocModules : Int -> List (Int, Int, Check DocModule) -> List DocModule -> Check (List DocModule, List (Int, Int, Check DocModule))
+takeDocModules n [] acc = OkC (reverse acc, [])
+takeDocModules n (r :: rest) acc =
+  if n <= 0 then
+    OkC (reverse acc, r :: rest)
+  else
+    case r of
+      (_, _, result) =>
+        case result of
+          ErrC e => ErrC e
+          OkC m => takeDocModules (n - 1) rest (m :: acc)
 
 -- | 内部：把已解析的源码转成 `DocModule`；fixity 重排失败带路径进 `ErrC`。
 buildModuleWith : String -> String -> String -> ParsedSource -> (FixityEnv, Check (List FixityDecl)) -> (FixityEnv, Check DocModule)
