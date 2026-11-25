@@ -182,3 +182,7 @@ vuna-target-<t> --ir FILE --out DIR [--print] [--diag FILE] [--files FILE]
 产物有内容寻址缓存（`objects/target-out/<irHash+target+后端身份+print>`）：命中时编译器
 直接物化上次的文件表与诊断，**不启动插件**；IR 本身不落盘（中间表示不建域），只把它的内容哈希编进键。
 详见 [cache.md](cache.md)「后端产物缓存」。
+
+插件调用有超时：默认 300s（`VUNA_PLUGIN_TIMEOUT` 覆盖，允许小数、`0` = 关闭；负数 / 非数字
+回落默认），驱动用 `timeout -s KILL` 包住插件进程；到点插件被杀、命令以「timed out after Ns」
+失败，不会静默挂住。`timeout` 不在 PATH 时退回无超时调用（与 `vuna test` 同一降级口径）。

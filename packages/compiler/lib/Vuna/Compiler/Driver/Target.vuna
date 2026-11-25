@@ -111,16 +111,77 @@ dispatchWith target bin program printResult outDir =
             pure (OkC (map firstOf files, diags))
         Nothing => runBackend target bin key irText irHash printResult outDir
 
+-- | 内部：插件调用的超时（秒，允许小数）：`VUNA_PLUGIN_TIMEOUT`（缺省 `300`；`0` = 关闭；
+-- 其它解析不了的值回落缺省）。小数用于短超时的回归（`0.001`）。插件挂死时不再静默卡住整条命令。
+pluginTimeoutEff : Member nEnv EnvOp r => Eff r String
+pluginTimeoutEff =
+  do
+    env <- envGetEnv "VUNA_PLUGIN_TIMEOUT"
+    pure (if isDurationText env then env else "300")
+
+-- | 内部：`<digits>[.<digits>]` 形状（`timeout` 接受的秒数文本）。
+isDurationText : String -> Bool
+isDurationText s = if s == "" then False else isDurationTextGo (strUnpack s) False False
+
+isDurationTextGo : List Int -> Bool -> Bool -> Bool
+isDurationTextGo [] sawDigit sawDot = sawDigit
+isDurationTextGo (c :: rest) sawDigit sawDot =
+  if c >= 48 && c <= 57 then
+    isDurationTextGo rest True sawDot
+  else if c == 46 && not sawDot then isDurationTextGo rest sawDigit True else False
+
+-- | 内部：`timeout`（coreutils）是否在 PATH 里；不在时退回无超时调用。
+hasTimeoutCmd : Member nProcess ProcessOp r => Eff r Bool
+hasTimeoutCmd =
+  do
+    code <- processRunIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]
+    pure (code == 0)
+
+pluginTimedOutDiag : String -> String -> Diagnostic
+pluginTimedOutDiag target duration =
+  diagNoLoc
+    SevError
+    PhCodegen
+    CatCodegen
+    ""
+    "target backend `${backendBinaryName target}` timed out after ${duration}s (raise or disable with VUNA_PLUGIN_TIMEOUT)"
+
+pluginArgv : String -> String -> String -> Bool -> List String
+pluginArgv bin target outDir printResult =
+  append
+    [bin, "--ir", irPathOf outDir target, "--out", outDir, "--diag", diagPathOf outDir target, "--files", filesPathOf outDir target]
+    (if printResult then ["--print"] else [])
+
+pluginTimedOutPath : String -> String -> String
+pluginTimedOutPath outDir target = "${outDir}/.vuna-plugin-timeout-${target}"
+
+-- | 超时标记：`sh` 跑 `timeout -s KILL`，超时后写 `<out>/.vuna-plugin-timeout-<target>`
+-- 再原样传回退出码。宿主 `Sys.command` 对被信号杀死的子进程只给 255，退出码本身分不清
+-- 超时与崩溃，所以用标记文件判定。
+pluginRunArgv : String -> String -> String -> String -> Bool -> List String
+pluginRunArgv bin target outDir duration printResult =
+  append
+    ["sh", "-c", "timeout -s KILL ${duration}s \"$@\"\ncode=$?\nif [ $code -eq 137 ] || [ $code -eq 124 ]; then printf timeout > \"${pluginTimedOutPath outDir target}\"; fi\nexit $code\n", "sh"]
+    (pluginArgv bin target outDir printResult)
+
 -- | 内部：缓存未命中——写 IR、起插件、读回诊断与产物，最后写产物缓存。
 runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 runBackend target bin key irText irHash printResult outDir =
   do
     _ <- pure (log! "debug" "target-cache=miss ${target}")
     _ <- fsWriteFile (irPathOf outDir target) irText
-    code <-
-      processRunIn
-        "."
-        (append [bin, "--ir", irPathOf outDir target, "--out", outDir, "--diag", diagPathOf outDir target, "--files", filesPathOf outDir target] (if printResult then ["--print"] else []))
+    duration <- pluginTimeoutEff
+    hasTimeout <- if duration == "0" then pure False else hasTimeoutCmd
+    stale <- fsFileExists (pluginTimedOutPath outDir target)
+    _ <- if stale then fsRemoveFile (pluginTimedOutPath outDir target) else pure 0
+    argv <-
+      if hasTimeout then
+        pure (pluginRunArgv bin target outDir duration printResult)
+      else
+        pure (pluginArgv bin target outDir printResult)
+    code <- processRunIn "." argv
+    timedOut <- if hasTimeout then fsFileExists (pluginTimedOutPath outDir target) else pure False
+    _ <- if timedOut then fsRemoveFile (pluginTimedOutPath outDir target) else pure 0
     hasDiag <- fsFileExists (diagPathOf outDir target)
     payload <- if hasDiag then fsReadFile (diagPathOf outDir target) else pure ""
     hasFiles <- fsFileExists (filesPathOf outDir target)
@@ -128,7 +189,9 @@ runBackend target bin key irText irHash printResult outDir =
     _ <- fsRemoveFile (irPathOf outDir target)
     _ <- if hasFiles then fsRemoveFile (filesPathOf outDir target) else pure 0
     _ <- if hasDiag then fsRemoveFile (diagPathOf outDir target) else pure 0
-    if code == 0 then
+    if timedOut then
+      pure (ErrC (pluginTimedOutDiag target duration))
+    else if code == 0 then
       let
         names = splitNames filesPayload
         diags = decodedDiags payload

@@ -1,0 +1,14 @@
+# 114) 后端插件调用有超时：极小超时必须失败（而不是静默等插件跑完），`0` 关闭超时。
+# 超时值允许小数，`0.001` 保证小包的原生 codegen 也会被截断。
+
+run: sh -c 'd="$TMPDIR/pt/pkg"; mkdir -p "$d/app"; printf "[package]\nname = \"pt\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
+exit: 0
+
+# 1ms：插件被杀，报超时。
+run: sh -c 'VUNA_PLUGIN_TIMEOUT=0.001 "$VUNA" build --target native --no-compile --out "$TMPDIR/pt/out" "$TMPDIR/pt/pkg" 2>&1'
+exit: 1
+out-contains: timed out after 0.001s
+
+# 0 = 关闭：同一构建正常完成。
+run: sh -c 'VUNA_PLUGIN_TIMEOUT=0 "$VUNA" build --target native --no-compile --out "$TMPDIR/pt/out" "$TMPDIR/pt/pkg" 2>&1'
+exit: 0
