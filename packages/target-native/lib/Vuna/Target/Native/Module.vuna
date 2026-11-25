@@ -2580,7 +2580,7 @@ genLamValue fuel st bs body =
                         frame = nativeFrameBytes stF.fgNextSlot
                         lamBody = append (firstOf cp) (append (firstOf bp) (firstOf q))
                         lamPromo = Regs.promoteLoops stF.fgSlotCls (clearDeadSlots stF.fgReenter stF.fgSlotCls (peephole lamBody))
-                        lamInstrs = append (cleanup lamPromo.rpBody) (Regs.epilogueOf lamPromo.rpSaved)
+                        lamInstrs = append (Regs.retargetSetccPass (cleanup lamPromo.rpBody)) (Regs.epilogueOf lamPromo.rpSaved)
                         lamFunc = NativeFunc lamName frame (append (Regs.prologueOf lamPromo.rpSaved) (append (nativePrologueOf frame (unwrittenSlots frame lamInstrs)) lamInstrs)) st.fgModule
                         lams = append st1.fgLams (append stF.fgLams [lamFunc])
                       in if ncap == 0 then
@@ -3239,7 +3239,7 @@ genLoopBody fuel st inner name loopLabel =
                 in nbind (genExprAt (fuel - 1) exitSt True rot.lrExit) (
                     \pe =>
                       let
-                        body = append [IJmp lc, ILabel lb] (append bodyInstrs (append (if st.fgThreaded then [ILabel lc, ICall (nativeRtLabel "safepoint")] else [ILabel lc]) (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
+                        body = append [IJmp lc, IAlign 4, ILabel lb] (append bodyInstrs (append (if st.fgThreaded then [ILabel lc, ICall (nativeRtLabel "safepoint")] else [ILabel lc]) (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
                       in NOk (body, { (secondOf pe) | fgRanges = st.fgRanges })
                   )
             )
@@ -3302,7 +3302,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
             st1 = secondOf p
             frame = nativeFrameBytes st1.fgNextSlot
             promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole (firstOf p)))
-            instrs = append (cleanup promo.rpBody) (Regs.epilogueOf promo.rpSaved)
+            instrs = append (Regs.retargetSetccPass (cleanup promo.rpBody)) (Regs.epilogueOf promo.rpSaved)
             holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
             mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
           in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)
@@ -3330,11 +3330,11 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
-                        body0 = append (firstOf bp) (append (if threaded then [ILabel loopLabel, ICall (nativeRtLabel "safepoint")] else [ILabel loopLabel]) (firstOf q))
+                        body0 = append (firstOf bp) (append (if threaded then [IAlign 4, ILabel loopLabel, ICall (nativeRtLabel "safepoint")] else [IAlign 4, ILabel loopLabel]) (firstOf q))
                         -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
                         bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
                         promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))
-                        instrs = append (cleanup promo.rpBody) (Regs.epilogueOf promo.rpSaved)
+                        instrs = append (Regs.retargetSetccPass (cleanup promo.rpBody)) (Regs.epilogueOf promo.rpSaved)
                         holes = if memStr name allocs && frameReused st1.fgReenter instrs then unwrittenSlots frame instrs else []
                         mainF = NativeFunc (nativeFuncLabel name) frame (append (Regs.prologueOf promo.rpSaved) (append (nativePrologueOf frame holes) instrs)) modPath
                       in NOk (append st1.fgLams [mainF], st1.fgNextLabel, st1.fgStatics)

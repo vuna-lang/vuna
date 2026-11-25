@@ -337,8 +337,150 @@ promoteLoops slotCls instrs =
       saveBytes = 8 * length saved + (if odd (length saved) then 8 else 0)
       body0 = map (\i => mapValueOperands (substOperand reps) i) instrs
       body1 = if saveBytes == 0 then body0 else shiftPositiveOffsets saveBytes body0
-      body = raxChainPass (scratchFoldPass body1)
+      body2 = hoistLoopConsts body1
+      body3 = retargetSetccPass body2
+      body = raxChainPass (scratchFoldPass body3)
     in RegPlan (restoreTailJumps saved body) saved
+
+-- ---------------------------------------------------------------
+-- 比较结果直接落在循环槽寄存器
+-- ---------------------------------------------------------------
+-- | `xor rax, rax; cmp a, b; setcc al; mov d, rax` 里的 0/1 结果直接写 `d`：
+--   省掉每条比较末尾的搬运（比较物化成循环携带值的常见形态）。要求 `d` 是提升后的
+--   寄存器、比较不读 `d`，且 `rax` 在搬运之后先被写或被块边界截断。
+export retargetSetccPass : List Instr -> List Instr
+retargetSetccPass [] = []
+retargetSetccPass (i :: rest) =
+  case i of
+    IBinReg "xor" Rax (OpReg r1) =>
+      case rest of
+        (ICmp a b) :: (ISetcc cc Rax) :: (IMov (OpReg d) (OpReg Rax)) :: more =>
+          if sameReg r1 Rax && isSetccTarget d && not (operandUsesReg d a) && not (operandUsesReg d b) && not (operandUsesReg Rax a) && not (operandUsesReg Rax b) && setccRaxDead more then
+            IBinReg "xor" d (OpReg d) :: ICmp a b :: ISetcc cc d :: retargetSetccPass more
+          else
+            i :: retargetSetccPass rest
+        _ => i :: retargetSetccPass rest
+    _ => i :: retargetSetccPass rest
+
+-- | 可以直接承接 0/1 结果的寄存器：callee-saved 提升槽 + 两个 caller-saved scratch 槽。
+isSetccTarget : Reg -> Bool
+isSetccTarget r = isPromotedReg r || sameReg r R10 || sameReg r R11
+
+-- | `rax` 在改向后的比较之后不再被读：自异或（清零）视为覆写，不算读。
+setccRaxDead : List Instr -> Bool
+setccRaxDead [] = True
+setccRaxDead (i :: rest) =
+  case i of
+    IBinReg "xor" Rax (OpReg Rax) => True
+    _ =>
+      if instrReadsReg Rax i then
+        False
+      else if instrWritesReg Rax i then
+        True
+      else if blockBoundary i then True else setccRaxDead rest
+
+-- ---------------------------------------------------------------
+-- 循环内常量提升
+-- ---------------------------------------------------------------
+-- | 把循环体里只写一次的 64-bit 立即数装载提到循环入口之前：常量除法 / 取模的 magic
+--   数不再每轮重新 materialize。判据：函数只有一个回边目标；目标寄存器是 caller-saved
+--   scratch（`r8`–`r11`，函数内没有 call / 其它写入），且在常量之前没有被读。
+--   提升点是第一条标签之前——来参绑定已经完成，自递归回边与内部回边都从标签之后进入。
+hoistLoopConsts : List Instr -> List Instr
+hoistLoopConsts instrs =
+  if length (backTargetsOf instrs) /= 1 then
+    instrs
+  else
+    case firstLabelIndex instrs of
+      Nothing => instrs
+      Just li =>
+        let
+          hoisted = filter (\p => firstOf p > li) (hoistableConsts instrs)
+        in if length hoisted == 0 then
+          instrs
+        else
+          let
+            consts = map secondOf hoisted
+            dropped = map firstOf hoisted
+            kept = filter (\p => not (memIndex (firstOf p) dropped)) (indexInstrs instrs)
+          in insertAt li consts (map secondOf kept)
+
+-- | 回边目标（不同标签去重）。单回边目标才允许提升。
+backTargetsOf : List Instr -> List String
+backTargetsOf instrs = backTargetsGo [] [] instrs
+
+backTargetsGo : List String -> List String -> List Instr -> List String
+backTargetsGo seen acc [] = acc
+backTargetsGo seen acc (i :: rest) =
+  case i of
+    ILabel l => backTargetsGo (l :: seen) acc rest
+    IJmp l => backTargetsGo seen (addBack l seen acc) rest
+    IJcc _ l => backTargetsGo seen (addBack l seen acc) rest
+    _ => backTargetsGo seen acc rest
+
+addBack : String -> List String -> List String -> List String
+addBack l seen acc = if memStr l seen && not (memStr l acc) then l :: acc else acc
+
+firstLabelIndex : List Instr -> Maybe Int
+firstLabelIndex instrs = firstLabelGo 0 instrs
+
+firstLabelGo : Int -> List Instr -> Maybe Int
+firstLabelGo _ [] = Nothing
+firstLabelGo i ((ILabel _) :: _) = Just i
+firstLabelGo i (_ :: rest) = firstLabelGo (i + 1) rest
+
+-- | 可以提升的 `mov r, imm64`：立即数装不进 imm32 的装载、目标寄存器只在这里被写、
+--   且在它之前没有被读。
+hoistableConsts : List Instr -> List (Int, Instr)
+hoistableConsts instrs =
+  filter (\p => hoistableAt (firstOf p) (secondOf p) instrs) (indexInstrs instrs)
+
+hoistableAt : Int -> Instr -> List Instr -> Bool
+hoistableAt i (IMov (OpReg r) (OpImm k)) instrs =
+  if isHoistReg r && needsImm64 k && countWrites r instrs == 1 then
+    case firstReadIndex r instrs of
+      Nothing => True
+      Just j => j > i
+  else
+    False
+hoistableAt _ _ _ = False
+
+isHoistReg : Reg -> Bool
+isHoistReg r = sameReg r R8 || sameReg r R9 || sameReg r R10 || sameReg r R11
+
+needsImm64 : Int -> Bool
+needsImm64 k = k > 2147483647 || k < 0 - 2147483648
+
+countWrites : Reg -> List Instr -> Int
+countWrites _ [] = 0
+countWrites r (i :: rest) = (if instrWritesReg r i then 1 else 0) + countWrites r rest
+
+firstReadIndex : Reg -> List Instr -> Maybe Int
+firstReadIndex r instrs = firstReadGo 0 r instrs
+
+firstReadGo : Int -> Reg -> List Instr -> Maybe Int
+firstReadGo _ _ [] = Nothing
+firstReadGo i r (ins :: rest) = if instrReadsReg r ins then Just i else firstReadGo (i + 1) r rest
+
+indexInstrs : List Instr -> List (Int, Instr)
+indexInstrs xs = indexInstrsGo 0 xs
+
+indexInstrsGo : Int -> List Instr -> List (Int, Instr)
+indexInstrsGo _ [] = []
+indexInstrsGo i (x :: rest) = (i, x) :: indexInstrsGo (i + 1) rest
+
+memIndex : Int -> List Int -> Bool
+memIndex _ [] = False
+memIndex i (j :: rest) = i == j || memIndex i rest
+
+insertAt : Int -> List a -> List a -> List a
+insertAt n xs ys =
+  if n <= 0 then
+    append xs ys
+  else
+    case ys of
+      [] => xs
+      y :: rest => y :: insertAt (n - 1) xs rest
 
 -- | prologue 压了 callee-saved 之后，`[rbp+正偏移]` 的来参区整体上移。
 --   只改正偏移；帧槽是负偏移，不动。
@@ -360,6 +502,10 @@ shiftOperandOff _ o = o
 isScalarCls : NCls -> Bool
 isScalarCls NClsScalar = True
 isScalarCls _ = False
+
+memStr : String -> List String -> Bool
+memStr _ [] = False
+memStr s (x :: rest) = s == x || memStr s rest
 
 memIntList : Int -> List Int -> Bool
 memIntList _ [] = False

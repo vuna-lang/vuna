@@ -156,11 +156,42 @@ liveChainBody =
 liveChainPlan : RegPlan
 liveChainPlan = promoteLoops [Pair 0 NClsScalar, Pair 1 NClsScalar] liveChainBody
 
+-- | 循环里的 64-bit 立即数（常量除法的 magic）提到循环入口之前。
+hoistBody : List Instr
+hoistBody =
+  [
+    ILabel ".L",
+    IMov (OpReg R9) (OpImm 2361183241434822607),
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IBinReg "add" Rax (OpReg R9),
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L"
+  ]
+
+hoistPlan : RegPlan
+hoistPlan = promoteLoops [Pair 0 NClsScalar] hoistBody
+
+-- | 比较物化的 `xor rax, rax; cmp r9, k; setcc al; mov rbx, rax` 直接写 rbx。
+setccBody : List Instr
+setccBody =
+  [
+    ILabel ".L",
+    IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)),
+    IBinReg "xor" Rax (OpReg Rax),
+    ICmp (OpReg R9) (OpImm 5),
+    ISetcc "setl" Rax,
+    IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax),
+    IJmp ".L"
+  ]
+
+setccPlan : RegPlan
+setccPlan = promoteLoops [Pair 0 NClsScalar] setccBody
+
 problems : List String
 problems =
   concatMap
     (\s => if s == "" then [] else [s])
-    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody), check "live rax keeps chain" True (hasRaxFromRbx liveChainPlan.rpBody)]
+    [check "loop keeps two registers" True (length loopPlan.rpSaved == 2), check "first register is rbx" True (firstSavedIsRbx loopPlan.rpSaved), check "scalar slots promoted" False (mentionsOff (nativeSlotOff 0) loopPlan.rpBody), check "second scalar promoted" False (mentionsOff (nativeSlotOff 1) loopPlan.rpBody), check "pointer slot stays" True (mentionsOff (nativeSlotOff 2) loopPlan.rpBody), check "temp slot stays" True (mentionsOff (nativeSlotOff 3) loopPlan.rpBody), check "tail call restores" True (tailRestored loopPlan.rpBody), check "straight line untouched" True (mentionsOff (nativeSlotOff 0) straightPlan.rpBody), check "straight line saves nothing" True (length straightPlan.rpSaved == 0), check "odd count pads" True (hasPad (prologueOf slimPlan.rpSaved)), check "odd count unpads" True (hasUnpad (epilogueOf slimPlan.rpSaved)), check "even count no pad" False (hasPad (prologueOf loopPlan.rpSaved)), check "epilogue pops both" True (epiloguePops loopPlan.rpSaved), check "five slots promoted" True (length fivePlan.rpSaved == 5), check "r15 used" True (savedHasR15 fivePlan.rpSaved), check "five slots leave frame" True (allSlotsGone fivePlan.rpBody), check "stack args promote" True (length stackArgPlan.rpSaved == 1), check "stack arg old offset gone" False (mentionsPos 16 stackArgPlan.rpBody), check "stack arg offset shifted" True (mentionsPos 32 stackArgPlan.rpBody), check "rax chain coalesced" False (usesRax patternPlan.rpBody), check "live rax keeps chain" True (hasRaxFromRbx liveChainPlan.rpBody), check "loop const hoisted" True (beforeLabel isBigConst ".L" hoistPlan.rpBody), check "setcc writes slot reg" True (hasSetccRbx setccPlan.rpBody), check "setcc copy removed" False (hasMovRbxRax setccPlan.rpBody)]
 
 check : String -> Bool -> Bool -> String
 check label want got = if want == got then "" else label ++ ": drifted"
@@ -190,6 +221,35 @@ allSlotsGone body =
 
 usesRax : List Instr -> Bool
 usesRax instrs = foldl (\acc, i => acc || instrReadsReg Rax i || instrWritesReg Rax i) False instrs
+
+isBigConst : Instr -> Bool
+isBigConst (IMov (OpReg R9) (OpImm k)) = k == 2361183241434822607
+isBigConst _ = False
+
+-- | 命中的指令是否出现在标签之前。
+beforeLabel : (Instr -> Bool) -> String -> List Instr -> Bool
+beforeLabel _ _ [] = False
+beforeLabel p l (i :: rest) =
+  if p i then
+    True
+  else
+    case i of
+      ILabel x => if x == l then False else beforeLabel p l rest
+      _ => beforeLabel p l rest
+
+hasSetccRbx : List Instr -> Bool
+hasSetccRbx [] = False
+hasSetccRbx (i :: rest) =
+  case i of
+    ISetcc _ r => if sameReg r Rbx then True else hasSetccRbx rest
+    _ => hasSetccRbx rest
+
+hasMovRbxRax : List Instr -> Bool
+hasMovRbxRax [] = False
+hasMovRbxRax (i :: rest) =
+  case i of
+    IMov (OpReg a) (OpReg b) => if sameReg a Rbx && sameReg b Rax then True else hasMovRbxRax rest
+    _ => hasMovRbxRax rest
 
 hasPad : List Instr -> Bool
 hasPad instructions = foldl (\acc, i => acc || isPad i) False instructions

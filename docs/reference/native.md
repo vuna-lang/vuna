@@ -332,6 +332,17 @@ prologue 保存用到的寄存器（奇数个补 8 字节，保持 `call` 前 16
 只剩一次 `add`；`cmp` / `cmov` 版本会把 `add → cmp → cmov` 串进累加器的关键路径。
 饱和判据与标量计划一致（有符号 `>`）；`Nat` 值恒为非负 63-bit。
 
+### 3.12 循环布局与标量搬运
+
+- **循环对齐**：自递归循环的循环头与旋转后的热循环体都发 `.p2align 4`。短循环
+  （`scalar_divconst` 的 `shr`/`xor` 环）对起址很敏感，16 字节对齐后不再跨取指块。
+- **循环内常量提升**：`mov r, imm64` 的立即数装不进 imm32 时（常量除法的 magic 数），
+  若函数只有一个回边目标、`r` 是 caller-saved scratch 且函数内没有其它写入与前置读，
+  就把装载提到第一条循环标签之前，循环体每轮少一条 `movabs`。
+- **比较结果直写**：`xor rax, rax; cmp a, b; setcc al; mov d, rax` 在 `d` 是提升槽、
+  比较不读 `d`/`rax` 且 `rax` 之后先被写时，改写成 `xor d, d; cmp a, b; setcc dl`，
+  省掉每条物化比较末尾的搬运。
+
 ## 4. IR 支持面
 
 从 `IrEntry.irEntryMain` 沿 `irDefDeps` 收集**可达**定义，只生成可达函数；不可达的
