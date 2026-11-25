@@ -7,4 +7,4 @@ loop acc 0 = acc
 loop acc (Succ k) = loop (Nat.plus acc k) k
 
 main : Int
-main = Nat.toInt (loop 0 (Nat.fromInt 10000000))
+main = Nat.toInt (loop 0 (Nat.fromIntClamp 10000000))

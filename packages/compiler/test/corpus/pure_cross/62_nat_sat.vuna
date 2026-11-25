@@ -1,4 +1,4 @@
--- Nat 饱和/夹取：plus / mult 饱和到 max_int，minus 截断到 0，fromInt 把负数夹成 0。
+-- Nat 饱和/夹取：plus / mult 饱和到 max_int，minus 截断到 0，fromIntClamp 把负数夹成 0。
 -- max_int = 2^62-1；ocaml 是语义 oracle，wasm / native 必须逐字一致。
 import Base.Data.Nat as Nat
 

@@ -17,9 +17,4 @@ main =
     ++ show (abs 1.5)
     ++ "/"
     ++ show (sqrt 4.0)
-    ++ "/"
-    ++ show (intToFloat 3)
-    ++ "/"
-    ++ show (floatToInt 3.9)
-    ++ "/"
-    ++ show meters
+    ++ "/" ++ show (intToFloat 3) ++ "/" ++ show (floatToIntTrunc 3.9) ++ "/" ++ show meters

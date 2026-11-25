@@ -11,8 +11,8 @@ churn n =
   else
     let
       a = Array.fromList (range 0 1000)
-      b = Array.set a (Nat.fromInt 0) n
-    in Nat.toInt (Array.length b) + Array.get b (Nat.fromInt 0) + churn (n - 1)
+      b = Array.set a (Nat.fromIntClamp 0) n
+    in Nat.toInt (Array.length b) + Array.get b (Nat.fromIntClamp 0) + churn (n - 1)
 
 main : Int
 main = churn 8000

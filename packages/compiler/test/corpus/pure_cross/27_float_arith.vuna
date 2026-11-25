@@ -1,4 +1,4 @@
 import Base.Data.Float as Float
 
 main : Int
-main = intFromFloat (1.5 + 2.25 * 2.0) + floatToInt (intToFloat 4)
+main = intFromFloat (1.5 + 2.25 * 2.0) + floatToIntTrunc (intToFloat 4)

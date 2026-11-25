@@ -10,4 +10,4 @@ loop acc n =
     in loop (acc + step / 3.0 + (if acc < 50000000.0 then 1.0 else 0.0)) (n - 1)
 
 main : Int
-main = floatToInt (loop 0.0 1000000)
+main = floatToIntTrunc (loop 0.0 1000000)

@@ -1,4 +1,4 @@
--- 只有 Nat→Int 隐式提升；Int→Nat 必须显式 fromInt，不得隐式通过。
+-- 只有 Nat→Int 隐式提升；Int→Nat 必须显式 fromIntClamp，不得隐式通过。
 import Base.Data.Nat as Nat
 
 natId : Nat -> Nat

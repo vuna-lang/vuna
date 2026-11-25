@@ -11,4 +11,4 @@ loop acc n =
     loop (acc + step (intToFloat n) / 3.0 + (if acc < 20.0 then 1.0 else 0.0)) (n - 1)
 
 main : Int
-main = floatToInt (loop 0.0 60) + floatToInt (step 16.0)
+main = floatToIntTrunc (loop 0.0 60) + floatToIntTrunc (step 16.0)
