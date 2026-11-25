@@ -1,10 +1,16 @@
--- 多线程原语的宿主行为：线程 spawn/join、原子单元、互斥与条件变量。
--- 断言值都来自 join 之后或持锁读取，输出与调度顺序无关。
+-- 多线程原语的宿主行为：spawn/join（含嵌套 / 重复 join / String 结果）、原子单元
+-- （fetchAdd 的 63-bit 回绕、exchange、CAS 成败）、互斥（lock/tryLock/unlock/withMutex）、
+-- 条件变量（signal 与 broadcast 唤醒全部等待者）。断言在末尾集中判定，失败打印 FAIL 并 exit 1。
 import Base
 import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
 import Base.Thread as Thread
 
--- 每个线程往共享原子单元里加 `k`，共 `n` 次。
+-- 断言失败时返回标签，成功返回空列表（末尾统一判定，避免每条断言都分叉）。
+check : String -> Bool -> List String
+check label ok = if ok then [] else [label]
+
 addMany : Atomic -> Int -> Int -> Eff [] Int
 addMany cell k n =
   if n <= 0 then
@@ -21,7 +27,7 @@ bumpOnce r =
     _ <- Thread.atomicStore r (x + 1)
     pure 0
 
--- 每个线程在互斥保护下把共享引用加一，共 `n` 次。
+-- 每个线程在互斥保护下把共享单元加一，共 `n` 次。
 bumpLocked : Mutex -> Atomic -> Int -> Eff [] Int
 bumpLocked m r n =
   if n <= 0 then
@@ -31,9 +37,9 @@ bumpLocked m r n =
       _ <- Thread.withMutex m (bumpOnce r)
       bumpLocked m r (n - 1)
 
--- 持锁等待引用达到 1（fuel 只用于终止性检查；正常一次通知就返回）。
-awaitOne : Nat -> Condvar -> Mutex -> Atomic -> Eff [] Int
-awaitOne fuel c m r =
+-- 持锁等待单元达到 1（fuel 只用于终止性检查；正常一次通知就返回）。
+waitForFlag : Nat -> Condvar -> Mutex -> Atomic -> Eff [] Int
+waitForFlag fuel c m r =
   case fuel of
     0 => pure 0
     Succ k =>
@@ -44,13 +50,42 @@ awaitOne fuel c m r =
         else
           do
             _ <- Thread.condWait c m
-            awaitOne k c m r
+            waitForFlag k c m r
 
 waitLocked : Condvar -> Mutex -> Atomic -> Eff [] Int
 waitLocked c m r =
   do
     _ <- Thread.lockMutex m
-    v <- awaitOne 1024 c m r
+    v <- waitForFlag 1024 c m r
+    _ <- Thread.unlockMutex m
+    pure v
+
+setAndBroadcast : Condvar -> Atomic -> Eff [] Int
+setAndBroadcast c r =
+  do
+    _ <- Thread.atomicStore r 1
+    Thread.condBroadcast c
+
+waitReady : Nat -> Atomic -> Condvar -> Mutex -> Atomic -> Eff [] Int
+waitReady fuel ready c m r =
+  case fuel of
+    0 => pure 0
+    Succ k =>
+      do
+        n <- Thread.atomicLoad ready
+        if n >= 2 then
+          Thread.withMutex m (setAndBroadcast c r)
+        else
+          do
+            _ <- Thread.yieldNow
+            waitReady k ready c m r
+
+broadcastWaiter : Atomic -> Condvar -> Mutex -> Atomic -> Eff [] Int
+broadcastWaiter ready c m r =
+  do
+    _ <- Thread.lockMutex m
+    _ <- Thread.atomicFetchAdd ready 1
+    v <- waitForFlag 4096 c m r
     _ <- Thread.unlockMutex m
     pure v
 
@@ -63,14 +98,79 @@ setReady c r =
 markReady : Condvar -> Mutex -> Atomic -> Eff [] Int
 markReady c m r = Thread.withMutex m (setReady c r)
 
-main : Eff [] String
+nestedBody : Eff [] Int
+nestedBody =
+  do
+    inner <- Thread.spawn (pure 5)
+    x <- Thread.join inner
+    pure (x + 3)
+
+stringBody : Eff [] String
+stringBody =
+  do
+    _ <- pure 0
+    pure ("ab" ++ strFromInt 12 ++ "cd")
+
+main : Eff [ConsoleOp, ExitOp] String
 main =
   do
-    cell <- Thread.newAtomic 0
+    -- 1) 原子：exchange / CAS 成败 / store / fetchAdd 的 63-bit 回绕。
+    a <- Thread.newAtomic 10
+    o1 <- Thread.atomicExchange a 20
+    o2 <- Thread.atomicCompareExchange a 20 30
+    o3 <- Thread.atomicCompareExchange a 20 40
+    _ <- Thread.atomicStore a 5
+    v <- Thread.atomicLoad a
+    wrap <- Thread.newAtomic 4611686018427387903
+    _ <- Thread.atomicFetchAdd wrap 1
+    wv <- Thread.atomicLoad wrap
+    minInt <- pure (0 - 4611686018427387903 - 1)
+    -- 2) tryLock：持锁时失败、释放后成功。
+    m2 <- Thread.newMutex
+    _ <- Thread.lockMutex m2
+    held <- Thread.tryLockMutex m2
+    _ <- Thread.unlockMutex m2
+    freeNow <- Thread.tryLockMutex m2
+    _ <- Thread.unlockMutex m2
+    -- 3) 嵌套 spawn、String 结果、重复 join、4 个并发原子加。
+    nested <- Thread.spawn nestedBody
+    nv <- Thread.join nested
+    strT <- Thread.spawn stringBody
+    sv <- Thread.join strT
+    twice <- Thread.spawn (pure 42)
+    d1 <- Thread.join twice
+    d2 <- Thread.join twice
+    many <- Thread.newAtomic 0
+    c1 <- Thread.spawn (Thread.atomicFetchAdd many 1)
+    c2 <- Thread.spawn (Thread.atomicFetchAdd many 1)
+    c3 <- Thread.spawn (Thread.atomicFetchAdd many 1)
+    c4 <- Thread.spawn (Thread.atomicFetchAdd many 1)
+    _ <- Thread.join c1
+    _ <- Thread.join c2
+    _ <- Thread.join c3
+    _ <- Thread.join c4
+    mv <- Thread.atomicLoad many
+    id0 <- Thread.currentId
+    par <- Thread.parallelism
+    -- 4) 条件变量 broadcast：两个等待者都被唤醒。
     m <- Thread.newMutex
-    counter <- Thread.newAtomic 0
-    cond <- Thread.newCondvar
+    cv <- Thread.newCondvar
     ready <- Thread.newAtomic 0
+    flag <- Thread.newAtomic 0
+    bw1 <- Thread.spawn (broadcastWaiter ready cv m flag)
+    bw2 <- Thread.spawn (broadcastWaiter ready cv m flag)
+    _ <- waitReady 100000 ready cv m flag
+    s1 <- Thread.join bw1
+    s2 <- Thread.join bw2
+    -- 5) 互斥保护下的计数与原子累计。
+    counter <- Thread.newAtomic 0
+    m3 <- Thread.newMutex
+    b1 <- Thread.spawn (bumpLocked m3 counter 50)
+    b2 <- Thread.spawn (bumpLocked m3 counter 50)
+    _ <- Thread.join b1
+    _ <- Thread.join b2
+    locked <- Thread.atomicLoad counter
+    cell <- Thread.newAtomic 0
     t0 <- Thread.spawn (addMany cell 1 100)
     t1 <- Thread.spawn (addMany cell 2 100)
     t2 <- Thread.spawn (addMany cell 3 100)
@@ -78,14 +178,18 @@ main =
     _ <- Thread.join t1
     _ <- Thread.join t2
     atomicTotal <- Thread.atomicLoad cell
-    b0 <- Thread.spawn (bumpLocked m counter 50)
-    b1 <- Thread.spawn (bumpLocked m counter 50)
-    _ <- Thread.join b0
-    _ <- Thread.join b1
-    locked <- Thread.atomicLoad counter
-    waiter <- Thread.spawn (waitLocked cond m ready)
-    _ <- markReady cond m ready
+    -- 6) signal：单个等待者。
+    cond <- Thread.newCondvar
+    ready2 <- Thread.newAtomic 0
+    waiter <- Thread.spawn (waitLocked cond m ready2)
+    _ <- markReady cond m ready2
     signalled <- Thread.join waiter
-    par <- Thread.parallelism
-    pure
-      ("threads atomic=" ++ strFromInt atomicTotal ++ " mutex=" ++ strFromInt locked ++ " cond=" ++ strFromInt signalled ++ " par>=1=" ++ (if par >= 1 then "True" else "False"))
+    let
+      bad = append (append (check "exchange" (o1 == 10)) (check "cas-ok" (o2 == 20))) (append (append (check "cas-fail" (o3 == 30)) (check "store-load" (v == 5))) (append (append (check "fetchAdd-wrap" (wv == minInt)) (check "tryLock-held" (not held))) (append (append (check "tryLock-free" freeNow) (check "nested" (nv == 8))) (append (append (check "string-result" (strLength sv == 6)) (check "double-join" (d1 == 42 && d2 == 42))) (append (append (check "four-threads" (mv == 4)) (check "currentId" (id0 >= 0))) (append (append (check "parallelism" (par >= 1)) (check "broadcast" (s1 == 0 && s2 == 0))) (append (append (check "mutex-count" (locked == 100)) (check "atomic-total" (atomicTotal == 600))) (check "signal" (signalled == 0)))))))))
+    in case bad of
+      [] => pure ""
+      _ =>
+        do
+          _ <- consolePrint ("FAIL " ++ join " " bad ++ "\n")
+          _ <- exitWith 1
+          pure ""

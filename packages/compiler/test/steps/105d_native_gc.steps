@@ -78,3 +78,23 @@ run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcthread-out/bin/gcthre
 out-equals: 1
 run: sh -c 'grep -rq "call rt_thread_spawn" "$TMPDIR/gcthread-out"'
 exit: 0
+
+# 9ac) 阻塞线程 + GC：一个线程在 Condvar 上等待（blocked 状态），主线程分配触发回收；
+#      GC 必须扫描阻塞线程的 saved_rsp 栈并正常结束，随后 broadcast 唤醒它。
+run: sh -c 'd="$TMPDIR/gcblocked"; mkdir -p "$d/app"; printf "[package]\nname = \"gcblocked\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat\nimport Base.Effect.Core\nimport Base.Effect.Pure.IORef\nimport Base.Thread as Thread\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + strLength (strFromInt (1000000 + n)))\n\nwaitFlag : Nat -> Condvar -> Mutex -> IORef Int -> Eff [] Int\nwaitFlag fuel c m r = case fuel of\n  0 => pure 0\n  Succ k => do\n    x <- readRef r\n    if x >= 1 then pure 0 else do\n      _ <- Thread.condWait c m\n      waitFlag k c m r\n\nwaiter : Condvar -> Mutex -> IORef Int -> Eff [] Int\nwaiter c m r = do\n  _ <- Thread.lockMutex m\n  v <- waitFlag 4096 c m r\n  _ <- Thread.unlockMutex m\n  pure v\n\nsetFlag : Condvar -> IORef Int -> Eff [] Int\nsetFlag c r = do\n  _ <- writeRef r 1\n  Thread.condBroadcast c\n\nmain : Eff [] Int\nmain = do\n  m <- Thread.newMutex\n  c <- Thread.newCondvar\n  r <- newRef 0\n  w <- Thread.spawn (waiter c m r)\n  n <- pure (churn 30000 0)\n  _ <- Thread.withMutex m (setFlag c r)\n  v <- Thread.join w\n  pure (if v == 0 && n > 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcblocked-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcblocked-out/bin/gcblocked" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcblocked-out/bin/gcblocked" 2>&1'
+out-equals: 1
+
+# 9ad) 紧循环 safepoint：子线程跑长自递归纯循环，主线程分配触发回收；子线程必须在
+#      循环头 `rt_safepoint` 停车，否则回收会永远等下去（超时）。
+run: sh -c 'd="$TMPDIR/gcspin"; mkdir -p "$d/app"; printf "[package]\nname = \"gcspin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core\nimport Base.Thread as Thread\n\nspin : Int -> Int -> Int\nspin acc n = if n <= 0 then acc else spin (acc + 1) (n - 1)\n\nchurn : Int -> Int -> Int\nchurn n acc = if n <= 0 then acc else churn (n - 1) (acc + strLength (strFromInt (2000000 + n)))\n\nspinBody : Eff [] Int\nspinBody = do\n  _ <- pure 0\n  pure (spin 0 3000000)\n\nmain : Eff [] Int\nmain = do\n  t <- Thread.spawn spinBody\n  n <- pure (churn 30000 0)\n  v <- Thread.join t\n  pure (if v == 3000000 && n > 0 then 1 else 0)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/gcspin-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcspin-out/bin/gcspin" 2>&1
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_GC_MIN=4096 timeout 120 "$TMPDIR/gcspin-out/bin/gcspin" 2>&1'
+out-equals: 1
+run: sh -c 'grep -rq "call rt_safepoint" "$TMPDIR/gcspin-out"'
+exit: 0

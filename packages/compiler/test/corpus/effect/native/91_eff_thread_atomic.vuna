@@ -1,0 +1,21 @@
+-- 原子单元的三端对拍：exchange / CAS 成败 / store / load / fetchAdd 的 63-bit 回绕。
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Thread as Thread
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    a <- Thread.newAtomic 10
+    o1 <- Thread.atomicExchange a 20
+    o2 <- Thread.atomicCompareExchange a 20 30
+    o3 <- Thread.atomicCompareExchange a 20 40
+    _ <- Thread.atomicStore a 5
+    v <- Thread.atomicLoad a
+    wrap <- Thread.newAtomic 4611686018427387903
+    _ <- Thread.atomicFetchAdd wrap 1
+    wv <- Thread.atomicLoad wrap
+    _ <-
+      consolePrint
+        ("atomic " ++ strFromInt o1 ++ " " ++ strFromInt o2 ++ " " ++ strFromInt o3 ++ " " ++ strFromInt v ++ " " ++ strFromInt wv ++ "\n")
+    pure 0

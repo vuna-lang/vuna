@@ -232,7 +232,7 @@
 
 ## 6.2 多线程原语
 
-**内建类型构造子**（与 `Array` / `IORef` 同层；名字恒可见、不可重定义，参数个数真源是
+**内建类型构造子**（与 `Array` / `@vuna@Cell` 同层；名字恒可见、不可重定义，参数个数真源是
 `Base.Intrinsics.typeIntrinsicArities`）：
 
 | 类型 | kind | 运行时承载 |
@@ -267,7 +267,7 @@
   `Result` 包装。
 - **同步**：`Atomic` 操作顺序一致（63-bit `Int` 回绕）；`Mutex` 非公平、非递归、无 owner 检查；
   `Condvar` 允许虚假唤醒；`join` / `lock` / `wait` 建立 happens-before。
-- **可共享可变状态**只有这四类句柄。`IORef` 不是线程安全的（跨线程访问属数据竞争）；
+- **可共享可变状态**只有这四类句柄。`MutRef` 单元与可变容器（`MArray` / `MDynArray` / `MBuffer`）不是线程安全的（跨线程访问属数据竞争）；
   `List` / `String` / record / 不可变 `Array` 共享读安全。
 - 这些是**阻塞的宿主操作**：不经过单线程 fiber 调度器，也不让出纤程。`join` 只允许一次、
   不能 join 当前线程；未 join 的线程在进程退出时被一并结束。

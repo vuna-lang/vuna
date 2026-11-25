@@ -1,0 +1,77 @@
+-- 多线程运行时符号表 ↔ `Ir.Runtime` 契约：
+--   * 19 个可见原语的隐藏别名都在契约里，且 target 能力是 ocaml/native、wasm 拒绝；
+--   * native 的标签与值形态 arity 与预期一致（arity 错会让 `IrRt` 值调用静默错配寄存器）；
+--   * 隐藏别名与可见名指向同一实现。
+import Base
+import Base.Effect.Core
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Ir.Runtime
+import Vuna.Target.Native.Runtime
+
+main : Eff [] String
+main =
+  case problems of
+    [] => pure ""
+    ps =>
+      do
+        _ <- prim_eff_print ("native thread runtime drifted:\n" ++ join "\n" ps ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
+
+problem : String -> Bool -> List String
+problem label ok = if ok then [] else [label ++ ": drifted"]
+
+problems : List String
+problems =
+  append
+    (append (concatMap visibleProblems threadIntrinsicNames) (concatMap aliasProblems threadIntrinsicNames))
+    (concatMap expectationProblems expectations)
+
+visibleProblems : String -> List String
+visibleProblems name =
+  append
+    (problem (name ++ " thread-name") (memName name irRtThreadNames))
+    (append (problem (name ++ " native") (irRtSupports "native" name)) (append (problem (name ++ " ocaml") (irRtSupports "ocaml" name)) (problem (name ++ " wasm-rejected") (not (irRtSupports "wasm" name)))))
+
+aliasProblems : String -> List String
+aliasProblems name =
+  let
+    alias = "@vuna@" ++ name
+  in append
+    (problem (alias ++ " known") (irRtIsKnown alias))
+    (problem (alias ++ " same label") (nativeRtTarget alias == nativeRtTarget name))
+
+-- (可见原语名, 值形态 arity, native 标签)
+expectations : List (String, Int, String)
+expectations =
+  [
+    ("prim_eff_threadSpawn", 1, "rt_thread_spawn"),
+    ("prim_eff_threadJoin", 1, "rt_thread_join"),
+    ("prim_eff_threadYield", 0, "rt_thread_yield"),
+    ("prim_eff_threadId", 0, "rt_thread_id"),
+    ("prim_eff_threadParallelism", 0, "rt_thread_parallelism"),
+    ("prim_eff_mutexNew", 0, "rt_mutex_new"),
+    ("prim_eff_mutexLock", 1, "rt_mutex_lock"),
+    ("prim_eff_mutexTryLock", 1, "rt_mutex_try_lock"),
+    ("prim_eff_mutexUnlock", 1, "rt_mutex_unlock"),
+    ("prim_eff_condvarNew", 0, "rt_condvar_new"),
+    ("prim_eff_condvarWait", 2, "rt_condvar_wait"),
+    ("prim_eff_condvarSignal", 1, "rt_condvar_signal"),
+    ("prim_eff_condvarBroadcast", 1, "rt_condvar_broadcast"),
+    ("prim_eff_atomicNew", 1, "rt_atomic_new"),
+    ("prim_eff_atomicLoad", 1, "rt_atomic_load"),
+    ("prim_eff_atomicStore", 2, "rt_atomic_store"),
+    ("prim_eff_atomicFetchAdd", 2, "rt_atomic_fetch_add"),
+    ("prim_eff_atomicExchange", 2, "rt_atomic_exchange"),
+    ("prim_eff_atomicCompareExchange", 3, "rt_atomic_cas")
+  ]
+
+expectationProblems : (String, Int, String) -> List String
+expectationProblems e =
+  let
+    name = firstOf e
+    arity = firstOf (secondOf e)
+    label = secondOf (secondOf e)
+  in append
+    (problem (name ++ " label") (nativeRtTarget name == Just label))
+    (append (problem (name ++ " arity") (nativeRtValueArity name == arity)) (problem (name ++ " alias arity") (nativeRtValueArity ("@vuna@" ++ name) == arity)))

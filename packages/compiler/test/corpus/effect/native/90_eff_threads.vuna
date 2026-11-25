@@ -3,7 +3,6 @@
 import Base.Data.Nat
 import Base.Effect.Core
 import Base.Effect.Console
-import Base.Effect.Pure.IORef
 import Base.Thread as Thread
 
 addMany : Atomic -> Int -> Int -> Eff [] Int
@@ -15,14 +14,14 @@ addMany cell k n =
       _ <- Thread.atomicFetchAdd cell k
       addMany cell k (n - 1)
 
-bumpOnce : IORef Int -> Eff [] Int
+bumpOnce : Atomic -> Eff [] Int
 bumpOnce r =
   do
-    x <- readRef r
-    _ <- writeRef r (x + 1)
+    x <- Thread.atomicLoad r
+    _ <- Thread.atomicStore r (x + 1)
     pure 0
 
-bumpLocked : Mutex -> IORef Int -> Int -> Eff [] Int
+bumpLocked : Mutex -> Atomic -> Int -> Eff [] Int
 bumpLocked m r n =
   if n <= 0 then
     pure 0
@@ -31,13 +30,13 @@ bumpLocked m r n =
       _ <- Thread.withMutex m (bumpOnce r)
       bumpLocked m r (n - 1)
 
-awaitOne : Nat -> Condvar -> Mutex -> IORef Int -> Eff [] Int
+awaitOne : Nat -> Condvar -> Mutex -> Atomic -> Eff [] Int
 awaitOne fuel c m r =
   case fuel of
     0 => pure 0
     Succ k =>
       do
-        x <- readRef r
+        x <- Thread.atomicLoad r
         if x >= 1 then
           pure 0
         else
@@ -45,7 +44,7 @@ awaitOne fuel c m r =
             _ <- Thread.condWait c m
             awaitOne k c m r
 
-waitLocked : Condvar -> Mutex -> IORef Int -> Eff [] Int
+waitLocked : Condvar -> Mutex -> Atomic -> Eff [] Int
 waitLocked c m r =
   do
     _ <- Thread.lockMutex m
@@ -53,10 +52,10 @@ waitLocked c m r =
     _ <- Thread.unlockMutex m
     pure v
 
-setReady : Condvar -> IORef Int -> Eff [] Int
+setReady : Condvar -> Atomic -> Eff [] Int
 setReady c r =
   do
-    _ <- writeRef r 1
+    _ <- Thread.atomicStore r 1
     Thread.condSignal c
 
 main : Eff [ConsoleOp] Int
@@ -64,9 +63,9 @@ main =
   do
     cell <- Thread.newAtomic 0
     m <- Thread.newMutex
-    counter <- newRef 0
+    counter <- Thread.newAtomic 0
     cond <- Thread.newCondvar
-    ready <- newRef 0
+    ready <- Thread.newAtomic 0
     t0 <- Thread.spawn (addMany cell 1 100)
     t1 <- Thread.spawn (addMany cell 2 100)
     t2 <- Thread.spawn (addMany cell 3 100)
@@ -78,7 +77,7 @@ main =
     b1 <- Thread.spawn (bumpLocked m counter 50)
     _ <- Thread.join b0
     _ <- Thread.join b1
-    locked <- readRef counter
+    locked <- Thread.atomicLoad counter
     waiter <- Thread.spawn (waitLocked cond m ready)
     _ <- Thread.withMutex m (setReady cond ready)
     signalled <- Thread.join waiter

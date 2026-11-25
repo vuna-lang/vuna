@@ -1,0 +1,15 @@
+import Base.Effect.Console
+import Base.Effect.Core
+import Base.Thread as Thread
+
+act : Eff [ConsoleOp] Int
+act =
+  do
+    _ <- consolePrint "x"
+    pure 0
+
+main : Eff [] Int
+main =
+  do
+    _ <- Thread.spawn act
+    pure 0

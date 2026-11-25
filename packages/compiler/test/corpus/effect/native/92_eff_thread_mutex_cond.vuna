@@ -1,0 +1,94 @@
+-- 互斥与条件变量的三端对拍：withMutex 计数、tryLock 的持锁/空闲两态、broadcast
+-- 唤醒两个等待者。输出只依赖 join 之后的值。
+import Base.Data.Nat
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Thread as Thread
+
+bumpOnce : Atomic -> Eff [] Int
+bumpOnce r =
+  do
+    x <- Thread.atomicLoad r
+    _ <- Thread.atomicStore r (x + 1)
+    pure 0
+
+bumpLocked : Mutex -> Atomic -> Int -> Eff [] Int
+bumpLocked m r n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.withMutex m (bumpOnce r)
+      bumpLocked m r (n - 1)
+
+waitForFlag : Nat -> Condvar -> Mutex -> Atomic -> Eff [] Int
+waitForFlag fuel c m r =
+  case fuel of
+    0 => pure 0
+    Succ k =>
+      do
+        x <- Thread.atomicLoad r
+        if x >= 1 then
+          pure 0
+        else
+          do
+            _ <- Thread.condWait c m
+            waitForFlag k c m r
+
+setAndBroadcast : Condvar -> Atomic -> Eff [] Int
+setAndBroadcast c r =
+  do
+    _ <- Thread.atomicStore r 1
+    Thread.condBroadcast c
+
+waitReady : Nat -> Atomic -> Condvar -> Mutex -> Atomic -> Eff [] Int
+waitReady fuel ready c m r =
+  case fuel of
+    0 => pure 0
+    Succ k =>
+      do
+        n <- Thread.atomicLoad ready
+        if n >= 2 then
+          Thread.withMutex m (setAndBroadcast c r)
+        else
+          do
+            _ <- Thread.yieldNow
+            waitReady k ready c m r
+
+broadcastWaiter : Atomic -> Condvar -> Mutex -> Atomic -> Eff [] Int
+broadcastWaiter ready c m r =
+  do
+    _ <- Thread.lockMutex m
+    _ <- Thread.atomicFetchAdd ready 1
+    v <- waitForFlag 4096 c m r
+    _ <- Thread.unlockMutex m
+    pure v
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    counter <- Thread.newAtomic 0
+    m <- Thread.newMutex
+    b1 <- Thread.spawn (bumpLocked m counter 30)
+    b2 <- Thread.spawn (bumpLocked m counter 30)
+    _ <- Thread.join b1
+    _ <- Thread.join b2
+    locked <- Thread.atomicLoad counter
+    heldM <- Thread.newMutex
+    _ <- Thread.lockMutex heldM
+    held <- Thread.tryLockMutex heldM
+    _ <- Thread.unlockMutex heldM
+    freeNow <- Thread.tryLockMutex heldM
+    _ <- Thread.unlockMutex heldM
+    cv <- Thread.newCondvar
+    ready <- Thread.newAtomic 0
+    flag <- Thread.newAtomic 0
+    w1 <- Thread.spawn (broadcastWaiter ready cv m flag)
+    w2 <- Thread.spawn (broadcastWaiter ready cv m flag)
+    _ <- waitReady 100000 ready cv m flag
+    s1 <- Thread.join w1
+    s2 <- Thread.join w2
+    _ <-
+      consolePrint
+        ("mutex " ++ strFromInt locked ++ " " ++ (if held then "True" else "False") ++ " " ++ (if freeNow then "True" else "False") ++ " cond " ++ strFromInt s1 ++ " " ++ strFromInt s2 ++ "\n")
+    pure 0

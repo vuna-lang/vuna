@@ -1,0 +1,42 @@
+-- 线程值的三端对拍：嵌套 spawn、子线程内构造 String、重复 join、4 个并发原子加。
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Thread as Thread
+
+nestedBody : Eff [] Int
+nestedBody =
+  do
+    inner <- Thread.spawn (pure 5)
+    x <- Thread.join inner
+    pure (x + 3)
+
+stringBody : Eff [] String
+stringBody =
+  do
+    _ <- pure 0
+    pure ("ab" ++ strFromInt 12 ++ "cd")
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    nested <- Thread.spawn nestedBody
+    nv <- Thread.join nested
+    strT <- Thread.spawn stringBody
+    sv <- Thread.join strT
+    twice <- Thread.spawn (pure 42)
+    d1 <- Thread.join twice
+    d2 <- Thread.join twice
+    cell <- Thread.newAtomic 0
+    c1 <- Thread.spawn (Thread.atomicFetchAdd cell 1)
+    c2 <- Thread.spawn (Thread.atomicFetchAdd cell 1)
+    c3 <- Thread.spawn (Thread.atomicFetchAdd cell 1)
+    c4 <- Thread.spawn (Thread.atomicFetchAdd cell 1)
+    _ <- Thread.join c1
+    _ <- Thread.join c2
+    _ <- Thread.join c3
+    _ <- Thread.join c4
+    total <- Thread.atomicLoad cell
+    _ <-
+      consolePrint
+        ("values " ++ strFromInt nv ++ " " ++ strFromInt (strLength sv) ++ " " ++ strFromInt d1 ++ " " ++ strFromInt d2 ++ " " ++ strFromInt total ++ "\n")
+    pure 0

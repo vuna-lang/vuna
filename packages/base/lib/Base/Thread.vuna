@@ -4,7 +4,7 @@
 -- 不继承父线程的 handler 栈；续延不跨线程恢复。线程内未捕获的错误按运行时错误报告
 -- 并退出进程（与 `main` 同一口径），`join` 不做 `Result` 包装。
 --
--- 跨线程共享的可变状态只有这里的句柄；`MutRef` 单元与可变容器（`` / `MArray` / `MDynArray` / `MBuffer`）不是线程安全的（跨线程访问属数据竞争），
+-- 跨线程共享的可变状态只有这里的句柄；`MutRef` 单元与可变容器（`MArray` / `MDynArray` / `MBuffer`）不是线程安全的（跨线程访问属数据竞争），
 -- 不可变数据（`List` / `String` / record / 不可变 `Array`）共享读是安全的。
 -- 同步语义：`Atomic` 操作是顺序一致的；`lock`/`unlock`、`condWait`/`condSignal`、
 -- `join` 建立 happens-before。
