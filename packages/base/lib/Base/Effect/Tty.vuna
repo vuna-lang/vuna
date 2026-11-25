@@ -1,0 +1,45 @@
+-- | 一阶终端元数据效应：标签 = `TtyOp`（实例名在行的 `Named n TtyOp :: r` 条目里），
+-- 操作只有 `IsTty`（stdout 是否连接终端）；真实 handler 用 `@vuna@host@isTty`。
+--
+-- 诊断格式（`human` / `short`）需要这个判断，所以它必须是一个正常效应：调用方留在自己的行里，
+-- 宿主探测只发生在 base 的宿主 handler 内部（`Eff [HostOp]`），不靠 `hostSync` 在工具链里
+-- 就地关闭宿主行。
+module Base.Effect.Tty where
+
+import Base.Effect.Core
+import Base.Effect.Host
+import Base.Data.Bool
+import Base.Trait.Monad
+
+-- | 终端元数据操作：stdout 是否 tty（wasm 的 WASI preview1 没有 isatty，恒 False）。
+export data TtyOp(..) : Type -> Type where
+  -- | 读 stdout 是否连接终端。
+  IsTty : TtyOp Bool
+
+-- | 通过命名实例读 stdout 是否连接终端。
+export ttyIsTty : Member n TtyOp r => Eff r Bool
+ttyIsTty = sendCore (Named n TtyOp) "tty" n IsTty
+
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `TtyOp`。
+export handleTty : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n TtyOp) r} -> (a -> b) -> ((i : Type) -> (o : TtyOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n TtyOp) r) b
+handleTty n ret opH comp = handleCore (Named n TtyOp) "tty" n ret opH comp
+
+-- ---------------------------------------------------------------
+-- 带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+-- | 带 `TtyOp` 行的 op 解释：宿主原语取值后写穿继续（answer 行是宿主行 `[HostOp]`）。
+ttyOpHIOHost : {a : Type} -> (i : Type) -> (o : TtyOp i) -> (Base.Effect.Core.resIdx i o -> Eff [HostOp] a) -> Eff [HostOp] a
+ttyOpHIOHost i op k =
+  case op of
+    IsTty =>
+      do
+        b <- @vuna@host@isTty
+        k b
+
+-- | 带行的宿主 handler：删掉 `TtyOp`，answer 是 `Eff [HostOp]`（不导出）。
+handleTtyHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n TtyOp :: r) a -> Eff r (Eff [HostOp] a)
+handleTtyHostHost n comp = handleCoreAt (Named n TtyOp) "tty" n (\a => pure a) ttyOpHIOHost comp
+
+-- | entry 自动预装用（泛化 r）：把行头 `TtyOp` 的 send 翻译成宿主 intrinsic。
+runTtyHost : {r : Row} -> {a : Type} -> Eff (Named "default" TtyOp :: r) a -> Eff (rowAppend r [HostOp]) a
+runTtyHost comp = joinEff (handleTtyHostHost "default" comp)

@@ -1,0 +1,15 @@
+-- TtyOp 走正常标签/handler 路径：mock 可以替换 tty 判断，不需要真实终端。
+import Base.Effect.Core as Eff
+import Base.Effect.Tty as EffTty
+import Base.Effect.Core
+
+prog : (n : String) -> Eff (Named n TtyOp :: []) Bool
+prog n = ttyIsTty@(n)
+
+fakeTty : (i : Type) -> (o : TtyOp i) -> (Base.Effect.Core.resIdx i o -> Bool) -> Bool
+fakeTty i op k =
+  case op of
+    IsTty => k True
+
+main : Bool
+main = runPure (handleTty "fake" (\b => b) fakeTty (prog "fake"))

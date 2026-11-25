@@ -198,6 +198,7 @@ builtinEffects =
       (HostDirect "args" "Base.Effect.Args.argsOpHIOHost")
       ""
       HostHandled,
+    BuiltinEffect "Base.Effect.Tty.TtyOp" "Base.Effect.Tty.runTtyHost" HostHandled "" HostHandled,
     BuiltinEffect
       "Base.Effect.Net.NetOp"
       "Base.Effect.Net.runNetHost"

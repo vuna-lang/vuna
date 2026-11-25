@@ -24,6 +24,7 @@ export module Base.Effect.Clock as Clock
 export module Base.Effect.Env as Env
 export module Base.Effect.Args as Args
 export module Base.Effect.Stdin as Stdin
+export module Base.Effect.Tty as Tty
 export module Base.Effect.Exit as Exit
 export module Base.Effect.Net as Net
 export module Base.Effect.Process as Process
