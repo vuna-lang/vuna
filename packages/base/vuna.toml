@@ -72,6 +72,7 @@ modules = [
   "Base.Effect.Types",
   "Base.Internal.Operator",
   "Base.Thread",
+  "Base.Thread.Par",
   "Base.Trait",
   "Base.Trait.Applicative",
   "Base.Trait.Convert",

@@ -1100,6 +1100,35 @@ rtCellWrite =
     []
     [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, ILocalGet "$p1", IArraySet "$arr", IConstI64 0, IStructNew "$int"]
 
+-- ---------------------------------------------------------------
+-- 线程调度子集（wasm 单线程：顺序退化）
+-- ---------------------------------------------------------------
+-- wasm 没有 OS 线程；`spawn` 立即把任务体（闭包应用到 dummy `Int 0`）跑完，把结果装进
+-- cell 当 `Thread a` 句柄，`join` 读回。`yield` / `id` 恒 0，`parallelism` 恒 1。
+-- 同步原语（Mutex / Condvar / Atomic）仍是明确非目标，见 `rtUnsupportedMsg`。
+rtThreadSpawn : WatFunc
+rtThreadSpawn =
+  rtFunc
+    "$rt_threadSpawn"
+    [("$p0", WvAnyRef)]
+    [WvAnyRef]
+    []
+    [ILocalGet "$p0", IConstI64 0, IStructNew "$int", ICall "$rt_apply", ICall "$rt_cellNew"]
+
+rtThreadJoin : WatFunc
+rtThreadJoin =
+  rtFunc "$rt_threadJoin" [("$p0", WvAnyRef)] [WvAnyRef] [] [ILocalGet "$p0", ICall "$rt_cellRead"]
+
+rtThreadYield : WatFunc
+rtThreadYield = rtFunc "$rt_threadYield" [] [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
+rtThreadId : WatFunc
+rtThreadId = rtFunc "$rt_threadId" [] [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
+rtThreadParallelism : WatFunc
+rtThreadParallelism =
+  rtFunc "$rt_threadParallelism" [] [WvAnyRef] [] [IConstI64 1, IStructNew "$int"]
+
 -- | `print` / `eprint`：写 fd 后返回写出的字节数（与 OCaml 的 `String.length` 一致）。
 rtEffPrint : String -> Int -> WatFunc
 rtEffPrint name fd =
@@ -2157,6 +2186,11 @@ rtFunctions c =
     rtCellNew,
     rtCellRead,
     rtCellWrite,
+    rtThreadSpawn,
+    rtThreadJoin,
+    rtThreadYield,
+    rtThreadId,
+    rtThreadParallelism,
     rtEffPrint "$rt_effPrint" 1,
     rtEffPrint "$rt_effEprint" 2,
     rtEffExit,
@@ -2362,6 +2396,12 @@ rtImplOf "prim_cleanupPop" = RtFunc 1 "$rt_cleanupPop"
 rtImplOf "@vuna@prim_mrefNew" = RtFunc 1 "$rt_cellNew"
 rtImplOf "@vuna@prim_mrefRead" = RtFunc 1 "$rt_cellRead"
 rtImplOf "@vuna@prim_mrefWrite" = RtFunc 2 "$rt_cellWrite"
+-- 线程调度子集：wasm 单线程顺序退化（spawn 立即执行）；同步原语仍走 `RtUnsupported`。
+rtImplOf "@vuna@prim_eff_threadSpawn" = RtFunc 1 "$rt_threadSpawn"
+rtImplOf "@vuna@prim_eff_threadJoin" = RtFunc 1 "$rt_threadJoin"
+rtImplOf "@vuna@prim_eff_threadYield" = RtFunc 0 "$rt_threadYield"
+rtImplOf "@vuna@prim_eff_threadId" = RtFunc 0 "$rt_threadId"
+rtImplOf "@vuna@prim_eff_threadParallelism" = RtFunc 0 "$rt_threadParallelism"
 rtImplOf "@vuna@prim_marrNew" = RtFunc 2 "$rt_arrayMake"
 rtImplOf "@vuna@prim_marrGet" = RtFunc 2 "$rt_arrayGet"
 rtImplOf "@vuna@prim_marrSet" = RtFunc 3 "$rt_marrSet"

@@ -1,0 +1,68 @@
+-- | 纯函数并行组合子：保序、jobs 收敛、顺序路径、真重叠、非交换 foldMap。
+-- 断言在末尾集中判定，失败打印 FAIL 并 exit 1。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Base.Thread as Thread
+import Base.Thread.Par as Par
+
+-- 断言失败时返回标签，成功返回空列表。
+check : String -> Bool -> List String
+check label ok = if ok then [] else [label]
+
+-- 原子标志：先置自己的位，再等对方的位；燃料耗尽返回 0（顺序执行时会走到这里）。
+spinEff : Atomic -> Atomic -> Int -> Eff [] Int
+spinEff mine other fuel =
+  if fuel <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.atomicStore mine 1
+      v <- Thread.atomicLoad other
+      if v == 1 then
+        pure 1
+      else
+        do
+          _ <- Thread.yieldNow
+          spinEff mine other (fuel - 1)
+
+spin : Atomic -> Atomic -> Int
+spin mine other = runPure (spinEff mine other 20000)
+
+-- 期望的 fold 结果：用显式签名避免 `join` 在 `String` / `Thread` 之间的短名歧义。
+wrapAll : List Int -> String
+wrapAll xs = foldl (\acc, x => acc ++ "(" ++ strFromInt x ++ ")") "" xs
+
+report : List String -> String
+report [] = ""
+report (x :: rest) = " " ++ x ++ report rest
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  do
+    par <- Thread.parallelism
+    ordered <- Par.parMap (\x => x * 2) (range 0 100)
+    oneJob <- Par.parMapWith 1 (\x => x + 1) [1, 2, 3]
+    clamped <- Par.parMapWith 100000 (\x => x + 1) [1, 2, 3]
+    empty <- Par.parMap (\x => x + 1) []
+    single <- Par.parMapWith 8 (\x => x + 1) [41]
+    strs <- Par.parMap (\x => "v" ++ strFromInt x) [1, 2, 3]
+    folded <- Par.parFoldMap (\x => "(" ++ strFromInt x ++ ")") [1, 2, 3]
+    foldedBig <- Par.parFoldMap (\x => "(" ++ strFromInt x ++ ")") (range 1 50)
+    bigSeq <- Par.parMapWith 1 (\x => x * x) (range 0 400)
+    bigPar <- Par.parMapWith 8 (\x => x * x) (range 0 400)
+    a <- Thread.newAtomic 0
+    b <- Thread.newAtomic 0
+    flags <- Par.parMapWith 2 (\i => if i == 0 then spin a b else spin b a) [0, 1]
+    let
+      overlapOk = if par < 2 then True else flags == [1, 1]
+      expectedBig = wrapAll (range 1 50)
+      bad = append (check "order" (ordered == map (\x => x * 2) (range 0 100))) (append (check "jobs1" (oneJob == [2, 3, 4])) (append (check "clamp" (clamped == [2, 3, 4])) (append (check "empty" (empty == [])) (append (check "single" (single == [42])) (append (check "strings" (strs == ["v1", "v2", "v3"])) (append (check "fold" (folded == "(1)(2)(3)")) (append (check "fold-chunked" (foldedBig == expectedBig)) (append (check "big-consistent" (bigSeq == bigPar)) (check "overlap" overlapOk)))))))))
+    in case bad of
+      [] => pure ""
+      _ =>
+        do
+          _ <- consolePrint ("FAIL" ++ report bad ++ "\n")
+          _ <- exitWith 1
+          pure ""

@@ -1,0 +1,21 @@
+-- 纯函数并行：parMap 保序、parFoldMap 分块合并；ocaml / native 逐字一致。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Thread.Par as Par
+
+sum : List Int -> Int
+sum xs = foldl (\acc, x => acc + x) 0 xs
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    xs <- Par.parMap (\x => x * x) (range 1 9)
+    seqXs <- Par.parMapWith 1 (\x => x * x) (range 1 9)
+    folded <- Par.parFoldMap (\x => "[" ++ strFromInt x ++ "]") (range 1 5)
+    _ <-
+      consolePrint
+        ("par=" ++ strFromInt (sum xs) ++ " seq=" ++ strFromInt (sum seqXs) ++ " fold=" ++ folded ++ "\n")
+    pure 0

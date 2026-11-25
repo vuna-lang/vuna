@@ -273,8 +273,14 @@
   不能 join 当前线程；未 join 的线程在进程退出时被一并结束。
 - 没有取消 / 优先级 / 线程本地存储 / 异步 I/O；协作取消用 `Atomic` 标志 + `join` 组合。
 
-**target 能力**：`Ir.Runtime.irRtTargets` 是唯一判据（线程符号为 `["ocaml","native"]`）。
-wasm 在引用点拒绝（文案点明「不是待补缺口」）。
+**库面组合子**：`Base.Thread.Par` 的 `parMap` / `parMapWith` / `parFoldMap` 把列表切成连续块，
+每块一个 `spawn`，结果按输入顺序拼接；并行度收敛到 `1..min 32 parallelism n`，`k = 1` 时在调用
+线程顺序执行（不 spawn，也是 worker 内不要再并行的逃生口）。body 必须是纯函数；不提供取消；
+不可嵌套。
+
+**target 能力**：`Ir.Runtime.irRtTargets` 是唯一判据。同步原语（Mutex / Condvar / Atomic）是
+`["ocaml","native"]`；调度子集（spawn / join / yield / id / parallelism）三端都支持，wasm 上按
+单线程顺序退化（`spawn` 立即执行、`join` 读回、`parallelism = 1`）。
 
 **native 运行时**（`Native.Runtime` 的 `thread_*` / `*mutex*` / `*condvar*` / `atomic_*`）：
 

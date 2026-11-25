@@ -1,0 +1,148 @@
+-- | 纯函数结构化并行：把列表切成连续块，各块在独立线程里执行纯函数，结果按输入顺序合并。
+--
+-- 线程数收敛到 `1 .. min 32 parallelism n`：`parMap` 取 CPU 并行度，`parMapWith` 取调用方
+-- 给的值。`k = 1` 时在调用线程顺序执行（不 spawn），因此也用于“已经在 worker 里、不要再
+-- 并行”的场合。
+--
+-- body 是纯函数（`a -> b` / `a -> m`）：线程里不能做 IO 或效果，也不继承调用方的 handler
+-- 栈（见 [primitives.md §6.2](../../../../docs/reference/primitives.md)）。worker 内的运行时
+-- trap 按线程语义报错并 exit 2，不包装成 `Result`。不提供取消：发散会在 `join` 处挂住。
+--
+-- wasm 上 `parallelism = 1`，自动走顺序路径；`spawn` 在 wasm 运行时里立即执行并返回已完成
+-- 的句柄，因此同一份代码在三端结果一致。
+module Base.Thread.Par where
+
+import Base.Effect.Types
+import Base.Trait.Monad
+import Base.Trait.Monoid
+import Base.Trait.Foldable
+import Base.Trait.Num
+import Base.Trait.Ord
+import Base.Data.Int
+import Base.Data.List
+import Base.Data.Nat
+import Base.Thread as Thread
+
+-- | 并行度硬上限。OCaml 每个 Domain 有独立 minor heap（运行时设 16 MB 起），native 每线程
+-- 有 64 MiB 虚拟栈；请求超过这个上限按上限处理。
+maxJobs : Int
+maxJobs = 32
+
+-- | 内部：把请求的并行度收敛到 `1 .. min maxJobs (min parallelism n)`。
+clampJobs : Int -> Int -> Int -> Int
+clampJobs jobs par n =
+  let
+    step1 = if jobs < 1 then 1 else jobs
+    step2 = if step1 > maxJobs then maxJobs else step1
+    step3 = if step2 > par then par else step2
+    step4 = if step3 > n then n else step3
+  in if step4 < 1 then 1 else step4
+
+-- | 内部：每块的元素个数（`n`、`k` 都 ≥ 1）。向上取整，使块数不超过 `k`。
+chunkLen : Int -> Int -> Int
+chunkLen n k = if k >= n then 1 else (n + k - 1) / k
+
+-- | 内部：按 `size` 切分后的块数（`n`、`size` 都 ≥ 1）。
+chunkCount : Int -> Int -> Int
+chunkCount n size = if n <= 0 then 0 else (n + size - 1) / size
+
+-- | 内部：把一个块 spawn 成线程；`pure chunk >>= ...` 把 `map` 推迟到线程体内执行
+-- （严格求值下 `pure (map f chunk)` 会在父线程算完，并行失效）。
+spawnChunk : {r : Row} -> {a : Type} -> {b : Type} -> (a -> b) -> List a -> Eff r (Thread (List b))
+spawnChunk f chunk = Thread.spawn (pure chunk >>= \cs => pure (map f cs))
+
+-- | 内部：`fuel` 是剩余块数（每次减一），终止性不依赖跨参数测量。
+spawnChunks : {r : Row} -> {a : Type} -> {b : Type} -> Int -> Int -> (a -> b) -> List a -> Eff r (List (Thread (List b)))
+spawnChunks fuel size f xs =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      t <- spawnChunk f (take size xs)
+      ts <- spawnChunks (fuel - 1) size f (drop size xs)
+      pure (t :: ts)
+
+-- | 内部：按 spawn 顺序 join 并把块结果拼接起来（保持输入顺序）。
+joinChunks : {r : Row} -> {b : Type} -> List (Thread (List b)) -> Eff r (List b)
+joinChunks hs =
+  case hs of
+    [] => pure []
+    t :: rest =>
+      do
+        ys <- Thread.join t
+        zs <- joinChunks rest
+        pure (append ys zs)
+
+-- | 内部：顺序路径（不 spawn）；经 bind 把 `map` 推迟到动作执行时。
+mapSeq : {r : Row} -> {a : Type} -> {b : Type} -> (a -> b) -> List a -> Eff r (List b)
+mapSeq f xs = pure xs >>= \ys => pure (map f ys)
+
+-- | 内部：`k` 已收敛；`k ≤ 1` 走顺序路径。
+runChunked : {r : Row} -> {a : Type} -> {b : Type} -> Int -> Int -> (a -> b) -> List a -> Eff r (List b)
+runChunked k n f xs =
+  if k <= 1 then
+    mapSeq f xs
+  else
+    do
+      ts <- spawnChunks (chunkCount n (chunkLen n k)) (chunkLen n k) f xs
+      joinChunks ts
+
+-- | 按 CPU 并行度自动分块的纯函数 map；结果顺序与输入一致。
+export parMap : {r : Row} -> {a : Type} -> {b : Type} -> (a -> b) -> List a -> Eff r (List b)
+parMap f xs =
+  do
+    par <- Thread.parallelism
+    runChunked (clampJobs par par (natToInt (length xs))) (natToInt (length xs)) f xs
+
+-- | 显式指定并行度的纯函数 map；`jobs ≤ 1` 时在调用线程顺序执行。
+export parMapWith : {r : Row} -> {a : Type} -> {b : Type} -> Int -> (a -> b) -> List a -> Eff r (List b)
+parMapWith jobs f xs =
+  do
+    par <- Thread.parallelism
+    runChunked (clampJobs jobs par (natToInt (length xs))) (natToInt (length xs)) f xs
+
+-- | 内部：把一个块 spawn 成 fold 线程（同样用 bind 推迟块内计算）。
+spawnFold : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> (a -> m) -> List a -> Eff r (Thread m)
+spawnFold f chunk = Thread.spawn (pure chunk >>= \cs => pure (foldMap f cs))
+
+-- | 内部：`fuel` 是剩余块数。
+spawnFolds : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> Int -> Int -> (a -> m) -> List a -> Eff r (List (Thread m))
+spawnFolds fuel size f xs =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      t <- spawnFold f (take size xs)
+      ts <- spawnFolds (fuel - 1) size f (drop size xs)
+      pure (t :: ts)
+
+-- | 内部：按 spawn 顺序 join 并用 `mappend` 累积；非交换 Monoid 的顺序也与输入一致。
+joinFolds : Monoid m, Semigroup m => {r : Row} -> {m : Type} -> m -> List (Thread m) -> Eff r m
+joinFolds acc hs =
+  case hs of
+    [] => pure acc
+    t :: rest =>
+      do
+        v <- Thread.join t
+        joinFolds (mappend acc v) rest
+
+-- | 内部：顺序路径的 foldMap；经 bind 推迟。
+foldSeq : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> (a -> m) -> List a -> Eff r m
+foldSeq f xs = pure xs >>= \ys => pure (foldMap f ys)
+
+-- | 内部：`k` 已收敛；`k ≤ 1` 走顺序路径。
+runFolded : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> Int -> Int -> (a -> m) -> List a -> Eff r m
+runFolded k n f xs =
+  if k <= 1 then
+    foldSeq f xs
+  else
+    do
+      ts <- spawnFolds (chunkCount n (chunkLen n k)) (chunkLen n k) f xs
+      joinFolds mempty ts
+
+-- | 分块 foldMap：块内 `foldMap`、块间按顺序 `mappend` 合并。
+export parFoldMap : Monoid m, Semigroup m => {r : Row} -> {a : Type} -> {m : Type} -> (a -> m) -> List a -> Eff r m
+parFoldMap f xs =
+  do
+    par <- Thread.parallelism
+    runFolded (clampJobs maxJobs par (natToInt (length xs))) (natToInt (length xs)) f xs

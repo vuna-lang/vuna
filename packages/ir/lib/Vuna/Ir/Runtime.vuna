@@ -257,7 +257,7 @@ irRtBridgedNames =
     "@vuna@prim_eff_spawn"
   ]
 
--- | 多线程原语的契约符号（OCaml / native 实现；wasm 明确拒绝）。
+-- | 多线程原语的契约符号（OCaml / native 实现；wasm 只实现调度子集的顺序退化）。
 export irRtThreadNames : List String
 irRtThreadNames =
   [
@@ -282,13 +282,29 @@ irRtThreadNames =
     "@vuna@prim_eff_atomicCompareExchange"
   ]
 
+-- | wasm 上按单线程顺序退化的调度子集：`spawn` 立即执行、`join` 读回结果、
+-- `parallelism` 恒 1。同步原语（Mutex / Condvar / Atomic）仍只在 OCaml / native 上可用。
+export irRtWasmSeqThreadNames : List String
+irRtWasmSeqThreadNames =
+  [
+    "@vuna@prim_eff_threadSpawn",
+    "@vuna@prim_eff_threadJoin",
+    "@vuna@prim_eff_threadYield",
+    "@vuna@prim_eff_threadId",
+    "@vuna@prim_eff_threadParallelism"
+  ]
+
 -- | 全部 target 名（能力查询的缺省值）。
 export irRtAllTargets : List String
 irRtAllTargets = ["ocaml", "native", "wasm"]
 
--- | 一个符号支持的 target 列表。缺省 = 全部；线程原语只支持 ocaml / native。
+-- | 一个符号支持的 target 列表。缺省 = 全部；wasm 只有调度子集（顺序退化），
+-- 其余线程符号（同步原语）只支持 ocaml / native。
 export irRtTargets : String -> List String
-irRtTargets sym = if memName sym irRtThreadNames then ["ocaml", "native"] else irRtAllTargets
+irRtTargets sym =
+  if memName sym irRtWasmSeqThreadNames then
+    irRtAllTargets
+  else if memName sym irRtThreadNames then ["ocaml", "native"] else irRtAllTargets
 
 -- | 某个 target 是否支持该符号（后端拒绝与文档能力矩阵的唯一判据）。
 export irRtSupports : String -> String -> Bool

@@ -1,5 +1,6 @@
 -- 多线程运行时符号表 ↔ `Ir.Runtime` 契约（线程原语全部隐藏，源码只经 `Base.Thread`）：
---   * 19 个隐藏原语都在契约里，且 target 能力是 ocaml/native、wasm 拒绝；
+--   * 19 个隐藏原语都在契约里；调度子集（spawn / join / yield / id / parallelism）在
+--     wasm 上按单线程顺序退化，其余同步原语 wasm 拒绝；
 --   * native 的标签与值形态 arity 与预期一致（arity 错会让 `IrRt` 值调用静默错配寄存器）。
 import Base
 import Base.Effect.Core
@@ -49,6 +50,14 @@ expectations =
     ("@vuna@prim_eff_atomicCompareExchange", 3, "rt_atomic_cas")
   ]
 
+-- wasm 能力：调度子集支持（顺序退化），同步原语拒绝。
+wasmExpectation : String -> Bool
+wasmExpectation name =
+  if memName name irRtWasmSeqThreadNames then
+    irRtSupports "wasm" name
+  else
+    not (irRtSupports "wasm" name)
+
 expectationProblems : (String, Int, String) -> List String
 expectationProblems e =
   let
@@ -57,4 +66,4 @@ expectationProblems e =
     label = secondOf (secondOf e)
   in append
     (problem (name ++ " known") (irRtIsKnown name))
-    (append (problem (name ++ " native") (irRtSupports "native" name)) (append (problem (name ++ " ocaml") (irRtSupports "ocaml" name)) (append (problem (name ++ " wasm-rejected") (not (irRtSupports "wasm" name))) (append (problem (name ++ " label") (nativeRtTarget name == Just label)) (problem (name ++ " arity") (nativeRtValueArity name == arity))))))
+    (append (problem (name ++ " native") (irRtSupports "native" name)) (append (problem (name ++ " ocaml") (irRtSupports "ocaml" name)) (append (problem (name ++ " wasm") (wasmExpectation name)) (append (problem (name ++ " label") (nativeRtTarget name == Just label)) (problem (name ++ " arity") (nativeRtValueArity name == arity))))))

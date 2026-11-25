@@ -88,11 +88,19 @@ exit: 1
 out-contains: wasm target: extern definition
 file-absent: $TMPDIR/rej-out/main.wasm
 
-# 7b) 多线程原语在 wasm 上是明确非目标：引用点编译期拒绝，文案点明 target 能力。
-run: sh -c 'd="$TMPDIR/rej-thread"; mkdir -p "$d/app"; printf "[package]\nname = \"rejthread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Effect.Core\nimport Base.Thread as Thread\n\nmain : Eff [] Int\nmain =\n  do\n    _ <- Thread.spawn (pure 1)\n    pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-thread-out" "$d" 2>&1'
+# 7b) 调度子集在 wasm 上按单线程顺序退化：parMap 能 build 并跑出结果。
+run: sh -c 'd="$TMPDIR/seq-thread"; mkdir -p "$d/app"; printf "[package]\nname = \"seqthread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Console as EffConsole\nimport Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\nimport Base.Thread.Par as Par\n\nsquare : Int -> Int\nsquare x = x * x\n\nwrap : Int -> String\nwrap x = \"[\" ++ strFromInt x ++ \"]\"\n\nmain : Eff [ConsoleOp] Int\nmain =\n  do\n    xs <- Par.parMap square (range 1 5)\n    folded <- Par.parFoldMap wrap (range 1 5)\n    _ <- consolePrint (\"wasm-par=\" ++ strFromInt (natToInt (length xs)) ++ \" \" ++ folded)\n    pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/seq-thread-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/seq-thread-out/main.wasm
+run: sh -c 'cd "$TMPDIR/seq-thread-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm'
+exit: 0
+out-contains: wasm-par=4 [1][2][3][4]
+
+# 7c) 同步原语仍是明确非目标：引用点编译期拒绝，文案点明 target 能力。
+run: sh -c 'd="$TMPDIR/rej-atomic"; mkdir -p "$d/app"; printf "[package]\nname = \"rejatomic\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core\nimport Base.Thread as Thread\n\nmain : Eff [] Int\nmain =\n  do\n    _ <- Thread.newAtomic 0\n    pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-atomic-out" "$d" 2>&1'
 exit: 1
 out-contains: is not supported by this target
-file-absent: $TMPDIR/rej-thread-out/main.wasm
+file-absent: $TMPDIR/rej-atomic-out/main.wasm
 
 # 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。
 run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-as" "$d"'

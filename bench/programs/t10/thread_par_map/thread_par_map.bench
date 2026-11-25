@@ -1,0 +1,4 @@
+ops=6000000
+n=1500000
+targets=ocaml,native,wasm
+cc_flags=-pthread

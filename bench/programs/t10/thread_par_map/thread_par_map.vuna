@@ -1,0 +1,23 @@
+-- 纯函数并行：parMap 把 4 个元素分给 4 个线程（每块累加 0..1499999），
+-- 结果按输入顺序返回后求和（测分块 + spawn 成本）。
+import Base.Effect.Core
+import Base.Trait.Num
+import Base.Trait.Ord
+import Base.Data.Int
+import Base.Data.List
+import Base.Thread.Par as Par
+
+sumRange : Int -> Int -> Int
+sumRange acc n = if n <= 0 then acc else sumRange (acc + n) (n - 1)
+
+work : Int -> Int
+work _ = sumRange 0 1500000
+
+sumList : List Int -> Int
+sumList xs = foldl (\acc, x => acc + x) 0 xs
+
+main : Eff [] Int
+main =
+  do
+    xs <- Par.parMap work (range 0 4)
+    pure (sumList xs)

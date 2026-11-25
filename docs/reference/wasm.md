@@ -261,9 +261,10 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   也直连真实实现。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
-契约符号，例如 Sched 家族（`prim_sched*`）、多线程原语（`prim_eff_thread*` / `mutex*` /
-`condvar*` / `atomic*`，文案点明是 target 能力而非待补缺口）与网络宿主原语
-（`@vuna@host@tryNet*`）。
+契约符号，例如 Sched 家族（`prim_sched*`）、线程同步原语（`mutex*` / `condvar*` / `atomic*`，
+文案点明是 target 能力而非待补缺口）与网络宿主原语（`@vuna@host@tryNet*`）。
+线程调度子集（`spawn` / `join` / `yield` / `id` / `parallelism`）在 wasm 上按单线程顺序退化：
+`spawn` 立即执行任务体并把结果装进 cell，`join` 读回，`parallelism` 恒 1。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `spanBegin` / `spanEnd` / `sampleStart` / `sampleStop`
@@ -325,7 +326,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 
 wasm 的契约上限是**浏览器能提供的能力子集**：纯计算、WasmGC 值、wasm 内 handler、经显式
 preopen 的文件读写、stdout/stderr、monotonic clock、args/env。进程派生 / stdin / raw 网络 /
-信号 / 线程 / 符号链接 / 阻塞 sleep 不在契约内。
+信号 / 线程同步原语 / 符号链接 / 阻塞 sleep 不在契约内；线程调度子集（spawn / join / yield /
+id / parallelism）按单线程顺序退化。
 
 宿主面固定为 WASI preview1（§1 的 import 列表），由本仓手写实现（`wasm-host/host.mjs`，
 Node 与浏览器共用，§8.6）。不引入 preview2-shim / `jco`：它们是
@@ -366,7 +368,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | DNS | 需宿主 adapter | 无 | 非目标 |
 | terminal | adapter-backed；默认无资源 | `isTty` | 恒 `False` |
 | process spawn / exec | 无 | `ProcessOp.Spawn` / `Wait` / `RunIn` | 不支持（trap） |
-| threads / signals | 无 | 无 | 非目标 |
+| threads / signals | 无 | `Base.Thread` | 调度子集（spawn / join / yield / id / parallelism）顺序退化；Mutex / Condvar / Atomic 与信号不支持 |
 
 ### 8.2 当前 wasm 多出来、已砍 / 降级的能力
 
@@ -377,6 +379,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   `@vuna@host@fileMtime` 直接置不可用状态，`FsOp.FileMtime` 得到 `Nothing`。
 - **阻塞 sleep**：`SleepMicros` 及所有 `*_sleep*` 符号映射到 `$rt_hostTrap1`；
   `clockNow`（monotonic）保留。浏览器不能用同步忙等占住事件循环。
+- **线程调度子集**：`spawn` 立即执行任务体并把结果装进 cell、`join` 读回、`yield` / `id` 恒 0、
+  `parallelism` 恒 1；Mutex / Condvar / Atomic 仍按引用点拒绝（单线程下无意义）。
 - **cwd**：`getcwd` 返回 `/`，不读 `PWD`；`execPath` 返回空串。相对路径按这个虚拟根
   归一。
 - **fd 3 主机根**：fd 3 只是 preview1 的 preopen 约定，不是主机 `/`。浏览器没有隐含

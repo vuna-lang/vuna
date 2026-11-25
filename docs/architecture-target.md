@@ -56,8 +56,9 @@
 - **擦除后 IR**：显式、带类型、well-scoped、无元变量、无燃料预算，是所有后端的唯一输入。
 - **两个产品后端**：native（自研运行时，产出服务器与桌面二进制）与 wasm（浏览器 / 边缘）；
   另有一个不发货的 OCaml 后端，只用于自举与互验。wasm 是**受限后端**：契约上限是浏览器
-  WASI 能提供的能力子集；进程、信号、raw 网络、线程、stdin、符号链接、阻塞 sleep 不在
-  契约内（契约与现状见 [reference/wasm.md](reference/wasm.md)「后端契约与边界」）。
+  WASI 能提供的能力子集；进程、信号、raw 网络、线程同步原语、stdin、符号链接、阻塞 sleep
+  不在契约内；线程调度子集（spawn / join / yield / id / parallelism）按单线程顺序退化
+  （契约与现状见 [reference/wasm.md](reference/wasm.md)「后端契约与边界」）。
 - **语义优先的工具**：语法高亮、补全、跳转、格式化都从编译器的语义结果派生，
   不从文本模式派生。
 - **宏与自定义 DSL**：语法是数据、按模块作用域；用户可定义宏与 DSL 语法，工具自动跟上。
@@ -147,8 +148,8 @@
   `git` / `curl` / Nix（D14）。
 - 不引入归档/解压原语来支持 tarball 依赖；`url` 只接受规范对象文件（primitive 轨道另议）。
 - 不为并行而并行、不为多后端而多后端、不为宏而宏。
-- 不把 wasm 后端做成系统级运行时：进程 / 信号 / 网络 / 线程 / stdin 不在契约内
-  （[reference/wasm.md](reference/wasm.md)）。
+- 不把 wasm 后端做成系统级运行时：进程 / 信号 / 网络 / 线程同步原语 / stdin 不在契约内
+  （线程调度子集按单线程顺序退化；[reference/wasm.md](reference/wasm.md)）。
 - 不走"先做框架、再回头补语言"的顺序。
 
 ## 依赖顺序
