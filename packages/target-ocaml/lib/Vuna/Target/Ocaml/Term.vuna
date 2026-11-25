@@ -1269,7 +1269,7 @@ let bi_ge_float (a : float) (b : float) = a >= b
 -- （`text` 缺省 / `jsonl`），目标 `VUNA_LOG_FILE`（缺省 stderr）。
 -- scope 过滤：`VUNA_LOG_SCOPE` 逗号分隔；无通配符按**点边界前缀**匹配，含 `*`/`?` 走 glob，
 -- `!pat` 是否定；全部按 scope 记忆（模块名是有限常量）。
--- 关闭路径 = 一次 `Lazy.force` + 整数比较；scope 未配置时不进表。
+-- 阈值与环境在模块初始化时读一次；关闭路径 = 一次整数比较；scope 未配置时不进表。
 dtLogRuntime : String
 dtLogRuntime = """(* vuna text log runtime (generated; see docs/reference/logging.md). *)
 let dtp_log_qc = Char.chr 34
@@ -1282,7 +1282,7 @@ let dtp_log_rs = Char.chr 93
 let dtp_log_colon = Char.chr 58
 let dtp_log_comma = Char.chr 44
 
-let dtp_log_level_lazy = lazy (
+let dtp_log_level_value = (
   let env = String.lowercase_ascii (try Sys.getenv \"VUNA_LOG\" with Not_found -> \"\") in
   if env = \"\" then 1
   else match env with
@@ -1294,7 +1294,7 @@ let dtp_log_level_lazy = lazy (
     | \"trace\" -> 4
     | s -> (match int_of_string_opt s with Some n -> n | None -> 1))
 
-let dtp_log_threshold () = Lazy.force dtp_log_level_lazy
+let dtp_log_threshold () = dtp_log_level_value
 
 let dtp_log_name (lvl : int) =
   if lvl <= 0 then \"ERROR\"
@@ -1303,7 +1303,7 @@ let dtp_log_name (lvl : int) =
   else if lvl = 3 then \"DEBUG\"
   else \"TRACE\"
 
-let dtp_log_scopes_lazy = lazy (
+let dtp_log_scopes_value = (
   let raw = try Sys.getenv \"VUNA_LOG_SCOPE\" with Not_found -> \"\" in
   if raw = \"\" then []
   else List.filter (fun s -> s <> \"\") (List.map String.trim (String.split_on_char ',' raw)))
@@ -1340,7 +1340,7 @@ let dtp_log_scope_eval (scope : string) (pats : string list) =
   base && not (List.exists (fun p -> dtp_log_scope_match (strip p) scope) exc)
 
 let dtp_log_scope_on (scope : string) =
-  match Lazy.force dtp_log_scopes_lazy with
+  match dtp_log_scopes_value with
   | [] -> true
   | pats ->
     (match Hashtbl.find_opt dtp_log_scope_cache scope with
@@ -1353,12 +1353,12 @@ let dtp_log_scope_on (scope : string) =
 let dtp_log_on (lvl : int) (scope : string) : bool =
   lvl <= dtp_log_threshold () && dtp_log_scope_on scope
 
-let dtp_log_pid_lazy = lazy (Unix.getpid ())
-let dtp_log_pid () = Lazy.force dtp_log_pid_lazy
+let dtp_log_pid_value = Unix.getpid ()
+let dtp_log_pid () = dtp_log_pid_value
 
-let dtp_log_format_lazy = lazy (
+let dtp_log_format_value = (
   String.lowercase_ascii (try Sys.getenv \"VUNA_LOG_FORMAT\" with Not_found -> \"\"))
-let dtp_log_json_mode () = Lazy.force dtp_log_format_lazy = \"jsonl\"
+let dtp_log_json_mode () = dtp_log_format_value = \"jsonl\"
 
 let dtp_log_out = ref None
 let dtp_log_opened = ref false
@@ -1441,7 +1441,7 @@ let dtp_log_emit (lvl : int) (scope : string) (text : string) : int =
 -- | 可观测性运行时（仅在程序引用 `@vuna@obs@*` 隐藏原语时追加；见 `dtRuntimeWith`
 -- 的 `usesObs`）。规范见 `docs/reference/observability.md`。
 --
--- 默认关闭：`dtp_obs_level_lazy` 是 lazy CAF，关闭时每个探针只剩一次 `Lazy.force` +
+-- 默认关闭：`dtp_obs_level_value` 在模块初始化时读一次环境，关闭时每个探针只剩一次整数比较 +
 -- 一个布尔分支（无时钟读、无分配、不碰文件）。打开后事件写 Chrome Trace Event JSONL
 -- （`ph:"M"` 元数据 + `ph:"X"` 跨度 + `ph:"C"` 计数 + `ph:"i"` 日志/采样），sink 是
 -- `VUNA_OBS_FILE` 或 `${VUNA_OBS_DIR:-${TMPDIR:-/tmp}/vuna-obs}/vuna-<pid>.jsonl`。
@@ -1455,7 +1455,7 @@ let dtp_log_emit (lvl : int) (scope : string) (text : string) : int =
 dtObsRuntime : String
 dtObsRuntime = """(* ------------------------------------------------------------------ *)
 (* vuna observability runtime (generated; see docs/reference/          *)
-(* observability.md). Off by default: a probe pays one Lazy.force.     *)
+(* observability.md). Off by default: probe reads one int at init.    *)
 (* Events are Chrome Trace Event JSONL, one object per line.           *)
 (*                                                                     *)
 (* This text is embedded verbatim in Codegen.Term.dtObsRuntime. It      *)
@@ -1473,7 +1473,7 @@ let dtp_obs_rb = Char.chr 125
 let dtp_obs_ls = Char.chr 91
 let dtp_obs_rs = Char.chr 93
 
-let dtp_obs_level_lazy = lazy (
+let dtp_obs_level_value = (
   let env =
     match int_of_string_opt (try Sys.getenv \"VUNA_OBS\" with Not_found -> \"\") with
     | Some n -> n
@@ -1496,8 +1496,8 @@ let dtp_obs_level_lazy = lazy (
   let l = scan 1 env in
   if l < 0 then 0 else if l > 3 then 3 else l)
 
-let dtp_obs_level (_ : int) = Lazy.force dtp_obs_level_lazy
-let dtp_obs_on () = Lazy.force dtp_obs_level_lazy > 0
+let dtp_obs_level (_ : int) = dtp_obs_level_value
+let dtp_obs_on () = dtp_obs_level_value > 0
 let dtp_obs_tid () = let t = !dtp_sched_current in if t < 0 then 0 else t
 
 let dtp_obs_esc b (s : string) =

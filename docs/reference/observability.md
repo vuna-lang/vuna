@@ -11,8 +11,8 @@
 ## 0. 一句话
 
 生成代码里带一个**零成本默认**的观测运行时：打开 `VUNA_OBS=1..3` 或 `--obs` 后，它把
-span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个探针只付一次
-`Lazy.force` + 一个布尔分支。文本日志是另一条通道（`log!` + `VUNA_LOG`，见
+span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个探针只付一次整数比较 +
+一个布尔分支（级别在模块初始化时读入）。文本日志是另一条通道（`log!` + `VUNA_LOG`，见
 [logging.md](logging.md)），不进 trace。
 
 ## 1. 设计决策（推翻时改这里，不静默改实现）
@@ -21,7 +21,7 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | --- | --- | --- |
 | O1 | **规范格式 = Chrome Trace Event JSONL**（schema `vuna-obs 1`）；`.cpuprofile` / speedscope / folded / HTML 都是它的**换算** | Perfetto / `chrome://tracing` 原生可开；每行一事件，崩溃可截断容忍 |
 | O2 | 观测是**运行时契约的一部分**（隐藏原语 `@vuna@obs@*`），不是工具链私有 hack | 与文本日志 `log!` 同策略：纯函数可调用（深部纯核心探针不需要把签名 effect 化，见 debt D68）、核心求值归约 no-op；编译器自带包装，应用经生态库使用 |
-| O3 | **默认关闭**，显式打开（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`） | 绝对性能读数必须来自关闭口径；关闭路径 = 一次 `Lazy.force` |
+| O3 | **默认关闭**，显式打开（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`） | 绝对性能读数必须来自关闭口径；关闭路径 = 一次整数比较 |
 | O4 | 分级：`0` 关；`1` 阶段 span + 计数；`2` 逐定义 span；`3` 采样（CPU/内存） | 每级成本有上界，见 §6 |
 | O5 | trace 是**普通文件**，绝不进对象库 / 缓存载荷 / 包产物 | 时间戳使产物非确定性；进缓存会污染命中 |
 | O6 | 生成单元默认注入 `# <line> "<包相对路径>"`（**唯一默认开启的产物变化**） | 让 `gdb` / `perf` / 异常回栈原生产生 `.vuna` 位置；代价是产物文本变化（基线/快照/seed rotation） |
@@ -49,11 +49,11 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 文本日志（`log!`）的开关是 `VUNA_LOG` / `VUNA_LOG_SCOPE` / `VUNA_LOG_FORMAT` /
 `VUNA_LOG_FILE`，与上表**完全独立**，规范见 [logging.md](logging.md)。
 
-级别含义与成本（关闭 = `Lazy.force` + 分支）：
+级别含义与成本（关闭 = 一次整数比较 + 分支）：
 
 | level | 打开什么 | 主要成本 |
 | --- | --- | --- |
-| 0 | 无 | 每次探针一次 `Lazy.force`（无分配、无 I/O） |
+| 0 | 无 | 每次探针一次整数比较（无分配、无 I/O） |
 | 1 | 阶段 span + 计数器 | 每 span 两次时钟读 + 一行 JSON |
 | 2 | + 逐定义 span（文本日志独立，见 [logging.md](logging.md)） | 每定义两次时钟读（compiler 实测 12773 条 `vuna.def.elab`） |
 | 3 | + 逐表达式节点 span（`vuna.elab.term.core`）+ 高频计数器 + CPU/内存采样 | 每表达式节点一次时钟读（compiler 实测 3.4×10^5 条）；采样 1%/默认 1 ms、固定 8192 槽 reservoir（全程均匀抽样） |
@@ -230,9 +230,10 @@ obsSample     : String -> Int -> (Int -> a) -> a
 
 ## 6. 成本纪律
 
-- 关闭路径：`dtp_obs_level` 是 lazy CAF；`dtp_obs_span` 关闭时只 `f 0`；`counter/mark`
-  关闭时直接 `0`。都不分配、不读时钟、不碰文件。文本日志的关闭路径另算（一次
-  `Lazy.force` + 整数比较，见 [logging.md](logging.md) §5），不进 trace。
+- 关闭路径：`dtp_obs_level` 在模块初始化时读入（多 domain 下不并发 `Lazy.force`——OCaml 的
+  lazy 不是线程安全的）；`dtp_obs_span` 关闭时只 `f 0`；`counter/mark` 关闭时直接 `0`。
+  都不分配、不读时钟、不碰文件。文本日志的关闭路径另算（一次整数比较，阈值在模块初始化时
+  读入，见 [logging.md](logging.md) §5），不进 trace。
 - 打开时事件走 `Buffer`（256 事件或 `sampleStop` / `at_exit` flush），写失败只警告一次并降级
   丢事件（**不中止程序**、不改退出码）。
 - 采样：`SIGPROF` handler 只 `Printexc.get_callstack 32`，memprof 分配回调只存

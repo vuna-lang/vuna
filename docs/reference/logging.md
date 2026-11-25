@@ -67,7 +67,7 @@ log! "level" msg
 | `VUNA_LOG_FORMAT` | `text`（缺省）/ `jsonl`（见 §4） |
 | `VUNA_LOG_FILE` | 输出文件；缺省 stderr。文件打不开时退回 stderr |
 
-阈值只读一次（lazy CAF），所以进程内改环境变量对已启动的进程无效。
+阈值与 scope 在模块初始化时读一次，所以进程内改环境变量对已启动的进程无效。
 
 ## 3. `VUNA_LOG_SCOPE` 过滤
 
@@ -119,7 +119,7 @@ VUNA_LOG_SCOPE='Vuna.*.Dt,Main'                     # glob + 点边界前缀
 
 关闭（或 scope 被过滤）时，每个 `log!` 只付：
 
-1. 一次 `Lazy.force`（阈值）+ 一次整数比较；
+1. 一次整数比较（阈值 / scope 在模块初始化时读入；多 domain 下不并发 `Lazy.force`）；
 2. `VUNA_LOG_SCOPE` 为空时不查 scope 表（直接放行）；
 3. `msg` **不求值**（宏的 `if` 门控）。
 
