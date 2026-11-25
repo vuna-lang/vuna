@@ -31,8 +31,8 @@ holeNameOf name = if holeNamed name then name else ""
 -- 卫生性靠**字符集不相交**：lexer 只在 `@vuna@` 前缀之后把 `@` 收进标识符
 -- （`Frontend.Lexer.startsWithVunaAt`），普通用户标识符不可能意外落进这个空间。
 -- 引用侧另有一道门（不是能力系统）：`Loader.Resolve` 放行 `classify` 认出的表面
--- 标记与 `Base.*` / `Vuna.*` 模块（`Rast.Name.isCompilerModulePrefix`），普通包写
--- `@vuna@…` 会报 `RN_UnknownVariable`；`packages/base` 因此可以直调宿主原语。
+-- 标记与 `Base.*` / `Vuna.*` / `Obs.*` 模块（`Rast.Name.isCompilerModulePrefix`），
+-- 普通包写 `@vuna@…` 会报 `RN_UnknownVariable`；标准库与第一方观测库因此可以直调。
 -- | 内部保留名的前缀（`@vuna@`）。
 export internalNamePrefix : String
 internalNamePrefix = "@vuna@"

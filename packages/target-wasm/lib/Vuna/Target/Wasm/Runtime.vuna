@@ -2297,8 +2297,8 @@ rtFunctions c =
 -- 符号表
 -- ---------------------------------------------------------------
 export rtImplOf : String -> RtImpl
--- 可观测性原语（`docs/reference/observability.md` §4.1）：wasm 后端只给**叶子**
--- 原语 no-op 桩（返回盒装 0）；`span` 依赖闭包，本后端不支持闭包 ⇒ 引用点编译期拒绝。
+-- 可观测性原语（`docs/reference/observability.md` §4.1）：wasm 后端给**叶子**
+-- 原语 no-op 桩（返回盒装 0）；`span` / `spanLab` 应用 thunk 后返回结果，不写事件。
 rtImplOf "+" = RtFunc 2 "$rt_add"
 rtImplOf "-" = RtFunc 2 "$rt_sub"
 rtImplOf "*" = RtFunc 2 "$rt_mul"

@@ -12,7 +12,6 @@ import Vuna.Compiler.Frontend.Cst
 import Base.Data.Sort as Sort
 import Base.Data.List as List
 import Base.Data.String as String
-import Base.Data.Obs as Obs
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Canonical.Ast

@@ -1851,7 +1851,8 @@ nativeRtTargetBase "natMul" = Just (nativeRtLabel "nat_mul")
 nativeRtTargetBase "natDiv" = Just (nativeRtLabel "nat_div")
 nativeRtTargetBase "natToInt" = Just (nativeRtLabel "nat_to_int")
 nativeRtTargetBase "natFromInt" = Just (nativeRtLabel "nat_from_int")
--- 可观测性叶子原语：no-op 桩（返回 0）。`@vuna@obs@span` 故意缺席（高阶，需闭包）。
+-- 可观测性叶子原语：no-op 桩（返回 0）；`@vuna@obs@span` / `spanLab` 走高阶
+-- `obs_span_run` / `obs_span_lab_run`，应用 thunk 后返回结果。
 nativeRtTargetBase "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
 nativeRtTargetBase "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
 nativeRtTargetBase "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")

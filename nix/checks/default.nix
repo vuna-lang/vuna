@@ -33,6 +33,7 @@ let
     pluginWeb = ../../packages/plugin-web;
     dev = ../../packages/dev;
     base = ../../packages/base;
+    obs = ../../packages/obs;
     pluginKit = ../../packages/plugin-kit;
     toolchain = ../../packages/toolchain;
     cli = ../../packages/cli;
@@ -60,6 +61,7 @@ let
 
   workspace = [
     src.base
+    src.obs
     src.compiler
     src.compilerBase
     src.ir
@@ -435,6 +437,7 @@ in
       src.pluginWeb
       src.dev
       src.base
+      src.obs
       src.pluginKit
       src.toolchain
       src.http
@@ -456,6 +459,7 @@ in
       src.pluginWeb
       src.dev
       src.base
+      src.obs
       src.pluginKit
       src.toolchain
       src.http
@@ -606,6 +610,7 @@ in
     ];
     env = {
       VUNA_BASE = "${repo}/packages/base";
+      VUNA_OBS_PKG = "${repo}/packages/obs";
     };
     nativeBuildInputs = ocamlTools ++ [
       pkgs.findutils

@@ -12,7 +12,7 @@ exit: 0
 
 # ---------------------------------------------------------------- fixtures
 # 一个带 obs span 的可执行包（多条断言复用）。
-run: sh -c 'd="$TMPDIR/app"; mkdir -p "$d/app"; printf "[package]\nname = \"obsapp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"app.work\" \"vuna.user\" (\\_ => 7)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/app-out" "$d"'
+run: sh -c 'd="$TMPDIR/app"; mkdir -p "$d/app"; printf "[package]\nname = \"obsapp\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Obs as ObsSpan\n\nmain : Int\nmain = obsSpan \"app.work\" \"vuna.user\" (\\_ => 7)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/app-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/app-out/bin/obsapp
 
@@ -100,7 +100,7 @@ exit: nonzero
 out-contains: vuna: runtime error
 out-contains: app/Main.vuna
 
-run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\nimport Base.Data.ObsSpan as ObsSpan\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => work (range 0 400000))\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
+run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Base.Data.List as List\nimport Obs as ObsSpan\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => work (range 0 400000))\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
 exit: 0
 run: sh -c 'VUNA_OBS=3 VUNA_OBS_DIR="$TMPDIR/sam-trace" "$TMPDIR/sam-out/bin/sam" >/dev/null'
 exit: 0
@@ -186,17 +186,17 @@ run: sh -c 't=$(find "$TMPDIR/mac-trace" -name "*.jsonl" | head -1); "$VUNA" dev
 exit: 0
 
 # ---------------------------------------------------------------- 10) 非 OCaml 后端
-run: sh -c 'd="$TMPDIR/wobs"; mkdir -p "$d/app"; printf "[package]\nname = \"wobs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Obs as Obs\n\nmain : Int\nmain =\n  let\n    _ = obsLevel 0\n    _ = log! \"info\" \"wasm\"\n  in 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wobs-out" "$d"'
+run: sh -c 'd="$TMPDIR/wobs"; mkdir -p "$d/app"; printf "[package]\nname = \"wobs\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Obs as Obs\n\nmain : Int\nmain =\n  let\n    _ = obsLevel 0\n    _ = log! \"info\" \"wasm\"\n  in 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wobs-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/wobs-out/main.wat
 
-run: sh -c 'd="$TMPDIR/wspan"; mkdir -p "$d/app"; printf "[package]\nname = \"wspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wspan-out" "$d"'
+run: sh -c 'd="$TMPDIR/wspan"; mkdir -p "$d/app"; printf "[package]\nname = \"wspan\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Obs as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wspan-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/wspan-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" main.wasm'
 exit: 0
 out-equals: 1
 
-run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; VUNA_OBS=1 VUNA_OBS_SAMPLE=mem VUNA_OBS_DIR="$TMPDIR/nspan-trace" "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
+run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Obs as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; VUNA_OBS=1 VUNA_OBS_SAMPLE=mem VUNA_OBS_DIR="$TMPDIR/nspan-trace" "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/nspan-out/bin/nspan"'
 exit: 0

@@ -37,6 +37,7 @@ VUNA=$1
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../../../../.." && pwd)
 VUNA_BASE=${VUNA_BASE:-$REPO/packages/base}
+VUNA_OBS_PKG=${VUNA_OBS_PKG:-$REPO/packages/obs}
 
 # socket 路径要短（sun_path 上限 108 字节）。
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocdp.XXXXXX") || exit 1
@@ -145,8 +146,8 @@ start_serve() { # trace log sock -> 0/1；成功时 sock 是这一段 server 的
 # ---------------------------------------------------------------- 1) 造采样 trace
 pkg=$tmp/app
 mkdir -p "$pkg/app"
-printf '[package]\nname = "cdpapp"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$pkg/vuna.toml"
-printf 'import Base.Data.List as List\nimport Base.Data.ObsSpan as ObsSpan\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample "cpu" 1000 (\\_ => work (range 0 400000))\n' >"$pkg/app/Main.vuna"
+printf '[package]\nname = "cdpapp"\n\n[dependencies]\nvuna-base = "%s"\nvuna-obs = "%s"\n' "$VUNA_BASE" "$VUNA_OBS_PKG" >"$pkg/vuna.toml"
+printf 'import Base.Data.List as List\nimport Obs as ObsSpan\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample "cpu" 1000 (\\_ => work (range 0 400000))\n' >"$pkg/app/Main.vuna"
 if ! "$VUNA" build --out "$tmp/app-out" "$pkg" >"$tmp/build.log" 2>&1; then
   cat "$tmp/build.log" >&2
   echo "smoke: build failed" >&2

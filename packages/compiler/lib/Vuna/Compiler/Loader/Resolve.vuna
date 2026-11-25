@@ -964,7 +964,8 @@ checkDebugConstruct release sp name resolved scope =
 
 -- parser 合成的表面标记（列表字面量 / 元组 / perform / handle / row@at / f@name / 类型标注）
 -- 与 `handle` op λ 的合成 binder 名：任何包都放行，因为源码写不出这些名字。
--- 其余 `@vuna@…`（内建类型、宿主原语、重载候选、宏 / do 标记）只在编译器包里可见。
+-- 其余 `@vuna@…`（内建类型、宿主原语、重载候选、宏 / do 标记）只在编译器 / 标准库 /
+-- 第一方观测库模块里可见。
 isParserSyntaxName : String -> Bool
 isParserSyntaxName name =
   case classify name of

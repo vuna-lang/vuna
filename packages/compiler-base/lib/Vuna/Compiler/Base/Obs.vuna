@@ -1,22 +1,55 @@
 module Vuna.Compiler.Base.Obs where
 
--- Vuna.Compiler.Base.Obs：编译器自身的观测插桩（阶段 span / 计数 / 标记）。
+-- Vuna.Compiler.Base.Obs：编译器自身的观测插桩（阶段 span / 计数 / 标记 / 采样）。
 --
--- 只是 `Base.Data.Obs` / `Base.Data.Obs.Span` 的**编译器侧适配层**：给 `Check a` 加跨度、给
--- `Eff r` 阶段打瞬时标记。规范见 `docs/reference/observability.md`。
+-- 直接包隐藏运行时原语 `@vuna@obs@*`：编译器在 seed 闭包里，不依赖应用面观测库。
+-- 规范见 `docs/reference/observability.md`。
 --
--- 为什么需要适配层：`Base.Data.Obs.obsSpan` 吃 `Int -> a` thunk，而编译器内部的阶段返回
--- `Check a`（`OkC` / `ErrC`）。这里把「求值 + 构造 Check」整体放进跨度的 thunk 里，
--- 错误路径也照样写出带 `args.error` 的 `X` 事件。
--- `Eff r` 的动作不能被纯跨度包住（执行发生在 runner 里），那些边界用
--- `vuna.mark.*` 瞬时标记记录（`obsMark`），时间轴上是零宽度点。
+-- `Check a`（`OkC` / `ErrC`）的阶段跨度把「求值 + 构造 Check」整体放进 thunk 里，
+-- 错误路径也照样写出带 `args.error` 的 `X` 事件。`Eff r` 的动作不能被纯跨度包住
+-- （执行发生在 runner 里），那些边界用 `vuna.mark.*` 瞬时标记记录（`obsMark`），
+-- 时间轴上是零宽度点。
 --
 -- 关闭时全部退化为一次 `Lazy.force` + 直接调用（见规范 §6）。
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.Data.Obs as Obs
-import Base.Data.ObsSpan as ObsSpan
+import Base.Effect.Core
 import Base.Effect.Types as EffTypes
+import Base.Trait.Monad
+
+-- ---------------------------------------------------------------
+-- 原语包装
+-- ---------------------------------------------------------------
+-- | 当前观测级别（`0` 关 / `1` 阶段 / `2` 逐定义 / `3` 采样）。
+obsLevel : Int -> Int
+obsLevel n = @vuna@obs@level n
+
+-- | 计数器读数（`ph:"C"`，`args.value`）。
+export obsCounter : String -> Int -> Int
+obsCounter name v = @vuna@obs@counter name v
+
+-- | 瞬时标记（`ph:"i"`）：零宽度事件。
+export obsMark : String -> Int
+obsMark name = @vuna@obs@mark name
+
+-- | 一个带分类的纯跨度：执行 `f 0` 并记录 `name` / `cat` 的 `ph:"X"` 事件。
+export obsSpan : String -> String -> (Int -> a) -> a
+obsSpan name cat f = @vuna@obs@span name cat f
+
+-- | 包住一个 `Eff` 动作的跨度：begin → action → end，`finally` 保证 abort 路径也结束跨度。
+export obsSpanEff : {r : Row} -> {a : Type} -> String -> String -> Eff r a -> Eff r a
+obsSpanEff name cat action =
+  do
+    tok <- pure (@vuna@obs@spanBegin name cat)
+    finally action (pure (@vuna@obs@spanEnd tok))
+
+-- | 开始采样：`mode` 为 `"cpu"` / `"mem"` / `"both"`，`intervalUs` 是采样间隔。
+export obsSampleStart : String -> Int -> Int
+obsSampleStart mode intervalUs = @vuna@obs@sampleStart mode intervalUs
+
+-- | 停止采样并 flush trace。
+export obsSampleStop : Int -> Int
+obsSampleStop n = @vuna@obs@sampleStop n
 
 -- ---------------------------------------------------------------
 -- Check 形态的阶段 span
@@ -24,12 +57,12 @@ import Base.Effect.Types as EffTypes
 -- | 把一个 `Check a` 的求值放进 `ph:"X"` 跨度：`name` 用规范词汇表（`vuna.elab.*` /
 -- `vuna.codegen.*` / `vuna.iface.*` …），`cat` 一般 `vuna.phase`。
 export obsCheck : String -> (Int -> Check a) -> Check a
-obsCheck name f = @vuna@obs@span name "vuna.phase" (\u => f u)
+obsCheck name f = obsSpan name "vuna.phase" f
 
 -- | 纯变换的阶段跨度：`rezonk` / 额外定义生成这类收尾工作不返回 `Check`，用这个包
 -- （分类与 `obsCheck` 一致）。关闭时只付一次 `Lazy.force` + 直接调用。
 export obsPure : String -> (Int -> a) -> a
-obsPure name f = ObsSpan.obsSpan name "vuna.phase" f
+obsPure name f = obsSpan name "vuna.phase" f
 
 -- | 高频计数器（`ph:"C"`）：`minLevel` 是发事件的最低观测级别。一次 check 里 conv /
 -- 求值的调用量是 10^5–10^6 级，默认压到 level 3，避免把 level 2 的 trace 撑大。

@@ -8,7 +8,7 @@
 -- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器；`obsSampleStart` 在 obs 关闭时是空操作。
 import Vuna.Cli
 import Base.Trait.Monad as Monad
-import Base.Data.Obs as Obs
+import Obs as Obs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Tty as EffTty
 import Base.Effect.Args as EffArgs

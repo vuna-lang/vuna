@@ -25,6 +25,7 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
     repo=$(dirname "$repo")
   done
   export VUNA_BASE="$repo/packages/base"
+  export VUNA_OBS_PKG="$repo/packages/obs"
   export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
   export VUNA_WEB_CLI="${vuna-web-cli}/bin/vuna-web-cli"
   export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"

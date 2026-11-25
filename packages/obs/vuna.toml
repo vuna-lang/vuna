@@ -1,0 +1,11 @@
+# vuna-obs：应用面结构化可观测性库（标准库之外的生态包，显式依赖后使用）。
+[package]
+name = "vuna-obs"
+
+[dependencies]
+vuna-base = "../base"
+
+[export]
+modules = [
+  "Obs"
+]

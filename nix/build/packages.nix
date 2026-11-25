@@ -53,6 +53,10 @@ let
   # 只认该目录的 manifest，不依赖 workspace 根。
   pkgDeps = {
     base = [ "base" ];
+    obs = [
+      "base"
+      "obs"
+    ];
     compiler-base = [
       "base"
       "compiler-base"
@@ -100,6 +104,7 @@ let
     ];
     toolchain = [
       "base"
+      "obs"
       "http"
       "plugin-kit"
       "compiler-base"
@@ -110,6 +115,7 @@ let
     ];
     cli = [
       "base"
+      "obs"
       "http"
       "plugin-kit"
       "compiler-base"
@@ -120,12 +126,14 @@ let
     ];
     target-native = [
       "base"
+      "obs"
       "compiler-base"
       "ir"
       "target-native"
     ];
     target-wasm = [
       "base"
+      "obs"
       "compiler-base"
       "ir"
       "target-wasm"
@@ -144,6 +152,7 @@ let
     ];
     dev = [
       "base"
+      "obs"
       "http"
       "plugin-kit"
       "compiler-base"
@@ -159,6 +168,7 @@ let
   # 预热 store 覆盖的包：所有「插件构建会当依赖读、但不作为插件单独构建」的库包。
   storeDeps = [
     "base"
+    "obs"
     "compiler-base"
     "ir"
     "target-ocaml"
@@ -207,6 +217,7 @@ let
   dirSrc = name: path: builtins.path { inherit name path; };
 
   baseSrc = dirSrc "vuna-base-src" ../../packages/base;
+  obsSrc = dirSrc "vuna-obs-src" ../../packages/obs;
   httpSrc = dirSrc "vuna-http-src" ../../packages/http;
   webSrc = dirSrc "vuna-web-src" ../../packages/web;
   seedSrc = dirSrc "vuna-seed-src" ../../seed;
@@ -398,6 +409,8 @@ let
         cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
         cp ${vuna-compiler}/cache-tag "$out/cache-tag"
         cp -r ${baseSrc} "$out/base"
+        # 应用面观测库是生态包：随产品安装源码，用户显式写路径依赖后使用。
+        cp -r ${obsSrc} "$out/obs"
         # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
         cp -r ${wasmHostSrc} "$out/share/vuna/wasm-host"
         if [ -f ${vuna-cli}/build-id ]; then cp ${vuna-cli}/build-id "$out/build-id"; fi

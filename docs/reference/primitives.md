@@ -377,7 +377,8 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 抛 `Failure`，由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
 `assert` / `todo` 在 release 构建里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）。
 文本日志与观测原语（`@vuna@log@*` / `@vuna@obs@*`）同样隐藏，只由 `log!` / `mark!` 与
-`Base.Data.Log` / `Base.Data.Obs` 使用。
+`Base.Data.Log` / 生态包 `vuna-obs`（模块 `Obs`）使用；编译器用自己的
+`Vuna.Compiler.Base.Obs` 包装。
 
 **分组只是文档归类**（内建表不带能力位，也没有 manifest 门控）：
 

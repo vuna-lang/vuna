@@ -2,7 +2,7 @@
 --
 -- 与产品工具链分开打包：suite / 观测 / 错误码文档生成只对 vuna 仓库成立。
 import Vuna.Dev.Registry
-import Base.Data.Obs as Obs
+import Obs as Obs
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole

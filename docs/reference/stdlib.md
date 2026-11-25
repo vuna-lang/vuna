@@ -79,7 +79,7 @@
 | `Base.Effect.Stdin` | 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`（返回 `Maybe String`，EOF = `Nothing`）/`handleStdin`/`handleStdinHost`（真实 handler 用 `@vuna@prim_eff_readLine`/`@vuna@prim_eff_readBytes`）；`runStdin n` |
 | `Base.Effect.Exit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `@vuna@prim_eff_exit`）；`runExit n` |
 | `Base.Effect.Process` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `@vuna@prim_eff_getArgs`/`@vuna@prim_eff_exit`/`@vuna@prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
-| `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Fin` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Log` / `Obs` / `Obs.Span`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
+| `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Fin` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Log`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
 | `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString` / `Convert`（含 `ConvertMaybe`）；也可写路径（`import Base.Trait.Monad as Monad`） |
 | `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...TreeMap` / `...TreeSet` / `...Queue` / `...PriorityQueue` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
@@ -98,8 +98,7 @@ packages/base/lib/
   Base.vuna                  Prelude.vuna
   Base/Data.vuna             Base/Trait.vuna
   Base/Container.vuna        Base/Effect.vuna
-  Base/Data/{Pair,Bool,List,Maybe,Result,String,Unit,Fin,Vec,Nat,Int,Float,Bits,Sort,Log,Obs}.vuna
-  Base/Data/Obs/Span.vuna
+  Base/Data/{Pair,Bool,List,Maybe,Result,String,Unit,Fin,Vec,Nat,Int,Float,Bits,Sort,Log}.vuna
   Base/Trait/{Eq,Ord,Show,Interp,Hashable,Monoid,Foldable,Traversable,
               Functor,Applicative,Monad,Record,Field,Num,Neg,FromInt,FromString,Convert}.vuna
   Base/Container/{Map,HashMap,HashSet,TreeMap,TreeSet,Queue,PriorityQueue,Array}.vuna

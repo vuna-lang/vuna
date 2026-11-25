@@ -1,0 +1,93 @@
+-- | 应用面可观测性库：隐藏运行时原语（`@vuna@obs@*`）的薄包装。
+--
+-- 默认关闭（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`）：关闭时每次调用只付一次
+-- `Lazy.force` + 一个布尔分支，不分配、不读时钟、不碰文件。打开后事件写 Chrome Trace
+-- Event JSONL（`ph:"X"` 跨度 / `ph:"C"` 计数 / `ph:"i"` 日志与采样），可直接拖进
+-- `chrome://tracing` / Perfetto，或经 `vuna dev obs convert` 换算成 `.cpuprofile` /
+-- speedscope / folded。
+--
+-- 叶子原语都是**纯函数**（返回 `Int` 或 `Bool`，无 `Eff`）：深部纯函数照样能埋探针，
+-- 不需要把签名 effect 化；开关是 ambient 运行时配置，与文本日志 `log!` 同形态。
+--
+-- 开关、成本纪律与事件词汇表见 `docs/reference/observability.md`。
+module Obs where
+
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Effect.Core
+import Base.Effect.Types
+import Base.Trait.Monad
+import Base.Trait.Ord
+
+-- ---------------------------------------------------------------
+-- 级别与开关
+-- ---------------------------------------------------------------
+-- | 当前观测级别（`0` 关 / `1` 阶段 / `2` 逐定义 / `3` 采样）。哑 `Int` 实参承载开关查询，避免在源码层出现「纯值读进程配置」的形态。
+export obsLevel : Int -> Int
+obsLevel n = @vuna@obs@level n
+
+-- | 观测是否打开（`level >= 1`）。需要自己判开销时用它，避免无谓的事件构造（例如构造日志实参本来就是贵的时候）。
+export obsOn : Int -> Bool
+obsOn n = if @vuna@obs@level n > 0 then True else False
+
+-- ---------------------------------------------------------------
+-- 事件
+-- ---------------------------------------------------------------
+-- | 计数器读数（`ph:"C"`，`args.value`）：用于步数 / 命中数 / 规模的归因。
+export obsCounter : String -> Int -> Int
+obsCounter name value = @vuna@obs@counter name value
+
+-- | 瞬时标记（`ph:"i"`）：不占时间轴宽度的一次性记号，用于「这一刻发生了什么」。
+export obsMark : String -> Int
+obsMark name = @vuna@obs@mark name
+
+-- | 开始一个 `Eff` 跨度：返回 token（关闭时为 0）。与 `obsSpanEnd` 配对；因为
+-- `Eff` 动作不能被纯 thunk 包住，跨度边界需要在执行期记录（`obsSpanEff`）。
+export obsSpanBegin : String -> String -> Int
+obsSpanBegin name cat = @vuna@obs@spanBegin name cat
+
+-- | 结束一个 `Eff` 跨度：按 token 找开始时间并写 `ph:"X"` 事件；未知/0 token 静默返回 0。
+export obsSpanEnd : Int -> Int
+obsSpanEnd tok = @vuna@obs@spanEnd tok
+
+-- ---------------------------------------------------------------
+-- 高阶跨度
+-- ---------------------------------------------------------------
+-- | 一个带分类的跨度：执行 `f 0` 并记录 `name` / `cat` 的 `ph:"X"` 事件（含耗时、分配
+-- 与堆读数）；异常路径也写出事件并原样重抛，异常不被吞。`cat` 用 `vuna.phase` /
+-- `vuna.def` / `vuna.io` / `vuna.user` 等，见规范 §3.2。
+export obsSpan : String -> String -> (Int -> a) -> a
+obsSpan name cat f = @vuna@obs@span name cat f
+
+-- | `obsSpan` 的便捷形态：分类固定 `vuna.user`（用户程序自己的跨度）。
+export obsSpanP : String -> (Int -> a) -> a
+obsSpanP name f = obsSpan name "vuna.user" f
+
+-- | 包住一个 `Eff` 动作的跨度：begin → action → end，`finally` 保证 abort 路径也结束
+-- 跨度。用于对象库读写这类「动作本身就是工作单元」的边界。
+export obsSpanEff : {r : Row} -> {a : Type} -> String -> String -> Eff r a -> Eff r a
+obsSpanEff name cat action =
+  do
+    tok <- pure (obsSpanBegin name cat)
+    finally action (pure (obsSpanEnd tok))
+
+-- ---------------------------------------------------------------
+-- 采样
+-- ---------------------------------------------------------------
+-- | 开始采样：`mode` 为 `"cpu"` / `"mem"` / `"both"`，`intervalUs` 是采样间隔（`<= 0` 用默认 1000us）。CPU 采样走 `ITIMER_PROF` + `SIGPROF`，只计 CPU 时间；内存采样走 `Gc.Memprof` 分配回调。样本在 `obsSampleStop` 时批量写入 trace。
+export obsSampleStart : String -> Int -> Int
+obsSampleStart mode intervalUs = @vuna@obs@sampleStart mode intervalUs
+
+-- | 停止采样并 flush trace；返回 0。与 `obsSampleStart` 配对使用（多 domain 采样未做，见 debt D41）。
+export obsSampleStop : Int -> Int
+obsSampleStop n = @vuna@obs@sampleStop n
+
+-- | 采样一段计算：开始、执行、停止（异常也保证停止）。典型用法是包住整个 `main` 热点
+-- 或一次基准循环。`mode` / `intervalUs` 语义同 `obsSampleStart`。
+export obsSample : String -> Int -> (Int -> a) -> a
+obsSample mode intervalUs f =
+  let
+    _ = @vuna@obs@sampleStart mode intervalUs
+    r = f 0
+    _ = @vuna@obs@sampleStop 0
+  in r

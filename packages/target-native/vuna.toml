@@ -5,6 +5,7 @@
 name = "vuna-target-native"
 
 [dependencies]
+vuna-obs = "../obs"
 vuna-base = "../base"
 vuna-compiler-base = "../compiler-base"
 vuna-ir = "../ir"

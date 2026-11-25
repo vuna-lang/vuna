@@ -6,6 +6,7 @@
 name = "vuna-toolchain"
 
 [dependencies]
+vuna-obs = "../obs"
 vuna-target-ocaml = "../target-ocaml"
 vuna-ir = "../ir"
 vuna-compiler-base = "../compiler-base"

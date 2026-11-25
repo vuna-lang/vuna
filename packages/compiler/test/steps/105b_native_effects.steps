@@ -94,7 +94,7 @@ run: "$TMPDIR/effcap-out/bin/effcap" 2>&1
 out-equals: 20001
 
 # 9n) 高阶观测原语：`@vuna@obs@span` 不写事件，但必须调 thunk 并返回其结果。
-run: sh -c 'd="$TMPDIR/obsspan"; mkdir -p "$d/app"; printf "[package]\nname = \"obsspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"vuna.probe\" \"vuna.user\" (\\_ => 42)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/obsspan-out" "$d"'
+run: sh -c 'd="$TMPDIR/obsspan"; mkdir -p "$d/app"; printf "[package]\nname = \"obsspan\"\n\n[dependencies]\nvuna-base = \"%s\"\nvuna-obs = \"%s\"\n" "$VUNA_BASE" "$VUNA_OBS_PKG" > "$d/vuna.toml"; printf "import Obs as ObsSpan\n\nmain : Int\nmain = obsSpan \"vuna.probe\" \"vuna.user\" (\\_ => 42)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/obsspan-out" "$d"'
 exit: 0
 run: "$TMPDIR/obsspan-out/bin/obsspan" 2>&1
 out-equals: 42

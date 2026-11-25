@@ -50,7 +50,7 @@ import Base.Effect.Clock as EffClock
 import Base.Effect.Env as EffEnv
 import Base.Effect.Exit as EffExit
 import Base.Effect.Process as EffProcess
-import Base.Data.Obs as Obs
+import Obs as Obs
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.Term

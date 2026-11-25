@@ -3,6 +3,7 @@
 name = "vuna-dev"
 
 [dependencies]
+vuna-obs = "../obs"
 vuna-base = "../base"
 vuna-compiler = "../compiler"
 vuna-compiler-base = "../compiler-base"

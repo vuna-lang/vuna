@@ -39,7 +39,7 @@ import Base.Container.HashMap as HashMap
 import Base.Data.Bool as Bool
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
-import Base.Data.ObsSpan as ObsSpan
+import Vuna.Compiler.Base.Obs
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
@@ -325,8 +325,7 @@ export lexCst : String -> Maybe (List CstToken)
 lexCst source =
   case lexSourceWithComments source of
     ErrC _ => Nothing
-    OkC (toks, comments) =>
-      Just (obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexTokensOf source toks comments))
+    OkC (toks, comments) => Just (obsPure "vuna.parse.cst" (\_ => lexTokensOf source toks comments))
 
 -- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
 triviaTextOf : Trivia -> String

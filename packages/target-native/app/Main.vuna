@@ -1,6 +1,6 @@
 -- | vuna-target-native：Native 后端插件入口（读 IR → 目标文本）。
 import Vuna.Target.Native.Plugin
-import Base.Data.Obs as Obs
+import Obs as Obs
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole

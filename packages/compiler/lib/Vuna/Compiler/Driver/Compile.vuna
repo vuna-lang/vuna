@@ -17,7 +17,6 @@ module Vuna.Compiler.Driver.Compile where
 -- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff r`，这里直接调用。
 import Base.Container.HashMap as HashMap
 import Base.Data.Maybe as Maybe
-import Base.Data.Obs as Obs
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash

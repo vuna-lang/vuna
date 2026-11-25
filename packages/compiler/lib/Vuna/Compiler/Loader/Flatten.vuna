@@ -17,7 +17,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
-import Base.Data.ObsSpan as ObsSpan
+import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
@@ -52,7 +52,7 @@ parseFileWithPath = parseFileWithPathMode PmStrict
 
 export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check (SourceFile, FixityFacts))
 parseFileWithPathMode mode path src =
-  case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
+  case obsPure "vuna.parse.lex" (\_ => lexSource src) of
     ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
     OkC toks => pure (parseWith mode path src toks)
 
@@ -61,7 +61,7 @@ parseFileWithPathMode mode path src =
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
 parseWith : ParseMode -> String -> String -> List PTok -> Check (SourceFile, FixityFacts)
 parseWith mode path src toks =
-  case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path src mode toks) of
+  case obsPure "vuna.parse.syntax" (\_ => parseSourceRecoveringTokens path src mode toks) of
     ErrC e => ErrC (withSpanFileIfEmpty path e)
     OkC p =>
       let

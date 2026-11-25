@@ -73,9 +73,8 @@ vuna: runtime error: division by zero
 过滤都放行时才写一行并求值 `msg`。scope 是所在模块名（入口文件取文件名），由展开期烘入；
 完整规范（级别、过滤、`VUNA_LOG_FORMAT`、JSONL）见 [logging.md](logging.md)。
 
-要**结构化**事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用语言层的可观测性 API
-（`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `mark!` 宏，见
-[observability.md](observability.md)）：
+要**结构化**事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用生态包 `vuna-obs`
+（模块 `Obs`）与 `mark!` 宏，见 [observability.md](observability.md)：
 
 | 名字 | 签名 | 行为 |
 | --- | --- | --- |

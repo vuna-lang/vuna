@@ -4,7 +4,6 @@ module Vuna.Compiler.Elab.Termination.Scc where
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
-import Base.Data.Obs as Obs
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Name
@@ -780,18 +779,18 @@ sctCheckGo comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     note = sctBlindNote sites
-    _ = Obs.obsCounter "vuna.counter.term.scc_size" (length comp)
-    _ = Obs.obsCounter "vuna.counter.term.sites" (length sites)
+    _ = obsCounter "vuna.counter.term.scc_size" (length comp)
+    _ = obsCounter "vuna.counter.term.sites" (length sites)
   in case initialTable defTbl sites ctors projs facts of
     (table0, ok0) =>
       if ok0 then
         let
-          _ = Obs.obsCounter "vuna.counter.term.graphs" (countGraphs table0)
+          _ = obsCounter "vuna.counter.term.graphs" (countGraphs table0)
         in case closureLoop table0 sctClosureFuel of
           (table1, closed, remaining) =>
             let
-              _ = Obs.obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
-              _ = Obs.obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
+              _ = obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
+              _ = obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
             in if closed then if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)) else ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
       else
         ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))

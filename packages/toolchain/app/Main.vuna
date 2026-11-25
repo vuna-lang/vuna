@@ -5,7 +5,7 @@
 --
 -- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna dev obs run --sample ...` 会设置它）。
 import Vuna.Cli.Registry
-import Base.Data.Obs as Obs
+import Obs as Obs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Tty as EffTty
 import Base.Effect.Args as EffArgs

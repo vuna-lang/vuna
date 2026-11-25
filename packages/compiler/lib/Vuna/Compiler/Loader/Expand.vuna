@@ -16,7 +16,7 @@ module Vuna.Compiler.Loader.Expand where
 --   * `log! "level" msg` → `if @vuna@log@on level scope then @vuna@log@emit level scope msg else 0`
 --     （`scope` 是本模块名，展开期烘入；关闭或被 `VUNA_LOG_SCOPE` 过滤时 `msg` 不求值）；
 --   * `mark! name` → `@vuna@obs@mark name`：瞬时标记事件（`VUNA_OBS` 分级开关；
---     实参在关闭级别下仍会求值，需要时用 `Base.Data.Obs.obsOn 0` 自行判）。
+--     实参在关闭级别下仍会求值，需要时用 `Obs.obsOn 0` 自行判）。
 -- 用户自定义宏不在范围内。
 import Base.Data.List as List
 import Base.Data.Nat as Nat

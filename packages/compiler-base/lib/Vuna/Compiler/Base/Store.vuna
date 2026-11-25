@@ -40,7 +40,7 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Types as EffTypes
-import Base.Data.ObsSpan as ObsSpan
+import Vuna.Compiler.Base.Obs
 
 -- | framing 版本串；格式变更即 bump（版本不符即拒绝，不做迁移）。
 export storeMagic : String

@@ -150,7 +150,8 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 （二进制 `vuna-dev`，提供 `vuna dev …`；suite / obs / 错误码文档 / IR dump，**不进 seed**）；`packages/base/` =
 标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**；跨包可见全部 `Base.*` 模块，
 门面 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` /
-`Prelude` 是推荐入口）；`packages/cli/` = 产品 CLI 包
+`Prelude` 是推荐入口）；`packages/obs/` = 应用面观测库 `vuna-obs`（模块 `Obs`，生态包，
+**不进 seed**，显式依赖后使用）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner 在 `packages/toolchain/lib/`，
 入口 `packages/cli/app/Main.vuna`；**不进 seed**，二进制 `vuna` 只做发现与路由）；
 `packages/toolchain/` = 产品工具链实现与命令接线表（二进制 `vuna-toolchain`）；
@@ -179,7 +180,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
   test-architecture、bootstrap（同在 `docs/reference/`）
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数；
   热点见 [performance-hotspots.md](docs/reference/performance-hotspots.md)）、
-  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）、
+  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `vuna-obs` 的 `Obs` / `vuna dev obs` / `#line` → DWARF）、
   [logging.md](docs/reference/logging.md)（`log!` / `VUNA_LOG` / scope 过滤 / text·jsonl 输出）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（唯一清单：只含开放项、带证据，

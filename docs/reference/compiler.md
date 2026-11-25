@@ -39,7 +39,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Base.Walk` | `.gitignore` 感知的目录遍历骨架（fmt / lint / doc / test / index / lsp 共用）；调用方传目录跳过谓词与文件名保留谓词 | `collectFilesEff` |
 | `Base.Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 | `Base.Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测、对象族读写（`objects/<kind>/`）、roots 与视图锁 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeObjectWriteEff`、`storeRootAppendEff`、`storeCacheBaseEff` |
-| `Base.Data.Obs` | 观测插桩适配层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
+| `Vuna.Compiler.Base.Obs` | 编译器观测插桩层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；直接包隐藏原语，规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
 | `Base.Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Target.Ocaml.Runtime` 实现）；内置身份按声明 symbol（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
 
 ### Frontend（词法、语法、manifest、包图、规范编码）

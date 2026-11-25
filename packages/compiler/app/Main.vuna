@@ -1,7 +1,6 @@
 -- vuna-compiler：编译器 CLI 入口（seed 与 stage 1 编译器共用）。
 -- main : Eff [] Int——由运行时执行；getArgs/exit 走宿主原语 @vuna@prim_eff_getArgs / @vuna@prim_eff_exit。
 import Vuna.Compiler.Driver.CompilerCli
-import Base.Data.Obs as Obs
 import Vuna.Target.Ocaml.Model
 import Vuna.Target.Ocaml.Render
 import Vuna.Ir.Represent
@@ -29,6 +28,7 @@ import Vuna.Compiler.Frontend.Rast
 import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
+import Vuna.Compiler.Base.Obs
 import Base.Effect.Args as EffArgs
 import Base.Effect.Exit as EffExit
 import Base.Trait.Monad as Monad

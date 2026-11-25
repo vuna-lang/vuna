@@ -1290,7 +1290,7 @@ export threadIntrinsicNames : List String
 threadIntrinsicNames = map intrinsicName threadIntrinsics
 
 -- | 文本日志 / 可观测性的隐藏原语（`visible = False`）：只由内置宏 `log!` / `mark!`
--- 展开与 `Base.Data.Obs` 引用，用户源码不可写。签名在此表；
+-- 展开与 `Base.Data.Log` / 生态库 `Obs` 引用，用户源码不可写。签名在此表；
 -- `Elab.Prelude` 会把它们补进 prelude globals（不进用户可见名单），`Core.Eval`
 -- 在 interp 里归约为 no-op。
 export internalIntrinsics : List Intrinsic

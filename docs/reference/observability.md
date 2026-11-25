@@ -1,8 +1,9 @@
 # 可观测性（observability）
 
-本页是 **vuna 全语言层**的性能/资源观测规范：编译器与**任何 vuna 应用**共用同一套事件
-模型、同一套开关、同一套格式。落地范围：编译器自身的内建探针、`Base.Data.Obs` 库层、
-隐藏原语与生成运行时、`vuna dev obs` 工具链、DWARF 行号、以及与外部生态的换算。
+本页是 **vuna 全语言层**的性能/资源观测规范：编译器与 vuna 应用共用同一套事件
+模型、同一套开关、同一套格式。落地范围：编译器自身的内建探针、`vuna-obs` 生态库
+（模块 `Obs`）、隐藏原语与生成运行时、`vuna dev obs` 工具链、DWARF 行号、以及与外部
+生态的换算。标准库不内置观测 API。
 
 读数方法学（怎么量、量什么、否决过的优化）在 [performance.md](performance.md)；本页只管
 **观测装置本身**：事件长什么样、开关怎么开、代价是多少、怎么接进外部工具。
@@ -19,7 +20,7 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | # | 决策 | 理由 / 代价 |
 | --- | --- | --- |
 | O1 | **规范格式 = Chrome Trace Event JSONL**（schema `vuna-obs 1`）；`.cpuprofile` / speedscope / folded / HTML 都是它的**换算** | Perfetto / `chrome://tracing` 原生可开；每行一事件，崩溃可截断容忍 |
-| O2 | 观测是**运行时契约的一部分**（隐藏原语 `@vuna@obs@*`），不是工具链私有 hack | 与文本日志 `log!` 同策略：纯函数可调用（深部纯核心探针不需要把签名 effect 化，见 debt D68）、核心求值归约 no-op、任何包可用 |
+| O2 | 观测是**运行时契约的一部分**（隐藏原语 `@vuna@obs@*`），不是工具链私有 hack | 与文本日志 `log!` 同策略：纯函数可调用（深部纯核心探针不需要把签名 effect 化，见 debt D68）、核心求值归约 no-op；编译器自带包装，应用经生态库使用 |
 | O3 | **默认关闭**，显式打开（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`） | 绝对性能读数必须来自关闭口径；关闭路径 = 一次 `Lazy.force` |
 | O4 | 分级：`0` 关；`1` 阶段 span + 计数；`2` 逐定义 span；`3` 采样（CPU/内存） | 每级成本有上界，见 §6 |
 | O5 | trace 是**普通文件**，绝不进对象库 / 缓存载荷 / 包产物 | 时间戳使产物非确定性；进缓存会污染命中 |
@@ -29,8 +30,9 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | O9 | 采样只在主 domain（`ITIMER_PROF` + `SIGPROF`），只计 CPU 时间 | 多 domain 采样未做（debt D41）；阻塞 I/O 的归因靠 span 墙钟，不靠采样 |
 | O10 | 内存观测 = `Gc` 计数器差（便宜、确定）+ 可选的 `Gc.Memprof` 分配栈（level 3） | OCaml 5.5 的 `Unix` 没有 `getrusage`；RSS 只做 `statm`（debt D81） |
 | O11 | CDP 只做 **Profiler 子集**，但传输就是 CDP 客户端要的那一套：HTTP/1.1 发现端点 + WebSocket（`vuna-http` + `Http.WebSocket`），vuna 侧自持 SHA-1/base64 | 为浏览器协议补的是通用库（中立包 + base 的纯算法），不是框架特判 |
-| O12 | wasm / native 后端只提供**叶子原语**的 no-op 桩；`obsSpan` 在这两个目标上编译期显式拒绝 | 两个后端今天都不支持闭包；诚实失败优于假成功 |
+| O12 | wasm / native 后端只提供**叶子原语**的 no-op 桩；`obsSpan` 应用 thunk 并返回结果，但不写计时事件 | 两个后端都不支持 trace 写入；thunk 语义与 OCaml 关闭路径一致，不能吞掉用户计算 |
 | O13 | `--obs` 系旗标由**运行时读原始 argv**；跨进程只认 env（`VUNA_OBS`）；文本日志只认 `VUNA_LOG*` env，没有 argv 开关 | 与 debt D67 同型的已知分散点；子进程由 `vuna dev obs run` 负责设 env |
+| O14 | 应用面库层放在生态包 `vuna-obs`（模块 `Obs`），**标准库不内置观测 API** | 标准库只留语言/运行时；运行时原语仍是契约，编译器用 `Vuna.Compiler.Base.Obs` 自带包装，不依赖生态包 |
 
 ## 2. 开关与级别
 
@@ -166,6 +168,8 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | `@vuna@log@emit` | `Int -> String -> String -> Int` | `(level, scope, text)`：写一行 text/jsonl，返回 `0` |
 | `@vuna@obs@level` | `Int -> Int` | 当前级别 0..3（哑 `Int` 实参，避免「纯值读进程配置」形态） |
 | `@vuna@obs@span` | `String -> String -> (Int -> a) -> a` | 名字 + 分类的高阶跨度；关闭时直接 `f 0` |
+| `@vuna@obs@spanBegin` | `String -> String -> Int` | 开始一个 `Eff` 跨度，返回 token（关闭时 0） |
+| `@vuna@obs@spanEnd` | `Int -> Int` | 按 token 结束 `Eff` 跨度并写事件 |
 | `@vuna@obs@counter` | `String -> Int -> Int` | 计数器事件（`args.value`） |
 | `@vuna@obs@mark` | `String -> Int` | 瞬时标记（`ph:"i"`） |
 | `@vuna@obs@sampleStart` | `String -> Int -> Int` | `"cpu"`/`"mem"`/`"both"` + 间隔 µs |
@@ -174,9 +178,12 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 核心求值（`Core.Eval`）把 `level`/`counter`/`mark`/`sampleStart`/`sampleStop` 归约成
 `VInt 0`，`span` 归约成「把 thunk 应用到 0」，`log@on` 归约成 `VBool False`、`log@emit`
 归约成 `VInt 0`——核心求值永远静默（文本日志同样不输出）。wasm/native 后端：叶子原语为
-no-op（`log@on` 恒 `False`、`log@emit` 恒 `0`），`span` 编译期 `unsupported`（O12）。
+no-op（`log@on` 恒 `False`、`log@emit` 恒 `0`），`span` / `spanLab` 应用 thunk 后返回结果，
+不写事件（O12）。隐藏原语的源码级卫生命名空间是 `Base.*` / `Vuna.*` / `Obs.*` 模块前缀。
 
-### 4.2 库层 `Base.Data.Obs`（所有 vuna 应用）
+### 4.2 库层 `Obs`（生态包 `vuna-obs`）
+
+应用包在 `[dependencies]` 显式加入 `vuna-obs` 后使用：
 
 ```text
 obsLevel      : Int -> Int
@@ -185,8 +192,11 @@ obsSpan       : String -> String -> (Int -> a) -> a
 obsSpanP      : String -> (Int -> a) -> a          -- cat = "vuna.user"
 obsCounter    : String -> Int -> Int
 obsMark       : String -> Int
+obsSpanBegin  : String -> String -> Int
+obsSpanEnd    : Int -> Int
 obsSampleStart : String -> Int -> Int
 obsSampleStop  : Int -> Int
+obsSample     : String -> Int -> (Int -> a) -> a
 ```
 
 薄包装（无 `Eff`、无 `runPure`，满足隐藏效果守卫）；`Base.Trait.Show` 的 `dbgShow` 走
@@ -480,7 +490,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
 | 手动（`obs serve --cdp` 原生 WS） | 起 `vuna dev obs serve --cdp tcp:127.0.0.1:0 TRACE`，用 WS 客户端连：`Runtime.getIsolateId` / `Profiler.enable` / `Profiler.start` / `Profiler.stop` 都有合法响应、`profile.samples` 数 == trace 的 `vuna.sample.cpu` 数、未知方法回 `-32601`、同一 trace 两次 stop 的 profile JSON 逐字节一致、无 cpu 采样的 trace 在 stop 上回 `-32000` 且进程退出码 1、参数错误退出码 2；`node packages/cli/test/corpus/obs-cdp/ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并断言 `/json/version`、`/json/list`、握手、`Profiler.*`、ping/pong。**不进 `nix flake check`**（需要 Node + 端口，沙箱不保证） |
 | 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
 | `checks.vuna-metrics` + `nix/checks/data/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
-| suite `107_observability.steps` | 关闭零输出、`log!` 文本行（`VUNA_LOG=debug`，带 scope）与 `mark!` 结构化事件各自独立、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
+| suite `107_observability.steps` | 关闭零输出、`log!` 文本行（`VUNA_LOG=debug`，带 scope）与 `mark!` 结构化事件各自独立、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与 thunk 透传、`convert`/`render` 的确定性 |
 | suite `108_obs_cdp.steps` | `vuna dev obs serve --cdp`：就绪行、六条 CDP 请求（WS 文本帧）、`getIsolateId`=trace pid、`profile.samples`==cpu 采样数、未知方法 `-32601`、跨进程 profile 逐字节一致、与 `convert --to cpuprofile` 逐字节等价、`-32000`+退出码 1、参数错误退出码 2、unix socket 清理；有 Node 时再验原生 WS 端点（独立算 `Sec-WebSocket-Accept`）+ `/json/version` `/json/list` + `Profiler.*` + ping/pong（无 Node 打印 SKIP） |
 
 回归面（每次改动后）：`vuna fmt <改动>`、`vuna check .`、`sh nix/checks/lib/eff-boundary.sh`、
@@ -501,7 +511,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
   `vuna.counter.steps` 需要给 `Core.Eval.force` / `primReduce` 加探针，会显著改热路径，
   待做且要先量代价；已接的计数只覆盖缓存三件套（hit / miss / write）。
 - 多 domain 采样（debt D41）、`Unix.getrusage`（OCaml 5.5 无，debt D81）。
-- wasm/native 的 span 与采样（O12）。
+- wasm/native 的 span 只透传 thunk，不产生事件；采样同样不生效（O12）。
 - `serve --cdp` 是**离线**的：数据源是已有的 trace 文件，不是附加到运行中进程做 live 采样
   （实现 `Vuna.Obs.Serve`；HTTP 发现端点 + WebSocket 都由 serve 自己做，经中立库 `vuna-http`）。
   因此它不是 DAP/调试器，也没有 `Runtime.evaluate` / `Debugger.*`；CDP 只覆盖 Profiler 子集。

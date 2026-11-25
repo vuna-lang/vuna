@@ -57,13 +57,15 @@ export rnameBase : RName -> String
 rnameBase (RGlobal _ base) = base
 rnameBase _ = ""
 
--- | 当前模块的包前缀是否属于编译器 / 标准库（这些包可以引用 `@vuna@...` 内部名）。
--- 判定按**模块前缀**，不是按名字前缀；普通包引用内部名会被 Resolve 拒绝
--- （`RN_UnknownVariable`）。
+-- | 当前模块的包前缀是否允许引用 `@vuna@...` 内部名（编译器 / 标准库 /
+-- 第一方观测库）。判定按**模块前缀**，不是按名字前缀；普通包引用内部名会被 Resolve
+-- 拒绝（`RN_UnknownVariable`）。
 export isCompilerModulePrefix : String -> Bool
 isCompilerModulePrefix prefix =
   startsWith "Base." prefix
-    || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix
+    || startsWith "Vuna." prefix
+    || startsWith "Base_d" prefix
+    || startsWith "Vuna_d" prefix || prefix == "Obs" || startsWith "Obs." prefix
 
 -- | 已解析名字的字符串 → 身份。顺序即优先级：洞 / 宏 / 编译器内部名 / 内建 / 全局 / 局部。
 export classifyName : String -> RName

@@ -153,7 +153,8 @@ logTrace : String -> String -> Int          -- 级别 4
 - `vuna dev obs` **不解析**日志文件：没有 span、没有 `args`、没有事件名；要把日志与时间轴
   对齐，用日志行的 epoch 微秒自己比对。
 - `mark!` 仍是结构化事件（`@vuna@obs@mark`，`ph:"i"`，`VUNA_OBS >= 1` 才写 trace），
-  它不是文本日志；实参在关闭时仍会求值，需要时用 `Base.Data.Obs.obsOn 0` 自行判。
+  它不是文本日志；实参在关闭时仍会求值，需要时用 `Obs.obsOn 0` 自行判（模块 `Obs` 在
+  生态包 `vuna-obs`）。
 - `error` / `warn` 只是文本，**不改变退出码**，也不参与诊断通道；编译器的错误/告警仍是
   `Diagnostic`（`vuna check` 的退出码与渲染由它决定）。
 
