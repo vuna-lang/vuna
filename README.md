@@ -48,7 +48,7 @@ nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走核心�
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生 suite（vuna dev suite --all）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
-nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
+nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing-checks.md）
 nix run .#vuna -- fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 nix run .#vuna -- lint packages/compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
 nix run .#vuna -- doc                          # 生成 docs/api.html（gitignored）
@@ -192,10 +192,14 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/ir.md](docs/reference/ir.md) | 擦除后的中间表示（Track A）：IR 节点与边界、Core → IR 的决策划分、`Ir.Runtime` 运行时契约与 `checks.ir-boundary` |
 | [docs/reference/wasm.md](docs/reference/wasm.md) | wasm 后端（WAT）：WasmGC 表示、WAT 布局、IR 支持面、运行时符号覆盖、`--target wasm` 边界 |
-| [docs/reference/native.md](docs/reference/native.md) | native 后端（x86-64 汇编）：产物/ABI、值表示（含字符串对象与 bump 堆）、栈帧、运行时符号、IR 支持面与边界 |
+| [docs/reference/native.md](docs/reference/native.md) | native 后端（x86-64 汇编）：产物与工具链、值表示（含字符串对象与 bump 堆）、ABI 与栈帧、IR 支持面 |
+| [docs/reference/native-runtime.md](docs/reference/native-runtime.md) | native 运行时：符号表与宿主原语、资源限制（栈/内存/核数/超时）、两代 GC、模块布局与确定性、验证、已知边界、插件形态 |
 | [docs/reference/cache.md](docs/reference/cache.md) | 输入寻址对象库：对象族、命名（contentHash/ifaceHash/implHash）、命中判据、roots 与 store gc、观测标签、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
-| [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
+| [docs/reference/performance.md](docs/reference/performance.md) | 性能工程：怎么量（`log!` / `VUNA_OBS` 探针设施与纪律）、当前读数（冷 / 热 / 产物规模）、增长率与阶段构成 |
+| [docs/reference/performance-hotspots.md](docs/reference/performance-hotspots.md) | 性能热点：查找表（`HashMap` 与 `Ec` 索引）、冷 `check` / `build` 各阶段仍存在的开销与已否决的优化 |
+| [docs/reference/testing.md](docs/reference/testing.md) | 测试体系：`vuna dev suite`、corpus 分类、包上下文夹具 |
+| [docs/reference/testing-checks.md](docs/reference/testing-checks.md) | 测试门禁与基准：`nix flake check` 的 checks 清单、后端自举 conformance、Nix 命令与本地开发、手动性能基准 |
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制与门禁 |
 | [docs/reference/prior-art-elaboration.md](docs/reference/prior-art-elaboration.md) | 外部先例（Idris 2 / Yaffle）的流水线与精化器对照：可推迟的合一、case tree、擦除与分层契约、vuna 的差距与候选调整 |

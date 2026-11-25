@@ -93,7 +93,7 @@
 - 核心求值与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
   `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。三个后端都走
   `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）；wasm/native 已实现，见
-  [wasm.md](wasm.md) §5、[native.md](native.md) §5。
+  [wasm.md](wasm.md) §5、[native-runtime.md](native-runtime.md) §1。
 
 ## 3.1 Nat
 

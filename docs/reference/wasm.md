@@ -314,10 +314,10 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   是允许失败清单，当前为空）与 `checks.vuna-wasm-browser`（默认特性
   validate 是硬门；浏览器实跑走 **`.#vuna-wasm-browser-smoke`**：Playwright +
   `pkgs.playwright-driver` 的 chromium，按需构建、不进 `nix flake check`，见
-  [testing.md](testing.md)「Nix checks 清单」）。
+  [testing-checks.md](testing-checks.md)「Nix checks 清单」）。
 - wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
   `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖
-  `vuna-native`（见 [testing.md](testing.md)「后端自举 conformance」）。
+  `vuna-native`（见 [testing-checks.md](testing-checks.md)「后端自举 conformance」）。
 
 ## 8. 后端契约与边界
 

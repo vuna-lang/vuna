@@ -46,7 +46,7 @@ memLimitMessage = "vuna: runtime error: memory limit exceeded\n"
 timeoutMessage : String
 timeoutMessage = "vuna: runtime error: timeout exceeded\n"
 
--- | 默认内存预算：1 GiB。口径见 `docs/reference/native.md` §5：`.bss` 堆的**累计**分配
+-- | 默认内存预算：1 GiB。口径见 `docs/reference/native-runtime.md` §1：`.bss` 堆的**累计**分配
 --   （arena 不回收）+ 续延捕获缓冲的**活跃**字节。
 export nativeMemDefaultBytes : Int
 nativeMemDefaultBytes = 1073741824

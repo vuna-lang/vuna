@@ -279,4 +279,4 @@ modules = ["My.Lib", "My.Lib.Internal"]
 - `Prelude` 与标准库包：[stdlib.md](stdlib.md)
 - 内建 / 原语的声明面与效应语义：[primitives.md](primitives.md)
 - 持久包 store 与 fetch：[package-store.md](package-store.md)
-- 测试命令的环境变量与 nix 入口：[testing.md](testing.md)
+- 测试命令的环境变量与 nix 入口：[testing.md](testing.md) / [testing-checks.md](testing-checks.md)

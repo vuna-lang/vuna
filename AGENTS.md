@@ -121,7 +121,7 @@ nix build .#vuna --out-link result        # 需要固定二进制时才构建（
 sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那条先跑过
 nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
-nix flake check                           # 3 packages + 31 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 31 checks（清单见 testing-checks.md）
 git config core.hooksPath .githooks       # 启用 pre-commit（devShell/direnv 自动设置）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```
@@ -167,9 +167,12 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 语言 / 类型 / 效应 / 标准库 / 包：[`docs/reference/`](docs/reference/)——逐页说明见
   [README 文档导航](README.md#文档导航)：frontend-syntax、language、type-system、qtt、records-traits、
   effects、stdlib、packages、package-store、primitives、operators
-- 编译器实现：compiler、core、ir、diagnostics、wasm、native、cache（同在 `docs/reference/`）
-- 工具链 / 测试 / 自举：tooling、testing、test-architecture、bootstrap（同在 `docs/reference/`）
-- 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
+- 编译器实现：compiler、core、ir、diagnostics、wasm、native（运行时与边界见
+  native-runtime）、cache（同在 `docs/reference/`）
+- 工具链 / 测试 / 自举：tooling、testing（门禁与基准见 testing-checks）、
+  test-architecture、bootstrap（同在 `docs/reference/`）
+- 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数；
+  热点见 [performance-hotspots.md](docs/reference/performance-hotspots.md)）、
   [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）、
   [logging.md](docs/reference/logging.md)（`log!` / `VUNA_LOG` / scope 过滤 / text·jsonl 输出）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）

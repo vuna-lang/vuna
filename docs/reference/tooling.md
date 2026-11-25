@@ -166,7 +166,7 @@ preopen 根 = 包目录；宿主路径按 `VUNA_WASM_RUNNER` → `<vuna>/../shar
 
 - `--mem-limit SIZE`（`512K` / `512M` / `512G` / 字节数）与 `--cpus auto|0|N` 只对
   `--target native` 生效（其他目标报用法错），分别转成子进程的
-  `VUNA_NATIVE_MEM_LIMIT` / `VUNA_NATIVE_CPUS`（语义见 [native.md](native.md) §5.1）；
+  `VUNA_NATIVE_MEM_LIMIT` / `VUNA_NATIVE_CPUS`（语义见 [native-runtime.md](native-runtime.md) §1.1）；
 - `--timeout SECS` 对**所有**目标额外包一层 coreutils `timeout -s TERM -k 5`（硬兜底），
   同时（native）设置 `VUNA_NATIVE_TIMEOUT_MS`，让产物自己报
   `vuna: runtime error: timeout exceeded` + exit 2。

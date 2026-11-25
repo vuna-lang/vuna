@@ -1,8 +1,8 @@
 # 测试架构（test-architecture）
 
 本文是测试体系的**设计页**：测试如何消费输入寻址对象库（`cache.md`）、为什么默认共享
-一个 store、哪些用例必须隔离。操作口径与 commands 在 [testing.md](testing.md)；
-对象库本身见 [cache.md](cache.md)。
+一个 store、哪些用例必须隔离。操作口径与 commands 在 [testing.md](testing.md)，门禁与基准在
+[testing-checks.md](testing-checks.md)；对象库本身见 [cache.md](cache.md)。
 
 ## 1. 原则：测试是对象库的普通客户端
 
@@ -143,6 +143,8 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 ## 相关阅读
 
-- 对象库：[cache.md](cache.md)；测试操作口径：[testing.md](testing.md)
-- 性能方法与读数：[performance.md](performance.md)
+- 对象库：[cache.md](cache.md)；测试操作口径：[testing.md](testing.md)；门禁与基准：
+  [testing-checks.md](testing-checks.md)
+- 性能方法与读数：[performance.md](performance.md)；热点与已否决的优化：
+  [performance-hotspots.md](performance-hotspots.md)
 - 终态方向：[../architecture-target.md](../architecture-target.md)

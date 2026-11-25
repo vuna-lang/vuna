@@ -7,7 +7,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
 
 命令/阶段慢、几分钟不返回、打超时，或要判断优化是否真的改了**增长率**时用这份规程。
 逻辑错（结果不对）走打印二分；写断言走 `vuna-run-tests` 的夹具。**性能问题只按本规程走。**
-读数怎么对外表述见 [performance.md](../../../docs/reference/performance.md) §7。
+读数怎么对外表述见 [performance.md](../../../docs/reference/performance.md) §1。
 
 ## 什么时候用
 

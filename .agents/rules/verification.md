@@ -75,5 +75,5 @@ nix flake check                      # 3 packages + 19 checks
 nix run .#vuna-run-tests             # 全量 suite
 ```
 
-清单与各 check 的职责见 [`docs/reference/testing.md`](../../docs/reference/testing.md)。
+清单与各 check 的职责见 [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
 性能问题不要用 CI 全量做定位——按技能 `perf-debug` 的增长率规程走。

@@ -124,7 +124,7 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
   512 MiB 虚拟栈，`VUNA_NATIVE_STACK_MB` 覆盖，与 `ulimit -s` 无关），JSON
   `meta.stack_policy` 记为 `self-managed`。每个 native 项另记 `default_stack_ok`
   （8 MiB soft limit 下能否正常退出，探针不参与计时；自带栈生效时应恒为 true）；
-- native 有**两代标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 已触碰的栈页 + live 堆
+- native 有**两代标记-清扫 GC**（[native-runtime.md](native-runtime.md) §1.2），峰值 RSS = 已触碰的栈页 + live 堆
   （自带栈未触碰的虚拟页不提交）；每个样本都同时给墙钟 / CPU / RSS，RSS 取样本最大值；
 - `--runs 5 --warmup 2`：墙钟与 CPU 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
@@ -176,7 +176,7 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
   `gc_low_live` 221 ms / 2.6 MiB、`gc_array_churn` 149 ms / 3.1 MiB（手写侧 244.4 / 82.3 MiB）；
   对照「按精确槽集扫描」时期的 231 / 3.6 与 138 / 3.9 MiB，墙钟只差一点、RSS 落回存活集量级。
   `gc_pressure` 32.8 MiB 与 `gc_retain` 55.3 MiB（live 单调上升到 ~19 MB）仍符合预期，
-  是 `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native.md](native.md) §5.2）。
+  是 `VUNA_NATIVE_GC_LOG` 里 `gen=` 分布的测量项（[native-runtime.md](native-runtime.md) §1.2）。
 - 峰值 RSS 的语义：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆，C 侧是 malloc 高水位
   （t5 用显式 free，比到 C 就是 GC 元数据与高水位的代价）；wasm 减掉 node 地板后才进入比较。
   三者都只作量级参考，判定以 ratio 为主。
@@ -221,7 +221,7 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   `gc_low_live` / `gc_array_churn` 此前的不满足来自逐帧保守扫根把陈旧栈槽里的死对象一并留住；
   `Native.Live` 的死槽清零（[native.md](native.md) §3）把两项拉回存活集量级。
   `VUNA_NATIVE_GC_LOG=1` 可逐次看 `live` / `gen`。两代回收里年轻代只扫根集与脏卡片、
-  整堆回收按计数轮换（见 [native.md](native.md) §5.2）；阈值取 `max(GC_MIN, live/8, 栈跨度)`
+  整堆回收按计数轮换（见 [native-runtime.md](native-runtime.md) §1.2）；阈值取 `max(GC_MIN, live/8, 栈跨度)`
   （年轻代）与 `max(GC_MIN, 2 × live, 栈跨度)`（整堆）摊销扫栈成本；栈帧整段保守扫。
 - 重标基线时 `default_stack_ok` 是布尔快照：自带栈生效时所有项都应为 true（包括非尾深
   递归）；false 说明 `init_stack` 回落到了进程栈。非尾深递归的栈帧成本仍体现在 RSS 与
@@ -288,7 +288,7 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 读法：`hashmap_remove` 接近；`tco_args` 两侧已落在同一量级（见 §1.2）。其余跑得动的项
 native 领先。差异来源与 native 的既有缺口一致：native 无寄存器分配、每个算术 / 比较
 都是一次运行时调用，而 V8 有优化编译器；native 赢在「调用少、字符串 / 栈传参多」的形状
-（[performance.md](performance.md) §3）。
+（[performance-hotspots.md](performance-hotspots.md) §2）。
 
 `wasm-opt -O3` 的内联会**掩盖**后端 codegen 的成本：binaryen 把闭包调用链与装箱/拆箱
 内联掉后，`call $rt_apply`、`struct.new $int` 这些开销不再直接体现在读数里。所以量后端
@@ -578,7 +578,7 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 #### 1.6.2 入口初始化裁剪
 
 T0 达标之后，`_start` 不再无条件初始化全部子系统：只按程序实际用到的部分发调用，
-并按 `_start` 的标签可达性裁剪运行时函数（规则见 [native.md](native.md) §5.1）。
+并按 `_start` 的标签可达性裁剪运行时函数（规则见 [native-runtime.md](native-runtime.md) §1.1）。
 同一 IR 的产物仍然逐字节确定。
 
 | 用例 | `_start` 的 init 调用 | 产物 bytes | 进程启动墙钟（交替 A/B） |

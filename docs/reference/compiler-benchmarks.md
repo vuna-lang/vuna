@@ -1,8 +1,8 @@
 # 编译器基准
 
 `bench/compiler.sh` / `bench/native.sh` 的命令墙钟、编译热点与**已量化否决的候选**。
-阶段跨度的构成与解读见 [performance.md](performance.md) §1 / §4 / §6；生成程序（运行时）
-基准见 [benchmarks.md](benchmarks.md)。
+阶段跨度的构成与解读见 [performance.md](performance.md) §1 / §6 与
+[performance-hotspots.md](performance-hotspots.md) §2；生成程序（运行时）基准见 [benchmarks.md](benchmarks.md)。
 
 `sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline` / `--alloc`）测
 编译器 / 工具链自身墙钟。基线 `bench/baselines/compiler.txt`（机器相关，只做同机回归对比）；
@@ -39,7 +39,7 @@
 分配密集微基准（2000 万个小变体）198 → 180 ms（-9%）、`records` 35 → 33 ms，
 `gc_pressure` / `list_recursion` 与编译器冷路径（≈2.5–2.7 s）在噪声内。
 冷读数从 24–25 s 降到 2 s 量级：段索引把 GC 的段定位从线性走链表改成
-二分（[native.md](native.md) §5.2），缺省内存预算也不再在 live 见顶后死锁。与 OCaml
+二分（[native-runtime.md](native-runtime.md) §1.2），缺省内存预算也不再在 live 见顶后死锁。与 OCaml
 产物同命令（~0.4 s）的剩余差距主要来自带捕获的高阶函数参数（仍按闭包 arity 分派）、
 部分应用 shim 与年轻代 GC（D129），标量算术已在 `Native.Select` 内联，能静态解析的
 闭包调用已不再发 `rt_apply`，闭合函数值实参已做高阶参数特化、已知小函数的调用点
@@ -129,7 +129,7 @@ PriorityQueue / Sort，三档合成探针，只测 OCaml 后端产物的运行�
   合成单模块 16k 项档 iface-compute 3.77 s → ~1.0 s，但真实包是「多模块、每模块几十项」：
   逐项哈希的分配放大让 `check packages/compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）
   或冷 build 的 iface 段 90 → 518 ms（逐项单 lane），冷 build 反而 +4%。故保留插入排序
-  口径，把「单模块数千项」记为已知边界（§4.1），由
+  口径，把「单模块数千项」记为已知边界（[performance-hotspots.md](performance-hotspots.md) §2），由
   `vuna-compiler-growth-incremental` 兜住增量收尾的回归。
 - codegen 并发生成：可并行的逐单元生成本身只占冷 build ~7–8%，fork+序列化 DtProgram 的
   净收益 ~6–7%，不做；`build.sh` 的层内并行已覆盖链接侧。

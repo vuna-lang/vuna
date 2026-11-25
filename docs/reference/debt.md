@@ -171,7 +171,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D81 · C | 进程 RSS / 峰值内存不可测：OCaml 5.5 的 `Unix` 没有 `getrusage`，`Gc.quick_stat` 只给分配字数；峰值只能 `/proc/self/statm` 轮询或外部 `time` | `Target/Ocaml/Term.vuna`（`dtp_obs_span`）；[observability.md](observability.md) §6/§10 | 后续 |
 | D82 · C | 观测只覆盖主 domain：`ITIMER_PROF`/`SIGPROF` 是进程级单定时器；多 domain 采样要每 domain 独立 timer + 合并 | `packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`（`dtp_obs_cpu_tick`）；[observability.md](observability.md) §1 O9 | 后续（与 D41 一起） |
 | D84 · C | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 未登记，现有 gate/e2e/tools tier 与 steps 都不覆盖它的 build/test | `nix/checks/default.nix`、`nix/checks/vuna-package.sh`、`cli/test/steps/28_packages.steps` | 后续 |
-| D87 · C | 词法扫描器的 fuel 初值仍是 `4*len+64` 的估算上界；字符游标已改成「原串 + 偏移」 | `Frontend/Lexer.vuna`（`sourceFuel`、`collect*` / `skip*`）；[performance.md](performance.md) §4.1 | 后续（低优先） |
+| D87 · C | 词法扫描器的 fuel 初值仍是 `4*len+64` 的估算上界；字符游标已改成「原串 + 偏移」 | `Frontend/Lexer.vuna`（`sourceFuel`、`collect*` / `skip*`）；[performance-hotspots.md](performance-hotspots.md) §2.1 | 后续（低优先） |
 | D88 · C | 同一模块在一次 `check` 里仍被语法分析约 2 次：加载一次 + `ifaceModsEff` 的 header 解析一次 | `Loader/Flatten.parseFileWithPath`、`Driver/Compile.loadHeaderEff`；[performance.md](performance.md) §6.1 | 后续（低优先） |
 | D91 · C | 互递归组的调用出现在 `let` / `case` 位置时，实参个数推断曾在部分形状上误报 `TC_TooManyArgs`；当前编译器上已知形状都走正确路径，原始触发用例未保留 | `compiler/test/corpus/term/12_let_case_call.vuna`、`Elab/Term/Impl.vuna`（应用脊椎的 `inferArgsGo`） | 后续（需要原始用例） |
 | D92 · C | 模式矩阵降级在个别嵌套模式 alt 上报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`）；改写成层层 `case` 即通过 | `Elab/Match`（`ctorAltList` / `clausesForCtor`）、`Elab/Sig.kindDomains` | 后续 |
@@ -248,4 +248,5 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 - 规则与语义：各主题参考页（见 `AGENTS.md` 的「文档导航」）
 - 编译器模块地图：[compiler.md](compiler.md)
 - Core / NbE / 精化器：[core.md](core.md) / [ir.md](ir.md)
-- 性能读数与已否决的优化：[performance.md](performance.md)
+- 性能读数：[performance.md](performance.md)；热点与已否决的优化：
+  [performance-hotspots.md](performance-hotspots.md)

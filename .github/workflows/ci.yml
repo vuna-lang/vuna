@@ -181,7 +181,7 @@ jobs:
           exit "$rc"
 
   # 自举后端 conformance：用「由自身编出来的」native 编译器跑 check 与夹具
-  # （口径见 docs/reference/testing.md「后端自举 conformance」）。
+  # （口径见 docs/reference/testing-checks.md「后端自举 conformance」）。
   # 不进 nix flake check：整轮成本远高于日常门禁。
   #
   # 后端矩阵（vuna-tests-wasm / vuna-tests-native）不单独开 job：它们本身就是

@@ -1,0 +1,239 @@
+# 测试门禁与基准（Nix checks / 后端自举 / 本地开发）
+
+本页是 [testing.md](testing.md) 的另一半：那里讲 suite 与 corpus（用例怎么发现、怎么写、
+怎么分类），这里讲**门禁怎么跑**——`nix flake check` 的 checks 清单与各 check 的语义、
+native 自举 conformance、Nix 命令与本地开发、手动性能基准，以及 effect 测试产物缓存。
+
+## Nix checks 清单
+
+`nix flake check` 实测 **34 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 31 个 check 语义项（`context-budget`、
+`seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
+`vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
+`vuna-diag`、`vuna-effect-machine-growth`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
+`vuna-lint`、`vuna-metrics`、`vuna-native-artifact`、`vuna-native-codegen-growth`、
+`vuna-native-surface`、
+`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
+`vuna-obs-schema`、`vuna-resolve-chain-growth`、`vuna-single-pass`、`vuna-static`、
+`vuna-tests-e2e`、`vuna-tests-gate`、
+`vuna-tests-native`、`vuna-tests-wasm`、`vuna-wasm-browser`、
+`vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
+`nix/checks/lib/`）。
+
+CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除 suite 长尾之外的
+全部 check（外加 `nix flake check --no-build` 求值），`tests-gate` 与 `tests-e2e` 各占
+一个 runner、`CI_JOBS=1` 把自己的 4 核全给 suite；`tests-matrix` 装三个后端矩阵 check
+与 `vuna-typecheck`，同样用一个 runner。单 job 只有 4 核（`--max-jobs 2 --cores 2`），
+而 gate / e2e 各自就能吃满 4 核，拆开后长尾不再共享核、其余 check 也不再排在它们后面。
+只有 `flake-check` 写 Nix store cache，另外三个 job 只读（`save: false`），避免同一 sha
+上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` / `CI_EXCLUDE`（按 flake
+求值枚举，新增 check 不用手工同步列表）。
+
+`tests-matrix` 里用 `CI_JOBS=1` 串行是**为了读时长**：构建日志里相邻两条
+`building '<drv>'` 的时间差就是上一个 check 的墙钟；并行时无法归属到具体 check。
+
+`flake-check` 的 checks 步是 `continue-on-error`，失败也按成功收尾：cache action 的
+保存是 `post-if: success()`，job 一红就不存 store，下一次 push 只能从更旧的 cache 冷
+构建。代价是 job 状态不再表示门禁结论，因此单独有 `ci-status` job 汇总三个 job 的
+结果（`needs.<job>.result` + `flake-check` 的 step outcome），它才是唯一失败点。
+
+保存前还有一个 `Drop builder lock files` 步：Nix 在 store 里留下 `<out>.lock`
+（root 0600），非 root 的 tar 读不动会让整次保存失败。purge 窗口是 `P1D`——purge
+在保存失败时也会执行，窗口为 0 会把旧 cache 全删光（配额归零、下一次全冷构建）。
+
+语义项：
+
+- `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
+  行为抽查与 seed 滞后报告（不阻塞）；
+- `vuna-tests-wasm` / `vuna-tests-native`：各包 suite 在 `--backend wasm|native` 下跑
+  `fast integration`，只覆盖 matrix 允许该目标的 case（`pure-cross` + 对应 `effect-*`）；
+  wasm 的执行宿主是 Node/V8（`wasm-host/run.mjs`），即「浏览器可跑面」的行为门禁。
+  `test/suite/wasm-allow-fail.txt` 是允许失败清单（当前为空），命中且失败按 `allow` 计
+  （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
+  ocaml 的完整门禁仍由 `vuna-tests-gate` 逐份调用各包 suite 承担。
+- `vuna-static`：结构守卫（诊断码 / IR 边界 / 进程绑定岛 / 隐藏效果 / **suite 清单**）——
+  `test/suite.toml` 的 driver 清单必须覆盖所有 `packages/*/test/suite.toml`，且每个 suite
+  带 `owner` 与正的 `min_cases`。
+- `vuna-wasm-browser`：产物在**默认 wasm 特性**下必须 validate 通过——纯程序、内建宿主效应、
+  宿主效应 + 用户 handler 三种形态都走显式效应机器，不含 `cont` / `$eff`，**都不需要 stack
+  switching**（门禁按 `--features=-stack-switching` validate 三份产物）。Chromium 实跑那一档
+  也跑 `mixed` 产物并期望 `done4`。默认不跑浏览器（保持 `nix flake check` 秒级）。
+- `vuna-wasm-browser-smoke`（**package，不在 `nix flake check` 里**）：用 Playwright 驱动
+  `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐，约 356 MB）做
+  headless 实跑，跑法与本地一致：
+  ```console
+  nix build .#vuna-wasm-browser-smoke
+  ```
+  注意构建里必须给可写的 `HOME` / `XDG_*`：浏览器崩溃上报器（crashpad）没有 database 目录会
+  `SIGTRAP`。本地单跑一条产物：
+  ```console
+  VUNA_PLAYWRIGHT=$(nix build --impure --no-link --print-out-paths \
+    --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.playwright')
+  VUNA_CHROMIUM=$(nix build nixpkgs#playwright-driver.browsers-chromium --no-link --print-out-paths)/chromium-*/chrome-linux64/chrome
+  VUNA_PLAYWRIGHT=$VUNA_PLAYWRIGHT VUNA_CHROMIUM=$VUNA_CHROMIUM \
+    node test/suite/fixtures/wasm_js_host/browser.mjs <main.wasm> --expect 'hi2<换行>'
+  ```
+
+- `vuna-fmt`：workspace 全包与 `examples/`；
+- `vuna-nix-fmt`：`flake.nix` 与 `nix/` 下的 Nix 文件必须与 `nixfmt` 输出一致；
+- `vuna-checks-inventory`：顶层 `nix/checks/*.sh` 与 `default.nix` 的登记一一对应
+  （`nix/checks/lib/` 是共享实现，不入登记面），防止 orphan 脚本；
+- `vuna-compiler-growth`：合成 500/1000/2000/4000 同形定义，相邻档墙钟比 ≤2.3（增长率
+  门槛，跨机器有效）；
+- `vuna-compiler-growth-incremental`：合成可执行包（N 个同形 def + `app/Main.vuna`），
+  先落依赖接口、再以独立进程计时**第二次 check**（包路径增量收尾），1000/2000/4000/8000
+  相邻档 ≤2.6；单文件探针走全量精化，覆盖不到 `dedup*`/`anyOwn`/写接口这类收尾热点
+  （见 [performance.md](performance.md) §5.2）；
+- `vuna-frontend-growth`：合成 2000/4000/8000 个同形定义，从 trace 取 `vuna.parse.lex` /
+  `vuna.parse.syntax` 的 `totalUs`（按同一进程窗口的 CPU / 墙钟比折算成 CPU 时间），再加
+  `fmt --check` 的 CPU 时间，相邻档 ≤2.5×；与 `vuna-compiler-growth` 互补（整条 check 里
+  前端只占几个百分点，n² 会被精化成本掩盖）。读数见 [performance.md](performance.md) §6.1；
+- `vuna-resolve-chain-growth`：合成 `g = 1 + 1 + …`（2000/4000/8000 项）的单文件中缀链，
+  从 trace 取 `vuna.resolve.warn` 的 `totalUs`，相邻档 ≤2.5×；重排后的左结合链是左嵌套，
+  引用名收集按层 `append (左子结果) …` 就是 O(n²)，而真实源码链短、别的探针看不见它；
+- `vuna-container-growth`：HashMap / Queue / TreeMap / PriorityQueue / Sort 各三档合成探针
+  （N / 2N / 4N），先编译成 OCaml 后端产物、只测**运行** CPU 时间（user+sys，编译不计），
+  相邻档 ≤3.0×；
+  线性路径 ≈2、n² 退化 ≈4。容器契约见 [stdlib.md](stdlib.md)「容器复杂度契约」；
+- `vuna-effect-machine-growth`：效应机器两个深度探针，都只测运行墙钟（编译不计）——
+  ① `frames`（OCaml 后端）：每层装一个 handler、内层返回后在本层非尾 `perform`，层数
+  100k / 200k / 400k，每档 30s 硬上限 + 相邻档 ≤3.0×（本机 2.1–2.4×），挡 `MSt.msUsed` /
+  handler 帧链按活续延数二次退化；② `answer-row`（native 后端）：handler 的 clause 先
+  `perform` 一次外层效应再 resume，N=40000 单档 10s 硬上限（本机约 0.37 s）——这条路径的
+  退化只在 native 上可见，比值门槛分不清，用数量级余量的绝对上限抓。夹具侧的小尺寸版本是
+  `effect/perf/51_eff_nested`，复杂度契约见 [effect-machine.md](effect-machine.md)；
+- `vuna-metrics`：冻结夹具（`corpus/codegen`）的 codegen 产物对
+  `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
+  §codegen 夹具基线）；
+- `vuna-native-surface`：native 平台面（syscall 站点、`.bss` 宿主缓冲上限、内核路径）
+  对 `nix/checks/data/native-surface.baseline`；平台知识只能经这条基线变化
+  （见 [native-platform.md](native-platform.md)）；
+- `vuna-native-artifact`：最小程序的 `runtime.s` / `Main.s` 逐字节基线。`runtime.s` 与
+  程序无关、覆盖全部运行时函数，因此纯重构必须保持它不变（见 [native-runtime.md](native-runtime.md) §2）；
+- `vuna-native-codegen-growth`：native codegen 的两类探针——右深标量链
+  `1 + (2 + (… + x))` 与 N 个顶层闭包 `g0 … gN`——各 100/400/800 档，每档在 120 s 硬上限内
+  完成、相邻档墙钟 ≤6×+5 s（线性 ≈2×）。这两类形状分别对应标量链回溯与跳转目标枚举的
+  指数级退化，每档独立空 `VUNA_STORE`；
+- `context-budget`：入口文档字节数与单模块行数对 `nix/checks/data/context.budget`（预算按实测 ×1.5
+  留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
+  失败时打印 builder 日志，所以 CI 成功时不显示）；
+- `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑
+  `npm install`。
+
+## 后端自举 conformance（`vuna-native`）
+
+`vuna-native` 把「编译器编译自己」固化成可执行入口，CI 用它跑与 OCaml 版同规格的检查。
+wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
+自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
+它在 `.github/workflows/ci.yml` 的 `backend-native` job 里只跑**定时（每晚）、手动
+dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后端仍有未关闭的边界（[native-runtime.md](native-runtime.md) §4），
+放在每次 push 上只会占满 runner 又被下一次 push 取消（`cancel-in-progress`），
+既拿不到读数也拖慢反馈。push 路径上的 native 覆盖由 flake check 的
+`vuna-tests-native`（fast+integration 矩阵）承担。
+
+| 包 | 产物 | 说明 |
+| --- | --- | --- |
+| `vuna-native` | `bin/vuna-native` + `bin/vuna-target-{native,wasm}` + `base/` | 原生可执行文件 + 它编非 OCaml 目标要用的后端插件（与产品 CLI 同构，插件按 `<exeDir>` 发现）；`build-id` = 编译器源码闭包身份，`cache-tag` = 二进制摘要 |
+
+runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
+
+| scope | 断言 |
+| --- | --- |
+| `selfhost` | `check . --error-format json` 在整仓（workspace 根）零 error 诊断、exit 0；机器格式走进程内顺序检查，避开文本格式对成员包的 `processSpawn` |
+| `parity` | `corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
+| `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
+
+`--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`
+只跑匹配的夹具，`--target` 收窄 parity 的输出目标。
+
+每条外部命令（编译器、`cc`、`node`、生成的程序）默认 240 s 上限
+（`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，其余夹具继续跑：
+单条命令挂住时按超时计入失败，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
+失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余夹具，
+其余记为 skip——编译器整体坏掉时清单已经很说明问题。
+
+```console
+nix run .#backend-check -- --compiler native --scope parity --jobs 8
+nix run .#backend-check -- --compiler native --scope all --jobs 8
+nix run .#backend-check -- --compiler native --scope selfhost
+```
+
+读数（16 核）：parity 82×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
+8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](native-runtime.md) §4）。
+
+**当前状态**：native 自举编译器能构建、`version` / 帮助可用；成员包 spawn 的 argv 边界
+（105 的 9u5）、GC 根集（逐帧保守扫）与入口自带栈（105 的 9u7）已修，空 store 整仓
+`check .` 在默认 `ulimit -s 8192` 下通过，不再需要抬高进程栈。`parity` / `corpus` 本轮
+未复测。
+
+**口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
+`nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是
+夹具问题）。
+
+## Nix 命令与本地开发
+
+```console
+nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
+nix flake check            # 全部 checks
+sh nix/ci.sh               # CI 统一入口；CI_TOKENS（默认 nproc）/ CI_JOBS（默认 2）决定
+                           # 每个 derivation 的 cores（默认 2×8）；gate/e2e 共享该预算
+CI_CHECKS="vuna-tests-gate" sh nix/ci.sh    # 只构建列出的 check
+CI_EXCLUDE="vuna-tests-gate vuna-tests-e2e" sh nix/ci.sh  # 构建其余全部 check
+nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
+nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
+nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
+nix build .#vuna-seed --out-link result-seed          # stage 0 种子编译器
+VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
+  vuna dev suite test/suite.toml --jobs auto
+```
+
+**`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。需要
+确定的产物路径时用 `nix build --print-out-paths --no-link .#vuna`（不建软链），或先重建对应的
+`nix build ... --out-link`（见下方「Nix 命令与本地开发」）。
+
+`devShells.default` = `ocaml`/`ocamlopt` + `vuna-seed`；`devShells.ocaml` 只有工具链，种子
+重建或损坏时用它。stage 1 的 `vuna` 不进任何 devShell，避免种子失效时连 shell 都进不去；
+`VUNA_SEED` 只需要一个能 `build --no-compile --out`（或 `compile`）的编译器。
+
+## 性能基准（手动）
+
+`nix run .#vuna-bench` 是**手动**基准（不是 CI check，结果依赖机器）：默认测 `vuna`，
+`--compiler seed` 改测 `vuna-seed`；`--quick` 快速冒烟，`--runs N --save F` 存档，
+`--baseline F` 与历史对比（JSON 用 `jq` 解析），`--with-tests` 额外跑全部 checks，`--json`
+输出机器可读报告。入库基线 `bench/baselines/bootstrap.json`、`--check`（默认读基线，超
+`--threshold N`（默认 20%）只打印 `WARN`、退出 0）、`--strict`（同机 + 同 compiler 的
+WARN 变失败）；`nix/ci.sh --bench` 在 flake check 之后跑软告警（默认不跑，避免 CI 抖动）。
+跨机器 / 不同口径只做软告警。
+
+报告包含三级构建（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能（自编译
+compiler 闭包、corpus 批量、tiny 程序、DT 精化 + 擦除 codegen）、吞吐、产物
+bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`String.concat ""`、
+`bi_eq_int/_str/_bool`、零参定义）以及 fixed point / seed 一致性与可选 tests 状态。中间
+产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。基线在空闲机器上重跑：
+`nix run .#vuna-bench -- --quick --json bench/baselines/bootstrap.json`（或默认 runs=3 更稳）。
+
+所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），没有「单文件
+`main.ml` vs 多模块」两种读数需要区分。
+
+产物本身另有一份基线：`nix run .#vuna-artifacts`（`bench/artifact.sh`）测三端的
+`.ml` / `.s` / `.wat` 文件树与字节/行数、最终 `prog` / `main.wasm` 大小、以及
+`vuna compile` 与外部工具链的分段构建时间（含 user+sys CPU），按 `hello` /
+`defs-N` / `mods-N` / `self` 分档。基线 `bench/baselines/artifacts.json`；
+`--check` 的尺寸阈值默认 5% / 20%（跨机器可比），耗时 20% / 50%（同机、软判定）。
+读数见 [performance.md §产物规模](performance.md)。
+
+## effect 测试产物缓存
+
+`vuna test` 的 effect 测试（`main : Eff ...`）编译产物按内容寻址缓存在
+`$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器身份、包源码闭包、context roots
+内容与测试源内容；命中直接运行缓存二进制，跳过 `compile + build.sh`。pure 测试仍走
+`interpretFile`，不缓存。没有 coreutils `timeout` 时同一路径不加外部超时（不再有临时包
+fallback）。REPL 的动作表达式用同一套视图机制，产物在 `$VUNA_STORE/views/effectbin/<digest>/`。
+
+## 相关阅读
+
+- suite 与 corpus 怎么写、怎么分类：[testing.md](testing.md)；测试体系设计（共享对象库 /
+  store-isolated / verdict 对象）：[test-architecture.md](test-architecture.md)
+- 种子不变量与 rotation：[bootstrap.md](bootstrap.md)；编译器模块职责：[compiler.md](compiler.md)
+- 改动定位与建议测试标签：[architecture.md](../architecture.md)
+- lint 规则：[lint.md](lint.md)；错误码：[tooling.md](tooling.md)

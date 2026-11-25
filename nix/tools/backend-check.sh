@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 跨编译器 conformance：用自举出来的 native 编译器跑 check 与夹具。
 #
-# 三个 scope（口径见 docs/reference/testing.md「后端自举 conformance」）：
+# 三个 scope（口径见 docs/reference/testing-checks.md「后端自举 conformance」）：
 #   selfhost  用该编译器检查整个仓库（workspace 根；机器格式诊断走进程内顺序检查）
 #   parity    packages/compiler/test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
 #   corpus    packages/*/test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error

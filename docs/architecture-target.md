@@ -199,4 +199,5 @@
 - 自举、种子与 TCB：[reference/bootstrap.md](reference/bootstrap.md)
 - 效应、运行时与线性用量：[reference/effects.md](reference/effects.md)
 - 模块级缓存与失效判定：[reference/cache.md](reference/cache.md)
-- 当前性能读数与已否决的优化：[reference/performance.md](reference/performance.md)
+- 当前性能读数与增长率：[reference/performance.md](reference/performance.md)；热点与已否决的
+  优化：[reference/performance-hotspots.md](reference/performance-hotspots.md)

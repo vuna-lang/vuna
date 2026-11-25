@@ -188,7 +188,7 @@ OCaml 后端大多数用例在 ~2× 手写 OCaml 内；例外是 `hashmap_remove
 绝对值、峰值内存与 `default_stack_ok` 也见该页。分配 / GC 统计由 OCaml 后端生成 runtime 的
 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；native 侧由
 `VUNA_NATIVE_GC_LOG=1` 的末次诊断行采集 `collections` / `live_bytes` / `alloc_bytes`
-（两代 mark-sweep，见 [native.md](../docs/reference/native.md) §5.2），另记峰值 RSS 与默认栈探针。
+（两代 mark-sweep，见 [native-runtime.md](../docs/reference/native-runtime.md) §1.2），另记峰值 RSS 与默认栈探针。
 `gc_low_live` 的 native RSS 落回进程基线（~2.6 MB，0.01× 手写 OCaml），C 对照是手工
 malloc/free，RSS 比到 C 更能看出 GC 元数据与高水位的代价；`gc_array_churn` 仍是 GC 相关的
 最差项（COW 数组复制）；`gc_retain` 是反向的一档——live 单调上升（~19 MB），整堆回收必须重扫

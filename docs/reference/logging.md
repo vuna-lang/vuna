@@ -166,6 +166,6 @@ logTrace : String -> String -> Int          -- 级别 4
 | native | 恒 `False` | 恒 `0` |
 
 即文本日志**只在 OCaml 后端输出**；wasm / native 上门控恒为假，`log!` 不产生任何输出
-（见 [wasm.md](wasm.md) / [native.md](native.md) 的运行时符号表）。
+（见 [wasm.md](wasm.md) / [native-runtime.md](native-runtime.md) 的运行时符号表）。
 核心求值（`vuna test` 的纯测试、REPL）把 `log@on` 归约成 `False`、`log@emit` 归约成 `0`，
 所以纯测试里没有日志输出。

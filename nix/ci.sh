@@ -47,7 +47,7 @@ export CI_TOKENS="$TOKENS" CI_JOBS="$JOBS" CI_CORES="$CORES"
 # 拆 job / 拆机器：CI_CHECKS（空格分隔的属性名）只构建这些 check；CI_EXCLUDE
 # 构建除这些之外的全部 check。两者都空 = 全量 `nix flake check`（本地默认）。
 # 用途是把互不依赖的 check 分配到不同 runner 并行（各自 4 核），单机 4 核时
-# 瓶颈是 suite 的两条长尾（见 docs/reference/testing.md「Nix checks 清单」）。
+# 瓶颈是 suite 的两条长尾（见 docs/reference/testing-checks.md「Nix checks 清单」）。
 # 枚举走 flake 求值，新增 check 不需要同步维护列表。
 SYSTEM=${CI_SYSTEM:-x86_64-linux}
 check_attr() { printf '.#checks.%s.%s' "$SYSTEM" "$1"; }
