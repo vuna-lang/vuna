@@ -571,14 +571,14 @@ let v_substringPrim = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) -> (m
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))
 
-# 804 "Vuna/Compiler/Core/Eval.vuna"
+# 805 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_argAt = (fun (mc0 : int) (mc1 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__163, dtb__164) -> (if (mc0 <= 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__163)) else ((v_argAt (mc0 - 1)) dtb__164))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 809 "Vuna/Compiler/Core/Eval.vuna"
+# 810 "Vuna/Compiler/Core/Eval.vuna"
 let v_evalProjFuel = (fun (fuel : int) (v : Core_dTerm.t_Value) (c : string) (tele : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (i : int) (fi : int) -> (if (fuel <= 0) then (Core_dTerm.C_Value_VProj (v, c, tele, i, fi)) else (match v with
   | Core_dTerm.C_Value_VCon (dtb__165, dtb__166) -> (match ((v_argAt i) dtb__166) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__167) -> dtb__167
@@ -910,306 +910,311 @@ let v_forceLabelArgs = (fun (defs : (string, Core_dTerm.t_Term) B_dContainer_dHa
   | _ -> nd_uscrut4
 )))
 
-# 821 "Vuna/Compiler/Core/Eval.vuna"
+# 822 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_normalizeFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (evalFuel : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then v else (if (evalFuel <= 0) then v else (match ((((v_force defs) sols) evalFuel) v) with
   | Core_dTerm.C_Value_VNeutral (dtb__324) -> (((((v_normalizeNeutralFuel (fuel - 1)) defs) sols) evalFuel) dtb__324)
-  | Core_dTerm.C_Value_VIf (dtb__325, dtb__326, dtb__327) -> (((((((v_normalizeIfFuel (fuel - 1)) defs) sols) evalFuel) dtb__325) dtb__326) dtb__327)
-  | Core_dTerm.C_Value_VCase (dtb__328, dtb__329) -> ((((((v_normalizeCaseFuel (fuel - 1)) defs) sols) evalFuel) dtb__328) dtb__329)
-  | Core_dTerm.C_Value_VProj (dtb__330, dtb__331, dtb__332, dtb__333, dtb__334) -> (((((((((v_normalizeProjFuel (fuel - 1)) defs) sols) evalFuel) dtb__330) dtb__331) dtb__332) dtb__333) dtb__334)
-  | dtb__335 -> dtb__335
+  | Core_dTerm.C_Value_VCon (dtb__325, dtb__326) -> (Core_dTerm.C_Value_VCon (dtb__325, ((B_dData_dList.v_map ((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel)) dtb__326)))
+  | Core_dTerm.C_Value_VApp (dtb__327, dtb__328) -> (Core_dTerm.C_Value_VApp ((((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel) dtb__327), (((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel) dtb__328)))
+  | Core_dTerm.C_Value_VIf (dtb__329, dtb__330, dtb__331) -> (((((((v_normalizeIfFuel (fuel - 1)) defs) sols) evalFuel) dtb__329) dtb__330) dtb__331)
+  | Core_dTerm.C_Value_VCase (dtb__332, dtb__333) -> ((((((v_normalizeCaseFuel (fuel - 1)) defs) sols) evalFuel) dtb__332) dtb__333)
+  | Core_dTerm.C_Value_VProj (dtb__334, dtb__335, dtb__336, dtb__337, dtb__338) -> (((((((((v_normalizeProjFuel (fuel - 1)) defs) sols) evalFuel) dtb__334) dtb__335) dtb__336) dtb__337) dtb__338)
+  | dtb__339 -> dtb__339
 ))))
-# 837 "Vuna/Compiler/Core/Eval.vuna"
+# 842 "Vuna/Compiler/Core/Eval.vuna"
 and v_normalizeCaseFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (evalFuel : int) (scrut : Core_dTerm.t_Value) (alts : Core_dTerm.t_VCaseAlt B_dData_dList.t_List) -> (if (fuel <= 0) then (Core_dTerm.C_Value_VCase (scrut, alts)) else (if (evalFuel <= 0) then (Core_dTerm.C_Value_VCase (scrut, alts)) else (match (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) scrut) with
-  | Core_dTerm.C_Value_VCon (dtb__336, dtb__337) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) (((v_applyCaseAlt dtb__336) dtb__337) alts))
-  | dtb__338 -> (Core_dTerm.C_Value_VCase (dtb__338, alts))
+  | Core_dTerm.C_Value_VCon (dtb__340, dtb__341) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) (((v_applyCaseAlt dtb__340) dtb__341) alts))
+  | dtb__342 -> (Core_dTerm.C_Value_VCase (dtb__342, alts))
 ))))
-# 849 "Vuna/Compiler/Core/Eval.vuna"
+# 854 "Vuna/Compiler/Core/Eval.vuna"
 and v_normalizeProjFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (evalFuel : int) (v : Core_dTerm.t_Value) (c : string) (tele : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (i : int) (fi : int) -> (if (fuel <= 0) then (Core_dTerm.C_Value_VProj (v, c, tele, i, fi)) else (if (evalFuel <= 0) then (Core_dTerm.C_Value_VProj (v, c, tele, i, fi)) else (match (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) v) with
-  | Core_dTerm.C_Value_VCon (dtb__339, dtb__340) -> (match ((v_argAt i) dtb__340) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__341) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) dtb__341)
+  | Core_dTerm.C_Value_VCon (dtb__343, dtb__344) -> (match ((v_argAt i) dtb__344) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__345) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) dtb__345)
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Value_VProj (v, c, tele, i, fi))
   | _ -> failwith "DT: impossible branch"
 )
-  | dtb__342 -> (Core_dTerm.C_Value_VProj (dtb__342, c, tele, i, fi))
+  | dtb__346 -> (Core_dTerm.C_Value_VProj (dtb__346, c, tele, i, fi))
 ))))
-# 863 "Vuna/Compiler/Core/Eval.vuna"
+# 868 "Vuna/Compiler/Core/Eval.vuna"
 and v_normalizeNeutralFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (evalFuel : int) (n : Core_dTerm.t_Neutral) -> (if (fuel <= 0) then (Core_dTerm.C_Value_VNeutral (n)) else (if (evalFuel <= 0) then (Core_dTerm.C_Value_VNeutral (n)) else (match n with
-  | Core_dTerm.C_Neutral_NVar (dtb__343, dtb__344, dtb__345) -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__343, dtb__344, ((B_dData_dList.v_map ((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel)) dtb__345)))))
-  | Core_dTerm.C_Neutral_NGlobal (dtb__346, dtb__347) -> (let sp2 = ((B_dData_dList.v_map ((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel)) dtb__347) in (match ((Core_dTerm.v_defLookup dtb__346) defs) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__348) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) ((v_applySpine ((v_eval B_dData_dList.C_List_Nil) dtb__348)) sp2))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match (((((v_primReduce defs) sols) (evalFuel - 1)) dtb__346) sp2) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__349) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) dtb__349)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal (dtb__346, sp2))))
+  | Core_dTerm.C_Neutral_NVar (dtb__347, dtb__348, dtb__349) -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__347, dtb__348, ((B_dData_dList.v_map ((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel)) dtb__349)))))
+  | Core_dTerm.C_Neutral_NGlobal (dtb__350, dtb__351) -> (let sp2 = ((B_dData_dList.v_map ((((v_normalizeFuel (fuel - 1)) defs) sols) evalFuel)) dtb__351) in (match ((Core_dTerm.v_defLookup dtb__350) defs) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__352) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) ((v_applySpine ((v_eval B_dData_dList.C_List_Nil) dtb__352)) sp2))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match (((((v_primReduce defs) sols) (evalFuel - 1)) dtb__350) sp2) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__353) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) dtb__353)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal (dtb__350, sp2))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 882 "Vuna/Compiler/Core/Eval.vuna"
+# 887 "Vuna/Compiler/Core/Eval.vuna"
 and v_normalizeIfFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (evalFuel : int) (c : Core_dTerm.t_Value) (th : Core_dTerm.t_Value) (el : Core_dTerm.t_Value) -> (if (fuel <= 0) then (Core_dTerm.C_Value_VIf (c, th, el)) else (if (evalFuel <= 0) then (Core_dTerm.C_Value_VIf (c, th, el)) else (match (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) c) with
-  | Core_dTerm.C_Value_VBool (dtb__350) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) (if dtb__350 then th else el))
-  | dtb__351 -> (Core_dTerm.C_Value_VIf (dtb__351, th, el))
+  | Core_dTerm.C_Value_VBool (dtb__354) -> (((((v_normalizeFuel (fuel - 1)) defs) sols) (evalFuel - 1)) (if dtb__354 then th else el))
+  | dtb__355 -> (Core_dTerm.C_Value_VIf (dtb__355, th, el))
 ))))
 
-# 901 "Vuna/Compiler/Core/Eval.vuna"
+# 906 "Vuna/Compiler/Core/Eval.vuna"
 let v_quoteFuelBound = 262144
 
-# 963 "Vuna/Compiler/Core/Eval.vuna"
+# 968 "Vuna/Compiler/Core/Eval.vuna"
 let v_applyClosureBinder = (fun (mc0 : Core_dTerm.t_Closure) (mc1 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc0 with
-  | { Core_dTerm.f_Closure_closureEnv = dtb__352; Core_dTerm.f_Closure_closureBody = dtb__353 } -> ((v_eval ((B_dData_dList.v_append (B_dData_dList.v_reverse mc1)) dtb__352)) dtb__353)
+  | { Core_dTerm.f_Closure_closureEnv = dtb__356; Core_dTerm.f_Closure_closureBody = dtb__357 } -> ((v_eval ((B_dData_dList.v_append (B_dData_dList.v_reverse mc1)) dtb__356)) dtb__357)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 966 "Vuna/Compiler/Core/Eval.vuna"
+# 971 "Vuna/Compiler/Core/Eval.vuna"
 let v_freshVar = (fun (name : string) (level : int) -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (name, level, B_dData_dList.C_List_Nil)))))
 
-# 957 "Vuna/Compiler/Core/Eval.vuna"
+# 962 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_argValsAt = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : int) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__354, dtb__355) -> (match dtb__354 with
-  | { B_dData_dPair.f_Pair_first = dtb__356; B_dData_dPair.f_Pair_second = dtb__357 } -> (B_dData_dList.C_List__x58__x58_ (((v_freshVar dtb__356) (mc1 + mc2)), (((v_argValsAt dtb__355) mc1) (mc2 + 1))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__358, dtb__359) -> (match dtb__358 with
+  | { B_dData_dPair.f_Pair_first = dtb__360; B_dData_dPair.f_Pair_second = dtb__361 } -> (B_dData_dList.C_List__x58__x58_ (((v_freshVar dtb__360) (mc1 + mc2)), (((v_argValsAt dtb__359) mc1) (mc2 + 1))))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 991 "Vuna/Compiler/Core/Eval.vuna"
+# 996 "Vuna/Compiler/Core/Eval.vuna"
 let v_varIndexM = (fun (depth : int) (level : int) -> (if (level < depth) then (B_dData_dMaybe.C_Maybe_Just (((depth - level) - 1))) else B_dData_dMaybe.C_Maybe_Nothing))
 
-# 994 "Vuna/Compiler/Core/Eval.vuna"
+# 999 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_applyTermSpine = (fun (mc0 : Core_dTerm.t_Term) (mc1 : Core_dTerm.t_Term B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__358, dtb__359) -> ((v_applyTermSpine (Core_dTerm.C_Term_TApp (mc0, dtb__358, Core_dTerm.C_Rig_RigOmega))) dtb__359)
+  | B_dData_dList.C_List__x58__x58_ (dtb__362, dtb__363) -> ((v_applyTermSpine (Core_dTerm.C_Term_TApp (mc0, dtb__362, Core_dTerm.C_Rig_RigOmega))) dtb__363)
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 907 "Vuna/Compiler/Core/Eval.vuna"
+# 912 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_quoteFuel = (fun (fuel : int) (depth : int) (v : Core_dTerm.t_Value) -> (if (fuel <= 0) then (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) else (match v with
-  | Core_dTerm.C_Value_VType (dtb__360) -> (Core_dTerm.C_Term_TType (dtb__360))
-  | Core_dTerm.C_Value_VPi (dtb__361, dtb__362, dtb__363, dtb__364, dtb__365) -> (Core_dTerm.C_Term_TPi (dtb__361, dtb__362, dtb__363, (((v_quoteFuel (fuel - 1)) depth) dtb__364), (((v_quoteFuel (fuel - 1)) (depth + 1)) ((v_applyClosure dtb__365) ((v_freshVar dtb__361) depth)))))
-  | Core_dTerm.C_Value_VLam (dtb__366, dtb__367, dtb__368) -> (Core_dTerm.C_Term_TLam (dtb__366, dtb__367, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_quoteFuel (fuel - 1)) (depth + 1)) ((v_applyClosure dtb__368) ((v_freshVar dtb__366) depth)))))
-  | Core_dTerm.C_Value_VNeutral (dtb__369) -> (((v_quoteNeutralFuel (fuel - 1)) depth) dtb__369)
-  | Core_dTerm.C_Value_VMeta (dtb__370, dtb__371) -> ((v_applyTermSpine (Core_dTerm.C_Term_TMeta (dtb__370))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__371))
-  | Core_dTerm.C_Value_VCon (dtb__372, dtb__373) -> (Core_dTerm.C_Term_TCon (dtb__372, (((v_quoteArgValuesFuel (fuel - 1)) depth) dtb__373)))
-  | Core_dTerm.C_Value_VApp (dtb__374, dtb__375) -> (Core_dTerm.C_Term_TApp ((((v_quoteFuel (fuel - 1)) depth) dtb__374), (((v_quoteFuel (fuel - 1)) depth) dtb__375), Core_dTerm.C_Rig_RigOmega))
-  | Core_dTerm.C_Value_VCase (dtb__376, dtb__377) -> (Core_dTerm.C_Term_TCase ((((v_quoteFuel (fuel - 1)) depth) dtb__376), ((B_dData_dList.v_map (fun (alt : Core_dTerm.t_VCaseAlt) -> (((v_quoteCaseAltFuel (fuel - 1)) depth) alt))) dtb__377)))
-  | Core_dTerm.C_Value_VProj (dtb__378, dtb__379, dtb__380, dtb__381, dtb__382) -> (Core_dTerm.C_Term_TProj ((((v_quoteFuel (fuel - 1)) depth) dtb__378), dtb__379, dtb__380, dtb__381, dtb__382))
-  | Core_dTerm.C_Value_VInt (dtb__383) -> (Core_dTerm.C_Term_TInt (dtb__383))
-  | Core_dTerm.C_Value_VStr (dtb__384) -> (Core_dTerm.C_Term_TStr (dtb__384))
-  | Core_dTerm.C_Value_VFloat (dtb__385) -> (Core_dTerm.C_Term_TFloat (dtb__385))
-  | Core_dTerm.C_Value_VBool (dtb__386) -> (Core_dTerm.C_Term_TBool (dtb__386))
-  | Core_dTerm.C_Value_VIf (dtb__387, dtb__388, dtb__389) -> (Core_dTerm.C_Term_TIf ((((v_quoteFuel (fuel - 1)) depth) dtb__387), (((v_quoteFuel (fuel - 1)) depth) dtb__388), (((v_quoteFuel (fuel - 1)) depth) dtb__389)))
+  | Core_dTerm.C_Value_VType (dtb__364) -> (Core_dTerm.C_Term_TType (dtb__364))
+  | Core_dTerm.C_Value_VPi (dtb__365, dtb__366, dtb__367, dtb__368, dtb__369) -> (Core_dTerm.C_Term_TPi (dtb__365, dtb__366, dtb__367, (((v_quoteFuel (fuel - 1)) depth) dtb__368), (((v_quoteFuel (fuel - 1)) (depth + 1)) ((v_applyClosure dtb__369) ((v_freshVar dtb__365) depth)))))
+  | Core_dTerm.C_Value_VLam (dtb__370, dtb__371, dtb__372) -> (Core_dTerm.C_Term_TLam (dtb__370, dtb__371, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_quoteFuel (fuel - 1)) (depth + 1)) ((v_applyClosure dtb__372) ((v_freshVar dtb__370) depth)))))
+  | Core_dTerm.C_Value_VNeutral (dtb__373) -> (((v_quoteNeutralFuel (fuel - 1)) depth) dtb__373)
+  | Core_dTerm.C_Value_VMeta (dtb__374, dtb__375) -> ((v_applyTermSpine (Core_dTerm.C_Term_TMeta (dtb__374))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__375))
+  | Core_dTerm.C_Value_VCon (dtb__376, dtb__377) -> (Core_dTerm.C_Term_TCon (dtb__376, (((v_quoteArgValuesFuel (fuel - 1)) depth) dtb__377)))
+  | Core_dTerm.C_Value_VApp (dtb__378, dtb__379) -> (Core_dTerm.C_Term_TApp ((((v_quoteFuel (fuel - 1)) depth) dtb__378), (((v_quoteFuel (fuel - 1)) depth) dtb__379), Core_dTerm.C_Rig_RigOmega))
+  | Core_dTerm.C_Value_VCase (dtb__380, dtb__381) -> (Core_dTerm.C_Term_TCase ((((v_quoteFuel (fuel - 1)) depth) dtb__380), ((B_dData_dList.v_map (fun (alt : Core_dTerm.t_VCaseAlt) -> (((v_quoteCaseAltFuel (fuel - 1)) depth) alt))) dtb__381)))
+  | Core_dTerm.C_Value_VProj (dtb__382, dtb__383, dtb__384, dtb__385, dtb__386) -> (Core_dTerm.C_Term_TProj ((((v_quoteFuel (fuel - 1)) depth) dtb__382), dtb__383, dtb__384, dtb__385, dtb__386))
+  | Core_dTerm.C_Value_VInt (dtb__387) -> (Core_dTerm.C_Term_TInt (dtb__387))
+  | Core_dTerm.C_Value_VStr (dtb__388) -> (Core_dTerm.C_Term_TStr (dtb__388))
+  | Core_dTerm.C_Value_VFloat (dtb__389) -> (Core_dTerm.C_Term_TFloat (dtb__389))
+  | Core_dTerm.C_Value_VBool (dtb__390) -> (Core_dTerm.C_Term_TBool (dtb__390))
+  | Core_dTerm.C_Value_VIf (dtb__391, dtb__392, dtb__393) -> (Core_dTerm.C_Term_TIf ((((v_quoteFuel (fuel - 1)) depth) dtb__391), (((v_quoteFuel (fuel - 1)) depth) dtb__392), (((v_quoteFuel (fuel - 1)) depth) dtb__393)))
   | _ -> failwith "DT: impossible branch"
 )))
-# 932 "Vuna/Compiler/Core/Eval.vuna"
+# 937 "Vuna/Compiler/Core/Eval.vuna"
 and v_quoteCaseAltFuel = (fun (fuel : int) (depth : int) (alt0 : Core_dTerm.t_VCaseAlt) -> (if (fuel <= 0) then { Core_dTerm.f_CaseAlt_caseAltName = ""; Core_dTerm.f_CaseAlt_caseAltBinders = B_dData_dList.C_List_Nil; Core_dTerm.f_CaseAlt_caseAltBody = (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) } else (match alt0 with
-  | { Core_dTerm.f_VCaseAlt_vCaseAltName = dtb__390; Core_dTerm.f_VCaseAlt_vCaseAltBinders = dtb__391; Core_dTerm.f_VCaseAlt_vCaseAltClosure = dtb__392 } -> (let n = (B_dData_dList.v_length dtb__391) in (let argVals = (((v_argValsAt dtb__391) depth) 0) in (let body = (((v_quoteFuel (fuel - 1)) (depth + n)) ((v_applyClosureBinder dtb__392) argVals)) in { Core_dTerm.f_CaseAlt_caseAltName = dtb__390; Core_dTerm.f_CaseAlt_caseAltBinders = (Core_dTerm.v_bindersOfPairs dtb__391); Core_dTerm.f_CaseAlt_caseAltBody = body })))
+  | { Core_dTerm.f_VCaseAlt_vCaseAltName = dtb__394; Core_dTerm.f_VCaseAlt_vCaseAltBinders = dtb__395; Core_dTerm.f_VCaseAlt_vCaseAltClosure = dtb__396 } -> (let n = (B_dData_dList.v_length dtb__395) in (let argVals = (((v_argValsAt dtb__395) depth) 0) in (let body = (((v_quoteFuel (fuel - 1)) (depth + n)) ((v_applyClosureBinder dtb__396) argVals)) in { Core_dTerm.f_CaseAlt_caseAltName = dtb__394; Core_dTerm.f_CaseAlt_caseAltBinders = (Core_dTerm.v_bindersOfPairs dtb__395); Core_dTerm.f_CaseAlt_caseAltBody = body })))
   | _ -> failwith "DT: impossible branch"
 )))
-# 948 "Vuna/Compiler/Core/Eval.vuna"
+# 953 "Vuna/Compiler/Core/Eval.vuna"
 and v_quoteArgValuesFuel = (fun (fuel : int) (depth : int) (vs : Core_dTerm.t_Value B_dData_dList.t_List) -> (if (fuel <= 0) then B_dData_dList.C_List_Nil else (match vs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
-  | B_dData_dList.C_List__x58__x58_ (dtb__393, dtb__394) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (((v_quoteFuel (fuel - 1)) depth) dtb__393); B_dData_dPair.f_Pair_second = Core_dTerm.C_Rig_RigOmega }, (((v_quoteArgValuesFuel (fuel - 1)) depth) dtb__394)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__397, dtb__398) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (((v_quoteFuel (fuel - 1)) depth) dtb__397); B_dData_dPair.f_Pair_second = Core_dTerm.C_Rig_RigOmega }, (((v_quoteArgValuesFuel (fuel - 1)) depth) dtb__398)))
   | _ -> failwith "DT: impossible branch"
 )))
-# 972 "Vuna/Compiler/Core/Eval.vuna"
+# 977 "Vuna/Compiler/Core/Eval.vuna"
 and v_quoteNeutralFuel = (fun (fuel : int) (depth : int) (n : Core_dTerm.t_Neutral) -> (if (fuel <= 0) then (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) else (match n with
-  | Core_dTerm.C_Neutral_NVar (dtb__395, dtb__396, dtb__397) -> (let idx = (match ((v_varIndexM depth) dtb__396) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__398) -> dtb__398
+  | Core_dTerm.C_Neutral_NVar (dtb__399, dtb__400, dtb__401) -> (let idx = (match ((v_varIndexM depth) dtb__400) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__402) -> dtb__402
   | B_dData_dMaybe.C_Maybe_Nothing -> (0 - 1)
   | _ -> failwith "DT: impossible branch"
-) in ((v_applyTermSpine (Core_dTerm.C_Term_TVar (dtb__395, idx, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__397)))
-  | Core_dTerm.C_Neutral_NGlobal (dtb__399, dtb__400) -> ((v_applyTermSpine (Core_dTerm.C_Term_TGlobal (dtb__399))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__400))
+) in ((v_applyTermSpine (Core_dTerm.C_Term_TVar (dtb__399, idx, { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__401)))
+  | Core_dTerm.C_Neutral_NGlobal (dtb__403, dtb__404) -> ((v_applyTermSpine (Core_dTerm.C_Term_TGlobal (dtb__403))) ((B_dData_dList.v_map (fun (a : Core_dTerm.t_Value) -> (((v_quoteFuel (fuel - 1)) depth) a))) dtb__404))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 904 "Vuna/Compiler/Core/Eval.vuna"
+# 909 "Vuna/Compiler/Core/Eval.vuna"
 let v_quote = (fun (depth : int) (v : Core_dTerm.t_Value) -> (((v_quoteFuel v_quoteFuelBound) depth) v))
 
-# 929 "Vuna/Compiler/Core/Eval.vuna"
+# 934 "Vuna/Compiler/Core/Eval.vuna"
 let v_quoteCaseAlt = (fun (depth : int) (alt : Core_dTerm.t_VCaseAlt) -> (((v_quoteCaseAltFuel v_quoteFuelBound) depth) alt))
 
-# 945 "Vuna/Compiler/Core/Eval.vuna"
+# 950 "Vuna/Compiler/Core/Eval.vuna"
 let v_quoteArgValues = (fun (depth : int) (vs : Core_dTerm.t_Value B_dData_dList.t_List) -> (((v_quoteArgValuesFuel v_quoteFuelBound) depth) vs))
 
-# 969 "Vuna/Compiler/Core/Eval.vuna"
+# 974 "Vuna/Compiler/Core/Eval.vuna"
 let v_quoteNeutral = (fun (depth : int) (n : Core_dTerm.t_Neutral) -> (((v_quoteNeutralFuel v_quoteFuelBound) depth) n))
 
-# 1002 "Vuna/Compiler/Core/Eval.vuna"
+# 1007 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_substSolvedMetas = (fun (mc0 : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc1 with
-  | Core_dTerm.C_Term_TIf (dtb__401, dtb__402, dtb__403) -> (Core_dTerm.C_Term_TIf (((v_substSolvedMetas mc0) dtb__401), ((v_substSolvedMetas mc0) dtb__402), ((v_substSolvedMetas mc0) dtb__403)))
-  | Core_dTerm.C_Term_TCase (dtb__404, dtb__405) -> (Core_dTerm.C_Term_TCase (((v_substSolvedMetas mc0) dtb__404), ((B_dData_dList.v_map (v_substSolvedAlt mc0)) dtb__405)))
-  | Core_dTerm.C_Term_TRecUpd (dtb__406, dtb__407, dtb__408, dtb__409, dtb__410) -> (Core_dTerm.C_Term_TRecUpd (((v_substSolvedMetas mc0) dtb__406), dtb__407, dtb__408, dtb__409, ((v_substSolvedMetas mc0) dtb__410)))
-  | Core_dTerm.C_Term_TProj (dtb__411, dtb__412, dtb__413, dtb__414, dtb__415) -> (Core_dTerm.C_Term_TProj (((v_substSolvedMetas mc0) dtb__411), dtb__412, dtb__413, dtb__414, dtb__415))
-  | Core_dTerm.C_Term_TRecord (dtb__416, dtb__417) -> (Core_dTerm.C_Term_TRecord (dtb__416, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__417)))
-  | Core_dTerm.C_Term_TMk (dtb__418, dtb__419) -> (Core_dTerm.C_Term_TMk (dtb__418, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__419)))
-  | Core_dTerm.C_Term_TCon (dtb__420, dtb__421) -> (Core_dTerm.C_Term_TCon (dtb__420, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__421)))
-  | Core_dTerm.C_Term_TApp (dtb__422, dtb__423, dtb__424) -> (Core_dTerm.C_Term_TApp (((v_substSolvedMetas mc0) dtb__422), ((v_substSolvedMetas mc0) dtb__423), dtb__424))
-  | Core_dTerm.C_Term_TLam (dtb__425, dtb__426, dtb__427, dtb__428, dtb__429) -> (let slot2 = (let nd_uscrut7 = dtb__427 in (match nd_uscrut7 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__430) -> (match dtb__430 with
-  | { B_dData_dPair.f_Pair_first = dtb__431; B_dData_dPair.f_Pair_second = dtb__432 } -> (match dtb__432 with
-  | { B_dData_dPair.f_Pair_first = dtb__433; B_dData_dPair.f_Pair_second = dtb__434 } -> (let bt2 = (match dtb__433 with
+  | Core_dTerm.C_Term_TIf (dtb__405, dtb__406, dtb__407) -> (Core_dTerm.C_Term_TIf (((v_substSolvedMetas mc0) dtb__405), ((v_substSolvedMetas mc0) dtb__406), ((v_substSolvedMetas mc0) dtb__407)))
+  | Core_dTerm.C_Term_TCase (dtb__408, dtb__409) -> (Core_dTerm.C_Term_TCase (((v_substSolvedMetas mc0) dtb__408), ((B_dData_dList.v_map (v_substSolvedAlt mc0)) dtb__409)))
+  | Core_dTerm.C_Term_TRecUpd (dtb__410, dtb__411, dtb__412, dtb__413, dtb__414) -> (Core_dTerm.C_Term_TRecUpd (((v_substSolvedMetas mc0) dtb__410), dtb__411, dtb__412, dtb__413, ((v_substSolvedMetas mc0) dtb__414)))
+  | Core_dTerm.C_Term_TProj (dtb__415, dtb__416, dtb__417, dtb__418, dtb__419) -> (Core_dTerm.C_Term_TProj (((v_substSolvedMetas mc0) dtb__415), dtb__416, dtb__417, dtb__418, dtb__419))
+  | Core_dTerm.C_Term_TRecord (dtb__420, dtb__421) -> (Core_dTerm.C_Term_TRecord (dtb__420, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__421)))
+  | Core_dTerm.C_Term_TMk (dtb__422, dtb__423) -> (Core_dTerm.C_Term_TMk (dtb__422, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__423)))
+  | Core_dTerm.C_Term_TCon (dtb__424, dtb__425) -> (Core_dTerm.C_Term_TCon (dtb__424, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((v_substSolvedMetas mc0) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__425)))
+  | Core_dTerm.C_Term_TApp (dtb__426, dtb__427, dtb__428) -> (Core_dTerm.C_Term_TApp (((v_substSolvedMetas mc0) dtb__426), ((v_substSolvedMetas mc0) dtb__427), dtb__428))
+  | Core_dTerm.C_Term_TLam (dtb__429, dtb__430, dtb__431, dtb__432, dtb__433) -> (let slot2 = (let nd_uscrut7 = dtb__431 in (match nd_uscrut7 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__434) -> (match dtb__434 with
+  | { B_dData_dPair.f_Pair_first = dtb__435; B_dData_dPair.f_Pair_second = dtb__436 } -> (match dtb__436 with
+  | { B_dData_dPair.f_Pair_first = dtb__437; B_dData_dPair.f_Pair_second = dtb__438 } -> (let bt2 = (match dtb__437 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__436) -> (B_dData_dMaybe.C_Maybe_Just (((v_substSolvedMetas mc0) dtb__436)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__440) -> (B_dData_dMaybe.C_Maybe_Just (((v_substSolvedMetas mc0) dtb__440)))
   | _ -> failwith "DT: impossible branch"
-) in (let rt2 = (match dtb__434 with
+) in (let rt2 = (match dtb__438 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__435) -> (B_dData_dMaybe.C_Maybe_Just (((v_substSolvedMetas mc0) dtb__435)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__439) -> (B_dData_dMaybe.C_Maybe_Just (((v_substSolvedMetas mc0) dtb__439)))
   | _ -> failwith "DT: impossible branch"
-) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__431; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
+) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__435; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) in (Core_dTerm.C_Term_TLam (dtb__425, dtb__426, slot2, dtb__428, ((v_substSolvedMetas mc0) dtb__429))))
-  | Core_dTerm.C_Term_TPi (dtb__437, dtb__438, dtb__439, dtb__440, dtb__441) -> (Core_dTerm.C_Term_TPi (dtb__437, dtb__438, dtb__439, ((v_substSolvedMetas mc0) dtb__440), ((v_substSolvedMetas mc0) dtb__441)))
-  | Core_dTerm.C_Term_TMeta (dtb__442) -> (match ((Core_dTerm.v_metaLookupList dtb__442) mc0) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__443) -> (let soln = ((v_quote 0) dtb__443) in (if ((Core_dTerm.v_hasFreeTermVar 0) soln) then mc1 else soln))
+)) in (Core_dTerm.C_Term_TLam (dtb__429, dtb__430, slot2, dtb__432, ((v_substSolvedMetas mc0) dtb__433))))
+  | Core_dTerm.C_Term_TPi (dtb__441, dtb__442, dtb__443, dtb__444, dtb__445) -> (Core_dTerm.C_Term_TPi (dtb__441, dtb__442, dtb__443, ((v_substSolvedMetas mc0) dtb__444), ((v_substSolvedMetas mc0) dtb__445)))
+  | Core_dTerm.C_Term_TMeta (dtb__446) -> (match ((Core_dTerm.v_metaLookupList dtb__446) mc0) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__447) -> (let soln = ((v_quote 0) dtb__447) in (if ((Core_dTerm.v_hasFreeTermVar 0) soln) then mc1 else soln))
   | B_dData_dMaybe.C_Maybe_Nothing -> mc1
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> mc1
 ))
-# 1045 "Vuna/Compiler/Core/Eval.vuna"
+# 1050 "Vuna/Compiler/Core/Eval.vuna"
 and v_substSolvedAlt = (fun (mc0 : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_CaseAlt) -> (match mc1 with
-  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__444; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__445; Core_dTerm.f_CaseAlt_caseAltBody = dtb__446 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__444; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__445; Core_dTerm.f_CaseAlt_caseAltBody = ((v_substSolvedMetas mc0) dtb__446) }
+  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__448; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__449; Core_dTerm.f_CaseAlt_caseAltBody = dtb__450 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__448; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__449; Core_dTerm.f_CaseAlt_caseAltBody = ((v_substSolvedMetas mc0) dtb__450) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1058 "Vuna/Compiler/Core/Eval.vuna"
+# 1063 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_substSolvedMetasAtGo = (fun (mc0 : int) (mc1 : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
-  | Core_dTerm.C_Term_TIf (dtb__447, dtb__448, dtb__449) -> (Core_dTerm.C_Term_TIf ((((v_substSolvedMetasAtGo mc0) mc1) dtb__447), (((v_substSolvedMetasAtGo mc0) mc1) dtb__448), (((v_substSolvedMetasAtGo mc0) mc1) dtb__449)))
-  | Core_dTerm.C_Term_TCase (dtb__450, dtb__451) -> (Core_dTerm.C_Term_TCase ((((v_substSolvedMetasAtGo mc0) mc1) dtb__450), ((B_dData_dList.v_map ((v_substSolvedAltAt mc0) mc1)) dtb__451)))
-  | Core_dTerm.C_Term_TRecUpd (dtb__452, dtb__453, dtb__454, dtb__455, dtb__456) -> (Core_dTerm.C_Term_TRecUpd ((((v_substSolvedMetasAtGo mc0) mc1) dtb__452), dtb__453, dtb__454, dtb__455, (((v_substSolvedMetasAtGo mc0) mc1) dtb__456)))
-  | Core_dTerm.C_Term_TProj (dtb__457, dtb__458, dtb__459, dtb__460, dtb__461) -> (Core_dTerm.C_Term_TProj ((((v_substSolvedMetasAtGo mc0) mc1) dtb__457), dtb__458, dtb__459, dtb__460, dtb__461))
-  | Core_dTerm.C_Term_TRecord (dtb__462, dtb__463) -> (Core_dTerm.C_Term_TRecord (dtb__462, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__463)))
-  | Core_dTerm.C_Term_TMk (dtb__464, dtb__465) -> (Core_dTerm.C_Term_TMk (dtb__464, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__465)))
-  | Core_dTerm.C_Term_TCon (dtb__466, dtb__467) -> (Core_dTerm.C_Term_TCon (dtb__466, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__467)))
-  | Core_dTerm.C_Term_TApp (dtb__468, dtb__469, dtb__470) -> (Core_dTerm.C_Term_TApp ((((v_substSolvedMetasAtGo mc0) mc1) dtb__468), (((v_substSolvedMetasAtGo mc0) mc1) dtb__469), dtb__470))
-  | Core_dTerm.C_Term_TLam (dtb__471, dtb__472, dtb__473, dtb__474, dtb__475) -> (let slot2 = (let nd_uscrut8 = dtb__473 in (match nd_uscrut8 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__476) -> (match dtb__476 with
-  | { B_dData_dPair.f_Pair_first = dtb__477; B_dData_dPair.f_Pair_second = dtb__478 } -> (match dtb__478 with
-  | { B_dData_dPair.f_Pair_first = dtb__479; B_dData_dPair.f_Pair_second = dtb__480 } -> (let bt2 = (match dtb__479 with
+  | Core_dTerm.C_Term_TIf (dtb__451, dtb__452, dtb__453) -> (Core_dTerm.C_Term_TIf ((((v_substSolvedMetasAtGo mc0) mc1) dtb__451), (((v_substSolvedMetasAtGo mc0) mc1) dtb__452), (((v_substSolvedMetasAtGo mc0) mc1) dtb__453)))
+  | Core_dTerm.C_Term_TCase (dtb__454, dtb__455) -> (Core_dTerm.C_Term_TCase ((((v_substSolvedMetasAtGo mc0) mc1) dtb__454), ((B_dData_dList.v_map ((v_substSolvedAltAt mc0) mc1)) dtb__455)))
+  | Core_dTerm.C_Term_TRecUpd (dtb__456, dtb__457, dtb__458, dtb__459, dtb__460) -> (Core_dTerm.C_Term_TRecUpd ((((v_substSolvedMetasAtGo mc0) mc1) dtb__456), dtb__457, dtb__458, dtb__459, (((v_substSolvedMetasAtGo mc0) mc1) dtb__460)))
+  | Core_dTerm.C_Term_TProj (dtb__461, dtb__462, dtb__463, dtb__464, dtb__465) -> (Core_dTerm.C_Term_TProj ((((v_substSolvedMetasAtGo mc0) mc1) dtb__461), dtb__462, dtb__463, dtb__464, dtb__465))
+  | Core_dTerm.C_Term_TRecord (dtb__466, dtb__467) -> (Core_dTerm.C_Term_TRecord (dtb__466, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__467)))
+  | Core_dTerm.C_Term_TMk (dtb__468, dtb__469) -> (Core_dTerm.C_Term_TMk (dtb__468, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__469)))
+  | Core_dTerm.C_Term_TCon (dtb__470, dtb__471) -> (Core_dTerm.C_Term_TCon (dtb__470, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substSolvedMetasAtGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__471)))
+  | Core_dTerm.C_Term_TApp (dtb__472, dtb__473, dtb__474) -> (Core_dTerm.C_Term_TApp ((((v_substSolvedMetasAtGo mc0) mc1) dtb__472), (((v_substSolvedMetasAtGo mc0) mc1) dtb__473), dtb__474))
+  | Core_dTerm.C_Term_TLam (dtb__475, dtb__476, dtb__477, dtb__478, dtb__479) -> (let slot2 = (let nd_uscrut8 = dtb__477 in (match nd_uscrut8 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__480) -> (match dtb__480 with
+  | { B_dData_dPair.f_Pair_first = dtb__481; B_dData_dPair.f_Pair_second = dtb__482 } -> (match dtb__482 with
+  | { B_dData_dPair.f_Pair_first = dtb__483; B_dData_dPair.f_Pair_second = dtb__484 } -> (let bt2 = (match dtb__483 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__482) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substSolvedMetasAtGo mc0) mc1) dtb__482)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__486) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substSolvedMetasAtGo mc0) mc1) dtb__486)))
   | _ -> failwith "DT: impossible branch"
-) in (let rt2 = (match dtb__480 with
+) in (let rt2 = (match dtb__484 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__481) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substSolvedMetasAtGo mc0) mc1) dtb__481)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__485) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substSolvedMetasAtGo mc0) mc1) dtb__485)))
   | _ -> failwith "DT: impossible branch"
-) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__477; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
+) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__481; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) in (Core_dTerm.C_Term_TLam (dtb__471, dtb__472, slot2, dtb__474, (((v_substSolvedMetasAtGo mc0) mc1) dtb__475))))
-  | Core_dTerm.C_Term_TPi (dtb__483, dtb__484, dtb__485, dtb__486, dtb__487) -> (Core_dTerm.C_Term_TPi (dtb__483, dtb__484, dtb__485, (((v_substSolvedMetasAtGo mc0) mc1) dtb__486), (((v_substSolvedMetasAtGo mc0) mc1) dtb__487)))
-  | Core_dTerm.C_Term_TMeta (dtb__488) -> (match ((Core_dTerm.v_metaLookupList dtb__488) mc1) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__489) -> ((v_quote mc0) dtb__489)
+)) in (Core_dTerm.C_Term_TLam (dtb__475, dtb__476, slot2, dtb__478, (((v_substSolvedMetasAtGo mc0) mc1) dtb__479))))
+  | Core_dTerm.C_Term_TPi (dtb__487, dtb__488, dtb__489, dtb__490, dtb__491) -> (Core_dTerm.C_Term_TPi (dtb__487, dtb__488, dtb__489, (((v_substSolvedMetasAtGo mc0) mc1) dtb__490), (((v_substSolvedMetasAtGo mc0) mc1) dtb__491)))
+  | Core_dTerm.C_Term_TMeta (dtb__492) -> (match ((Core_dTerm.v_metaLookupList dtb__492) mc1) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__493) -> ((v_quote mc0) dtb__493)
   | B_dData_dMaybe.C_Maybe_Nothing -> mc2
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> mc2
 ))
-# 1103 "Vuna/Compiler/Core/Eval.vuna"
+# 1108 "Vuna/Compiler/Core/Eval.vuna"
 and v_substSolvedAltAt = (fun (mc0 : int) (mc1 : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Core_dTerm.t_CaseAlt) -> (match mc2 with
-  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__490; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__491; Core_dTerm.f_CaseAlt_caseAltBody = dtb__492 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__490; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__491; Core_dTerm.f_CaseAlt_caseAltBody = (((v_substSolvedMetasAtGo mc0) mc1) dtb__492) }
+  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__494; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__495; Core_dTerm.f_CaseAlt_caseAltBody = dtb__496 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__494; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__495; Core_dTerm.f_CaseAlt_caseAltBody = (((v_substSolvedMetasAtGo mc0) mc1) dtb__496) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1054 "Vuna/Compiler/Core/Eval.vuna"
+# 1059 "Vuna/Compiler/Core/Eval.vuna"
 let v_substSolvedMetasAt = (fun (mc0 : int) (mc1 : (int, Core_dTerm.t_Value) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Core_dTerm.t_Term) -> (match mc1 with
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> (((v_substSolvedMetasAtGo mc0) mc1) mc2)
 ))
 
-# 1106 "Vuna/Compiler/Core/Eval.vuna"
+# 1111 "Vuna/Compiler/Core/Eval.vuna"
 let v_isNilList = (fun mc0 -> (match mc0 with
   | B_dData_dList.C_List_Nil -> true
   | _ -> false
 ))
 
-# 1112 "Vuna/Compiler/Core/Eval.vuna"
+# 1117 "Vuna/Compiler/Core/Eval.vuna"
 let v_showValueAt = (fun (depth : int) (v : Core_dTerm.t_Value) -> (match v with
-  | Core_dTerm.C_Value_VType (dtb__493) -> (if ((Core_dTerm.v_levelToInt dtb__493) = 0) then "Type" else ("Type " ^ (bi_strFromInt (Core_dTerm.v_levelToInt dtb__493))))
-  | Core_dTerm.C_Value_VNeutral (dtb__494) -> (match dtb__494 with
-  | Core_dTerm.C_Neutral_NGlobal (dtb__495, dtb__496) -> (if (v_isNilList dtb__496) then dtb__495 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
-  | Core_dTerm.C_Neutral_NVar (dtb__497, dtb__498, dtb__499) -> (if (v_isNilList dtb__499) then dtb__497 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
+  | Core_dTerm.C_Value_VType (dtb__497) -> (if ((Core_dTerm.v_levelToInt dtb__497) = 0) then "Type" else ("Type " ^ (bi_strFromInt (Core_dTerm.v_levelToInt dtb__497))))
+  | Core_dTerm.C_Value_VNeutral (dtb__498) -> (match dtb__498 with
+  | Core_dTerm.C_Neutral_NGlobal (dtb__499, dtb__500) -> (if (v_isNilList dtb__500) then dtb__499 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
+  | Core_dTerm.C_Neutral_NVar (dtb__501, dtb__502, dtb__503) -> (if (v_isNilList dtb__503) then dtb__501 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
   | _ -> failwith "DT: impossible branch"
 )
-  | Core_dTerm.C_Value_VMeta (dtb__500, dtb__501) -> (if (v_isNilList dtb__501) then ("?" ^ (bi_strFromInt dtb__500)) else (Core_dTerm.v_showTerm ((v_quote depth) v)))
-  | Core_dTerm.C_Value_VCon (dtb__502, dtb__503) -> (match ((v_natCtorInt dtb__502) dtb__503) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__504) -> (bi_strFromInt dtb__504)
+  | Core_dTerm.C_Value_VMeta (dtb__504, dtb__505) -> (if (v_isNilList dtb__505) then ("?" ^ (bi_strFromInt dtb__504)) else (Core_dTerm.v_showTerm ((v_quote depth) v)))
+  | Core_dTerm.C_Value_VCon (dtb__506, dtb__507) -> (match ((v_natCtorInt dtb__506) dtb__507) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__508) -> (bi_strFromInt dtb__508)
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.v_showTerm ((v_quote depth) v))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> (Core_dTerm.v_showTerm ((v_quote depth) v))
 ))
 
-# 1130 "Vuna/Compiler/Core/Eval.vuna"
+# 1135 "Vuna/Compiler/Core/Eval.vuna"
 let v_showValue = (fun (v : Core_dTerm.t_Value) -> ((v_showValueAt 0) v))
 
-# 1133 "Vuna/Compiler/Core/Eval.vuna"
+# 1141 "Vuna/Compiler/Core/Eval.vuna"
+let v_normalizeFuelBound = 262144
+
+# 1144 "Vuna/Compiler/Core/Eval.vuna"
 let v_normalize = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) -> (((((v_normalizeFuel a3) a1) a2) a3) a4))
 
-# 1136 "Vuna/Compiler/Core/Eval.vuna"
+# 1147 "Vuna/Compiler/Core/Eval.vuna"
 let v_normalizeCase = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) (a5 : Core_dTerm.t_VCaseAlt B_dData_dList.t_List) -> ((((((v_normalizeCaseFuel a3) a1) a2) a3) a4) a5))
 
-# 1139 "Vuna/Compiler/Core/Eval.vuna"
+# 1150 "Vuna/Compiler/Core/Eval.vuna"
 let v_normalizeNeutral = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Neutral) -> (((((v_normalizeNeutralFuel a3) a1) a2) a3) a4))
 
-# 1142 "Vuna/Compiler/Core/Eval.vuna"
+# 1153 "Vuna/Compiler/Core/Eval.vuna"
 let v_normalizeIf = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) (a5 : Core_dTerm.t_Value) (a6 : Core_dTerm.t_Value) -> (((((((v_normalizeIfFuel a3) a1) a2) a3) a4) a5) a6))
 
-# 1163 "Vuna/Compiler/Core/Eval.vuna"
+# 1174 "Vuna/Compiler/Core/Eval.vuna"
 let v_substFuelMax = 1000000
 
-# 1157 "Vuna/Compiler/Core/Eval.vuna"
+# 1168 "Vuna/Compiler/Core/Eval.vuna"
 let v_substFuelFor = (fun (t : Core_dTerm.t_Term) -> (let need = (128 + (4 * (Core_dTerm.v_termSize t))) in (if (need > v_substFuelMax) then v_substFuelMax else need)))
 
-# 1166 "Vuna/Compiler/Core/Eval.vuna"
+# 1177 "Vuna/Compiler/Core/Eval.vuna"
 let rec v_substSolvedMetasAtTblFuel = (fun (fuel : int) (sols : (int, Core_dTerm.t_Value) B_dContainer_dHashMap.t_HashMap) (depth : int) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then t else (match t with
-  | Core_dTerm.C_Term_TMeta (dtb__505) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) dtb__505) sols) with
+  | Core_dTerm.C_Term_TMeta (dtb__509) -> (match ((((B_dContainer_dHashMap.v_lookup B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) dtb__509) sols) with
   | B_dData_dMaybe.C_Maybe_Nothing -> t
-  | B_dData_dMaybe.C_Maybe_Just (dtb__506) -> (let q = ((v_quote depth) dtb__506) in (if (Core_dTerm.v_hasNegativeVar q) then t else ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) q)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__510) -> (let q = ((v_quote depth) dtb__510) in (if (Core_dTerm.v_hasNegativeVar q) then t else ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) q)))
   | _ -> failwith "DT: impossible branch"
 )
-  | Core_dTerm.C_Term_TPi (dtb__507, dtb__508, dtb__509, dtb__510, dtb__511) -> (Core_dTerm.C_Term_TPi (dtb__507, dtb__508, dtb__509, ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__510), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__511)))
-  | Core_dTerm.C_Term_TLam (dtb__512, dtb__513, dtb__514, dtb__515, dtb__516) -> (let slot2 = (let nd_uscrut9 = dtb__514 in (match nd_uscrut9 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__517) -> (match dtb__517 with
-  | { B_dData_dPair.f_Pair_first = dtb__518; B_dData_dPair.f_Pair_second = dtb__519 } -> (match dtb__519 with
-  | { B_dData_dPair.f_Pair_first = dtb__520; B_dData_dPair.f_Pair_second = dtb__521 } -> (let bt2 = (match dtb__520 with
+  | Core_dTerm.C_Term_TPi (dtb__511, dtb__512, dtb__513, dtb__514, dtb__515) -> (Core_dTerm.C_Term_TPi (dtb__511, dtb__512, dtb__513, ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__514), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__515)))
+  | Core_dTerm.C_Term_TLam (dtb__516, dtb__517, dtb__518, dtb__519, dtb__520) -> (let slot2 = (let nd_uscrut9 = dtb__518 in (match nd_uscrut9 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__521) -> (match dtb__521 with
+  | { B_dData_dPair.f_Pair_first = dtb__522; B_dData_dPair.f_Pair_second = dtb__523 } -> (match dtb__523 with
+  | { B_dData_dPair.f_Pair_first = dtb__524; B_dData_dPair.f_Pair_second = dtb__525 } -> (let bt2 = (match dtb__524 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__523) -> (B_dData_dMaybe.C_Maybe_Just (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__523)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__527) -> (B_dData_dMaybe.C_Maybe_Just (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__527)))
   | _ -> failwith "DT: impossible branch"
-) in (let rt2 = (match dtb__521 with
+) in (let rt2 = (match dtb__525 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__522) -> (B_dData_dMaybe.C_Maybe_Just (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__522)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__526) -> (B_dData_dMaybe.C_Maybe_Just (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__526)))
   | _ -> failwith "DT: impossible branch"
-) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__518; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
+) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__522; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
-)) in (Core_dTerm.C_Term_TLam (dtb__512, dtb__513, slot2, dtb__515, ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__516))))
-  | Core_dTerm.C_Term_TApp (dtb__524, dtb__525, dtb__526) -> (Core_dTerm.C_Term_TApp (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__524), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__525), dtb__526))
-  | Core_dTerm.C_Term_TCon (dtb__527, dtb__528) -> (Core_dTerm.C_Term_TCon (dtb__527, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__528)))
-  | Core_dTerm.C_Term_TCase (dtb__529, dtb__530) -> (Core_dTerm.C_Term_TCase (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__529), ((B_dData_dList.v_map (((v_substSolvedAltAtTbl (fuel - 1)) sols) depth)) dtb__530)))
-  | Core_dTerm.C_Term_TIf (dtb__531, dtb__532, dtb__533) -> (Core_dTerm.C_Term_TIf (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__531), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__532), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__533)))
+)) in (Core_dTerm.C_Term_TLam (dtb__516, dtb__517, slot2, dtb__519, ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) (depth + 1)) dtb__520))))
+  | Core_dTerm.C_Term_TApp (dtb__528, dtb__529, dtb__530) -> (Core_dTerm.C_Term_TApp (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__528), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__529), dtb__530))
+  | Core_dTerm.C_Term_TCon (dtb__531, dtb__532) -> (Core_dTerm.C_Term_TCon (dtb__531, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__532)))
+  | Core_dTerm.C_Term_TCase (dtb__533, dtb__534) -> (Core_dTerm.C_Term_TCase (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__533), ((B_dData_dList.v_map (((v_substSolvedAltAtTbl (fuel - 1)) sols) depth)) dtb__534)))
+  | Core_dTerm.C_Term_TIf (dtb__535, dtb__536, dtb__537) -> (Core_dTerm.C_Term_TIf (((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__535), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__536), ((((v_substSolvedMetasAtTblFuel (fuel - 1)) sols) depth) dtb__537)))
   | _ -> t
 )))
-# 1204 "Vuna/Compiler/Core/Eval.vuna"
+# 1215 "Vuna/Compiler/Core/Eval.vuna"
 and v_substSolvedAltAtTbl = (fun (mc0 : int) (mc1 : (int, Core_dTerm.t_Value) B_dContainer_dHashMap.t_HashMap) (mc2 : int) (mc3 : Core_dTerm.t_CaseAlt) -> (match mc3 with
-  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__534; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__535; Core_dTerm.f_CaseAlt_caseAltBody = dtb__536 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__534; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__535; Core_dTerm.f_CaseAlt_caseAltBody = ((((v_substSolvedMetasAtTblFuel mc0) mc1) (mc2 + (B_dData_dList.v_length dtb__535))) dtb__536) }
+  | { Core_dTerm.f_CaseAlt_caseAltName = dtb__538; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__539; Core_dTerm.f_CaseAlt_caseAltBody = dtb__540 } -> { Core_dTerm.f_CaseAlt_caseAltName = dtb__538; Core_dTerm.f_CaseAlt_caseAltBinders = dtb__539; Core_dTerm.f_CaseAlt_caseAltBody = ((((v_substSolvedMetasAtTblFuel mc0) mc1) (mc2 + (B_dData_dList.v_length dtb__539))) dtb__540) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1152 "Vuna/Compiler/Core/Eval.vuna"
+# 1163 "Vuna/Compiler/Core/Eval.vuna"
 let v_substSolvedMetasAtTbl = (fun (sols : (int, Core_dTerm.t_Value) B_dContainer_dHashMap.t_HashMap) (depth : int) (t : Core_dTerm.t_Term) -> ((((v_substSolvedMetasAtTblFuel (v_substFuelFor t)) sols) depth) t))

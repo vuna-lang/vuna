@@ -1117,7 +1117,7 @@ let v_dtEvalExprInInfoCore = (fun (prog : Elab_dTypes.t_DtProgram) (expr : Front
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (((Elab_dMeta.v_unsolvedFrom dtb__500) (Elab_dTypes.v_ecNext ec2)) (Elab_dTypes.v_ecSolTbl ec2)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__509) -> ((Base_dDiag.v_onErrDiag (fun (d : Base_dDiag.t_Diagnostic) -> (((v_withMetaCreated ec2) dtb__509) d))) (((Base_dDiagnostics_dTc.v_tcErr1 (Frontend_dRast.v_exprSpan expr)) (Base_dDiagnostics_dTc.C_TcErr_UnsolvedMetavarInfer ((bi_strFromInt dtb__509)))) (bi_strFromInt dtb__509)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((((Core_dEval.v_normalize (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) bodies)) (Elab_dTypes.v_ecSolsP ec2)) Core_dTerm.v_defaultFuel) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__503)) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((((Core_dEval.v_normalize (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) bodies)) (Elab_dTypes.v_ecSolsP ec2)) Core_dEval.v_normalizeFuelBound) ((Core_dEval.v_eval B_dData_dList.C_List_Nil) dtb__503)) with
   | Core_dTerm.C_Value_VInt (dtb__510) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (bi_strFromInt dtb__510); B_dData_dPair.f_Pair_second = tyText }))
   | dtb__511 -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_showValueRepl dtb__493) ec2) dtb__511); B_dData_dPair.f_Pair_second = tyText }))
 )
