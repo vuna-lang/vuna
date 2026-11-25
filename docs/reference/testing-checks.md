@@ -158,13 +158,9 @@ nix run .#backend-check -- --compiler native --scope all --jobs 8
 nix run .#backend-check -- --compiler native --scope selfhost
 ```
 
-读数（16 核）：parity 82×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
-8 路并行。CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](native-runtime.md) §4）。
-
-**当前状态**：native 自举编译器能构建、`version` / 帮助可用；成员包 spawn 的 argv 边界
-（105 的 9u5）、GC 根集（逐帧保守扫）与入口自带栈（105 的 9u7）已修，空 store 整仓
-`check .` 在默认 `ulimit -s 8192` 下通过，不再需要抬高进程栈。`parity` / `corpus` 本轮
-未复测。
+CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](native-runtime.md) §4）。
+三个 scope 的当前读数、逐包耗时、单进程整仓检查的成本形状与已知边界见
+[native-selfhost.md](native-selfhost.md)；本页只保留门禁语义与运行方式。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是

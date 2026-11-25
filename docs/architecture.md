@@ -178,7 +178,8 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
 `strShow` / 字符串相等 / String 入口）与堆段 + 尺寸类复用 + 两代标记-清扫 GC；支持面、
 ABI 与值表示见 [native.md](reference/native.md)，运行时符号、GC、验证与边界见
-[native-runtime.md](reference/native-runtime.md)。
+[native-runtime.md](reference/native-runtime.md)，native 自举的读数与成本形状见
+[native-selfhost.md](reference/native-selfhost.md)。
 
 **wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
 main.wat`，再由 CLI 的 `build` 分支跑 `build.sh`：`wasm-tools parse` 汇编成 `main.wasm`，

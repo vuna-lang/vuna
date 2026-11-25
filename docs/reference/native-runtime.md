@@ -293,9 +293,9 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   `gettid`。见 [debt.md](debt.md) D135。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
-  保守扫根，入口自带栈（105 的 9u7）。空 store 下整仓 `check .` 在默认 `ulimit -s 8192`
-  下通过，不再需要抬高进程栈；40 万层非尾递归由 9u7 锁定。
-  整仓 selfhost 的现状见 [testing-checks.md](testing-checks.md)「后端自举 conformance」：尾调用（[native.md](native.md) §3）只覆盖
+  保守扫根，入口自带栈（105 的 9u7）：深递归不再依赖 `ulimit -s`，40 万层非尾递归由 9u7 锁定。
+  整仓 `check .` 的成本与 selfhost / parity / corpus 读数见 [native-selfhost.md](native-selfhost.md)：
+  尾调用（[native.md](native.md) §3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃自带栈；效应侧另有延迟 answer 的
   handler 缺口（[debt.md](debt.md) D101）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见

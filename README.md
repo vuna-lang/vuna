@@ -196,6 +196,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/wasm.md](docs/reference/wasm.md) | wasm 后端（WAT）：WasmGC 表示、WAT 布局、IR 支持面、运行时符号覆盖、`--target wasm` 边界 |
 | [docs/reference/native.md](docs/reference/native.md) | native 后端（x86-64 汇编）：产物与工具链、值表示（含字符串对象与 bump 堆）、ABI 与栈帧、IR 支持面 |
 | [docs/reference/native-runtime.md](docs/reference/native-runtime.md) | native 运行时：符号表与宿主原语、资源限制（栈/内存/核数/超时）、两代 GC、模块布局与确定性、验证、已知边界、插件形态 |
+| [docs/reference/native-selfhost.md](docs/reference/native-selfhost.md) | native 自举：`vuna-native` 的产物与平台前提、三个 conformance scope 的当前读数与逐包耗时、单进程整仓检查的成本形状、门禁地位与已知边界 |
 | [docs/reference/cache.md](docs/reference/cache.md) | 输入寻址对象库：对象族、命名（contentHash/ifaceHash/implHash）、命中判据、roots 与 store gc、观测标签、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/performance.md](docs/reference/performance.md) | 性能工程：怎么量（`log!` / `VUNA_OBS` 探针设施与纪律）、当前读数（冷 / 热 / 产物规模）、增长率与阶段构成 |

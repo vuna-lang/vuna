@@ -174,7 +174,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
   [README 文档导航](README.md#文档导航)：frontend-syntax、language、type-system、qtt、records-traits、
   effects、stdlib、packages、package-store、primitives、operators
 - 编译器实现：compiler、core、ir、diagnostics、wasm、native（运行时与边界见
-  native-runtime）、cache（同在 `docs/reference/`）
+  native-runtime，自举读数见 native-selfhost）、cache（同在 `docs/reference/`）
 - 工具链 / 测试 / 自举：tooling、testing（门禁与基准见 testing-checks）、
   test-architecture、bootstrap（同在 `docs/reference/`）
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数；

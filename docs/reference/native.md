@@ -39,6 +39,8 @@
   同构。
 - ELF 字节依赖链接工具版本，只保证**行为**；`.s` 文件集保证字节确定。
 - 不接对象库：每次重新生成 `.s` 文件集，只有 `cc` 层按内容哈希增量。
+- 把编译器自身编到 native 的产物（`vuna-native`）、自举 conformance 的读数与成本形状见
+  [native-selfhost.md](native-selfhost.md)。
 
 ## 2. 平台与值表示
 
