@@ -1,0 +1,10 @@
+-- 纯入口只收 `Eff []`：带宿主行的动作不能当纯值执行。
+import Base.Effect.Core as Eff
+import Base.Effect.Core
+import Base.Effect.Host
+
+touchesHost : Eff [HostOp] Int
+touchesHost = pure 0
+
+bad : Int
+bad = runPure touchesHost

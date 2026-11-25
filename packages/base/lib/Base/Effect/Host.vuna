@@ -1,0 +1,32 @@
+-- | 宿主行标记：唯一表示「这次求值可能观察或改变外部世界」的行条目。
+--
+-- 它是**标记类型**，没有操作、没有实例名、没有 handler：行条目只需要类型身份。
+-- 宿主原语（`@vuna@prim_eff_*` / `@vuna@host@*`）的类型固定为 `Eff [HostOp] a`；
+-- 真 handler 在库机器上的 op 解释也返回 `Eff [HostOp] a`，由 `runXHost` 把这个行接到
+-- 结果行尾（`rowAppend r [HostOp]`）；带 typed-error 的收口族（Fs / Process / Net）用
+-- `hostSync` 把原语放回自己的错误行。`rowRem` 不对宿主标记归约，所以源码层没有第二条
+-- 移除路径；`main` 的族 handler 折叠后由入口的 `runMain` 关闭。
+--
+-- 判据：`Eff [] a` 表示求值不观察也不改变外部世界（发散与不变式破坏不计）；确定性、
+-- 不可逃逸的内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）不占用这个行。
+module Base.Effect.Host where
+
+import Base.Effect.Core
+import Base.Trait.Monad
+
+-- | 宿主能力标记：出现在行里表示「可能碰外部世界」。按行标签的统一形状声明为
+-- `Type -> Type`（结果类型索引）；没有操作、没有构造子，行条目只需要类型身份。
+export data HostOp : Type -> Type where
+
+-- | 关闭宿主行：给宿主 handler 的同步 op 解释（后端把 `HostDirect` 叶子改写成直连调用时，
+-- opH 需要裸值答案）与同一套原语在库机器上的实现使用。只接受 `Eff [HostOp] a`，
+-- 所以纯代码拿不到入口；`@vuna@` 宿主原语本身在隐藏层，用户面仍走标签 + handler。
+export runHost : {a : Type} -> Eff [HostOp] a -> a
+runHost e = runEff e
+
+-- | 同步执行一个宿主原语并把结果放回任意行。**必须留在动作里求值**：直接写
+-- `raise (pure (runHost e))` 会在构造时就跑原语，零参定义（`fsHostStatus` 这样的
+-- 取值封装）会被顶层 `let` 缓存成常量。`dropEffHead` 是恒等包装（行只在类型层），
+-- 所以它把求值留在动作执行期。
+export hostSync : {r : Row} -> {a : Type} -> Eff [HostOp] a -> Eff r a
+hostSync e = raise (dropEffHead e)

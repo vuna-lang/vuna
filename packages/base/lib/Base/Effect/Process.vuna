@@ -4,6 +4,7 @@
 module Base.Effect.Process where
 
 import Base.Effect.Core
+import Base.Effect.Host
 import Base.Trait.Eq
 import Base.Trait.Monad
 import Base.Data.List
@@ -81,8 +82,8 @@ processErrorText (ProcessHostIo p) = "process: ${p}: host I/O error"
 export handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ProcessOp) r} -> (a -> b) -> ((i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ProcessOp) r) b
 handleProcess n ret opH comp = handleCore (Named n ProcessOp) "process" n ret opH comp
 
--- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。
-processOpHIOWith : {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
+-- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。answer 行是宿主行。
+processOpHIOWith : {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [HostOp] a) -> Eff [HostOp] a
 processOpHIOWith i op k =
   case op of
     Args =>
@@ -103,8 +104,8 @@ processOpHIOWith i op k =
         c <- @vuna@prim_eff_wait h
         k c
 
--- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是已处理干净的 `Eff []` 动作。
-export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [] a)
+-- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是宿主行动作。
+export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [HostOp] a)
 handleProcessHostWith n comp =
   handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) processOpHIOWith comp
 
@@ -113,7 +114,7 @@ handleProcessHostWith n comp =
 -- ---------------------------------------------------------------
 -- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里，0 = 成功。
 processHostStatus : {r : Row} -> Eff r Int
-processHostStatus = raise @vuna@prim_eff_hostStatus
+processHostStatus = hostSync @vuna@prim_eff_hostStatus
 
 -- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
 processOpHIOWithHost : {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ProcessErrorOp@"process-error"] a) -> Eff [ProcessErrorOp@"process-error"] a
@@ -121,21 +122,21 @@ processOpHIOWithHost i op k =
   case op of
     Args =>
       do
-        xs <- raise @vuna@prim_eff_getArgs_process_host
+        xs <- hostSync @vuna@prim_eff_getArgs_process_host
         k xs
-    Exit c => k (runPure (@vuna@prim_eff_exit_process_host c))
+    Exit c => k (runHost (@vuna@prim_eff_exit_process_host c))
     RunIn dir args =>
       do
-        c <- raise (@vuna@host@tryRunIn dir args)
+        c <- hostSync (@vuna@host@tryRunIn dir args)
         ok <- processHostStatus
         if ok /= 0 then processFail (processErrorOfCode "runIn ${dir}" ok) else k c
     Spawn args =>
       do
-        h <- raise (@vuna@prim_eff_spawn args)
+        h <- hostSync (@vuna@prim_eff_spawn args)
         k h
     Wait h =>
       do
-        c <- raise (@vuna@prim_eff_wait h)
+        c <- hostSync (@vuna@prim_eff_wait h)
         k c
 
 -- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
@@ -171,6 +172,6 @@ runProcessErrorHost comp =
       Ok a => pure a
       Err msg =>
         do
-          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-          _ <- raise (@vuna@prim_eff_exit 1)
+          _ <- hostSync (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- hostSync (@vuna@prim_eff_exit 1)
           prim_fail "unreachable: process error handler"

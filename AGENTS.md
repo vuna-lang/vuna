@@ -49,12 +49,16 @@
 4. **工具链不进 TCB**：整个 `packages/cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
    obs/package manager 等都在 `packages/cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff r a`（行里的内建宿主标签由
-   entry 预装 handler；自定义效应必须在入口前 handle 成 `Nil`，未处理效应是类型错误），
-   执行入口是 `Base.Effect.Core.runPure : Eff [] a -> a`。
+   entry 预装 handler；自定义效应必须在入口前 handle 成 `Nil`，未处理效应是类型错误）。
+   执行入口两个：`Base.Effect.Core.runPure : Eff [] a -> a`（纯动作）与不导出的 `runMain`
+   （entry 折完 handler、行里带 `HostOp` 的动作）。
+   **`Eff []` 就是纯**（不观察也不改变外部世界；发散与不变式破坏不计；`MutRef`/`MutArray`/
+   `MutBuffer`/调度器原语的确定性内部状态不算）。
    宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出，只由 base 的 handler 与
-   编译器/工具链内部使用）；用户面只有 `Base.Effect.Core.*` 标签 + handler 这一条路径
-   （`consolePrint` / `fsReadFile` / `envGetEnv` / `exitWith` …）。Int/Nat 归一化只在
-   handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
+   编译器/工具链内部使用），类型固定为 `Eff [HostOp] a`；关闭它的只有 `Base.Effect.Host` 的
+   `runHost` / `hostSync`，`rowRem` 不对 `HostOp` 归约。用户面只有 `Base.Effect.Core.*`
+   标签 + handler 这一条路径（`consolePrint` / `fsReadFile` / `envGetEnv` / `exitWith` …）。
+   Int/Nat 归一化只在 handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    可变单元的隐藏原语（`@vuna@prim_mref*` 等）实现全是 `Eff []`。
    **无 manifest 门控**：没有能力/特权/信任机制；`prim_*`（纯原语）任何包（含 ad-hoc 文件）都可直调。
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；

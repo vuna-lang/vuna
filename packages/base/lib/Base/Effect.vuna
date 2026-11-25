@@ -6,6 +6,7 @@
 module Base.Effect where
 
 export module Base.Effect.Core as Core
+export module Base.Effect.Host as Host
 export module Base.Effect.Types as Types
 export module Base.Effect.State as State
 export module Base.Effect.Reader as Reader

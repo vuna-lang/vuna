@@ -53,6 +53,20 @@ preinstallResolves tag =
 bit : Bool -> Int
 bit b = if b then 1 else 0
 
+-- | 宿主原语的签名尾部必须是 `IEffHost`（`Eff [HostOp] …`）：宿主交互不落在 `Eff []` 里。
+hostEffOnly : String -> Bool
+hostEffOnly name =
+  case I.findIntrinsic name of
+    Just i =>
+      case I.intrinsicSignature i of
+        I.IEffHost _ => True
+        I.IFun _ cod =>
+          case cod of
+            I.IEffHost _ => True
+            _ => False
+        _ => False
+    Nothing => False
+
 main : Int
 main =
   bit (directKeyIs "Base.Effect.Console.runConsoleHost" "console")
@@ -86,3 +100,7 @@ main =
     + bit (not (I.isSendCoreName "Base.Effect.Core.send"))
     + bit (I.isBuiltinEffectTag "Base.Effect.Console.ConsoleOp")
     + bit (not (I.isBuiltinEffectTag "Base.Data.List.List"))
+    + bit (hostEffOnly "@vuna@prim_eff_print")
+    + bit (hostEffOnly "@vuna@host@tryReadFile")
+    + bit (hostEffOnly "@vuna@prim_eff_getenv")
+    + bit (not (hostEffOnly "@vuna@prim_mrefRead"))

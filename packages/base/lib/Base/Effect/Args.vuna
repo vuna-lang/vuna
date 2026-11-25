@@ -2,6 +2,7 @@
 module Base.Effect.Args where
 
 import Base.Effect.Core
+import Base.Effect.Host
 import Base.Trait.Monad
 import Base.Data.List
 
@@ -18,31 +19,22 @@ argsGetArgs = sendCore (Named n ArgsOp) "args" n GetArgs
 export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ArgsOp) r} -> (a -> b) -> ((i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ArgsOp) r) b
 handleArgs n ret opH comp = handleCore (Named n ArgsOp) "args" n ret opH comp
 
--- | 真实 handler 的操作解释：取 `@vuna@prim_eff_getArgs` 后继续。
-argsOpHIO : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-argsOpHIO i op k =
-  case op of
-    GetArgs =>
-      do
-        xs <- @vuna@prim_eff_getArgs
-        k xs
-
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
--- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是 `[ArgsOp]`）。
-argsOpHIOHost : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
+-- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是宿主行 `[HostOp]`）。
+argsOpHIOHost : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [HostOp] a) -> Eff [HostOp] a
 argsOpHIOHost i op k =
   case op of
     GetArgs =>
       do
-        xs <- raise @vuna@host@getArgs
+        xs <- @vuna@host@getArgs
         k xs
 
--- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [ArgsOp]`（不导出）。
-handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ArgsOp :: r) a -> Eff r (Eff [ArgsOp] a)
+-- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [HostOp]`（不导出）。
+handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ArgsOp :: r) a -> Eff r (Eff [HostOp] a)
 handleArgsHostHost n comp = handleCoreAt (Named n ArgsOp) "args" n (\a => pure a) argsOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ArgsOp` 的 send 翻译成宿主 intrinsic。
-runArgsHost : {r : Row} -> {a : Type} -> Eff (Named "default" ArgsOp :: r) a -> Eff (rowAppend r [ArgsOp]) a
+runArgsHost : {r : Row} -> {a : Type} -> Eff (Named "default" ArgsOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runArgsHost comp = joinEff (handleArgsHostHost "default" comp)

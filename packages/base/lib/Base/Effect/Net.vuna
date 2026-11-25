@@ -10,6 +10,7 @@
 module Base.Effect.Net where
 
 import Base.Effect.Core
+import Base.Effect.Host
 import Base.Trait.Eq
 import Base.Data.Maybe
 import Base.Trait.Monad
@@ -162,7 +163,7 @@ handleNet n ret opH comp = handleCore (Named n NetOp) "net" n ret opH comp
 
 -- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里。
 netHostStatus : {r : Row} -> Eff r Int
-netHostStatus = raise @vuna@prim_eff_hostStatus
+netHostStatus = hostSync @vuna@prim_eff_hostStatus
 
 -- | 句柄类失败的上下文文本。
 handleContext : Int -> String
@@ -174,44 +175,44 @@ netOpHIOHost i op k =
   case op of
     Listen addr =>
       do
-        h <- raise (@vuna@host@tryNetListen addr)
+        h <- hostSync (@vuna@host@tryNetListen addr)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "listen ${addr}" ok) else k h
     Port h =>
       do
-        p <- raise (@vuna@host@tryNetPort h)
+        p <- hostSync (@vuna@host@tryNetPort h)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "port ${handleContext h}" ok) else k p
     Accept h =>
       do
-        c <- raise (@vuna@host@tryNetAccept h)
+        c <- hostSync (@vuna@host@tryNetAccept h)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "accept ${handleContext h}" ok) else k c
     Recv h n =>
       do
-        s <- raise (@vuna@host@tryNetRecv h n)
+        s <- hostSync (@vuna@host@tryNetRecv h n)
         ok <- netHostStatus
         if ok == 0 then
           k (Just s)
         else if ok == 1 then k Nothing else netFail (netErrorOfCode "recv ${handleContext h}" ok)
     Send h s =>
       do
-        n <- raise (@vuna@host@tryNetSend h s)
+        n <- hostSync (@vuna@host@tryNetSend h s)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "send ${handleContext h}" ok) else k n
     Close h =>
       do
-        _ <- raise (@vuna@host@tryNetClose h)
+        _ <- hostSync (@vuna@host@tryNetClose h)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "close ${handleContext h}" ok) else k 0
     Connect addr =>
       do
-        c <- raise (@vuna@host@tryNetConnect addr)
+        c <- hostSync (@vuna@host@tryNetConnect addr)
         ok <- netHostStatus
         if ok /= 0 then netFail (netErrorOfCode "connect ${addr}" ok) else k c
     AcceptWithin h micros =>
       do
-        c <- raise (@vuna@host@tryNetAcceptWithin h micros)
+        c <- hostSync (@vuna@host@tryNetAcceptWithin h micros)
         ok <- netHostStatus
         if ok == 0 then
           k (StepOk c)
@@ -221,7 +222,7 @@ netOpHIOHost i op k =
           netFail (netErrorOfCode "acceptWithin ${handleContext h}" ok)
     RecvWithin h bytes micros =>
       do
-        s <- raise (@vuna@host@tryNetRecvWithin h bytes micros)
+        s <- hostSync (@vuna@host@tryNetRecvWithin h bytes micros)
         ok <- netHostStatus
         if ok == 0 then
           k (StepOk s)
@@ -233,7 +234,7 @@ netOpHIOHost i op k =
           netFail (netErrorOfCode "recvWithin ${handleContext h}" ok)
     SendWithin h s micros =>
       do
-        n <- raise (@vuna@host@tryNetSendWithin h s micros)
+        n <- hostSync (@vuna@host@tryNetSendWithin h s micros)
         ok <- netHostStatus
         if ok == 0 then
           k (StepOk n)
@@ -273,6 +274,6 @@ runNetErrorHost comp =
       Ok a => pure a
       Err msg =>
         do
-          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-          _ <- raise (@vuna@prim_eff_exit 1)
+          _ <- hostSync (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- hostSync (@vuna@prim_eff_exit 1)
           prim_fail "unreachable: net error handler"

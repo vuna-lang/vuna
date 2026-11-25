@@ -20,7 +20,10 @@
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
   子计算里的其它效应；`catchExn` 在 `tryWith` 上组合。
 - `runEff` 是信任边界内的作用域运行入口（任意行；仅供库内 handler 实现使用）；普通用户用
-  `runPure`——只接受行已处理干净的动作（`Eff []`，入口处未处理效应是类型错误）。
+  `runPure`——只接受纯动作（`Eff []`，入口处未处理效应是类型错误）。
+- 宿主交互只能出现在 `HostOp` 行里（`Base.Effect.Host`）：宿主原语类型固定为
+  `Eff [HostOp] a`，关闭器是 `runHost`（裸值，给直连 opH）与 `hostSync`（放回任意行，
+  给带 typed-error 的收口族）。`rowRem` 不对 `HostOp` 归约，源码层没有第二条删除路径。
 - 夹具 `dt_base/23_eff_scoped`（107：子计算里的 Reader 由外层 handler 处理）；
   负例 `dt_err/74_try_row_mismatch`（`tryWith` 要求行首 `Exn n`）。
 
@@ -131,11 +134,13 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   程序可以同时装 mock 与真实 handler（或两个 mock）；send/handler 用同一对 `(key, name)`
   字符串。实例名由使用方自选，同一效应族同时安装的实例名必须互不相同。fs 的 API 是带
   实例名的形态（`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40`。
-- **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (e :: r) a`，
-  返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
-- **原生 sleep**：编译器原语 `@vuna@prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
+- **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (e :: r) a`，返回
+  `Eff r (Eff [HostOp] a)`（错误收口族返回 `Eff r (Eff [Err] a)`，原语经 `hostSync` 同步执行），
+  由 `joinEff` 执行；非错误族的结果行尾是宿主行 `[HostOp]`。
+- **原生 sleep**：编译器原语 `@vuna@host@sleep : Int -> Eff [HostOp] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，核心求值不归约）。
-  `Base.Effect.Clock` 的 `SleepMicros` 直接走 `@vuna@prim_eff_sleep`。
+  `Base.Effect.Clock` 的 `SleepMicros` 直接走它；探针用的 `effTimeUs` /
+  `@vuna@prim_eff_sleep` 同样是宿主行类型。
 - **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = @vuna@prim_eff_exit`，调用即
   结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
@@ -146,7 +151,8 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   在同一程序里并存。
 - **工具链**：`packages/cli/lib/Vuna/Cli.vuna` 的 `vuna version` 输出走
   console 标签——`consoleLine` 用 `consolePrint msg`（默认实例名，`Member n ConsoleOp r =>`）
-  走宿主行；只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块同样走
+  走宿主行；宿主行只由 entry 关闭（`main` 有族标签时折完 handler 走 `runMain`，纯 main 走
+  `runPure`）。工具链其余模块同样走
   `Base.Effect.*` 标签；宿主原语是隐藏名（源码写不出），没有可直调的入口。`prim_*`（纯原语）
   仍可直接调用。
 - **对拍夹具**（关闭 interp 阶段，只 check + compile + run）：

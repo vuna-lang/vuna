@@ -1,0 +1,10 @@
+-- 宿主行不能在源码层删掉：`rowRem` 不对 `HostOp` 归约，删除后的行不可能是 `Nil`。
+import Base.Effect.Core as Eff
+import Base.Effect.Core
+import Base.Effect.Host
+
+strip : Eff (rowRem (Named "default" HostOp) [HostOp]) Int -> Eff [] Int
+strip e = e
+
+bad : Eff [] Int
+bad = strip (pure 0 : Eff [HostOp] Int)

@@ -7,6 +7,7 @@
 module Base.Effect.Fs where
 
 import Base.Effect.Core
+import Base.Effect.Host
 import Base.Effect.Cursor
 import Base.Trait.Eq
 import Base.Data.Maybe
@@ -217,7 +218,7 @@ handleFs n ret opH comp = handleCore (Named n FsOp) "fs" n ret opH comp
 -- ---------------------------------------------------------------
 -- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里，0 = 成功。
 fsHostStatus : {r : Row} -> Eff r Int
-fsHostStatus = raise @vuna@prim_eff_hostStatus
+fsHostStatus = hostSync @vuna@prim_eff_hostStatus
 
 -- | 带行解释内部用的 typed 失败：标签已是行首的固定实例，直接 send，不经过 Member 求解。
 fsFailAt : {a : Type} -> FsError -> Eff [FsErrorOp@"fs-error"] a
@@ -229,17 +230,17 @@ fsOpHIOHost i op k =
   case op of
     ReadFile p =>
       do
-        s <- raise (@vuna@host@tryReadFile p)
+        s <- hostSync (@vuna@host@tryReadFile p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "readFile ${p}" ok) else k s
     ReadFileRange p offset length =>
       do
-        s <- raise (@vuna@host@tryReadFileRange p offset length)
+        s <- hostSync (@vuna@host@tryReadFileRange p offset length)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "readFileRange ${p}" ok) else k s
     WriteFile p s =>
       do
-        _ <- raise (@vuna@host@tryWriteFile p s)
+        _ <- hostSync (@vuna@host@tryWriteFile p s)
         ok <- fsHostStatus
         if ok /= 0 then
           fsFailAt (fsErrorOfCode "writeFile ${p}" ok)
@@ -247,63 +248,63 @@ fsOpHIOHost i op k =
           k (natFromInt (strLength s))
     WriteFileAtomic p s =>
       do
-        _ <- raise (@vuna@host@tryWriteFileAtomic p s)
+        _ <- hostSync (@vuna@host@tryWriteFileAtomic p s)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "writeFileAtomic ${p}" ok) else k (strLength s)
     ReadDir p =>
       do
-        xs <- raise (@vuna@host@tryReadDir p)
+        xs <- hostSync (@vuna@host@tryReadDir p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "readDir ${p}" ok) else k (sortEntries xs)
     IsDirectory p =>
       do
-        b <- raise (@vuna@host@tryIsDirectory p)
+        b <- hostSync (@vuna@host@tryIsDirectory p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "isDirectory ${p}" ok) else k b
     MakeDir p =>
       do
-        _ <- raise (@vuna@host@tryMakeDir p)
+        _ <- hostSync (@vuna@host@tryMakeDir p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "makeDir ${p}" ok) else k 0
     RemoveFile p =>
       do
-        _ <- raise (@vuna@host@tryRemoveFile p)
+        _ <- hostSync (@vuna@host@tryRemoveFile p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "removeFile ${p}" ok) else k 0
     RemoveTree p =>
       do
-        _ <- raise (@vuna@host@tryRemoveTree p)
+        _ <- hostSync (@vuna@host@tryRemoveTree p)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "removeTree ${p}" ok) else k 0
     Rename src dst =>
       do
-        _ <- raise (@vuna@host@tryRename src dst)
+        _ <- hostSync (@vuna@host@tryRename src dst)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "rename ${src} -> ${dst}" ok) else k 0
     Symlink target link =>
       do
-        _ <- raise (@vuna@host@trySymlink target link)
+        _ <- hostSync (@vuna@host@trySymlink target link)
         ok <- fsHostStatus
         if ok /= 0 then fsFailAt (fsErrorOfCode "symlink ${target} -> ${link}" ok) else k 0
     MakeDirExclusive p =>
       do
-        _ <- raise (@vuna@host@tryMakeDirExclusive p)
+        _ <- hostSync (@vuna@host@tryMakeDirExclusive p)
         ok <- fsHostStatus
         if ok == 0 then
           k True
         else if ok == 6 then k False else fsFailAt (fsErrorOfCode "makeDirExclusive ${p}" ok)
     FileExists p =>
       do
-        b <- raise (@vuna@host@fileExists p)
+        b <- hostSync (@vuna@host@fileExists p)
         k b
     FileMtime p =>
       do
-        n <- raise (@vuna@host@fileMtime p)
+        n <- hostSync (@vuna@host@fileMtime p)
         ok <- fsHostStatus
         if ok /= 0 then k Nothing else k (Just n)
     FileSize p =>
       do
-        n <- fmap natFromInt (raise (@vuna@host@fileSize p))
+        n <- fmap natFromInt (hostSync (@vuna@host@fileSize p))
         ok <- fsHostStatus
         if ok /= 0 then k Nothing else k (Just n)
 
@@ -338,6 +339,6 @@ runFsErrorHost comp =
       Ok a => pure a
       Err msg =>
         do
-          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-          _ <- raise (@vuna@prim_eff_exit 1)
+          _ <- hostSync (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- hostSync (@vuna@prim_eff_exit 1)
           prim_fail "unreachable: fs error handler"

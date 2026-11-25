@@ -2,6 +2,7 @@
 -- （"observed" 的 `handleProcessHostWith` 现成实例）都能观察退出码并继续执行；真实路径
 -- （`handleProcessHost` 的 `@vuna@prim_eff_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Effect.Core as Eff
+import Base.Effect.Host
 import Base.Effect.Process as EffProcess
 import Base.Effect.Console as EffConsole
 import Base.Data.List as List
@@ -31,6 +32,6 @@ main =
       consolePrint
         ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
     observed <-
-      raiseTo [ConsoleOp, ProcessOp] (joinEff (handleProcessHostWith "observed" (prog "observed")))
+      pure (runHost (joinEff (handleProcessHostWith "observed" (prog "observed"))))
     _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
     pure 0

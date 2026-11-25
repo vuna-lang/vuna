@@ -52,6 +52,7 @@ modules = [
   "Base.Effect.Exit",
   "Base.Effect.Exn",
   "Base.Effect.Fs",
+  "Base.Effect.Host",
   "Base.Effect.MutArray",
   "Base.Effect.MutBuffer",
   "Base.Effect.MutRef",

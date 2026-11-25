@@ -4,6 +4,7 @@
 module Base.Effect.Clock where
 
 import Base.Effect.Core
+import Base.Effect.Host
 import Base.Trait.Monad
 
 -- | clock 操作：`Now`（微秒时间戳）与 `SleepMicros`（睡眠微秒数）。
@@ -25,40 +26,28 @@ clockSleepMicros us = sendCore (Named n ClockOp) "clock" n (SleepMicros us)
 export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ClockOp) r} -> (a -> b) -> ((i : Type) -> (o : ClockOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ClockOp) r) b
 handleClock n ret opH comp = handleCore (Named n ClockOp) "clock" n ret opH comp
 
--- | 真实 handler 的操作解释：`Now` 走 `effTimeUs`，`SleepMicros` 走 `@vuna@prim_eff_sleep`（阻塞睡眠）。
-clockOpHIO : {a : Type} -> (i : Type) -> (o : ClockOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-clockOpHIO i op k =
-  case op of
-    Now =>
-      do
-        t <- effTimeUs
-        k t
-    SleepMicros us =>
-      do
-        _ <- @vuna@prim_eff_sleep us
-        k 0
-
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
--- | 带 `ClockOp` 行的 op 解释：时间走 `effTimeUs_host`，睡眠走 `@vuna@host@sleep` 后写穿继续（answer 行是 `[ClockOp]`）。
-clockOpHIOHost : {a : Type} -> (i : Type) -> (o : ClockOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ClockOp] a) -> Eff [ClockOp] a
+-- | 带 `ClockOp` 行的 op 解释：时间走 `effTimeUs_host`，睡眠走 `@vuna@host@sleep` 后写穿继续
+-- （answer 行是宿主行 `[HostOp]`）。
+clockOpHIOHost : {a : Type} -> (i : Type) -> (o : ClockOp i) -> (Base.Effect.Core.resIdx i o -> Eff [HostOp] a) -> Eff [HostOp] a
 clockOpHIOHost i op k =
   case op of
     Now =>
       do
-        t <- raise effTimeUs_host
+        t <- effTimeUs_host
         k t
     SleepMicros us =>
       do
-        _ <- raise (@vuna@host@sleep us)
+        _ <- @vuna@host@sleep us
         k 0
 
 -- | 带行的宿主 handler：删掉 `ClockOp`，answer 是 `Eff [ClockOp]`（不导出）。
-handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ClockOp :: r) a -> Eff r (Eff [ClockOp] a)
+handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ClockOp :: r) a -> Eff r (Eff [HostOp] a)
 handleClockHostHost n comp =
   handleCoreAt (Named n ClockOp) "clock" n (\a => pure a) clockOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ClockOp` 的 send 翻译成宿主 intrinsic。
-runClockHost : {r : Row} -> {a : Type} -> Eff (Named "default" ClockOp :: r) a -> Eff (rowAppend r [ClockOp]) a
+runClockHost : {r : Row} -> {a : Type} -> Eff (Named "default" ClockOp :: r) a -> Eff (rowAppend r [HostOp]) a
 runClockHost comp = joinEff (handleClockHostHost "default" comp)

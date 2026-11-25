@@ -32,6 +32,7 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Types as EffTypes
+import Base.Effect.Host
 import Base.Effect.Args as EffArgs
 import Base.Effect.Exit as EffExit
 
@@ -497,7 +498,7 @@ stripDiagFormatGo (arg :: rest) acc found =
 -- 终端探测：OCaml 用 `Unix.isatty Unix.stdout`，native 用 `ioctl(1, TCGETS)`；
 -- wasm 的 WASI preview1 没有 isatty，恒 False（诊断默认 short）。
 stdoutIsTty : {r : Row} -> Eff r Bool
-stdoutIsTty = raise @vuna@host@isTty
+stdoutIsTty = hostSync @vuna@host@isTty
 
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
 export runCompilerCliFor : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> Eff r Int

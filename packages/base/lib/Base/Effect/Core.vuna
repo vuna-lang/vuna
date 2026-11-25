@@ -121,7 +121,8 @@ runThunk e =
   case e of
     MkEff f => f
 
--- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。行只描述用户效应：宿主原语（`@vuna@prim_eff_*`）构造的叶子不在行里，所以语义是「无未处理行效应」而非「无副作用」。
+-- | 运行纯动作（`Eff []`）：求值不观察也不改变外部世界（发散与不变式破坏不计）。
+-- 宿主交互只能经由 `HostOp` 行（`Base.Effect.Host`），所以这里不需要运行时检查。
 export runPure : {a : Type} -> Eff [] a -> a
 runPure e = runThunk e MkEffUnit
 
@@ -150,7 +151,8 @@ export handleSelf : {e : Type} -> {r : Row} -> {a : Type} -> {b : Type} -> Eff (
 handleSelf comp = handleScoped (scope comp)
 
 -- codegen 的 main 钩子引用这个名字；不导出，用户源码拿不到。
--- | 入口执行：执行任意行（含内建宿主效应行 `Eff [ConsoleOp]`）的 `main`，运行时直接走 thunk。
+-- | 入口执行：执行任意行（内建族 handler 折叠后行里带 `HostOp`；`Eff []` 的 main 走 `runPure`），
+-- 运行时直接走 thunk。
 runMain : {r : Row} -> {a : Type} -> Eff r a -> a
 runMain e = runThunk e MkEffUnit
 

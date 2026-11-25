@@ -1,12 +1,20 @@
 # 效应：Eff 统一动作、handler 与宿主层
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Effect.Core`，构造子不导出；`MkEff` 是内部表示），
-入口是 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler），执行入口是
-`Base.Effect.Core.runPure`。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出），
-用户面只有 `Base.Effect.*` 标签 + handler 这一条路径；Int/Nat 归一化只留在 handler 的结果索引
-（`Print`、`WriteFile`/`FileSize` 返回 `Nat`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
-`runX = joinEff (handleXHost …)`。用户面
-执行一个已处理干净的动作用 `runPure`；可变单元的隐藏原语实现也是 `Eff []`。
+入口是 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler），执行入口分两个：
+`Base.Effect.Core.runPure : Eff [] a -> a`（纯动作）与不导出的 `runMain`（entry 折叠完 handler
+之后的动作，行里带 `HostOp`）。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`
+（源码写不出），类型固定为 `Eff [HostOp] a`（`Base.Effect.Host`）；用户面只有
+`Base.Effect.*` 标签 + handler 这一条路径；Int/Nat 归一化只留在 handler 的结果索引
+（`Print`、`WriteFile`/`FileSize` 返回 `Nat`）。宿主 handler 的 op 解释在自己的
+`Eff [HostOp]` 行里跑原语（错误收口族用 `hostSync` 放回带 typed-error 的行），入口组合是
+`runX = joinEff (handleXHost …)`，结果行尾接宿主行。
+
+**`Eff []` 就是纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。确定性、不可逃逸的
+内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）仍在 `Eff []` 里，它们不改变
+可观察结果。唯一能拿到 `Eff [HostOp]` 值的入口是隐藏宿主原语；关闭它的只有
+`Base.Effect.Host.runHost`（裸值，供直连 opH）与 `hostSync`（放回任意行），`rowRem` 不对
+`HostOp` 归约，所以源码层没有第二条移除路径。
 
 运行时核心（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
 一阶效应（`Base.Effect.Core` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
@@ -32,9 +40,9 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | --- | --- |
 | 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Effect.Core` 的 data；行是 Type-1 擦除索引） |
 | 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
-| main 入口 | `main : Eff r a`（内建宿主标签由 entry 预装 handler）；钩子 `dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)` |
-| 执行 | `runPure : Eff [] a -> a`（行必须 Nil；运行时 `runThunk` 应用 dummy 令牌） |
-| 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
+| main 入口 | `main : Eff r a`（内建宿主标签由 entry 预装 handler）；钩子 `dtp_sched_main (fun () -> <runMain> (handlers… v_main))` |
+| 执行 | `runPure : Eff [] a -> a`（纯动作，行必须 Nil）；不导出的 `runMain` 执行折叠后带 `HostOp` 的动作。两者运行时都是 `runThunk` 应用 dummy 令牌 |
+| 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行（`HostOp` 不归约），运行时按 `(key, name)` 路由 |
 
 - `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
   `TC_UnhandledEffects`；核心求值路径遇到动作入口报
@@ -43,10 +51,13 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   行里留命名实例（`Eff [ConsoleOp@mock] Int`）报 `TC_EntryInstanceNotDefault`，不拖到运行期
   `unhandled effect`。命名实例必须在进 main 之前被 handler 消掉（夹具
   `dt_err/112_entry_instance_not_default`、`dt_base/93_eff_named_row_handled`）。
-- `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
-  有真实宿主操作。宿主副作用没有 manifest 能力/特权门控；用户面应经
+- `Eff []` 表示**纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。宿主交互只能出现在
+  `HostOp` 行里（`Base.Effect.Host`），宿主原语的类型固定为 `Eff [HostOp] a`，`rowRem` 不对
+  `HostOp` 归约；确定性、不可逃逸的内部状态（`MutRef` / `MutArray` / `MutBuffer` / 调度器原语）
+  不占用这个行。宿主副作用没有 manifest 能力/特权门控；用户面应经
   `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
-- **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、隐藏
+- **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、`IEffHost`（宿主原语类型 =
+  `Eff [HostOp] a`）、隐藏
   `Base.Effect.Core.runMain`、`rowAppend` 行拼接与 `joinEff` 泛化、`builtinEffects` 表、entry
   按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args/Net 有带行
   handler（Net 另带 `net-error` 收口），Ref 只允许行、不需要 handler（`beImpl=""`）。
@@ -232,6 +243,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 模块 | 内容 |
 | --- | --- |
 | `Base.Effect.Core` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
+| `Base.Effect.Host` | 宿主行标记 `HostOp : Type -> Type`（空 data，无操作/无 handler）与两个关闭器：`runHost : Eff [HostOp] a -> a`（直连 opH 的裸值答案）、`hostSync : Eff [HostOp] a -> Eff r a`（错误收口族把原语放回带 typed-error 的行；**必须留在动作里求值**，零参封装才不会被顶层 `let` 缓存） |
 | `Base.Effect.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `Base.Effect.MutRef.cellReadOp`/`cellWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
@@ -324,9 +336,12 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
   `TC_UnhandledEffects` 并列出标签，而不是裸 `TC_TypeMismatch`。
 - **宿主层无门控（显式接受的损失）**：没有 `[capabilities]` / `[trust]` / `[privileged]`
   与宿主模块 import 门控——`prim_*`（纯原语）任何包（用户包、ad-hoc 文件）都可以直调；
-  宿主效应原语是隐藏名，源码写不出，唯一路径是 `Base.Effect.*` 标签 + handler（`runX =
-  joinEff (handleXHost …)`）。没有每包原语白名单、`unsafe` 定义级审计，也没有
-  REPL `--privileged`。缺口见 [debt.md](debt.md) D62。
+  宿主效应原语是隐藏名，源码写不出，**类型固定为 `Eff [HostOp] a`**，唯一路径是
+  `Base.Effect.*` 标签 + handler（`runX = joinEff (handleXHost …)`）；关闭宿主行只有
+  `Base.Effect.Host.runHost` / `hostSync`，且 `rowRem` 不对 `HostOp` 归约（负例
+  `dt_err/134_host_row_not_removable`、`dt_err/135_runpure_host`）。没有每包原语白名单、
+  `unsafe` 定义级审计，也没有 REPL `--privileged`。缺口见 [debt.md](debt.md) D62：
+  `@vuna@` 名字在词法层可写，所以保证的前提是不手写内部名。
 - **base 宿主层直接使用点（安全审计参考，不是强制约束）**：13 处——
   `Base.Effect.Core.sendCore`、`Base.Effect.Core.handleCore`、`Base.Effect.Core.bracket`、
   `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、

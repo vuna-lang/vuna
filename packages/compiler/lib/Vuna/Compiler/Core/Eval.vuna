@@ -630,10 +630,20 @@ forceLabelArgs defs sols fuel v =
     VNeutral (NVar name lvl sp) => VNeutral (NVar name lvl (map (\a => force defs sols fuel a) sp))
     other => other
 
+-- | 标签值是不是宿主标记（`HostOp`，含 `Named n HostOp`）。按值形状判断，不做 delta
+-- 展开：行条目来自源码里的类型表达式（`Named n Op` / `HostOp` / 行变量），没有别名层。
+isHostLabel : Value -> Bool
+isHostLabel (VNeutral (NGlobal g [])) = g == effHostOpName
+isHostLabel (VNeutral (NGlobal g (n :: inner :: _))) = g == effNamedName && isHostLabel inner
+isHostLabel _ = False
+
 -- 行删除：`rowRem label r` 按标签值结构相等删除条目。
+-- 宿主标记 `HostOp` 例外：不归约，源码层没有移除路径（只有 entry 的 `runMain` 关闭它）。
 rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
 rowRemReduce defs sols fuel e r =
   if fuel <= 0 then
+    Nothing
+  else if isHostLabel e then
     Nothing
   else
     case force defs sols (fuel - 1) r of
