@@ -1,9 +1,11 @@
 #!/bin/sh
 # vuna-container-growth：**容器增长率**门槛。
 #
-# 每个容器一族合成探针，按 N 与 2N 编译成 OCaml 后端产物，只测**运行**墙钟（编译时间不计）；
+# 每个容器一族合成探针，按 N 与 2N 编译成 OCaml 后端产物，只测**运行 CPU**（编译时间不计）；
 # 相邻档的比值必须落在阈值内。绝对时间跨机器不可比，增长率可比：
 # 线性路径（N 次 O(1)/O(log n) 操作）比值 ≈2，排序 ≈2.1；出现 n² 退化时 ≈4。
+# 用 CPU 而不是墙钟：`nix flake check` 会并发构建其他 check，墙钟会把「等 CPU」算进
+# 探针耗时，导致同一份代码在不同负载下报出假回归；user+sys 只随真实工作量增长。
 #
 # 覆盖的回归形状：
 #   - HashMap 的 insert/remove/size 被改回「按名线性扫桶」或 size 退回 O(n)；
@@ -210,7 +212,25 @@ build_probe() { # file dir
   fi
 }
 
-run_ms() { # dir -> best-of-5 wall ms（先跑一次预热，不计时）
+stamp_times() { # file —— 保存 shell 的子进程累计时间（第 2 行）
+  times >"$1"
+}
+
+child_cpu_ms() { # file -> 子进程 user+sys 毫秒
+  awk 'NR == 2 {
+    ms = 0
+    for (i = 1; i <= NF; i++) {
+      split($i, p, "m")
+      s = p[2]
+      sub(/s$/, "", s)
+      ms += p[1] * 60000 + s * 1000
+    }
+    printf "%d\n", ms
+  }
+  END { if (NR < 2) print 0 }' "$1"
+}
+
+run_ms() { # dir -> best-of-5 CPU ms（先跑一次预热，不计时）
   "$1/prog" >/dev/null 2>&1 || {
     echo "container-growth: probe run failed ($1)" >&2
     exit 1
@@ -218,13 +238,13 @@ run_ms() { # dir -> best-of-5 wall ms（先跑一次预热，不计时）
   best=999999
   k=0
   while [ "$k" -lt 5 ]; do
-    t0=$(date +%s%3N)
+    stamp_times "$1/.times-before"
     if ! "$1/prog" >/dev/null 2>&1; then
       echo "container-growth: probe run failed ($1)" >&2
       exit 1
     fi
-    t1=$(date +%s%3N)
-    ms=$((t1 - t0))
+    stamp_times "$1/.times-after"
+    ms=$(($(child_cpu_ms "$1/.times-after") - $(child_cpu_ms "$1/.times-before")))
     [ "$ms" -lt "$best" ] && best=$ms
     k=$((k + 1))
   done

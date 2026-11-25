@@ -1,7 +1,7 @@
 #!/bin/sh
 # vuna-frontend-growth：前端（词法 / 语法分析 / trivia + 格式化）的**增长率**门槛。
 #
-# 合成「N 个同形定义」的单文件探针，每档用独立进程、独立空 `VUNA_STORE` 跑两次：
+# 合成「N 个同形定义」的单文件探针，每档用独立进程、独立空 `VUNA_STORE` 跑五次：
 #   1. `vuna check` + `VUNA_OBS=1`：从 trace 里取 `vuna.parse.lex` / `vuna.parse.syntax`
 #      的 `totalUs`（`docs/reference/observability.md` §3.3 的插桩点）；
 #   2. `vuna fmt --check`：覆盖第二条词法通道（注释）与渲染，是工具侧真实路径。
@@ -9,6 +9,11 @@
 # 断言：相邻档（N→2N）的比值不超过阈值（默认 2.5，同 compiler-growth 的噪声余量）。
 # 绝对时间跨机器不可比，增长率可比；线性路径比值 ≈2，出现 n²（例如「每个 token 都从
 # 行首扫一遍」这类退化）会明显越界。可用 `VUNA_FRONTEND_MAX_RATIO_MILLI` 覆盖。
+#
+# 计时口径是 **CPU**，不是墙钟：trace 里的 `totalUs` 是墙钟，`nix flake check` 并发构建
+# 其他 check 时会把它拉长（越大越长的探针越容易撞上，产生假回归）。这里用同一进程窗口的
+# `times` 子进程 CPU / 墙钟比例把 span 折算成 CPU 时间，`fmt --check` 也直接取 CPU 时间；
+# CPU 只随真实工作量增长，增长率仍可比。
 #
 # 为什么单独一条：`compiler-growth` 看的是整条 check 的墙钟，前端只占其中几个百分点，
 # n² 的前端会被精化的固定成本掩盖；这里把 lex / syntax / fmt 的读数直接拿出来比。
@@ -45,20 +50,50 @@ span_us() { # summary-json span-name -> µs（缺失输出空串）
   grep -o "{\"name\":\"$2\"[^}]*}" "$1" | sed -n 's/.*"totalUs":\([0-9][0-9]*\).*/\1/p' | head -1
 }
 
-best_us() { # file -> "lex syntax"（两次独立冷跑取最小）
+stamp_times() { # file —— 保存 shell 的子进程累计时间（第 2 行）
+  times >"$1"
+}
+
+child_cpu_ms() { # file -> 子进程 user+sys 毫秒
+  awk 'NR == 2 {
+    ms = 0
+    for (i = 1; i <= NF; i++) {
+      split($i, p, "m")
+      s = p[2]
+      sub(/s$/, "", s)
+      ms += p[1] * 60000 + s * 1000
+    }
+    printf "%d\n", ms
+  }
+  END { if (NR < 2) print 0 }' "$1"
+}
+
+best_us() { # file -> "lex syntax"（五次独立冷跑取最小，span 折算成 CPU µs）
   f=$1
   lex_best=999999999
   syn_best=999999999
   k=0
-  while [ "$k" -lt 2 ]; do
+  while [ "$k" -lt 5 ]; do
     cache=$(mktemp -d "$work/cache.XXXXXX")
     dir="$cache/trace"
+    stamp_times "$cache/times-before"
+    t0=$(date +%s%3N)
     VUNA_STORE="$cache/store" TMPDIR="$cache" VUNA_OBS=1 VUNA_OBS_DIR="$dir" \
       "$VUNA" check "$f" >"$cache/check.out" 2>&1 || {
       echo "frontend-growth: check failed for $f" >&2
       cat "$cache/check.out" >&2
       exit 1
     }
+    t1=$(date +%s%3N)
+    stamp_times "$cache/times-after"
+    wall_ms=$((t1 - t0))
+    cpu_ms=$(($(child_cpu_ms "$cache/times-after") - $(child_cpu_ms "$cache/times-before")))
+    # 用这个进程窗口的 CPU 占比把墙钟 span 折算成 CPU 时间。CPU 不应超过墙钟；
+    # 读数异常（时钟精度 / 子进程统计）时退回墙钟，宁可噪声也不除零。
+    [ "$wall_ms" -le 0 ] && wall_ms=1
+    if [ "$cpu_ms" -le 0 ] || [ "$cpu_ms" -gt "$wall_ms" ]; then
+      cpu_ms=$wall_ms
+    fi
     trace=$(find "$dir" -name '*.jsonl' -type f | head -1)
     [ -n "$trace" ] || {
       echo "frontend-growth: no trace produced for $f" >&2
@@ -75,6 +110,8 @@ best_us() { # file -> "lex syntax"（两次独立冷跑取最小）
       echo "frontend-growth: trace misses vuna.parse.lex / vuna.parse.syntax spans" >&2
       exit 1
     }
+    lex=$((lex * cpu_ms / wall_ms))
+    syn=$((syn * cpu_ms / wall_ms))
     [ "$lex" -lt "$lex_best" ] && lex_best=$lex
     [ "$syn" -lt "$syn_best" ] && syn_best=$syn
     rm -rf "$cache"
@@ -83,20 +120,20 @@ best_us() { # file -> "lex syntax"（两次独立冷跑取最小）
   printf '%s %s\n' "$lex_best" "$syn_best"
 }
 
-best_fmt_ms() { # file -> ms（两次独立冷跑取最小；fmt --check 只做「是否已格式化」判定）
+best_fmt_ms() { # file -> CPU ms（五次独立冷跑取最小；fmt --check 只做「是否已格式化」判定）
   f=$1
   best=999999
   k=0
-  while [ "$k" -lt 2 ]; do
+  while [ "$k" -lt 5 ]; do
     cache=$(mktemp -d "$work/cache.XXXXXX")
-    t0=$(date +%s%3N)
+    stamp_times "$cache/times-before"
     VUNA_STORE="$cache/store" TMPDIR="$cache" "$VUNA" fmt --check "$f" >"$cache/fmt.out" 2>&1 || {
       echo "frontend-growth: fmt --check failed for $f (probe should be canonical)" >&2
       cat "$cache/fmt.out" >&2
       exit 1
     }
-    t1=$(date +%s%3N)
-    ms=$((t1 - t0))
+    stamp_times "$cache/times-after"
+    ms=$(($(child_cpu_ms "$cache/times-after") - $(child_cpu_ms "$cache/times-before")))
     [ "$ms" -lt "$best" ] && best=$ms
     rm -rf "$cache"
     k=$((k + 1))
