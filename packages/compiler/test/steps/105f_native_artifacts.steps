@@ -97,7 +97,7 @@ exit: 0
 
 # 9ao5) 浮点循环参数拆箱：循环参数槽存 raw `f64` 位，循环内不再每轮 `alloc_leaf`；
 #       只有退出时把结果装盒一次。
-run: sh -c 'd="$TMPDIR/floop"; mkdir -p "$d/app"; printf "[package]\nname = \"floop\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Float -> Int -> Float\nloop acc n = if n <= 0 then acc else loop (acc + 0.5) (n - 1)\n\nmain : Int\nmain = floatToInt (loop 0.0 10)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/floop-out" "$d"'
+run: sh -c 'd="$TMPDIR/floop"; mkdir -p "$d/app"; printf "[package]\nname = \"floop\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Float -> Int -> Float\nloop acc n = if n <= 0 then acc else loop (acc + 0.5) (n - 1)\n\nmain : Int\nmain = floatToIntTrunc (loop 0.0 10)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/floop-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/floop-out/bin/floop"'
 out-equals: 5
@@ -124,9 +124,9 @@ file-contains: $TMPDIR/magicdiv-n/Main.s imul
 run: sh -c '! grep -q "idiv" "$TMPDIR/magicdiv-n/Main.s"'
 exit: 0
 
-# 9s5) `Nat.plus` / `Nat.mult` / `Nat.fromInt` 的零参别名在调用点展开，
+# 9s5) `Nat.plus` / `Nat.mult` / `Nat.fromIntClamp` 的零参别名在调用点展开，
 #      与饱和乘法一起内联进标量树：热点循环里没有 `call rt_nat_*`。
-run: sh -c 'd="$TMPDIR/natinline"; mkdir -p "$d/app"; printf "[package]\nname = \"natinline\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nloop : Nat -> Int -> Nat\nloop acc n = if n <= 0 then acc else loop (Nat.plus acc (Nat.mult (Nat.fromInt n) (Nat.fromInt 3))) (n - 1)\n\nmain : String\nmain = show (Nat.toInt (loop Zero 100))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/natinline-n" "$d"'
+run: sh -c 'd="$TMPDIR/natinline"; mkdir -p "$d/app"; printf "[package]\nname = \"natinline\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nloop : Nat -> Int -> Nat\nloop acc n = if n <= 0 then acc else loop (Nat.plus acc (Nat.mult (Nat.fromIntClamp n) (Nat.fromIntClamp 3))) (n - 1)\n\nmain : String\nmain = show (Nat.toInt (loop Zero 100))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/natinline-n" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/natinline-n/bin/natinline"'
 out-equals: "15150"

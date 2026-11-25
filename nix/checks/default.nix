@@ -16,6 +16,7 @@ let
     vuna
     vuna-seed
     vuna-compiler
+    vuna-web-cli
     ;
 
   repo = ../..;
@@ -229,6 +230,9 @@ in
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
+      # 109_web_static 的 smoke 需要 web-cli 产物；`nix run .#vuna-run-tests` 已注入，
+      # 派生环境必须同样提供，否则 step 拿到空路径。
+      VUNA_WEB_CLI = "${vuna-web-cli}/bin/vuna-web-cli";
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;

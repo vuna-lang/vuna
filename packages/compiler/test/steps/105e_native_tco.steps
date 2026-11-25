@@ -153,7 +153,7 @@ out-equals: 0
 # 9am) 零参别名直调：`Nat.plus` / `Nat.mult` / `Nat.toInt` 这类 η-收缩定义在调用点
 #      解析到运行时叶子，不再把 CAF 闭包交给 `rt_apply`；标量叶子（含饱和乘法）
 #      在饱和应用处内联，热点路径不再有 `call rt_nat_*`。
-run: sh -c 'd="$TMPDIR/alias"; mkdir -p "$d/app"; printf "[package]\nname = \"alias\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nmain : Int\nmain =\n  let\n    a = Nat.fromInt 800000\n  in Nat.toInt (Nat.plus (Nat.fromInt 1) (Nat.mult a (Nat.fromInt 2)))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/alias-out" "$d"'
+run: sh -c 'd="$TMPDIR/alias"; mkdir -p "$d/app"; printf "[package]\nname = \"alias\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nmain : Int\nmain =\n  let\n    a = Nat.fromIntClamp 800000\n  in Nat.toInt (Nat.plus (Nat.fromIntClamp 1) (Nat.mult a (Nat.fromIntClamp 2)))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/alias-out" "$d"'
 exit: 0
 run: "$TMPDIR/alias-out/bin/alias" 2>&1
 exit: 0
