@@ -352,7 +352,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 | `main` 形态 | 执行路径 | 通过条件 |
 | --- | --- | --- |
 | `String` / `Int` / `Bool` | DT 核心求值 | `""` / `0` / `True` |
-| `Eff [] a` | compile + 运行产物 | 退出码 0 |
+| `Eff r a` | compile + 运行产物（行里的内建宿主标签由 entry 预装 handler） | 退出码 0 |
 
 纯形态走核心求值，因此**只能用核心求值器实现的原语**：`strUnpack` / `strPack` /
 `strConcatMany` / `strSubstring` 这类 List 桥接原语不在其中，用了会得到
@@ -360,16 +360,18 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 因此用 `.run.out`）。需要这些原语时把测试写成 `Eff` 入口，失败自己收口：
 
 ```vuna
-main : Eff [] String
+main : Eff [ConsoleOp, ExitOp] String
 main = case failuresOf n written of
   [] => pure ""
   bad => do
-    _ <- prim_eff_print ("codec failed: " ++ join "; " bad ++ "\n")
-    _ <- prim_eff_exit 1
+    _ <- consolePrint ("codec failed: " ++ join "; " bad ++ "\n")
+    _ <- exitWith 1
     pure ""
 ```
 
-`prim_eff_print` / `prim_eff_exit` 是 `Eff []` 的宿主原语（D62：无 manifest 门控，任何包可直调）。
+失败面走标签 + handler：`consolePrint`（`Base.Effect.Console`）/ `exitWith`（`Base.Effect.Exit`）在
+entry 预装的宿主 handler 下执行；它们背后的 `@vuna@prim_eff_print` / `@vuna@prim_eff_exit` 是
+隐藏内部名，源码写不出。
 `packages/http/test/` 是这套写法的实例（编解码、连接循环、WebSocket、客户端回环），
 失败原因只打到 stderr，判定看退出码。`checks.vuna-tests*` 会跑所有包顶层的 `test/*.vuna`。
 
@@ -389,8 +391,9 @@ main = case failuresOf n written of
 - 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
   直接可用；显式 `import Prelude` 仍合法；
 - 夹具 manifest 只有 `[package]` / `[export]` / `[dependencies]`（没有能力 / 信任 /
-  特权 section）：corpus 代码可直接调用 `prim_*` / `prim_eff_*` 使用效果，没有门控；
-  原语直调正例是 `corpus/packages/07_prim_direct`（直调 `prim_eff_*`）；
+  特权 section）：corpus 代码用效果也只经标签 + handler（`consolePrint` / `fsReadFile` …），
+  纯原语 `prim_*` 可直接调用；标签正例是 `corpus/packages/07_prim_direct`（`fsFileExists`，
+  没有能力 section 也照常检查）；
 - `corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
   不接受模块根参数。
 
@@ -401,7 +404,7 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 `vuna test` 的单元测试仍在各包 `test/*.vuna`。
 
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
-「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
+「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff r a`，以及核心求值器不可
 归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
 `<base>.run.out` 表达。负例统一用
 `<base>.diag.json`（结构化诊断），interp / compile 共用同一份（绝大多数负例完全一致，少数仅 message
@@ -450,7 +453,7 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   data 的 OCaml 构造子名）；`06_entry_trait` 覆盖入口 trait 的归属与产物；
   `93_duplicate_name` 覆盖同名包显式报错；`94_ambiguous_module` 覆盖包上下文下的歧义模块；
   `95_cross_dep` 覆盖依赖方向的负例（依赖包不能 import 消费包模块）；
-  `07_prim_direct`（无 manifest 门控：直调 `prim_*` / `prim_eff_*`）；
+  `07_prim_direct`（无 manifest 门控：效果标签 `fsFileExists` 在没有能力 section 的包里照常可用）；
   `08_module_scope`（entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按模块作用域
   计算后 base 模块不报 `unknown name x`）；
 - `corpus/err/`、`corpus/run_err/`：解析 / 求值负例，期望载体是 `.diag.json`

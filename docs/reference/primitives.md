@@ -15,8 +15,8 @@
 | primitive 类型 | `Int` / `String`：没有 `data` 声明，表示与字面量由编译器提供 |
 | intrinsic | `Base.Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、核心求值归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
-| 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
-| 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；没有别名模块，任何包都可直调，没有 manifest 门控 |
+| 效果原语 | `intrinsicReturnsEff` 的 intrinsic：隐藏的 `@vuna@prim_eff_*`（`Eff []` 动作叶子）；可见的只有 `effTimeUs` |
+| 宿主层 | 用户面经 `Base.Effect.*` 标签 + handler；宿主原语（`@vuna@prim_eff_*` / `@vuna@host@*`）源码写不出，只由 base handler 使用 |
 
 ## 2. 身份与常量
 
@@ -50,7 +50,7 @@
   展示与 FFI 白名单都查这张表，新增 canonical 族只改这里。
 
 - `Eff`（`Base.Effect.Core.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
-  行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
+  行是擦除索引。入口 `main : Eff r a`（内建宿主标签由 entry 预装 handler），执行 `runPure`（[effects.md](effects.md) §2）。
 
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
@@ -118,10 +118,10 @@
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
 - **度量返回 Nat（只留在 Eff handler 的 result 族）**：`Base.Effect.Console.Print` 与
-  `Base.Effect.Fs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）；
-  直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`。
-  `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
-  字节计数中间量）保留 `Int`。
+  `Base.Effect.Fs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）。
+  宿主原语是隐藏名（`@vuna@host@print` / `@vuna@host@tryWriteFile` / `@vuna@host@fileSize`），
+  源码写不出、只由 handler 调用，返回 `Int`；`@vuna@prim_eff_eprint` 与编译器内部计数器
+  （level/meta/fuel/span/arity、字节计数中间量）保留 `Int`。
 - **展示**：`main : Nat` 与核心求值都输出十进制。
 
 ## 4. String
@@ -181,7 +181,7 @@
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Data.Vec.substTemplate`） |
 | `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语（clock 组） |
-| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；核心求值不归约 |
+| `@vuna@prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；核心求值不归约 |
 
 `strHash` 的核心求值实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
@@ -224,175 +224,123 @@
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；局部可变走命名句柄
+- 可变数据的安全边界：`@vuna@prim_eff_*Ref` 的实现都返回 `Eff []`；用户面局部可变走命名句柄
   （`MutableRef` / `MutArray` / `MutBuffer`，见 [effects.md](effects.md) §8.8–§8.10），
   没有 region/ST 令牌；也没有依赖 multiplicity / 线性箭头（多用未禁止，见
   [effects.md](effects.md)、[debt.md](debt.md) D22）。
 
 ## 7. 效果原语、Eff 动作与宿主层
 
-**动作类型**：唯一动作类型是 `Eff r a`（`Base.Effect.Core`，装箱 data；行是擦除索引），入口
-`main : Eff [] a`，执行 `Base.Effect.Core.runPure`。
+**动作类型**：唯一动作类型是 `Eff r a`（`Base.Effect.Core`，装箱 data；行是擦除索引）。
+入口 `main : Eff r a`：行里的内建宿主标签由 entry 自动预装 handler；自定义效应必须在入口前
+`handle` 成 `Nil`，否则是类型错误（`TC_UnhandledEffects`）。纯动作的执行入口是
+`Base.Effect.Core.runPure : Eff [] a -> a`。
 
-**宿主原语单表**：
+**宿主原语是隐藏名**：宿主叶子只有 `@vuna@prim_eff_*` / `@vuna@host@*` 两族，源码写不出
+（`Frontend/Lexer` 的 `@vuna@` 内部名规则 + 不在用户可见内建表）。可见的效果内建只有
+`effTimeUs` / `effTimeUs_host`（`Eff [] Int`）。用户面只有 `Base.Effect.*` 标签 + handler：
 
-| 表 | 名字 | 类型 | 用途 |
+| 模块 | 标签 | 用户面 sender | handler 内部的宿主符号 |
 | --- | --- | --- | --- |
-| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | 宿主层（直接调用） |
+| `Base.Effect.Console` | `ConsoleOp` | `consolePrint`（结果 `Nat`）/ `consoleEprint` | `@vuna@host@print` / `@vuna@prim_eff_eprint` |
+| `Base.Effect.Fs` | `FsOp` | `fsReadFile` / `fsReadFileRange` / `fsWriteFile` / `fsWriteFileAtomic` / `fsReadDir` / `fsIsDirectory` / `fsMakeDir` / `fsRemoveFile` / `fsFileExists` / `fsFileMtime` / `fsFileSize` / `fsRemoveTree` / `fsRename` / `fsSymlink` / `fsMakeDirExclusive` | `@vuna@host@try*` + `@vuna@prim_eff_hostStatus` |
+| `Base.Effect.Clock` | `ClockOp` | `clockNow` / `clockSleepMicros` | `effTimeUs` / `@vuna@prim_eff_sleep` |
+| `Base.Effect.Env` | `EnvOp` | `envGetEnv` / `envGetCwd` / `envExecPath` | `@vuna@prim_eff_getenv` / `getcwd` / `execPath` |
+| `Base.Effect.Process` | `ProcessOp` | `processRunIn` / `processSpawn` / `processWait` / `processArgs` / `processExit` | `@vuna@prim_eff_runIn` / `spawn` / `wait` / `getArgs` / `exit`；宿主行变体 `@vuna@host@tryRunIn`、`@vuna@prim_eff_*_process_host` |
+| `Base.Effect.Stdin` | `StdinOp` | `stdinReadLine`（`Maybe String`）/ `stdinReadBytes` | `@vuna@host@readLine` / `readBytes`；无 handler 行的库路径回落到 `@vuna@prim_eff_readLine` / `readBytes` |
+| `Base.Effect.Args` | `ArgsOp` | `argsGetArgs` | `@vuna@prim_eff_getArgs` |
+| `Base.Effect.Exit` | `ExitOp` | `exitWith` | `@vuna@prim_eff_exit`（库路径）/ `@vuna@host@exitOp`（宿主行） |
+| `Base.Effect.Net` | `NetOp` | `netListen` / `netPort` / `netAccept` / `netRecv` / `netSend` / `netClose` / `netConnect`（含 `Within` 变体） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
+| （隐藏）`@vuna@Ref` | base / 工具链内部 | — | `@vuna@prim_eff_newRef` / `readRef` / `writeRef`；`Base.Effect.MutRef` 走 `@vuna@prim_mref*` |
 
-原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；Int/Nat 归一化只在 `Base.Effect.Core.*` handler
-的 result 族（`Print`、`WriteFile`/`FileSize`）里做，原语本身返回 `Int`。
+**执行与求值**：宿主原语是 `Eff []` 动作叶子；codegen 按 arity 包成 `MkEff`（零参原语是动作
+**值**，引用不执行、不重新求值），`@vuna@prim_eff_bind1`（线性绑定）由 `effLinearBindText` 生成。
+`Int`/`Nat` 归一化只在 handler 的结果索引（`Print`、`WriteFile`、`FileSize` 返回 `Nat`），
+宿主原语本身返回 `Int`。`@vuna@prim_eff_hostStatus` 是 try 变体的失败码状态槽
+（0 = 成功），base 的 handler 读它并抛 typed error（`FsErrorOp` / `NetErrorOp`）。
 
-**Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
-实例（`Base.Effect.Core` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Effect.Core` 的库函数。
-`prim_effectPerformId` / `prim_effectHandleId` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
-运行时效应核心，常规只由 `Base.Effect.Core` 包装使用（没有 `unsafe` 门控）。`*Id` 变体
-按 `(keyId, nameId)` 路由（`effectId` 把路由串折成 30 位整数）；展示名仍随原语传入，
-只用于「未处理效应」的诊断。
+**源码侧边界**：`prim_eff_print` 与 `@vuna@prim_eff_print` 都报 `RN_UnknownVariable`。
+strict 非 try 的文件与网络符号（`@vuna@prim_eff_{readFile,readFileRange,writeFile,
+writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`，连同它们的
+`@vuna@host@*` 形式）没有源码入口，已从内建表、契约与三端符号表删除；失败面统一走
+`@vuna@host@try*` + 状态槽 + typed error
+（entry 收口成诊断 + exit 1）。`Base.Effect.Fs` 的 `fsFileMtime` / `fsFileSize` 返回 `Maybe`
+（取不到 = 无值，不是 0），`fsRemoveFile` / `fsRemoveTree` 幂等。
 
-**效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
-（`Base.Effect.Console.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
-`prim_eff_readLine : Eff [] String`（EOF 时写状态槽 1、返回 `""`）、`prim_eff_readDir : String -> Eff [] (List String)`、
-`prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
-`prim_eff_makeDir` / `prim_eff_removeFile` / `prim_eff_fileMtime : String -> Eff [] Int`、
-`prim_eff_fileSize : String -> Eff [] Int`、`prim_eff_writeFile : String -> String -> Eff [] Int`、
-`prim_eff_getArgs : Eff [] (List String)`、`prim_eff_getenv : String -> Eff [] String`、
-`prim_eff_getcwd` / `prim_eff_execPath : Eff [] String`、
-`prim_eff_exit : Int -> Eff [] Int`（执行即退出、不返回）、
-`prim_eff_runIn : String -> List String -> Eff [] Int`、`prim_eff_spawn : List String -> Eff [] Int`、
-`prim_eff_wait : Int -> Eff [] Int`、`prim_eff_readBytes : Int -> Eff [] String`、
-`prim_eff_sleep : Int -> Eff [] Int`（阻塞 us 微秒）、`effTimeUs : Eff [] Int`。
-零参原语因此是**真正的动作值**：引用不执行、也不重新求值。
+**运行时核心（隐藏）**：`prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` /
+`prim_cleanupPush` / `prim_cleanupPop` 是续延、scoped handler 重装与 bracket cleanup 的底层
+原语，常规只由 `Base.Effect.Core` 包装使用；`effectId : String -> Int` 是派发 id（FNV-1a 32 位
+取低 30 位，三端 runtime 与编译器折叠同一公式）。内部 cast `prim_erase`（`visible = False`）只由
+精化器插入；设计见 [effects.md](effects.md) §5。
 
-纯 `main` 直接调用效果原语是类型错误（`TC_TypeMismatch`）：效果只能出现在 `Eff` 动作里。
+**调试/诊断**：`@vuna@prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；`prim_fail`
+抛 `Failure`，由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
+`assert` / `todo` 在 release 构建里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）。
+文本日志与观测原语（`@vuna@log@*` / `@vuna@obs@*`）同样隐藏，只由 `log!` / `mark!` 与
+`Base.Data.Log` / `Base.Data.Obs` 使用。
 
-调试/诊断原语与语言级调试构造（见 [debugging.md](debugging.md) §3）：
+**分组只是文档归类**（内建表不带能力位，也没有 manifest 门控）：
 
-- `assert : Bool -> String -> a -> a`（debug-only）：失败抛 `Failure`；
-- `todo : String -> a`（debug-only）：以 `TODO: <msg>` 抛 `Failure`；
-- 文本日志原语 2 条（隐藏 runtime 原语，`visible = False`，源码不可写；只由 `log!` 展开或
-  `Base.Data.Log` 引用；核心求值归约为静默；规范见 [logging.md](logging.md)）：
-  `@vuna@log@on : Int -> String -> Bool`（级别 + scope 是否输出）、
-  `@vuna@log@emit : Int -> String -> String -> Int`（写一行，返回 `0`）；
-- 观测原语 6 条（同样是隐藏 runtime 原语，`visible = False`；只由 `mark!` 或
-  `Base.Data.Obs` / `Base.Data.Obs.Span` 引用；核心求值归约为 no-op，wasm/native 是 no-op 桩）：
-  `@vuna@obs@level`（读当前级别，`Int -> Int`）、
-  `@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
-  `@vuna@obs@mark`（瞬时标记 `ph:"i"`）、`@vuna@obs@span`（`String -> String ->
-  (Int -> a) -> a`，唯一高阶原语）、`@vuna@obs@sampleStart`（`String -> Int -> Int`）、
-  `@vuna@obs@sampleStop`。命令面与语义见 [observability.md](observability.md)；
-- `prim_eff_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush，返回写入字节数；
-- `prim_fail : String -> a`（不在动作里）：抛 `Failure <msg>` 的底值，
-  由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。
+| 分组 | 用户面入口 | 宿主符号（隐藏） |
+| --- | --- | --- |
+| `console` | `consolePrint` / `consoleEprint` | `@vuna@host@print`、`@vuna@prim_eff_eprint` |
+| `fs` | `fs*`（见上表） | `@vuna@host@try*` + `@vuna@prim_eff_hostStatus` |
+| `process` | `process*` / `exitWith` / `argsGetArgs` | `@vuna@prim_eff_{runIn,spawn,wait,getArgs,exit}`、`@vuna@host@tryRunIn`、`@vuna@prim_eff_{exit,getArgs}_process_host` |
+| `env` | `envGetEnv` / `envGetCwd` / `envExecPath` | `@vuna@prim_eff_{getenv,getcwd,execPath}` |
+| `clock` | `clockNow` / `clockSleepMicros` | `effTimeUs`、`@vuna@prim_eff_sleep` |
+| `stdin` | `stdinReadLine` / `stdinReadBytes` | `@vuna@host@{readLine,readBytes}`、`@vuna@prim_eff_{readLine,readBytes}` |
+| `net` | `net*`（`NetOp`，含 `Within`） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
+| `ref` | （隐藏）`@vuna@Ref` / `Base.Effect.MutRef` | `@vuna@prim_eff_{newRef,readRef,writeRef}`、`@vuna@prim_mref*` |
+| 运行时核心 | — | `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`、`effectId` |
 
-`assert` / `todo` 在 release 构建（CLI 显式解析 `--release` / `VUNA_RELEASE=1` 得到 `Bool`，
-包括 workspace 成员子进程）里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）；
-`log!` 作为调试输出在两种构建都可用（受 `VUNA_LOG` 门控）。
-
-`net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）。用户面走
-`Base.Effect.Net` 的 `NetOp` 效应（可 mock；entry 自动预装真实 handler）；宿主失败由
-`@vuna@host@tryNet*` + 状态槽转成 `NetErrorOp`（typed），`recv` 的对端关闭是
-`Nothing`（`Maybe String`），不是错误：
-
-- `prim_eff_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
-  `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
-- `prim_eff_netPort : Int -> Eff [] Int`：listener 的端口（TCP；unix 返回 0），配合 `PORT=0`；
-- `prim_eff_netAccept : Int -> Eff [] Int`：阻塞接受一个连接，返回连接句柄；
-- `prim_eff_netRecv : Int -> Int -> Eff [] String`：最多读 n 字节、**有数据就立即返回**（可能更少）；
-  `""` 表示对端关闭；
-- `prim_eff_netSend : Int -> String -> Eff [] Int`：写完整串（内部循环处理部分写），返回字节数；
-- `prim_eff_netClose : Int -> Eff [] Int`：关闭句柄（幂等）；`unix:` listener 关闭时删掉它绑定的
-  socket 路径（按 bind 时记下的 inode 判定：路径已被别的进程重新绑定就不删）；
-- `prim_eff_netConnect : String -> Eff [] Int`：客户端连接（`vuna repl client --addr` 与测试夹具用）。
-
-句柄是小整数，运行时映射到 `Unix.file_descr` 表，**不引入新的语言类型**；
-无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
-
-**名字面**：效果原语只有 `prim_eff_*` 名（外加 `effTimeUs`）。唯一用法是**直接**调用
-`prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明）。
-
-**执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
-`dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)`。没有 main 之外的通用执行入口：
-需要重复执行的部分用 handler 显式解释。
-
-**内部 cast（不可见）**：`prim_erase` 是隐藏 intrinsic（`visible = False`），只由精化器在
-「运行时类型不可命名」的 binder 使用点插入；签名 `{a} -> a -> a`、runtime `Obj.magic`、
-`IntrinsicOp.OpIdentity` 让它对求值/定义性相等透明。用户源码不可引用它（不在 prelude，
-也不受任何门控）。设计见 [effects.md](effects.md) §5。
-
-以下分组只是**文档归类**（内建表不带能力位；调用不受门控）：
-
-| 分组 | 原语 / 入口 |
-| --- | --- |
-| `console` | `prim_eff_print`、`prim_eff_eprint`、`prim_eff_readLine`、`prim_eff_readBytes` |
-| `fs` | `prim_eff_readFile`、`prim_eff_readFileRange`、`prim_eff_writeFile`、`prim_eff_writeFileAtomic`、`prim_eff_readDir`、`prim_eff_isDirectory`、`prim_eff_makeDir`、`prim_eff_removeFile`、`prim_eff_fileExists`、`prim_eff_fileMtime`、`prim_eff_fileSize`；宿主 handler 用 `@vuna@host@tryReadFile`/`tryReadFileRange`/`tryWriteFile`/`tryWriteFileAtomic`/`tryReadDir`/`tryIsDirectory`/`tryMakeDir`/`tryRemoveFile` + `@vuna@prim_eff_hostStatus`（状态槽：0 = 成功，非 0 = 失败码） |
-| `process` | `prim_eff_getArgs`、`prim_eff_exit`、`prim_eff_runIn`、`prim_eff_spawn`、`prim_eff_wait` |
-| `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
-| `clock` | `effTimeUs`、`prim_eff_sleep` |
-| `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect`；宿主 handler 用 `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus`（0 = 成功、1 = 对端关闭、2 = refused、3 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、7 = timeout(带超时变体)、8 = bad-handle、其它 = io）；带超时的变体是 `@vuna@host@tryNetAcceptWithin` / `tryNetRecvWithin` / `tryNetSendWithin` |
-| 运行时核心（隐藏） | `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Effect.Core` 包装使用）；`effectId : String -> Int` 是派发 id（FNV-1a 32 位取低 30 位，三端 runtime 与编译器折叠同一公式） |
-
-- **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
-  `prim_eff_*`。没有 manifest `[capabilities]` /
-  `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`。
-- **推荐用法（纪律，非强制）**：常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果
-  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Effect.Core*` handler 内部（需要直调时
-  调用 `prim_eff_*`）；base 的 Eff handler、编译器与根工具链内部直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
-  只是底层叶子。
-- 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）见
-  [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62。
+- **宿主原语不是用户 API**：源码写不出这些名字；用户面只有标签 + handler（`runPure` 执行
+  已处理干净的动作）。
+- **`prim_*`（纯原语）仍可直接调用**：没有 manifest `[capabilities]` / `[trust]`、每包原语
+  白名单或 `unsafe` 审计；显式接受的损失见 [effects.md](effects.md) §8.6 与
+  [debt.md](debt.md) D62。
+- `vuna repl` 能求值顶层类型为 `Eff r a` 的表达式：Nil 行直接跑；带行时先定义带显式签名的值
+  （`prog : Eff [ConsoleOp] Int`）再求值 `prog`（见 [tooling.md](tooling.md)）。
 
 ## 8. 生成 runtime 的契约
 
 产物固定包含一个 `Vuna_runtime.ml`（`Target.Ocaml.Term.dtRuntime`），**无条件**内嵌 Unix：
 
-- `Unix.stat`（`prim_eff_fileMtime` / `prim_eff_fileSize`）、`Unix.gettimeofday`（`effTimeUs`）、
-  `Unix.sleepf`（`prim_eff_sleep`）、
-  `Unix.readlink "/proc/self/exe"`（`prim_eff_execPath`）；`build.sh` 无条件
-  `-I +unix ... unix.cmxa`。因此任何产物都依赖 OCaml 的 unix 库。
+- `Unix.stat`（`@vuna@host@fileMtime` / `fileSize`）、`Unix.gettimeofday`（`effTimeUs`）、
+  `Unix.sleepf`（`@vuna@prim_eff_sleep`）、`Unix.readlink "/proc/self/exe"`
+  （`@vuna@prim_eff_execPath`）；`build.sh` 无条件 `-I +unix ... unix.cmxa`。因此任何产物都
+  依赖 OCaml 的 unix 库。
 - 启动时设置 GC（`minor_heap_size` 16MB、`space_overhead` 200）。
 
-下表 runtime 契约使用 `prim_eff_*` 名字（codegen 包一层 `MkEff`）。
+契约里的符号都是隐藏名（codegen 包一层 `MkEff`）；下表的「用户面」列给出对应标签：
 
-| 原语 | runtime 契约 |
-| --- | --- |
-| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.Effect.Console.Print` 在 handler 边界转 `Nat`） |
-| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.Effect.Fs.WriteFile` 在 handler 边界转 `Nat`）；写失败抛宿主异常 |
-| `prim_eff_writeFileAtomic` | 同 `prim_eff_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
-| `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常。宿主 handler 走 `@vuna@host@tryReadFile`：失败不抛，写状态槽并返回 `""`，由 base 抛 `FsErrorOp`（typed，entry 收口成诊断 + exit 1） |
-| `prim_eff_readFileRange` | 按偏移读文件片段（`path`、`offset`、`length`）：`offset < 0` 按 0，`length <= 0` 或 `offset` 越过 EOF 给 `""`，`length` 截到 EOF 与后端单次读上界（native 8 MiB）。宿主 handler 走 `@vuna@host@tryReadFileRange`（失败同上）；base 暴露为 `FsOp.ReadFileRange` / `fsReadFileRange`，按块消费用 `fsFileCursor` + `Base.Effect.Cursor` |
-| `prim_eff_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
-| `prim_eff_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
-| `prim_eff_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |
-| `prim_eff_makeDir` / `prim_eff_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
-| `prim_eff_fileExists` | 路径不存在时为 `False` |
-| `prim_eff_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.Effect.Fs.FileSize` 的结果索引是 `Nat`） |
-| `prim_eff_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
-| `prim_eff_getcwd` | 失败时返回 `"."` |
-| `prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
-| `prim_eff_getArgs` | 排除 `argv[0]` 的其余参数 |
-| `prim_eff_exit` | 立即退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、**不返回**） |
-| `prim_eff_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 `0`（真实睡眠，非忙等） |
-| `prim_eff_runIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd |
-| `prim_eff_spawn` | 异步启动子进程（argv 列表，继承 stdin/stdout/stderr），返回 pid |
-| `prim_eff_wait` | 等待子进程并返回退出码（signal/stopped 归 1） |
-| `prim_eff_netListen` | 绑定并监听：`tcp:HOST:PORT`（`SO_REUSEADDR`，backlog 8）或 `unix:PATH`（bind 前删除已存在的路径，开发工具惯例）；返回句柄表下标；失败 `failwith "net: ..."` |
-| `prim_eff_netPort` | `getsockname` 的端口（TCP）；unix socket 返回 0 |
-| `prim_eff_netAccept` | 阻塞接受一个连接，返回新句柄 |
-| `prim_eff_netRecv` | 阻塞 `Unix.read`：有数据即返回（可能少于 n），对端关闭返回 `""` |
-| `prim_eff_netSend` | 循环写完整串（处理部分写）；对端关闭时报 `net: send: connection closed` |
-| `prim_eff_netClose` | 关闭 fd 并从句柄表移除（幂等）；`unix:` listener 关闭时按 bind 时记下的 inode 删掉自己那份 socket 路径（路径已被别人重新绑定则不动） |
-| `prim_eff_netConnect` | 客户端 `Unix.connect`（`tcp:`/`unix:` 同一套地址语法） |
+| 内部符号 | runtime 契约 | 用户面 |
+| --- | --- | --- |
+| `@vuna@host@print` / `@vuna@prim_eff_eprint` | 写 stdout / stderr 并 flush，返回**字节数** | `consolePrint`（`Nat`）/ `consoleEprint` |
+| `@vuna@prim_eff_readFile` 等 strict 文件族 | `dtp_readFile` 等仍是 `dtp_tryReadFile` 的实现细节，**不是契约符号**；`try*` 失败写状态槽、返回默认值 | `fsReadFile` 等；base 抛 `FsErrorOp`，`runFsError` 可局部收成 `Result` |
+| `@vuna@host@{fileExists,fileMtime,fileSize,isTty}` | 路径不存在给 `False`；mtime/size 取不到给状态（`Maybe` 在 base 侧）；isTty 探测 stdin | `fsFileExists` / `fsFileMtime` / `fsFileSize` / REPL 行编辑 |
+| `@vuna@prim_eff_readLine` / `@vuna@host@readLine` | 读一行；EOF 返回 `""`（与空行不可区分） | `stdinReadLine`（`Maybe`） |
+| `@vuna@prim_eff_readBytes` / `@vuna@host@readBytes` | 最多读 n 字节，**有数据就立即返回**；EOF 返回 `""` | `stdinReadBytes` |
+| `@vuna@prim_eff_getenv` | 未设置或空串都返回 `""` | `envGetEnv`（`envGetEnvNonEmpty` 给 `Maybe`） |
+| `@vuna@prim_eff_getcwd` | 失败时返回 `"."` | `envGetCwd` |
+| `@vuna@prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` | `envExecPath` |
+| `@vuna@prim_eff_getArgs` | 排除 `argv[0]` 的其余参数 | `argsGetArgs` |
+| `@vuna@prim_eff_exit` / `@vuna@host@exitOp` | 立即退出进程（执行即退出、**不返回**） | `exitWith` |
+| `@vuna@prim_eff_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 0（真实睡眠，非忙等） | `clockSleepMicros` |
+| `effTimeUs` | `Unix.gettimeofday` 换算微秒（可见内建，唯一例外） | `clockNow` |
+| `@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd | `processRunIn` |
+| `@vuna@prim_eff_spawn` / `wait` | 异步启动子进程（argv 列表，继承 stdio）返回 pid；等待返回退出码（signal/stopped 归 1） | `processSpawn` / `processWait` |
+| `@vuna@host@tryNet*`（含 `Within`） | 失败写状态槽（1 = 对端关闭、2 = refused、3/7 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、8 = bad-handle、其它 = io）；`recv` 对端关闭是 `Nothing` | `net*`；base 抛 `NetErrorOp` |
+| `@vuna@prim_eff_newRef` / `readRef` / `writeRef`、`@vuna@prim_mref*` | `ref` / `!` / `:=` 与命名可变单元（原地读写） | （隐藏）`@vuna@Ref` / `Base.Effect.MutRef` |
+| `@vuna@prim_eff_hostStatus` | 宿主 try 变体的失败码状态槽（0 = 成功；OCaml 用 Domain.DLS） | 仅 base 的 handler 读取 |
+| `@vuna@prim_eff_bind1` | 线性绑定（`effLinearBindText` 生成） | `>>=` / `do` |
 
 效果原语的 runtime 表（`dtp_*`）仍是**立即执行**的 OCaml 函数；生成器
 （`Target.Ocaml.Term.effThunkText`）按 `Intrinsic` 的 arity 把它们包成 `MkEff` 动作值，例如
-`prim_eff_getcwd` → `(MkEff (fun (_ : EffUnit) -> dtp_getcwd ()))`、`prim_eff_print` →
-`(fun s -> MkEff (fun (_ : EffUnit) -> dtp_print s))`。`prim_eff_bind1`（线性绑定）由
-`effLinearBindText` 单独生成（装箱 `MkEff` 的 match）。因此零参原语（`prim_eff_getArgs` /
-`prim_eff_readLine` / `prim_eff_getcwd` / `effTimeUs`）是动作**值**：引用不执行、不重新求值；
-需要快照 / 执行时显式 `let t = runPure effTimeUs` 或在 `do` 里 `<-`。
-
+`@vuna@prim_eff_getcwd` → `(MkEff (fun (_ : EffUnit) -> dtp_getcwd ()))`、
+`@vuna@host@print` → `(fun s -> MkEff (fun (_ : EffUnit) -> dtp_print s))`。因此零参原语
+（`@vuna@prim_eff_getArgs` / `readLine` / `getcwd` / `effTimeUs`）是动作**值**：引用不执行、
+不重新求值。native / wasm 的符号表与 OCaml 契约由测试（`target-*/test/RuntimeTable.vuna`）
+逐条对拍；无入口的 strict 非 try 家族已从三端表删除。
 ## 9. 核心求值归约边界
 
 核心求值路径是精化后的纯求值器（`Core.Eval.primReduce` 按 `IntrinsicOp` 归约）。
@@ -407,7 +355,7 @@
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
 | `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.Data.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
-| 全部 `OpNone` 原语：效果原语（`prim_eff_*`）、容器原语、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
+| 全部 `OpNone` 原语：效果原语（`@vuna@prim_eff_*`）、容器原语、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
@@ -416,8 +364,8 @@
   （无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：
-  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_eff_getArgs` /
-  `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` / `arrayToList`。桥接只为
+  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`@vuna@prim_eff_getArgs` /
+  `@vuna@host@tryReadDir` / `@vuna@prim_eff_runIn` / `@vuna@prim_eff_spawn`、`arrayFromList` / `arrayToList`。桥接只为
   canonical `Base.Data.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
   ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.Data.List.List` declaration ...``。
 - 相关夹具关闭 interp 阶段，只做 `compile` + 运行产物。

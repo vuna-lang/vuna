@@ -329,7 +329,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrLam` | 支持 | 作为值 → 闭包对象 `[code][arity][自由变量...]`（无自由变量时静态化，不分配）；立即应用的 lambda 内联成体；其余应用按调用点已知 arity 直调或走 `rt_apply` |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
-| `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
+| `IrEffBind` | 拒绝 | 只服务 `@vuna@prim_eff_bind1`，base 不用 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；作为值同样生成 wrapper 闭包 |
 | Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
@@ -447,15 +447,15 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 效应叶子：`@vuna@prim_eff_newRef` / `readRef` / `writeRef`（`@vuna@Ref`，单槽对象）、
-  `prim_eff_print` / `eprint`（写 fd 后返回字节数）、`prim_eff_exit`；预装宿主 handler
-  用到的 `@vuna@host@*` / `prim_eff_*_host` 名字映射到同一批叶子。
-- 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`getArgs`
-  （List 桥接，不含 `argv[0]`）、`getenv`（扫 `envp` 的 `KEY=`）、`getcwd`（syscall 79）、
-  `execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
-- 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`prim_eff_sleep`（`nanosleep`，
-  syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、`@vuna@prim_eff_hostStatus`
-  （读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
-- 文件系统：15 个叶子（`tryReadFile` / `tryReadFileRange` / `tryWriteFile` / `tryWriteFileAtomic` /
+  `@vuna@prim_eff_print` / `_eprint`（写 fd 后返回字节数）、`@vuna@prim_eff_exit`；预装宿主 handler
+  用到的 `@vuna@host@*` / `@vuna@prim_eff_*_host` 名字映射到同一批叶子。
+- 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`@vuna@prim_eff_getArgs`
+  （List 桥接，不含 `argv[0]`）、`@vuna@host@getenv`（扫 `envp` 的 `KEY=`）、`@vuna@host@getcwd`（syscall 79）、
+  `@vuna@host@execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
+- 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`@vuna@prim_eff_sleep`（`nanosleep`，
+  syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、
+  `@vuna@prim_eff_hostStatus`（读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
+- 文件系统：15 个 `@vuna@host@*` 叶子（`tryReadFile` / `tryReadFileRange` / `tryWriteFile` / `tryWriteFileAtomic` /
   `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` /
   `tryRemoveTree` / `tryRename` / `trySymlink` / `fileExists` / `fileMtime` / `fileSize`）
   走 `openat` / `read` / `write` / `lseek` / `fstat` / `getdents64` / `mkdirat` / `unlinkat` /
@@ -467,18 +467,18 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `directory tree too deep` 而不是 SIGSEGV；
   路径拷贝按容量上界检查，超出 trap `path too long`；`tryWriteFileAtomic` 写
   `<path>.<pid>.tmp` 再 `rename`。
-- **非 try 符号的失败显式可见**：`prim_eff_readFile` / `readFileRange` / `writeFile` / `writeFileAtomic` /
-  `readDir` / `isDirectory` / `makeDir` / `removeFile` 走 `strict_*` 包装——跑同一个
-  `try_*` 叶子，状态槽非 0 时按 `vuna: runtime error: <op><path>: <reason>` 报告并
-  exit 2。`fs_fail` 额外记下原始 errno（`rt_host_errno`），reason 取自 `Pal` 的
-  errno→`strerror` 表，因此首行与 OCaml `dtp_*` 在 C locale 下逐字一致（没有 `at ...`
-  行）。库层 `Base.Effect.Fs` 仍走 `@vuna@host@try*`，把失败变成 typed `FsError`。
-- 进程：`runIn` / `tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
-  + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
-  argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
-- 未实现的宿主面：stdin 的 `readLine` / `readBytes`（编译器闭包不可达）与 net。
+- **失败面只有 try 家族**：契约里没有 strict 非 try 叶子——`@vuna@prim_eff_readFile` /
+  `readFileRange` / `writeFile` / `writeFileAtomic` / `readDir` / `isDirectory` / `makeDir` /
+  `removeFile` 这组名字（连同它们的 `@vuna@host@*` 形式）已删除，源码也没有入口。`try_*` 叶子
+  跑同一批 syscall，失败时把 errno 映射成状态码写进 `rt_host_status` 并返回默认值（原始 errno
+  另记在 `rt_host_errno`）；库层 `Base.Effect.Fs` 读 `@vuna@prim_eff_hostStatus`，把失败收成
+  typed `FsError`，entry 打印 `vuna: fs: <op> …` 并以退出码 1 结束。
+- 进程：`@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
+  + 恢复 cwd；实参按 shell 单引号转义）、`@vuna@prim_eff_spawn`（`fork` + `execve("/proc/self/exe", argv)`，
+  argv[0] 是本进程路径）、`@vuna@prim_eff_wait`（`wait4` 取退出码，被信号杀死按 1）、`@vuna@host@exitOp`。
+- 未实现的宿主面：stdin 的 `@vuna@host@readLine` / `readBytes`（编译器闭包不可达）与 net。
 - 续延：`perform` / `handle` 由库机器（`Base.Effect.Core` 的 `Control` 循环）执行，见 §3.4；
-  `prim_eff_*` 的实现面以 `Native.Runtime` 的符号映射为准，未列出的符号由
+  宿主原语（`@vuna@prim_eff_*` / `@vuna@host@*`）的实现面以 `Native.Runtime` 的符号映射为准，未列出的符号由
   `RuntimeTable` 测试登记为缺口。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
@@ -602,7 +602,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   年轻代回收在扫完普通根之后逐段遍历卡片表：脏卡片清 0，并把该卡片覆盖的 512 字节
   `[起点, 起点 + 512) ∩ [块区, 段尾)` 当额外根保守扫一遍。卡片按段分配、容量随段走，
   所以没有固定容量上限；死块/复用块留下的陈旧脏位只会多扫一格，不会漏根。
-  可变点只有 `prim_eff_writeRef` 与 `insert_sorted` / `sort_list` 的原地改接；
+  可变点只有 `@vuna@prim_eff_writeRef` 与 `insert_sorted` / `sort_list` 的原地改接；
   构造器 / 闭包字段只在对象刚分配（年轻代）时写，数组是 COW、record 不可变，都不需要
   屏障。
 - **动态实参**：`rt_apply` 慢路径把实参压成调用栈数组交给运行时；数组本身不在任何帧的
@@ -721,8 +721,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - **宿主缓冲与算术边界**（失败一律显式，不静默截断/越界写）：
   - `fsReadFile` 没有固定缓冲上界：先 `stat` 拿大小、按 `max(size, 64 KiB)` 一次分配字符串
     再读到 EOF，读满则容量加倍续读（数据搬一次）；`stat` 给 0 的伪文件（`/proc` 等）从 64 KiB
-    起步。`readFileRange` 的单次 `length` 仍截到 8 MiB 读缓冲上界；
-  - `readDir` 的名字数组上限 4032 项：超出报 io 错误；
+    起步。`@vuna@host@tryReadFileRange` 的单次 `length` 仍截到 8 MiB 读缓冲上界；
+  - `@vuna@host@tryReadDir` 的名字数组上限 4032 项：超出报 io 错误；
   - 路径缓冲 4096 字节：超长路径 trap（`vuna: runtime error: path too long`，exit 2）；
   - `Int` 除法 `min_int / -1` 返回 `min_int`（与 OCaml / wasm 一致，不触发 x86 `#DE`）。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
@@ -749,7 +749,6 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 
 | 语义 | OCaml | Native | WASM |
 | --- | --- | --- | --- |
-| 非 try FS 失败 | exit 2 | exit 2 | trap |
 | `strPack` 越界 | 抛异常 | 截断低 8 位 | 截断低 8 位 |
 | `isTty` | stdout | stdout | 恒 False（WASI 无 isatty，保守） |
 | 零参顶层定义 | 初始化时求值 | `_start` 一次（CAF 槽） | `_start` 一次 |

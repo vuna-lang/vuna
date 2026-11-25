@@ -54,7 +54,7 @@ nix run .#vuna -- lint packages/compiler/lib/Vuna/Compiler/Elab/Term.vuna   # �
 nix run .#vuna -- doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Effect.Core`（宿主层直调 `prim_eff_*`，别名模块已删，任何包都可直调）。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff r a`，效果 API 是 `Base.Effect.*` 的标签 + handler（宿主原语是隐藏名，源码写不出）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：默认 `nix run .#vuna -- <subcommand>`（按当前源码构建）；需要固定二进制时先
@@ -101,7 +101,7 @@ vuna help, -h
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.Driver.CompilerCli` 的库实现（in-process 调库，不
 fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（经受限进程执行内建
-`prim_eff_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。
+`Process.runIn` → 内部 `@vuna@prim_eff_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。
 
 **包上下文是唯一的加载语义**：每个源文件向上找最近的 `vuna.toml`（该包 + 依赖闭包解析
 import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
@@ -147,10 +147,10 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/seed/forbidden.txt`）；
-3. **效果原语返回 `Eff []` 动作**：effectful `prim_*`（含 `prim_eff_*`）没有 manifest
-   门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Effect.Core` +
-   handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
-   入口 `main : Eff [] a`）；
+3. **效果原语返回 `Eff []` 动作**：`prim_*`（纯原语）没有 manifest
+   门控——任何包都可直接调用；宿主效应原语是隐藏名（源码写不出），用户面只有 `Base.Effect.*` +
+   handler 这一条路径。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
+   入口 `main : Eff r a`，内建宿主标签由 entry 预装 handler）；
 4. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；
 5. 编译器自检通过（`vuna check .`）；`seed/` 是生成物，禁止手改。

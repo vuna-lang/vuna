@@ -218,9 +218,10 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 签名，`u = Type 1` 自动推断为 `u : Type 2`。同名 `DFun` 再次输入即重定义
 （文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
 
-**效果表达式**：动作表达式放进临时包走 `compile` + 运行，效果输出直接到终端、按进程
-退出码判定，因此需要 PATH 里有 `ocamlopt`。包上下文取最近 `vuna.toml` 的本地依赖闭包
-（不在包内时 base-only）。
+**效果表达式**：顶层类型是 `Eff r a` 的表达式放进临时包走 `compile` + 运行，效果输出直接到
+终端、按进程退出码判定，因此需要 PATH 里有 `ocamlopt`。Nil 行可以直接求值；行里带标签时
+要先定义成带显式签名的值（`prog : Eff [ConsoleOp] Int`，再求值 `prog`），REPL 用源码里的
+签名合成入口。包上下文取最近 `vuna.toml` 的本地依赖闭包（不在包内时 base-only）。
 
 **加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
 
@@ -321,7 +322,7 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 `vuna repl client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
 客户端崩溃会随连接关闭自动恢复，但**不要**在同一会话上并发发请求。
 
-**server 的限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
+**server 的限制**：server 模式下 `:!` 与效果表达式（`Eff r a` 临时编译运行；带行时用带签名的值）**拒绝执行**
 （子进程会写真实 stdout，污染协议通道）；需要跑程序时用 `vuna run` / `vuna build` 后直接
 执行产物。`vuna test` 的效果测试路径不受影响。
 

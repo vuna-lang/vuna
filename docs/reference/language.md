@@ -36,9 +36,10 @@
   而是 `Base.Trait.Eq` / `Base.Trait.Ord` 的方法（方法名就是 `(==)` / `(/=)` / `(<)` 等）。
   `a == b` 与 `(==) a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
-- 效果原语**只有 `prim_eff_*` 名**（`prim_eff_print` / `prim_eff_readFile` / `prim_eff_getArgs` /
-  `prim_eff_getenv` / …；外加 `effTimeUs`）：宿主层直接调用这些原语，
-  没有 manifest 门控；见 [primitives.md](primitives.md) 的
+- 效果入口**只有 `Base.Effect.*` 的标签 + handler**（`consolePrint` / `fsReadFile` /
+  `envGetEnv` / `exitWith` …）：宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`
+  （源码写不出，只由 base 的 handler 与编译器/工具链内部使用）；`effTimeUs` 是唯一可见的
+  效果内建（`Eff [] Int`）。没有 manifest 门控；见 [primitives.md](primitives.md) 的
   效果原语与宿主层一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen
   一致）；

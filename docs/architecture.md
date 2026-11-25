@@ -152,9 +152,9 @@ data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），
 
 擦除检查由 `Lowering.Program.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
 判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
-`Obj.t` / `Obj.magic`。核心求值路径（`vuna test` 纯测试 / REPL）
+`Obj.t` / `Obj.magic`。核心求值路径（`vuna test` 纯测试 / REPL 的纯表达式）
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
-任何 `main : Eff [] a` 报错并提示 `compile`）。
+任何 `main : Eff ...` 报错并提示 `compile`）。
 
 **入口符号**：`Driver.Dt.dtCheck` / `dtCheckWithProgramParts` / `dtCheckPackageWithIfacesParts` / `dtSplitProjectParts` / `dtEvalFile` /
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
@@ -235,7 +235,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `CliOpts` 是显式参数；`Base.Diag.Format` 语言也是显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
-- 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`）。
+- 进程执行只在 `Driver.CompilerCli.runIn`（`@vuna@prim_eff_runIn`）。
 - **stdio / socket server 公共层**（工具链，不进 seed）：`Vuna.Json.Frame`（字节级
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
@@ -260,9 +260,10 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`packages/compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/seed/forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有
-  `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `prim_*` / `prim_eff_*` 对任何包
-  可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Effect.Core.*` 标签 + handler
-  使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
+  `[capabilities]` / `[trust]` / `[privileged]`，`prim_*`（纯原语）对任何包可见
+  （用户包/ad-hoc 也可直调）。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`
+  （源码写不出，只由 base 的 handler 与编译器/工具链内部使用）；用户面的唯一入口是
+  `Base.Effect.Core.*` 标签 + handler。原语返回 `Eff []` 动作（只在 `main` 执行，
   钩子是 `v_main 0`）。显式接受的损失见 [effects.md](reference/effects.md) §8.6
   （缺口编号见 [debt.md](reference/debt.md) D62）。
 

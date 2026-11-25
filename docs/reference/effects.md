@@ -1,10 +1,10 @@
 # 效应：Eff 统一动作、handler 与宿主层
 
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Effect.Core`，构造子不导出；`MkEff` 是内部表示），
-入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Effect.Core.runPure`。宿主原语只有
-`prim_eff_*`（`Eff []`）；宿主层就是直接调用这些原语（任何包都可直调），
-Int/Nat 归一化只留在 `Base.Effect.Core.*` handler 的结果索引（`Print`、`WriteFile`/`FileSize` 返回
-`Nat`，直接调用原语得到 `Int`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
+入口是 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler），执行入口是
+`Base.Effect.Core.runPure`。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出），
+用户面只有 `Base.Effect.*` 标签 + handler 这一条路径；Int/Nat 归一化只留在 handler 的结果索引
+（`Print`、`WriteFile`/`FileSize` 返回 `Nat`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
 
@@ -18,8 +18,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 1. 范围
 
-- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、宿主层（直接调用 `prim_eff_*`）、
-  宿主层直调纪律、通用 Eff 的边界。
+- **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、宿主层（隐藏原语 + 标签/handler）、
+  宿主层纪律、通用 Eff 的边界。
 - **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.Effect.Pure.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
@@ -32,7 +32,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | --- | --- |
 | 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Effect.Core` 的 data；行是 Type-1 擦除索引） |
 | 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
-| main 入口 | `main : Eff [] a`；钩子 `dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)` |
+| main 入口 | `main : Eff r a`（内建宿主标签由 entry 预装 handler）；钩子 `dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)` |
 | 执行 | `runPure : Eff [] a -> a`（行必须 Nil；运行时 `runThunk` 应用 dummy 令牌） |
 | 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
 
@@ -59,24 +59,23 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Effect.Types` 只重导出
   类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
-  `List` 的 `(::)` 重载；局部可变走 `Base.Effect.MutRef`（命名单元 + 编译期名字绑定，见 §8.8）。
-- **宿主原语**：`@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
-  源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
+`List` 的 `(::)` 重载；局部可变走 `Base.Effect.MutRef`（命名单元 + 编译期名字绑定，见 §8.8）。
+- **宿主原语**：`@vuna@prim_eff_*` / `@vuna@host@*`（隐藏，源码写不出；见 `Frontend/Lexer` 的
+  `@vuna@` 规则），用户面经 `Base.Effect.*` 标签 + handler 使用；eff-boundary 守卫检查
+  「可见宿主原语名不得出现在源码」。
 
 | 层 | 类型/入口 | 说明 |
 | --- | --- | --- |
-| 用户面 | `Eff r a` + `Base.Effect.Core.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
+| 用户面 | `Eff r a` + `Base.Effect.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff r a` |
 | handler 层 | entry 自动预装的行 handler（`@vuna@` 内部名） | 用户面写不出 handler 名字；`main` 行有内建标签时由编译器嵌套预装 |
-| 宿主层 | `@vuna@prim_eff_*`（隐藏 intrinsic，源码写不出） | 直接调用即得 `Eff []` 动作；Int/Nat 归一化只在 Eff handler 的结果索引；没有 manifest 能力/信任门控 |
+| 宿主层 | `@vuna@prim_eff_*` / `@vuna@host@*`（隐藏 intrinsic，源码写不出） | 只由 base 的 handler 与编译器内部调用；Int/Nat 归一化只在 Eff handler 的结果索引；没有 manifest 能力/信任门控 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。
 - **宿主层边界（无 manifest 门控）**：`vuna.toml` 没有 `[capabilities]` / `[trust]` /
-  `[privileged]`；任何包（用户包、ad-hoc 文件）都可以直接调用
-  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。用户面**应**经 `Base.Effect.Core.*` 标签 + handler 使用
-  效果——这是纪律/文档约定，不是编译器强制。`prim_*` / `prim_eff_*` 是宿主层/底层原语，
-  base 的 Eff handler、编译器与根工具链内部直接使用它们。显式接受的损失见 §8.6
-  （登记在 [debt.md](debt.md) D62）。
+  `[privileged]`；`prim_*`（纯原语）任何包（用户包、ad-hoc 文件）都可直调。
+  宿主效应原语是隐藏名，源码写不出：唯一路径是 `Base.Effect.*` 标签 + handler。
+  显式接受的损失见 §8.6（登记在 [debt.md](debt.md) D62）。
 - **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
   统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见 [debugging.md](debugging.md)）。
   `log!` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
@@ -237,10 +236,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
 | `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `@vuna@mrefReadOp`/`@vuna@mrefWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsReadFileRange n`/`fsWriteFile n`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
-| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
-| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
-| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
-| `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
+| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
+| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `@vuna@prim_eff_sleep`） |
+| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`） |
+| `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `@vuna@prim_eff_getArgs`/`@vuna@prim_eff_exit`/`@vuna@prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
 | `Base.Effect.Error` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
 | `Base.Effect.Exn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
 | `Base.EffMutex` | Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -253,7 +252,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `31–36`（调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
 （Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（fs 命名实例 /
 process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 bracket、一次性闭包）、`45`（行语法糖）；
-负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`prim_eff_sleep`）。
+负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`clockSleepMicros`，内部走 `@vuna@prim_eff_sleep`）。
 细节见 §8.6 与 [effects-layers.md](effects-layers.md)。
 
 ### 8.4 已知边界
@@ -324,11 +323,10 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 - **专门诊断**：`Elab/Term/Impl.checkByInferFuel` 在「期望行 `Nil`、实际行具体非空」时报
   `TC_UnhandledEffects` 并列出标签，而不是裸 `TC_TypeMismatch`。
 - **宿主层无门控（显式接受的损失）**：没有 `[capabilities]` / `[trust]` / `[privileged]`
-  与宿主模块 import 门控——任何包（用户包、ad-hoc 文件）都可以直调
-  `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
-  REPL `--privileged`。用户面仍**应**经 `Base.Effect.Core.*` 标签 + handler（`runX =
-  joinEff (handleXHost …)`）；这是纪律/文档约定，不是强制门控。缺口见
-  [debt.md](debt.md) D62。
+  与宿主模块 import 门控——`prim_*`（纯原语）任何包（用户包、ad-hoc 文件）都可以直调；
+  宿主效应原语是隐藏名，源码写不出，唯一路径是 `Base.Effect.*` 标签 + handler（`runX =
+  joinEff (handleXHost …)`）。没有每包原语白名单、`unsafe` 定义级审计，也没有
+  REPL `--privileged`。缺口见 [debt.md](debt.md) D62。
 - **base 宿主层直接使用点（安全审计参考，不是强制约束）**：13 处——
   `Base.Effect.Core.sendCore`、`Base.Effect.Core.handleCore`、`Base.Effect.Core.bracket`、
   `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、

@@ -476,15 +476,16 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - `Hashable`：`hash : a -> Int`，泛型 `HashMap` / `HashSet` 的键约束；用户类型可
   `deriving (Hashable)`（与 Show/Eq/Ord 同一套展开，复合字段用 `hashCombine`）。
 
-- 效果 API 直接返回 `Eff []`：用户面经 `Base.Effect.Core.*` 标签 + handler（如 `consolePrint` /
-  `fsReadFile`）；handler 内部直接调用 `prim_eff_*` 原语（`print`/`readFile`/`writeFile`/
-  `readLine` 这类别名不存在；也没有 `println`，换行写
-  `prim_eff_print (s ++ "\n")`），原语返回 `Eff []`（例如
-  `prim_eff_getArgs : Eff [] (List String)`、`prim_eff_print : String -> Eff [] Int`）。
-  宿主层对任何包可见：源码里可直接调用 `prim_*` / `prim_eff_*`（没有 manifest 能力声明；
-  用户面**应**经 `Base.Effect.Core.*` + handler，见 [primitives.md](primitives.md)）。
-- 可执行包 / `vuna build` 要求 `main : Eff [] a`；核心求值路径（`vuna test` 纯测试 /
-  REPL）是纯核心求值，任何 `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
-  `main : Eff [] ...` 走 compile + 运行；REPL 的动作表达式经临时包 compile + 运行。
+- 效果 API 直接返回 `Eff`：用户面经 `Base.Effect.Core.*` 标签 + handler（如 `consolePrint` /
+  `fsReadFile`）；handler 内部直调隐藏宿主原语 `@vuna@prim_eff_*` / `@vuna@host@*`
+  （`print`/`readFile`/`writeFile`/`readLine`/`println` 这类源码别名不存在；handler 里换行写
+  `@vuna@prim_eff_print (s ++ "\n")`——隐藏名只在内建模块里可引用），原语返回 `Eff []`（例如
+  `@vuna@prim_eff_getArgs : Eff [] (List String)`、`@vuna@prim_eff_print : String -> Eff [] Int`）。
+  `prim_*`（纯原语）对任何包可见：源码里可直接调用（没有 manifest 能力声明，见
+  [primitives.md](primitives.md)）。
+- 可执行包 / `vuna build` 要求 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler，
+  自定义效应必须先 handle 成 `Nil`）；核心求值路径（`vuna test` 纯测试 / REPL 的纯表达式）是
+  纯核心求值，任何 `main : Eff ...` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
+  `main : Eff ...` 走 compile + 运行；REPL 的 `Eff r a` 表达式经临时包 compile + 运行。
 - 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。

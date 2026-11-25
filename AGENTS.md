@@ -48,15 +48,15 @@
    含它依赖的 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml` 模块；native/wasm 后端插件不在 seed）；
 4. **工具链不进 TCB**：整个 `packages/cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
    obs/package manager 等都在 `packages/cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
-5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
-   Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
+5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff r a`（行里的内建宿主标签由
+   entry 预装 handler；自定义效应必须在入口前 handle 成 `Nil`，未处理效应是类型错误），
    执行入口是 `Base.Effect.Core.runPure : Eff [] a -> a`。
-   宿主层 = 直接调用 `prim_eff_*`（`Base.Host` 已删除）；Int/Nat 归一化只在
-   `Base.Effect.Core.*` handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
+   宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出，只由 base 的 handler 与
+   编译器/工具链内部使用）；用户面只有 `Base.Effect.Core.*` 标签 + handler 这一条路径
+   （`consolePrint` / `fsReadFile` / `envGetEnv` / `exitWith` …）。Int/Nat 归一化只在
+   handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    `IORef` 实现全是 `Eff []`。
-   **无 manifest 门控**：没有能力/特权/信任机制；任何包（含 ad-hoc 文件）都可直调
-   `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Effect.Core.*` 标签 + handler（纪律，不是门控，
-   见 [effects.md](docs/reference/effects.md) §8.6）。
+   **无 manifest 门控**：没有能力/特权/信任机制；`prim_*`（纯原语）任何包（含 ad-hoc 文件）都可直调。
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
    `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；
    tracing 走隐藏 runtime 原语。

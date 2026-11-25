@@ -68,13 +68,13 @@
 | `Base.EffSched` | 单线程 fiber 调度器：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
 | `Base.EffMutex` | cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
-| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
-| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `effTimeUs` 与原生 `prim_eff_sleep`） |
-| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetEnvNonEmpty`（未设置或空串 ⇒ `Nothing`）/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
-| `Base.Effect.Args` | 参数标签 `ArgsOp`：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsHost`（真实 handler 用 `prim_eff_getArgs`）；`runArgs n` 单效应入口 |
-| `Base.Effect.Stdin` | 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`（返回 `Maybe String`，EOF = `Nothing`）/`handleStdin`/`handleStdinHost`（真实 handler 用 `prim_eff_readLine`/`prim_eff_readBytes`）；`runStdin n` |
-| `Base.Effect.Exit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `prim_eff_exit`）；`runExit n` |
-| `Base.Effect.Process` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
+| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
+| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `effTimeUs` 与原生 `@vuna@prim_eff_sleep`） |
+| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetEnvNonEmpty`（未设置或空串 ⇒ `Nothing`）/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`） |
+| `Base.Effect.Args` | 参数标签 `ArgsOp`：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsHost`（真实 handler 用 `@vuna@prim_eff_getArgs`）；`runArgs n` 单效应入口 |
+| `Base.Effect.Stdin` | 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`（返回 `Maybe String`，EOF = `Nothing`）/`handleStdin`/`handleStdinHost`（真实 handler 用 `@vuna@prim_eff_readLine`/`@vuna@prim_eff_readBytes`）；`runStdin n` |
+| `Base.Effect.Exit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `@vuna@prim_eff_exit`）；`runExit n` |
+| `Base.Effect.Process` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `@vuna@prim_eff_getArgs`/`@vuna@prim_eff_exit`/`@vuna@prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
 | `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Fin` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Log` / `Obs` / `Obs.Span`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
 | `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString` / `Convert`（含 `ConvertMaybe`）；也可写路径（`import Base.Trait.Monad as Monad`） |
 | `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...TreeMap` / `...TreeSet` / `...Queue` / `...PriorityQueue` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
@@ -118,7 +118,9 @@ packages/base/lib/
 各门面内部的模块清单以 `packages/base/lib/Base/{Data,Trait,Container,Effect,Effect/Core,Effect/Pure}.vuna`
 与 `Prelude.vuna` 的模块头为真源。
 
-宿主操作直接调用 `prim_eff_*`；`Eff` / `runPure` / `joinEff` / `raise` / `runEff`
+用户面只有 `Base.Effect.Core.*` 标签 + handler 一条路径；handler 内部直调隐藏宿主原语
+`@vuna@prim_eff_*` / `@vuna@host@*`（只在内建模块里可引用，普通包源码写不出）。
+`Eff` / `runPure` / `joinEff` / `raise` / `runEff`
 从 `Base.Effect.Core`（或扁平门面 `Base.Effect.Core`）显式 import。
 `Prelude` 的导出列表见 `packages/base/lib/Prelude.vuna`。
 
@@ -130,8 +132,8 @@ packages/base/lib/
   `Queue.size`、`PriorityQueue.size`、`Vec.vlen`。
 - **Nat 归一化只留在 Eff handler 的 result 族**：`Base.Effect.Console` 的 `Print` 与
   `Base.Effect.Fs` 的 `WriteFile` / `FileSize` 结果是 `Nat`（handler 在边界用 `natFromInt` 转）；
-  直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`；
-  `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与内部状态码仍 `Int`。
+  直接调用隐藏原语 `@vuna@prim_eff_print` / `@vuna@host@tryWriteFile` / `@vuna@host@fileSize`
+  得到 `Eff [] Int`；`@vuna@prim_eff_eprint` / `@vuna@host@tryWriteFileAtomic` 与内部状态码仍 `Int`。
 - **低层原语仍是 Int**：`strLength` / `arrayLength` / `prim_*Length` 等保持 Int 签名；
   Base 在边界用 `natFromInt` / `natToInt`（运行时恒等或单分支）转换。这样避免了
   seed 阶段改 intrinsic 签名的自举死锁。
@@ -182,13 +184,13 @@ packages/base/lib/
   用户写同名 `data Bool` 是普通 data，不与 canonical 冲突。
 - **`List` 也是 base 的普通 `data` 声明**：canonical 身份 `Base.Data.List.List`。返回或接收
   `List` 的 10 个原语（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、
-  `prim_eff_getArgs` / `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` /
+  `@vuna@prim_eff_getArgs` / `@vuna@host@tryReadDir` / `@vuna@prim_eff_runIn` / `@vuna@prim_eff_spawn`、`arrayFromList` /
   `arrayToList`）经 List 桥接 helper（`dtp_unpack` / `dtp_pack` / `dtp_listOf` 等）落地，
   桥接只为 canonical `Base.Data.List.List` 生成；包内没有该族时 codegen 报
   `CG_ListBridgeRequired`。`Prelude` 自动注入 `Base.Data.List`，所以正常上下文里总可用。
 - **`Eff` 是唯一动作类型**：`Base.Effect.Core` 的装箱 data（行擦除索引），运行时是一次性续延 +
-  handler 路由；入口 `main : Eff [] a`，执行 `runPure`；细节见
-  [effects.md](effects.md) §2。
+  handler 路由；入口 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler），执行 `runPure`；
+  细节见 [effects.md](effects.md) §2。
 - **`Show` / `Eq` / `Ord` / `Hashable` 在库（声明与实例分离）**：`Base.Trait.Show` / `Base.Trait.Eq` /
   `Base.Trait.Ord` / `Base.Trait.Hashable` 承载 trait 声明；实例按**落点规则**分布（见 [operators.md](operators.md)）：
   `Int` → `Base.Data.Int`、`String` 的 Eq/Ord → `Base.Data.String`、`Show String` → `Base.Trait.Show`
@@ -207,14 +209,15 @@ packages/base/lib/
   形态声明。字符串展示只有一个实现 `strShow`——`Base.Trait.Show` 的 `String` 实例是
   `show s = strShow s`，库不再另写一套转义；`Show Bool` 用 `if` 输出 `True` / `False`；
   `Eq Bool` / `Ord Bool` 用模式匹配穷尽（不依赖 `==` / `<`，避免实例体自引用）。
-- **效果原语单表**：`prim_eff_*`（`Eff []`，外加 `effTimeUs`）就是宿主层，
-  宿主操作直接调用这些原语，没有别名模块。没有 manifest 能力/特权声明：任何包都可直调
-  `prim_*` / `prim_eff_*`。
+- **效果单表**：宿主层是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（`Eff []`，外加可见的
+  `effTimeUs`），源码写不出，只由 base 的 handler 与编译器/工具链内部使用；用户面只有
+  `Base.Effect.Core.*` 标签 + handler（`consolePrint` / `fsReadFile` / `exitWith` …），没有别名模块。
+  `prim_*`（纯原语）对任何包可见，没有 manifest 能力/特权声明。
   动作只在 `main` 执行（钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是
-  唯一 main 执行入口。Int/Nat 归一化只在 Eff handler 的 result 族。用户面**应**经 `Eff` + handler（纪律，非强制）。
+  唯一 main 执行入口。Int/Nat 归一化只在 handler 的 result 族。
 - **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件同样没有能力门控：
-  既可经 `Base.Effect.Core` + handler，也可直接调用 `prim_*` / `prim_eff_*`（约定：用户面应经 handler）。
+  效果经 `Base.Effect.Core` + handler，纯原语 `prim_*` 可直接调用（效果原语是隐藏名，源码写不出）。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
   `Main`；文件集以 `seed/` 与 `nix/seed/files.txt` 为准。
 
@@ -265,8 +268,8 @@ packages/base/lib/
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；
   **效应标签在库层**：`Base.Effect.Fs` 是完整 fs 面并带命名实例（`Named "mock" FsOp` / `Named "real" FsOp`），
-  `Base.Effect.Console` / `Base.Effect.Clock` / `Base.Effect.Env` / `Base.Effect.Process` 是命名实例 + 宿主 handler，宿主层仍可
-  直接调用 `prim_eff_*`；原生 `prim_eff_sleep`（`Base.Effect.Clock` 与直接调用路径都用）、可控
+  `Base.Effect.Console` / `Base.Effect.Clock` / `Base.Effect.Env` / `Base.Effect.Process` 是命名实例 + 宿主 handler，宿主 handler
+  内部直调隐藏原语 `@vuna@prim_eff_*`；原生 `@vuna@prim_eff_sleep`（`Base.Effect.Clock` 的 `SleepMicros` 用它）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）都在；
   见 [effects.md](effects.md) §8.6；
 - 抽象类型（`Map`、`HashMap`、`HashSet`）跨包不可构造、不可模式匹配，只能经 API 使用；

@@ -10,8 +10,8 @@
 把 `Row`/`Member`/`rowRem` 当普通库编码会撞到四个硬问题：
 
 1. **双轨制**：内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，两者靠转换函数
-   桥接。今天只有 `Eff` 一个动作类型，宿主 op 构造器不导出、`prim_eff_*` 只作宿主层
-   逃生口。
+   桥接。今天只有 `Eff` 一个动作类型，宿主 op 构造器不导出；宿主层原语是隐藏的
+   `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出，只由 base 的 handler 与编译器/工具链内部使用）。
 2. **三重表示**：同一抽象三副面孔（纯 monad `Base.Effect.Pure.State`/`Reader`/`Error`、效应行
    `Base.Effect.Core.*`、宿主 handler）会把库 API 与文档面乘三倍。今天库 API 只剩 handler 一种
    写法，`transformer` 与 `MonadIO` 不存在。
@@ -60,7 +60,7 @@ main : Eff [] Nat
 | key | op 族规范名（编译器推导，send / handle 两侧由构造保证一致） |
 | 实例名 | 名字与签名进标签 `Named : String -> (Type -> Type) -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
 | 行标签 | 标签 = 命名后的效应签名（`Named "audit" ConsoleOp`、`Named "counter" (StateOp Nat)`）；op 族以结果类型为最后索引（`ConsoleOp : Type -> Type`、`StateOp : (s : Type) -> Type -> Type`） |
-| 权威 | 宿主 op 构造器不导出；`prim_eff_*` 是宿主层逃生口（无 manifest 门控，见 [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62） |
+| 权威 | 宿主 op 构造器不导出；宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出；无 manifest 门控，见 [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62） |
 | 纯效应 | 库级 monad 与 mock handler 并存；核心求值可执行 mock 程序 |
 | 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（[debt.md](debt.md) D42） |
 | handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（[debt.md](debt.md) D27） |
@@ -190,13 +190,15 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
 
 ## 4. 动作类型与宿主层
 
-- `main : Eff [] a`；运行时 main 钩子预装宿主 handler（print/fs/clock/env/process 的
-  handler 在宿主层由 runtime 直接提供）。
+- `main : Eff r a`；运行时 main 钩子给行里的内建宿主标签预装 handler（print/fs/clock/env/process 的
+  handler 在宿主层由 runtime 直接提供），自定义效应必须先 handle 成 `Nil`。
 - 宿主 op 类型（`ConsoleOp` 等的宿主分支）构造器不导出：用户能 `perform`、能写 mock
   handler，但**不能**在无 handler 情况下构造宿主动作。权威只有「宿主 op 构造器不导出」
   ——manifest 权威（`unsafe`/`privileged`）不存在（[debt.md](debt.md) D62）。
-- 直接调用 `prim_eff_*`、`prim_schedNewScope` 保留为宿主层逃生口。
-- 内建动作类型不存在；`prim_eff_*` / `IORef` 等宿主面就是宿主层，`IORef` 的实现全是
+- 宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`：只在内建模块（模块前缀 `Base.` /
+  `Vuna.`，即 base / 编译器 / 工具链）里可引用，普通包源码写 `prim_eff_print` 与
+  `@vuna@prim_eff_print` 都报 `RN_UnknownVariable`；`prim_schedNewScope` 这类纯原语仍是可见内建。
+- 内建动作类型不存在；`@vuna@prim_eff_*` / `IORef` 等宿主面就是宿主层，`IORef` 的实现全是
   `Eff []`。
 
 ## 5. 表示收敛

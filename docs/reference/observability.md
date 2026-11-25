@@ -261,10 +261,11 @@ vuna dev obs symbols [--out FILE] [OUTDIR]
 vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
 ```
 
-- `run`：经 `@vuna@prim_eff_runIn` 跑子命令，退出码原样返回；结束后打印 trace 路径。
+- `run`：经 `processRunIn`（`Base.Effect.Process.RunIn`，handler 内部是 `@vuna@prim_eff_runIn`）
+  跑子命令，退出码原样返回；结束后打印 trace 路径。
   **env 注入用「`env` 前置命令」**（`["env", "VUNA_OBS=…", …]` ++ 用户 argv，与
-  `Vuna.Test.Run.withEnv` 同一范式）：本仓库没有 `prim_eff_setenv` 原语，所以 `run` 不改
-  自己的进程环境，只让子进程继承 `env` 设的那一组。规则：
+  `Vuna.Test.Run.withEnv` 同一范式）：本仓库没有设置环境变量的原语（`@vuna@host@*` 只有
+  `getenv`），所以 `run` 不改自己的进程环境，只让子进程继承 `env` 设的那一组。规则：
   - `--level N`（缺省 **2**，`run` 的默认语义就是 level 2；`--level 0` 是关闭口径对照）
     → `VUNA_OBS`；`--sample cpu|mem|both` → `VUNA_OBS_SAMPLE`；`--interval US` →
     `VUNA_OBS_INTERVAL`；

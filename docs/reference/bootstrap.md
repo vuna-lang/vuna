@@ -163,20 +163,24 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 ## 效应边界（无 manifest 门控）
 
 `seed/` 里没有工具链模块，但编译器自身需要文件读写。这条边界**不由 manifest 门控**：
-没有 `[capabilities]` / `[trust]` / `[privileged]`，也没有宿主模块 import 门控。
+没有 `[capabilities]` / `[trust]` / `[privileged]`，也没有宿主模块 import 门控；宿主原语的
+可见性由 `@vuna@` 内部名规则给出（源码写不出），同样不是 manifest 门控。
 
 - **seed 闭包不变**：seed 只含 compiler 包入口闭包；编译器与 base 的 Eff handler 直调
-  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。动作类型是唯一的 `Eff r a`，入口 `main : Eff [] a`，
-  执行入口 `Base.Effect.Core.runPure`。
-- **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以直接调用
-  `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
-  REPL `--privileged`。编译器不检查内建的能力位。
-- **用户面纪律（非门控）**：用户面**应**经 `Base.Effect.Core.*` 标签 + handler 使用效果；宿主层
-  细节留在 `prim_eff_*` / `Base.Effect.Core*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
+  隐藏宿主原语 `@vuna@prim_eff_*` / `@vuna@host@*`（`Eff []` 叶子）。动作类型是唯一的
+  `Eff r a`，入口 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler，自定义效应必须
+  先 handle 成 `Nil`），执行入口 `Base.Effect.Core.runPure`。
+- **任何包都可见纯原语面**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以直接调用
+  `prim_*`（纯原语）；效果原语是隐藏名（`@vuna@prim_eff_*` / `@vuna@host@*`），源码写不出，
+  只由 base 的 handler 与编译器/工具链内部使用。没有每包原语白名单、`unsafe` 定义级审计，
+  也没有 REPL `--privileged`。编译器不检查内建的能力位。
+- **用户面唯一入口（不是门控）**：用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果
+  （`consolePrint` / `fsReadFile` / `exitWith` …）；宿主层细节留在隐藏原语与
+  `Base.Effect.Core*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
   [primitives.md](primitives.md) §7。
 - **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
   根包可用（[debt.md](debt.md) D62）。
-- `Driver.CompilerCli.runIn`（`prim_eff_runIn`）是唯一的进程执行入口（代码内部约定，
+- `Driver.CompilerCli.runIn`（`@vuna@prim_eff_runIn`）是唯一的进程执行入口（代码内部约定，
   不是能力检查）。
 
 ## 种子文件集（当前）

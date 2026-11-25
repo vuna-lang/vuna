@@ -61,7 +61,7 @@
     只生成源码目录、不调 `ocamlopt`（非 `--no-compile` 时生成的 `build.sh` 需要 PATH 里有
     `ocamlopt`）；
   - `vuna test [DIR]`：纯测试（`main : String` 空串 / `Int` 0 / `Bool` True 通过）走
-    DT 核心求值；`main : Eff [] ...` 走 compile + 运行，退出码 0 通过（可测效果）。纯形态受
+    DT 核心求值；`main : Eff ...` 走 compile + 运行，退出码 0 通过（可测效果）。纯形态受
     核心求值器的原语支持面限制（List 桥接的 `strUnpack` / `strConcatMany` 等不在其中），
     这类测试改用 `Eff` 入口，见 [testing.md](testing.md) 的「包内测试」。DIR 是
     workspace 根时对每个包的 `test/` 聚合；
@@ -70,10 +70,12 @@
     模块头显式导出列表逐项一行并按名排序，项注释随项移动；`infix*` 声明按源码顺序打印在
     imports 之后；fixity 取**程序级**可见闭包，见 [operators.md](operators.md)）；省略 PATH
     时格式化 workspace 内所有包的 `lib/app/test`；
-  - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/
+  - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、纯表达式经 DT 求值（支持 import/记录/
     trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
-    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；动作表达式经临时包
-    compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）；tty 下有行编辑（方向键、Ctrl-R、
+    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`Eff r a` 表达式一律经
+    临时包 compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）：`Nil` 行可直接求值，带行
+    （非 `Nil`）的要先定义带显式签名的值（如 `prog : Eff [ConsoleOp] Int`）再求值 `prog`；
+    server 模式拒绝效果表达式（子进程会写真实 stdout）；tty 下有行编辑（方向键、Ctrl-R、
     Tab 补全）与颜色，`:load` 接受文件/目录/模块名；
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
@@ -98,25 +100,27 @@
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
   CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
-- 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.Effect.Exit`）。
-  没有 manifest 级能力/特权/信任门控：effectful `prim_*` / `prim_eff_*` 宿主层
-  对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Effect.Core.*` 标签 +
-  handler 使用效果——这是约定与文档纪律，不是强制门控。纯测试的核心求值不执行效果；
-  效果程序用 `compile` + 运行产物。
+- 可执行入口：`vuna build` 要求入口 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler，
+  自定义效应必须先 handle 成 `Nil`；退出码用 `exitWith` / `Base.Effect.Exit`）。
+  没有 manifest 级能力/特权/信任门控：`prim_*`（纯原语）对任何包（用户包、ad-hoc 文件）
+  都可见（直接调用即可）；效果原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出）。
+  用户面只有 `Base.Effect.Core.*` 标签 + handler 这一条路径（`consolePrint` / `fsReadFile` /
+  `exitWith` …）。纯测试的核心求值不执行效果；效果程序用 `compile` + 运行产物。
 
 ## 效应边界（无 manifest 门控）
 
 - 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 没有 `[capabilities]`、`[trust]`、
   `[privileged]`；`[package]` 只接受 `name`。
-- 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` / `prim_eff_*`
-  （效果原语是 `Eff []` 叶子）。编译器没有包级原语白名单、宿主模块 import 门控、`unsafe` 的
+- 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*`（纯原语）。效果原语是隐藏名
+  （`@vuna@prim_eff_*` / `@vuna@host@*`，源码写不出），只由 base 的 Eff handler 与
+  编译器/工具链内部使用。编译器没有包级原语白名单、宿主模块 import 门控、`unsafe` 的
   定义级审计，也没有 `REPL --privileged`。
-- **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Effect.Core.*` 标签 + handler 使用效果
-  （入口执行点 `runPure : Eff [] a -> a`）；`prim_*` / `prim_eff_*` 是宿主层 / 底层原语，
-  base 的 Eff handler、编译器与根工具链内部直接使用它们——不由编译器强制，只是约定。
+- **用户面唯一入口**：标准库与用户代码经 `Base.Effect.Core.*` 标签 + handler 表达效果
+  （`consolePrint` / `fsReadFile` / `exitWith` …；入口执行点 `runPure : Eff [] a -> a`）。
+  宿主原语是 `@vuna@` 内部名，源码里没有写法——这条边界由名字可见性保证，不是能力位检查。
 - **显式接受的损失**（[debt.md](debt.md) D62）：宿主层 import 门控、
   每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
-  是 `Eff r a`，入口 `main : Eff [] a`，核心求值路径不执行运行时效应。
+  是 `Eff r a`，入口 `main : Eff r a`（内建宿主标签由 entry 预装 handler），核心求值路径不执行运行时效应。
 - **base 的宿主层直接使用点**：13 个真实使用点见 [effects.md](effects.md) §8.6。
 
 ## 依赖声明（源 + 摘要）
@@ -181,7 +185,8 @@ modules = ["My.Lib", "My.Lib.Internal"]
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
-没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`；`Base.Effect` 只是效应模块的
+没有能力 / 特权 / 信任 section。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`
+（源码写不出，只由 base 的 handler 与编译器/工具链内部使用）；`Base.Effect` 只是效应模块的
 命名空间门面，不包原语。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
@@ -246,9 +251,9 @@ modules = ["My.Lib", "My.Lib.Internal"]
 | `vuna check (<file.vuna> \| <package-dir>)` | 类型检查（workspace 根检查所有成员；单文件带 `module` 头 = 库模块检查；不生成代码） |
 | `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]` | 逐模块 codegen（默认 `<PKG-DIR>/.output`）+ 执行 `build.sh` → `DIR/bin/<包名>`；workspace 根建所有可执行成员 |
 | `vuna lint [--fix] <file.vuna>...` | 风格检查与自动修复 |
-| `vuna test [DIR]` | 纯测试走核心求值；`main : Eff [] ...` 走 compile+运行（退出码 0 通过） |
+| `vuna test [DIR]` | 纯测试走核心求值；`main : Eff ...` 走 compile+运行（退出码 0 通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
-| `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；动作表达式经 compile+运行） |
+| `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；`Eff r a` 表达式经 compile+运行） |
 | `vuna doc [--check] [--package NAME] [DIR [OUT]]` | 单文件交互 HTML API 文档（docstring；尊重 `[export]`） |
 | `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
 | `vuna map` / `vuna map find` / `vuna map impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |

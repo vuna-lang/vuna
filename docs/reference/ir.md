@@ -77,7 +77,7 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
 | `IrNatCase scrut fresh zero succ catch` | Nat case 降级 | Nat 运行时是 `int`，不能生成变体 match；`fresh` 是 `dtnat__<n>` 的编号 |
 | `IrConcatMany parts` | `++` 链展平 | `String.concat "" [a; b; c]` |
 | `IrEffThunk family ctor unitTy arity prim` | 装箱动作构造 | 原语运行时仍是 eager 函数，结果包成 `MkEff` |
-| `IrEffBind family ctor unitTy` | `prim_eff_bind1` 的装箱实现 | 当前无库调用方 |
+| `IrEffBind family ctor unitTy` | `@vuna@prim_eff_bind1` 的装箱实现 | 当前无库调用方 |
 
 ### binder 身份 `IrBName`
 
@@ -147,9 +147,13 @@ id 只需沿作用域链唯一，不同定义 / 单元可复用。Pass 里的合
 
 | 类别 | 条数 | 说明 |
 | --- | --- | --- |
-| 普通内建名 | 223 | 名字 = `Base.Intrinsics.intrinsicName`；`prim_eff_bind1` 除外（走 `IrEffBind` 专用节点） |
+| 普通内建名 | 223 | 名字 = `Base.Intrinsics.intrinsicName`；`@vuna@prim_eff_bind1` 除外（走 `IrEffBind` 专用节点） |
 | 桥接内建名 | 25 | 运行时模板引用 canonical List 族的 `dtp_*` helper：缺 List 族报 `CG_ListBridgeRequired`，跨单元按 List 族单元限定；`irRtSymBridgesList = True` |
 | 合成符号 | 6 | `@ir@natSucc`、`@ir@show{Int,Nat,Str,Float,Bool}`（入口展示 / Nat 后继，不对应内建） |
+
+契约里的名字就是 IR 实际携带的符号名：宿主效应面是 `@vuna@prim_eff_*` / `@vuna@host@*`
+隐藏名（只在内建模块里可引用——模块前缀 `Base.` / `Vuna.`；普通包源码写不出；`effTimeUs`
+是唯一可见的效果内建）。
 
 后端义务（OCaml 是参考实现；wasm / native 按同一契约实现子集）：
 

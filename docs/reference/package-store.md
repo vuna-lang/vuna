@@ -37,7 +37,8 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
   roots/<项目摘要>/<digest>     # fetch 登记的项目保留集合（跨项目 GC 保护）
 ```
 
-- **对象是唯一真源**：内容摘要即对象地址；写用 `prim_eff_writeFileAtomic`。
+- **对象是唯一真源**：内容摘要即对象地址；写用 `Base.Effect.Fs` 的 `fsWriteFileAtomic`
+  （`WriteFileAtomic`；handler 内部是 `@vuna@host@tryWriteFileAtomic` + 状态槽）。
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。

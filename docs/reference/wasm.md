@@ -252,11 +252,13 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   （WASI preview1 没有可执行路径）；`clockNow` 读 monotonic clock；`sleep` 是运行期 trap
   （浏览器不能用同步忙等阻塞事件循环）；`isTty` 恒 `False`（WASI preview1 无 isatty，stdout 终端性不可知，保守按管道处理）。
 - **未实现的宿主操作**走 `$rt_hostTrap<n>`：运行期 `vuna: runtime error: wasm host
-  operation is not implemented` + exit 2，不返回伪造结果。直接调用多数
-  `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / `writeFileAtomic` /
-  `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `fileMtime` / `fileSize`）
-  是这条路径；base 的 `FsOp` handler 不走它们，而是走 `@vuna@host@try*`，属于可用路径。
-  `@vuna@prim_eff_readDir` / `getArgs` / `getenv` / `getcwd` / `execPath` 直连真实实现。
+  operation is not implemented` + exit 2，不返回伪造结果。`@vuna@host@tryReadFileRange` /
+  `trySymlink` 与 Sched 家族是这条路径。文件系统其余 `@vuna@host@try*` 叶子直连真实实现
+  （`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` /
+  `tryMakeDir` / `tryRemoveFile` / `tryRemoveTree` / `tryRename` / `tryMakeDirExclusive` /
+  `fileExists` / `fileMtime` / `fileSize`），是 base `FsOp` handler 走的可用路径；
+  `@vuna@prim_eff_getArgs` / `@vuna@host@getenv` / `@vuna@host@getcwd` / `@vuna@host@execPath`
+  也直连真实实现。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
 契约符号，例如 Sched 家族（`prim_sched*`）与网络宿主原语（`@vuna@host@tryNet*`）。
@@ -347,7 +349,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 
 | WASI 面 | preview2-shim 浏览器 | Vuna 效应 / 原语 | 当前 wasm 后端 |
 | --- | --- | --- | --- |
-| stdout / stderr | console-backed，保留 UTF-8 分片 | `ConsoleOp` / `prim_eff_print` | 支持 |
+| stdout / stderr | console-backed，保留 UTF-8 分片 | `ConsoleOp` / `@vuna@prim_eff_print` | 支持 |
 | stdin | adapter-backed，默认 closed | `StdinOp` | 不支持（trap） |
 | args / env / initial cwd | 可配置；默认空快照 | `ArgsOp` / `EnvOp` | 支持；cwd 固定 `/`，env 可空 |
 | exit | cli/exit（`ComponentExit`） | `ExitOp` / `ProcessOp.Exit` | 支持 |
@@ -386,9 +388,9 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   `RunIn` 运行期 trap。家族整体仍按不可用告警。
 - **stdin / raw 网络**：分别 trap 与生成期拒绝；浏览器默认 stdin closed，raw TCP/UDP/DNS
   不暴露。
-- **直接 `prim_eff_*` 文件系统原语**：多数仍是 trap；base 的 `FsOp` handler 走
-  `@vuna@host@try*`，是可用路径。例外是 `FsOp.ReadFileRange`：宿主侧把整文件读进内存，
-  按偏移读没有收益，运行期 trap（`vuna: runtime error: wasm host operation is not implemented`）。
+- **文件系统失败面**：`FsOp` handler 走 `@vuna@host@try*`，是可用路径；`tryReadFileRange` /
+  `trySymlink` 是运行期 trap。`FsOp.ReadFileRange` 在这个后端同样 trap：宿主侧把整文件读进内存，
+  按偏移读没有收益（`vuna: runtime error: wasm host operation is not implemented`）。
 
 ### 8.3 浏览器允许但当前未实现
 
@@ -440,8 +442,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   `--error-format json`（机器格式走进程内顺序检查）或按包单独 `check <pkg-dir>`。
 - stdin（`readLine` / `readBytes`）在运行期 trap；网络（`@vuna@host@tryNet*`）与
   extern / FFI 在生成期拒绝。
-- 直接调用 `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / …）是运行期
-  trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
+- `@vuna@host@tryReadFileRange` / `trySymlink` 这类未实现的宿主叶子是运行期 trap；base 的
+  `FsOp` handler 走 `@vuna@host@try*`，其余叶子是可用路径（见 §5）。
 - wasm 的 `tryRemoveTree` 在 guest 侧递归：先 `path_unlink_file`（宿主用 `lstat`，符号链接
   删链接本身），目录再 `path_open` + `fd_readdir` 逐条删子项，最后 `path_remove_directory`。
   递归深度上限 512（超出报 `FsIo`）；嵌套路径超过 4096 字节仍按 `rt_pathCopyRel` 的容量

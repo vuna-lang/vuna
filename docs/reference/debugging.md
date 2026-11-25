@@ -57,7 +57,7 @@ vuna: runtime error: division by zero
   没有表达式级定位，见 debt D80）；`ocamlopt` 单元内联仍可能把帧归到调用者（D33）。
   规范见 [observability.md](observability.md) §5。
 - 纯 `main`（零参值绑定）在**模块初始化期**求值，早于 main 钩子：`Main.ml` 第一行
-  开启回栈、并给入口 main 的绑定套同一个报告器；`main : Eff [] a` 的 thunk 在钩子的
+  开启回栈、并给入口 main 的绑定套同一个报告器；`main : Eff r a` 的 thunk 在钩子的
   `try` 内执行。
 - 回栈记录由生成代码 `Printexc.record_backtrace true` 打开；`build.sh` 本就带 `-g`
   （见 [compiler.md](compiler.md) 的输出模型）。
@@ -87,7 +87,7 @@ vuna: runtime error: division by zero
 
 `log!` 展开为隐藏 runtime 原语（`@vuna@log@on` / `@vuna@log@emit`，见
 [primitives.md](primitives.md)），`mark!` 展开为 `@vuna@obs@mark`，
-所以源码里没有“假纯值”；核心求值路径（`vuna test` 纯测试 / REPL）不执行 tracing / 观测（都归约为 no-op），
+所以源码里没有“假纯值”；核心求值路径（`vuna test` 纯测试 / REPL 的纯表达式）不执行 tracing / 观测（都归约为 no-op），
 输出只发生在 compile+run 的 runtime。
 
 `DebugShow` 在 `Base.Trait.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
@@ -129,11 +129,12 @@ vuna: runtime error: assertion failed: broken invariant
 - `assert` / `todo`：§3 的语言级调试构造（由 `Loader.Resolve` 在 release 构建拒绝）；
 - `@vuna@log@on` / `@vuna@log@emit`：`log!` 的隐藏 runtime 原语
   （`visible = False`，源码不可写；签名与 runtime 在 Intrinsics；规范见 [logging.md](logging.md)）；
-- `prim_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush；
+- `consoleEprint`（`Base.Effect.Console` 的 `EPrint`）：写 stderr 并 flush，返回 `Int`；
 - `prim_fail : String -> a`：抛 `Failure <msg>`，可被报告器渲染。
 
-普通程序用 §3 的构造即可；需要直接调用原语时可直接引用 `prim_*` / `prim_eff_*`
-（没有 manifest 门控；用户面**应**经 `Base.Effect.Core` + handler）。
+普通程序用 §3 的构造即可；纯原语 `prim_*` 可直接引用（没有 manifest 门控）；效果只有
+`Base.Effect.Core` 标签 + handler 一条路径（宿主原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`，
+源码写不出）。
 
 编译器的性能/诊断探针分两层：
 
