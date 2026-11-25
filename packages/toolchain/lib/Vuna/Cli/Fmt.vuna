@@ -2,8 +2,8 @@
 --
 -- 格式化本体在 `Vuna.Fmt`；本模块只做目标展开、逐文件错误累计与退出码。
 --
--- 一批文件分三段处理：顺序读盘、`Vuna.Fmt.formatSourceWith` 并行（纯函数，`parMap`
--- 保序）、顺序写盘与报告。读/写是宿主动作，只在调用线程执行；worker 里只跑纯格式化。
+-- 一批文件在 worker 里各自完成「读 → 格式化 → 写」，结果保序回到调用线程报告。
+-- worker 用 `runFsResult` 安装自己的 fs handler；调用线程不再读 / 写，只做顺序报告。
 module Vuna.Cli.Fmt where
 
 import Vuna.Cli.Args
@@ -15,6 +15,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Files
 import Vuna.Fmt
+import Base.Data.Result
 import Base.Effect.Console as EffConsole
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
@@ -40,7 +41,8 @@ fmtRun check [] =
       OkC paths =>
         do
           expanded <- expandPaths paths
-          fmtFiles check (length expanded) (filter fmtScanKeep expanded) 0 0
+          let targets = dedupePaths (filter fmtScanKeep expanded)
+          fmtFiles check (length targets) targets 0 0
 fmtRun check paths =
   do
     missing <- firstMissingPath paths
@@ -49,7 +51,8 @@ fmtRun check paths =
       Nothing =>
         do
           expanded <- expandPaths paths
-          fmtFiles check (length expanded) expanded 0 0
+          let targets = dedupePaths expanded
+          fmtFiles check (length targets) targets 0 0
 
 -- | 内部：批量存在性检查，一次给出第一个缺失的路径（不静默跳过）。
 firstMissingPath : Member nFs FsOp r => List String -> Eff r (Maybe String)
@@ -117,60 +120,78 @@ expandPath path =
     exists <- pathExistsDir path
     if exists then collectVunaFiles path else pure [path]
 
--- | 内部：一批同时驻留的文件数。三段式一次持有整批的原文与规范文本，按批推进以限制峰值内存。
+-- | 内部：保序去重。显式 PATH 与目录展开可能重叠；并发写同一路径会竞争，所以进入 worker
+-- 前只保留首次出现。
+dedupePaths : List String -> List String
+dedupePaths paths = dedupeInto [] paths
+
+dedupeInto : List String -> List String -> List String
+dedupeInto seen [] = reverse seen
+dedupeInto seen (path :: rest) =
+  if memName path seen then dedupeInto seen rest else dedupeInto (path :: seen) rest
+
+-- | 内部：每批文件数。worker 各自只持有一个文件的文本；批次限制一次返回的结果数与报告粒度。
 fmtBatchSize : Int
 fmtBatchSize = 256
 
--- | 内部：单个文件在纯格式化阶段的结果。
+-- | 内部：单个文件在 worker 里的结果。
 data FmtDone : Type where
   -- | 原文已经是规范形。
   FmtSame : String -> FmtDone
-  -- | 需要改写：路径与规范文本。
-  FmtChanged : String -> String -> FmtDone
+  -- | 需要改写：路径。
+  FmtChanged : String -> FmtDone
   -- | 失败：已拼好的报告文本（读盘失败自带路径，格式化失败补 `<path>: `）。
   FmtFailed : String -> FmtDone
 
--- | 内部：顺序读一批文件；读盘失败保留为 `ErrC` 并继续读剩下的。
-fmtLoadBatch : Member nFs FsOp r => List String -> Eff r (List (String, Check String))
-fmtLoadBatch [] = pure []
-fmtLoadBatch (path :: rest) =
+-- | 内部：单文件 worker——读、格式化，必要时写；Fs 失败由 `runFsResult` 收成 `Err`。
+fmtOne : Bool -> String -> Eff [FsOp] FmtDone
+fmtOne check path =
   do
     textR <- readText path
-    restR <- fmtLoadBatch rest
-    pure ((path, textR) :: restR)
+    case textR of
+      ErrC e => pure (FmtFailed (diagText e))
+      OkC original =>
+        case formatSourceWith original of
+          ErrC e => pure (FmtFailed "${path}: ${diagText e}")
+          OkC formatted =>
+            if formatted == original then
+              pure (FmtSame path)
+            else if check then
+              pure (FmtChanged path)
+            else
+              do
+                _ <- fsWriteFile path formatted
+                pure (FmtChanged path)
 
--- | 内部：纯函数——单个文件从「读盘结果」到 [FmtDone]。在 worker 线程里执行。
-fmtPlan : (String, Check String) -> FmtDone
-fmtPlan (path, ErrC e) = FmtFailed (diagText e)
-fmtPlan (path, OkC original) =
-  case formatSourceWith original of
-    ErrC e => FmtFailed "${path}: ${diagText e}"
-    OkC formatted => if formatted == original then FmtSame path else FmtChanged path formatted
-
--- | 内部：顺序写盘与报告一批结果；返回（改写数, 失败数）。顺序即输入顺序。
-fmtEmitBatch : Member nFs FsOp r, Member nConsole ConsoleOp r => Bool -> List FmtDone -> Int -> Int -> Eff r (Int, Int)
-fmtEmitBatch check [] changed failed = pure (changed, failed)
-fmtEmitBatch check (done :: rest) changed failed =
-  case done of
-    FmtFailed msg =>
+-- | 内部：父线程顺序报告一批 worker 结果；返回（改写数, 失败数）。
+fmtReport : Member nConsole ConsoleOp r => Bool -> List (Result FmtDone) -> Int -> Int -> Eff r (Int, Int)
+fmtReport check [] changed failed = pure (changed, failed)
+fmtReport check (res :: rest) changed failed =
+  case res of
+    Err msg =>
       do
         _ <- consolePrint "error: ${msg}\n"
-        fmtEmitBatch check rest changed (failed + 1)
-    FmtSame _ => fmtEmitBatch check rest changed failed
-    FmtChanged path formatted =>
-      if check then
-        do
-          _ <- consolePrint "would reformat: ${path}\n"
-          fmtEmitBatch check rest (changed + 1) failed
-      else
-        do
-          _ <- fsWriteFile path formatted
-          _ <- consolePrint "formatted ${path}\n"
-          fmtEmitBatch check rest (changed + 1) failed
+        fmtReport check rest changed (failed + 1)
+    Ok done =>
+      case done of
+        FmtFailed msg =>
+          do
+            _ <- consolePrint "error: ${msg}\n"
+            fmtReport check rest changed (failed + 1)
+        FmtSame _ => fmtReport check rest changed failed
+        FmtChanged path =>
+          if check then
+            do
+              _ <- consolePrint "would reformat: ${path}\n"
+              fmtReport check rest (changed + 1) failed
+          else
+            do
+              _ <- consolePrint "formatted ${path}\n"
+              fmtReport check rest (changed + 1) failed
 
--- | 入口：按批跑「顺序读 → 并行纯格式化 → 顺序写盘/报告」，返回 0 / 1。
+-- | 入口：按批在 worker 内「读 → 格式化 → 写」，父线程顺序报告，返回 0 / 1。
 --
--- 单个文件出错（读盘 / 格式化）时**报告并继续**：否则第一个坏文件之后的一切都被跳过。
+-- 单个文件出错（读盘 / 格式化 / 写盘）时**报告并继续**：否则第一个坏文件之后的一切都被跳过。
 -- 结束时只要出现过错误（或 `check` 下有差异）就返回非 0。
 -- `fuel` 是剩余批数，取调用时的文件数即可；终止性靠它逐批减一，不依赖 `drop` 的测量。
 fmtFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Int -> List String -> Int -> Int -> Eff r Int
@@ -182,9 +203,8 @@ fmtFiles check fuel paths changed failed =
       [] => fmtFinish check changed failed
       _ =>
         do
-          loaded <- fmtLoadBatch (take fmtBatchSize paths)
-          plans <- Par.parMap fmtPlan loaded
-          counts <- fmtEmitBatch check plans changed failed
+          results <- Par.parMapEff runFsResult (fmtOne check) (take fmtBatchSize paths)
+          counts <- fmtReport check results changed failed
           fmtFiles check (fuel - 1) (drop fmtBatchSize paths) (firstOf counts) (secondOf counts)
 
 -- | 内部：收尾——`--check` 有差异时打印汇总，返回退出码。

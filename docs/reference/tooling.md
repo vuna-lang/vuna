@@ -390,10 +390,12 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在都是工具错误
 （exit 2）。
 
-**并行**：一批文件分三段处理——顺序读盘、`Vuna.Fmt.formatSourceWith` 并行（`Base.Thread.Par.parMap`，
-纯函数、结果保序）、顺序写盘与报告；每批 256 个文件，限制「原文 + 规范文本」的峰值驻留。
-宿主动作（读 / 写 / 打印）只在调用线程执行，worker 里只跑纯格式化。因此报告顺序始终是文件
-顺序，单文件失败（读盘或解析）不阻断同批与后续批次，失败状态汇总到退出码。
+**并行**：按批（每批 256 个文件）把每个文件交给一个 worker：worker 内完成读盘、
+`Vuna.Fmt.formatSourceWith` 与必要的写盘，结果保序回到调用线程；调用线程只做顺序报告。
+worker 用 `Base.Effect.Fs.runFsResult` 安装自己的 fs handler，父线程的 handler 栈不继承；
+读 / 写不再串行经过调用线程。报告顺序始终是文件顺序，单文件失败（读 / 解析 / 写）不阻断
+同批与后续批次，失败状态汇总到退出码。展开后的路径先保序去重，避免并发写同一路径；
+重复的显式 PATH 只处理一次。
 
 **基础排版**：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 `format(parse(x))` 可重新 parse，且格式化幂等（`format(format(x)) == format(x)`）。

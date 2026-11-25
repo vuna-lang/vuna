@@ -1,0 +1,18 @@
+# 31) fmt：worker 内读写一批文件；单个坏文件不阻断其它文件；重复路径只处理一次。
+run: sh -c 'mkdir -p "$TMPDIR/fmt-par"; printf "module Good1 where\n\nmain : Int\nmain = 1\n\n\n" > "$TMPDIR/fmt-par/Good1.vuna"; printf "module Good2 where\n\nmain : Int\nmain = 2\n\n\n" > "$TMPDIR/fmt-par/Good2.vuna"; printf "module Bad where\n\nmain : Int\nmain = \n" > "$TMPDIR/fmt-par/Bad.vuna"'
+run: "$VUNA" fmt "$TMPDIR/fmt-par" 2>&1
+exit: 1
+out-contains: formatted
+out-contains: Good1.vuna
+out-contains: Good2.vuna
+out-contains: error:
+out-contains: Bad.vuna
+run: "$VUNA" fmt --check "$TMPDIR/fmt-par/Good1.vuna" >/dev/null 2>&1
+exit: 0
+run: "$VUNA" fmt --check "$TMPDIR/fmt-par/Good2.vuna" >/dev/null 2>&1
+exit: 0
+run: sh -c 'printf "module Good1 where\n\nmain : Int\nmain = 1\n\n\n" > "$TMPDIR/fmt-par/Good1.vuna"'
+run: sh -c '"$VUNA" fmt "$TMPDIR/fmt-par/Good1.vuna" "$TMPDIR/fmt-par/Good1.vuna" | grep -c "^formatted " | grep -qx 1'
+exit: 0
+run: "$VUNA" fmt --check "$TMPDIR/fmt-par/Good1.vuna" >/dev/null 2>&1
+exit: 0
