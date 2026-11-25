@@ -1058,29 +1058,56 @@ floatLitLabel _ _ = Nothing
 
 floatTreeApp : FGen -> List Int -> Ir -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeApp st pool f a =
-  case f of
-    IrRt sym => floatTreeLeafApp st pool sym a
+  case floatLeafSymOf st f of
     -- `sqrt` / `abs` / `intToFloat` 是 η-收缩的零参别名（`sqrt = rt:floatSqrt`），
     -- 调用点上解析到运行时叶子后再按一元叶子展开。
-    IrGlobal name =>
-      case aliasTargetOf 8 st.fgDefs name of
-        Just (AliasRt sym) => floatTreeLeafApp st pool sym a
-        _ => Nothing
+    Just sym => floatTreeLeafApp st pool sym a
+    Nothing => Nothing
+
+-- | 一元运行时符号的解析：直接是 `IrRt`，或零参别名（`abs = rt:floatAbs`）。
+floatLeafSymOf : FGen -> Ir -> Maybe String
+floatLeafSymOf _ (IrRt sym) = Just sym
+floatLeafSymOf st (IrGlobal name) =
+  case aliasTargetOf 8 st.fgDefs name of
+    Just (AliasRt sym) => Just sym
     _ => Nothing
+floatLeafSymOf _ _ = Nothing
 
 floatTreeLeafApp : FGen -> List Int -> String -> Ir -> Maybe (Int, List Instr, List Int)
 floatTreeLeafApp st (x :: rest) sym a =
   if sym == "floatSqrt" then
     floatTreeUn st (x :: rest) "sqrt" a
   else if sym == "floatAbs" then
-    floatTreeUn st (x :: rest) "abs" a
+    if floatNonNegative st a then floatTree st (x :: rest) a else floatTreeUn st (x :: rest) "abs" a
   else if sym == "floatFromInt" then
     case atomToReg st Rax a of
+      -- `abs` 对可证非负的操作数是恒等（`intToFloat` 的非负性来自守卫区间）：
+      -- 整条省掉，`sqrt (abs (intToFloat n))` 只剩一次 `cvtsi2sd`。
       Just load => Just (x, append load [IXmmFromInt x Rax], rest)
       Nothing => Nothing
   else
     Nothing
 floatTreeLeafApp _ [] _ _ = Nothing
+
+-- | 浮点操作数可证明非负：`intToFloat e` 且 `e` 的区间下界 ≥ 0。
+floatNonNegative : FGen -> Ir -> Bool
+floatNonNegative st (IrCast _ _ inner) = floatNonNegative st inner
+floatNonNegative st (IrTail inner) = floatNonNegative st inner
+floatNonNegative st (IrRtApp sym args) = floatNonNegLeaf st sym args
+floatNonNegative st (IrApp _ f a) =
+  case floatLeafSymOf st f of
+    Just sym => floatNonNegLeaf st sym [a]
+    Nothing => False
+floatNonNegative _ _ = False
+
+floatNonNegLeaf : FGen -> String -> List Ir -> Bool
+floatNonNegLeaf st sym args =
+  if sym == "floatFromInt" then
+    case args of
+      [a] => nonNegative (rangeOf st.fgRanges a)
+      _ => False
+  else
+    False
 
 floatTreeUn : FGen -> List Int -> String -> Ir -> Maybe (Int, List Instr, List Int)
 -- abs：按位清符号位（与 `rt_float_abs` 同一手法），不引入 `andpd`。
