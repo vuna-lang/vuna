@@ -22,6 +22,7 @@
 112_stdin_eof.steps	run	artifact-exec;stdin-eof
 113_effect_target.steps	repl	repl-session;cli-text;artifact-exec
 113_net_timeout.steps	build	artifact-exec;build-link
+114_plugin_timeout.steps	build	cli-text;artifact-exec
 14_cli.steps	build,check,compile,corpus,help,lint,seed,--typed	seed-binary;build-link;cli-text;tooling-output;corpus-selfcheck
 14b_binary_fingerprint.steps	build	build-link;cli-text
 17_diagnostics.steps	check,compile	cli-render;cli-text
