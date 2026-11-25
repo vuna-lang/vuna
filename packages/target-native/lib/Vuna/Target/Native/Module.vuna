@@ -1286,7 +1286,18 @@ allocLeafToR10 =
 -- | 有符号常量除法：先选被除数，再从剩余池里取 scratch。
 genDivInto : Int -> FGen -> List Reg -> Ir -> DivPlan -> Maybe (Reg, List Instr, List Reg)
 genDivInto bud st pool a (DivShift k) =
-  case genScalarIntoW (bud - 1) True st pool a of
+  let
+    nonNeg = k == 0 || nonNegative (rangeOf st.fgRanges a)
+    -- 负数分支把「63-bit wrap + 除 2^k」融成一条 `lea` + 条件传送。
+    -- `wrap(y) = (y<<1)>>1`，`shl` 之后的符号位就是 63-bit 值的符号 `w`：
+    --   `w >= 0: w >> k      = (2y) >> (k+1)`
+    --   `w < 0:  (w+2^k-1)>>k = (2y + 2^(k+1)-2) >> (k+1)`
+    -- 位移量与 `lea` 位移都要装得下：k > 29 时回退到分两步的写法。
+    fused = k >= 1 && k <= 29
+    -- 融合序列只看低 63 位（`shl` 丢掉 bit 63，`lea` 的进位落在 bit 64），所以未规范化
+    -- 的 dirty 被除数也能直接吃；回退路径要先规范化再读符号位。
+    wrapOperand = nonNeg || not fused
+  in case genScalarIntoW (bud - 1) wrapOperand st pool a of
     Nothing => Nothing
     Just pa =>
       case secondOf (secondOf pa) of
@@ -1294,14 +1305,14 @@ genDivInto bud st pool a (DivShift k) =
           let
             r = firstOf pa
             ins = firstOf (secondOf pa)
-            -- 非负被除数：`x / 2^k` 就是逻辑右移一条（算术右移结果相同，`shr` 更直白）。
-            -- 负数要按符号补 `d-1` 再算术右移（向零截断）：用 `test` + `lea d-1` +
-            -- `cmovns` 选回原值，比 `sar 63; and d-1; add` 少一条、关键路径短一拍。
-            nonNeg = k == 0 || nonNegative (rangeOf st.fgRanges a)
           in if nonNeg then
             let
               instrs = if k == 0 then ins else append ins [IBinReg "shr" r (OpImm k)]
             in Just (r, instrs, s :: rest)
+          else if fused then
+            let
+              instrs = append ins [ILeaScale s r 1 (ipow2 (k + 1) - 2), IBinReg "shl" r (OpImm 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm (k + 1))]
+            in Just (s, instrs, r :: rest)
           else
             let
               instrs = append ins [ITest r r, ILeaMem s r (ipow2 k - 1), ICmov "cmovns" s (OpReg r), IBinReg "sar" s (OpImm k)]

@@ -1,0 +1,30 @@
+-- 负被除数的常量除法：native 把「63-bit wrap + 除 2^k」融成
+-- `lea` + `shl` + `cmovns` + `sar`（`shl` 的符号位就是 63-bit 值的符号）。
+-- 63-bit 两端的差会先 wrap 再除：`maxInt - minInt` wrap 成 -1 ⇒ 0 —— 与 OCaml / wasm 一致。
+div8 : Int -> Int -> Int
+div8 a b = (a - b) / 8
+
+div1024 : Int -> Int -> Int
+div1024 a b = (a - b) / 1024
+
+divBig : Int -> Int -> Int
+divBig a b = (a - b) / 1073741824
+
+-- `k > 29` 走回退写法（先规范化再看符号位）；被除数仍是运行时算出来的未规范化值。
+divBigDirty : Int -> Int -> Int
+divBigDirty a b = ((a - b) - 1) / 1073741824
+
+main : Int
+main =
+  let
+    maxI = 4611686018427387903
+    minI = 0 - 4611686018427387903
+  in div8 maxI minI
+    + div8 minI maxI
+    + div8 (0 - 1000) 3
+    + div8 1000 (0 - 3)
+    + div8 0 63
+    + div8 (0 - 63) 0
+    + div8 9 0
+    + div8 (0 - 9) 0
+    + div1024 (0 - 5000) 24 + div1024 5000 (0 - 24) + divBig minI 0 + divBigDirty minI 5

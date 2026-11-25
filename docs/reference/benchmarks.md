@@ -605,7 +605,7 @@ exec（~200 µs）主导，init 只剩 10–20 µs。裁剪的收益在产物（
 | `scalar_cmp` | 1.98x | **1.00x** | 比较改 `xor rax, rax; cmp; setcc`，切断 `setcc al` 对上一轮 `rax` 的部分寄存器依赖 |
 | `scalar_ilp` | 1.54x | **0.99x** | `d = d*5+7` 折成 `lea d, [d+d*4+7]`（1 拍替 3 拍 `imul`），`a += n*3` 也走 `lea` |
 | `scalar_muladd` | 1.24x | **0.96x** | `& 0xFFFF_FFFF` 折成 `mov r32, r32`（零扩展），省掉一次 scratch 装掩码 |
-| `scalar_divsigned` | 1.72x | **~1.4x** | 负被除数的符号修正改 `test` + `lea d-1` + `cmovns` + `sar`（原 `sar 63` + `and` + `add`） |
+| `scalar_divsigned` | 1.72x | **1.19x** | 负被除数的 63-bit wrap + `/ 2^k` 融成 `lea x+x+c` + `shl` + `cmovns` + `sar k+1`（原 `sar 63` + `and` + `add`；上一档的 `test`+`lea`+`cmovns` 仍留 6 拍链） |
 | `float_math` | 2.5x | **~1.0x** | 浮点形参常驻 xmm8（前一档）＋ `if <浮点比较> then <字面量> else <字面量>` 改掩码选择（`cmpltsd` + `andpd`，14 条降到 4 条） |
 
 读数在同一台机器（Ryzen 7 7840HS）同一会话内交替测得，loadavg 3–5，绝对 ms 只作方向
@@ -615,5 +615,7 @@ C ~3.1ms）：剩下的差别只有 `movapd` 往返与常量装填。掩码选�
 运算挤到已饱和的 FP 端口上（实测慢 25–40%）。按位那侧只用 `andpd`：`andnpd` 在 Zen 4 上
 明显更慢（同一循环 4.7ms vs 3.0ms），能换反向谓词的都换。
 
-`scalar_divsigned` 的 `test` 复用与结果写回前移也试过：各能省一条指令，但实测在噪声内
-（该循环挂在「wrap → 符号修正 → 移位」这条 6 拍链上，只挪一条还不足以跨档）。
+`scalar_divsigned` 剩余 1.19x：C 只发 `sub` + `lea` + `cmovs` + `sar`（7 条 / 4 拍），
+我们多两条 `mov` 搬运（`mov rax, r12` / `mov r12, r11`）。把除法链直接写进槽提升的
+目标寄存器还能再省 1–2 条（实测 10.3ms → 9.6ms，与 C 同档），但那要做一次链式目标
+改写，留作单独一档。
