@@ -314,7 +314,8 @@ hostSupportTable =
     HostSupport "Base.Effect.Exit.ExitOp" "full" "full" "full",
     HostSupport "Base.Effect.Stdin.StdinOp" "full" "none" "none",
     HostSupport "Base.Effect.Args.ArgsOp" "full" "full" "full",
-    HostSupport "Base.Effect.Net.NetOp" "full" "none" "none"
+    HostSupport "Base.Effect.Net.NetOp" "full" "none" "none",
+    HostSupport "Base.Effect.Tty.TtyOp" "full" "full" "full"
   ]
 
 findHostSupport : String -> List HostSupport -> HostSupport

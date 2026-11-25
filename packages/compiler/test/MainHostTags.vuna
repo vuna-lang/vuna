@@ -57,12 +57,16 @@ exitTag = "Base.Effect.Exit.ExitOp"
 argsTag : String
 argsTag = "Base.Effect.Args.ArgsOp"
 
+ttyTag : String
+ttyTag = "Base.Effect.Tty.TtyOp"
+
 -- 每个内建标签在 ocaml 上都必须满档；标签集必须与 `builtinEffects` 对齐（数量变化会提醒更新本表）。
 allTagsOcamlFull : Bool
-allTagsOcamlFull = allFull "ocaml" allTags && allBuiltinTags && length builtinEffects == 9
+allTagsOcamlFull = allFull "ocaml" allTags && allBuiltinTags && length builtinEffects == 10
 
 allTags : List String
-allTags = [consoleTag, fsTag, clockTag, envTag, processTag, exitTag, stdinTag, argsTag, netTag]
+allTags =
+  [consoleTag, fsTag, clockTag, envTag, processTag, exitTag, stdinTag, argsTag, netTag, ttyTag]
 
 allBuiltinTags : Bool
 allBuiltinTags = allBuiltinGo allTags
