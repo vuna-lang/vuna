@@ -2,8 +2,10 @@ module Vuna.Target.Native.Gc where
 
 -- native 后端的两代标记-清扫 GC（非移动）。
 --
--- 根集：沿 `rbp` 链逐帧保守扫（帧内每个机器字都当候选指针）、`.bss` 的
--- cleanup 链头与 CAF 求值区。
+-- 根集（单线程）：沿 `rbp` 链逐帧保守扫（帧内每个机器字都当候选指针）、`.bss` 的
+-- cleanup 链头与 CAF 求值区。程序用了线程原语时（`rt_threaded`）改为 STW：置
+-- `rt_gc_requested` 等全部 live 线程停车，扫本线程 `[rsp, stack_top)`，再按线程表逐个
+-- 扫 `[saved_rsp, stack_top)`（state 3 = 已结束的槽跳过）。
 --
 -- 两代：
 --   * 新分配的块都是年轻代；块头 `nativeOldFlag` 置位即老代；

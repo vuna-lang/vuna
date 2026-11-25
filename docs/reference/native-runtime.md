@@ -37,13 +37,13 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   `@vuna@host@execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
 - 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`@vuna@prim_eff_sleep`（`nanosleep`，
   syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、
-  `@vuna@prim_eff_hostStatus`（读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
+  `@vuna@prim_eff_hostStatus`（读 线程 TCB 的宿主状态槽；fs / process 的 `try*` 后续写入）。
 - 文件系统：15 个 `@vuna@host@*` 叶子（`tryReadFile` / `tryReadFileRange` / `tryWriteFile` / `tryWriteFileAtomic` /
   `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` /
   `tryRemoveTree` / `tryRename` / `trySymlink` / `fileExists` / `fileMtime` / `fileSize`）
   走 `openat` / `read` / `write` / `lseek` / `fstat` / `getdents64` / `mkdirat` / `unlinkat` /
   `rmdir` / `rename` / `symlinkat`；`tryReadFileRange` 用 `openat` + `lseek(SEEK_SET)` + 定长
-  `read` 循环，单次 `length` 截到 8 MiB 读缓冲上界；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
+  `read` 循环，单次 `length` 截到 8 MiB 读缓冲上界；失败写 线程 TCB 的宿主状态槽（errno → 码表与 `dtp_hostCode` 一致：
   ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
   `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
   8 KiB `getdents64` 缓冲，并在分配帧后检查栈下界（`rt_stack_top - 4 MiB`）——越界 trap
@@ -53,7 +53,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - **失败面只有 try 家族**：契约里没有 strict 非 try 叶子——`@vuna@prim_eff_readFile` /
   `readFileRange` / `writeFile` / `writeFileAtomic` / `readDir` / `isDirectory` / `makeDir` /
   `removeFile` 这组名字（连同它们的 `@vuna@host@*` 形式）已删除，源码也没有入口。`try_*` 叶子
-  跑同一批 syscall，失败时把 errno 映射成状态码写进 `rt_host_status` 并返回默认值（原始 errno
+  跑同一批 syscall，失败时把 errno 映射成状态码写进 线程 TCB 的宿主状态槽并返回默认值（原始 errno
   另记在 `rt_host_errno`）；库层 `Base.Effect.Fs` 读 `@vuna@prim_eff_hostStatus`，把失败收成
   typed `FsError`，entry 打印 `vuna: fs: <op> …` 并以退出码 1 结束。
 - 进程：`@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
@@ -147,6 +147,9 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
      候选指针保守判断；入口 `rbp = 0` 终止。GC 自己的帧也按整帧扫，入口先把通用寄存器
      （含 `r15`）溢进自己的帧。
   2. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
+  3. **线程模式**（程序用了线程原语，`rt_threaded = 1`）：根集改为 STW——置 `rt_gc_requested`
+     等全部 live 线程在 safepoint / `block_begin` 停车，扫本线程 `[rsp, stack_top)`，再按线程表
+     逐个扫未结束线程的 `[saved_rsp, stack_top)`（见 [primitives.md](primitives.md) §6.2）。
   handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随上面的根可达。
   寄存器不是根：跨调用的活值都在调用方的栈槽里（`alloc` 也按同一约定，不保存调用方
   的 caller-saved 寄存器）。
