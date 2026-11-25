@@ -1,13 +1,16 @@
 module Vuna.Target.Native.Specialize where
 
 -- 高阶参数特化：整程序 IR 在手里，调用点上函数实参**静态已知**（无自由变量的 lambda /
--- 顶层函数 / 运行时叶子）时，克隆被调定义并把那个形参替换成已知函数值，于是
--- `twice f x = f (f x)` / `foldl f` 里的 `f` 变成直调（不再每次按闭包 arity 分派）。
+-- 顶层函数 / 运行时叶子 / 已知定义的部分应用）时，克隆被调定义并把那个形参替换成已知
+-- 函数值，于是 `twice f x = f (f x)` / `foldl f` 里的 `f` 变成直调（不再每次按闭包 arity
+-- 分派）。
 --
--- 只替换**闭合**的函数值（自由变量为空）：把带自由变量的 lambda 搬进被调函数体会丢捕获。
--- 克隆按（被调名、形参序号、实参指纹）去重；每个原始定义最多 8 个克隆、整程序最多 64 个，
--- 超出的调用点保持原样（语义不变，只丢优化）。克隆仍接收原来的全部形参（那个函数形参
--- 变成未使用），调用点因此不用改实参——代价只是一次静态闭包的 `lea`。
+-- 只替换**闭合**的函数值与**闭合**的已知部分应用（`mk 3`）：把带自由变量的值搬进
+-- 被调函数体会丢捕获；部分应用的实参只收平凡值或可重复求值的标量表达式，替换复制进
+-- 体里才不会重复求值昂贵的表达式。替换后体里的 `(mk k) x` 会由 `flattenApp` 合回
+-- `mk k x`，再交给调用点内联。克隆按（被调名、形参序号、实参指纹）去重；每个原始定义
+-- 最多 8 个克隆、整程序最多 64 个，超出的调用点保持原样（语义不变，只丢优化）。
+-- 被特化的形参已替换进克隆体，克隆不再接收它，调用点相应丢掉那个实参。
 --
 -- 边界：只 import Base 与 `Ir.Model` / `Ir.Analysis`；不 import 编译器阶段与任何后端。
 import Base.Data.Bool as Bool
@@ -82,8 +85,95 @@ fnKeyOf defs ir =
         Just ("l:" ++ join "," (map strFromInt (idsOf bs)))
       else
         Nothing
+    -- 已知顶层定义的**部分应用**（`mk k`）：把形参换成它之后，体里对形参的饱和应用
+    -- 会经 `flattenApp` 合到同一 head 上，再交给调用点内联。只收闭合的部分应用：
+    -- 克隆是独立的顶层函数，把调用方的局部 binder 搬进去会变成未绑定。
+    IrApp _ _ _ =>
+      let
+        p = Analysis.flattenApp ir
+      in case firstOf p of
+        IrGlobal n =>
+          case partialArity n defs of
+            Just arity =>
+              let
+                args = secondOf p
+              in if not (isEmptyList args) && length args < arity && allSimpleArg args && isEmptyList (freeVarsOf ir) then
+                Just ("p:" ++ n ++ "[" ++ join "," (map argKey args) ++ "]")
+              else
+                Nothing
+            Nothing => Nothing
+        _ => Nothing
     -- lambda 自己的形参是绑定的：自由变量要看体里引用了**外层**哪些 binder。
     _ => Nothing
+
+-- | 顶层定义在 CPS 后的运行时 binder 数（部分应用判定用）。
+partialArity : String -> List IrDef -> Maybe Int
+partialArity n defs =
+  case findDef n defs of
+    Just (IrDef _ _ _ _ (IrLam bs _ _) _ _ _) => Just (length (runtimeBindersOf bs))
+    _ => Nothing
+
+-- | 部分应用的实参只收平凡值：特化会把实参复制进体里，复杂表达式不在这里重复求值。
+allSimpleArg : List Ir -> Bool
+allSimpleArg [] = True
+allSimpleArg (a :: rest) = if simpleArg a then allSimpleArg rest else False
+
+simpleArg : Ir -> Bool
+simpleArg (IrVar _) = True
+simpleArg (IrGlobal _) = True
+simpleArg (IrRt _) = True
+simpleArg (IrInt _) = True
+simpleArg (IrStr _) = True
+simpleArg (IrBool _) = True
+simpleArg (IrFloatLit _) = True
+simpleArg (IrRtApp sym args) =
+  if isDivLike sym then
+    divisorSafe args && allSimpleArg args
+  else
+    memStr sym scalarArgSyms && allSimpleArg args
+simpleArg _ = False
+
+-- | 可重复求值的标量运行时符号（与 `Inline` 的实参判据同口径）。
+scalarArgSyms : List String
+scalarArgSyms =
+  [
+    "+",
+    "-",
+    "*",
+    "bitAnd",
+    "bitOr",
+    "bitXor",
+    "bitNot",
+    "bitShl",
+    "bitShr",
+    "bi_eq_int",
+    "bi_neq_int",
+    "bi_lt_int",
+    "bi_le_int",
+    "bi_gt_int",
+    "bi_ge_int",
+    "bi_eq_bool",
+    "bi_neq_bool",
+    "bi_lt_bool",
+    "bi_le_bool",
+    "bi_gt_bool",
+    "bi_ge_bool",
+    "natAdd",
+    "natSub",
+    "natMul",
+    "natToInt",
+    "natFromInt"
+  ]
+
+isDivLike : String -> Bool
+isDivLike "/" = True
+isDivLike "%" = True
+isDivLike "mod" = True
+isDivLike _ = False
+
+divisorSafe : List Ir -> Bool
+divisorSafe [_, IrInt d] = d /= 0
+divisorSafe _ = False
 
 -- | 只保留运行时 binder（擦除占位不占参数位）。
 runtimeBindersOf : List IrBinder -> List IrBinder
@@ -222,6 +312,10 @@ argKey : Ir -> String
 argKey (IrGlobal n) = "g:" ++ n
 argKey (IrRt s) = "r:" ++ s
 argKey (IrLam bs _ _) = "l:" ++ join "," (map strFromInt (idsOf bs))
+argKey (IrVar b) = "v:" ++ strFromInt b.irBinderId
+argKey (IrInt n) = "i:" ++ strFromInt n
+argKey (IrBool b) = if b then "b:1" else "b:0"
+argKey (IrApp _ f a) = "a:" ++ argKey f ++ "(" ++ argKey a ++ ")"
 argKey _ = "?"
 
 isEmptyList : List a -> Bool

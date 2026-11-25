@@ -4245,7 +4245,9 @@ build program printResult =
                       cpsLsr = Inline.lsrDefs cpsSpecialized
                       recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsLsr
                       -- 小函数内联：体够小、非递归、实参平凡的调用点直接代进去。
-                      inlined = Inline.inlineDefs recNames cpsLsr
+                      -- 两遍：第一遍的 β 归约 / 内联会让更多小定义变成可内联形状。
+                      inlinedOnce = Inline.inlineDefs recNames cpsLsr
+                      inlined = Inline.inlineDefs recNames (firstOf inlinedOnce)
                       -- 尾位置内联：把互递归 SCC 沿定义序单向展开成自递归。
                       tailInlined = Inline.inlineTailDefs recNames (firstOf inlined)
                       cps1 = Inline.simplifyDefs (firstOf tailInlined)

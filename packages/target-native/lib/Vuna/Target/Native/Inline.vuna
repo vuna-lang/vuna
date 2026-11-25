@@ -75,10 +75,40 @@ rw fuel defs ir st =
           head = firstOf p
           args = secondOf p
         in case head of
+          -- `(if c then f else g) x` 先分到两支，避免把条件结果当动态 head 走 rt_apply。
+          IrIf c t e => rw (fuel - 1) defs (IrIf c (Synthetic.applyAllIr t args) (Synthetic.applyAllIr e args)) st
+          -- 立即 lambda 应用：先递归化简体，体只剩标量树时直接 β 归约。
+          IrLam bs rt inner =>
+            let
+              pb = rw (fuel - 1) defs inner st
+              inner1 = firstOf pb
+            in if length (runtimeBindersOf bs) == length args && scalarOnly inner1 && irSize inner1 <= scalarInlineSize then
+              let
+                reps = inlineReps (runtimeBindersOf bs) args inner1
+              in rw (fuel - 1) defs (wrapInlineLets (secondOf reps) (inlineBody (firstOf reps) inner1)) (secondOf pb)
+            else
+              rwApp (fuel - 1) defs (IrLam bs rt inner1) args (secondOf pb)
           IrGlobal name =>
-            case tryInline defs name args st of
-              Just hit => hit
-              Nothing => rwApp (fuel - 1) defs head args st
+            case defRuntimeArity name defs of
+              -- 过度应用：按运行时 arity 拆成「先饱和、再应用剩余实参」，
+              -- 让第一段能被内联（`pick p x` → `(pick p) x`），不直接掉进 rt_apply。
+              Just ar =>
+                if length args > ar then
+                  let
+                    sp = splitAt ar args
+                    firstApp = Synthetic.applyAllIr (IrGlobal name) (firstOf sp)
+                    p1 = rw (fuel - 1) defs firstApp st
+                  in rwApplied (fuel - 1) defs (firstOf p1) (secondOf sp) (secondOf p1)
+                else
+                  case tryInline defs name args st of
+                    -- 内联结果里可能还有刚暴露出来的调用（`apply1$s0` → `mk k acc`），
+                    -- 继续在同一预算下改写，否则链式内联只走一层。
+                    Just hit => rw (fuel - 1) defs (firstOf hit) (secondOf hit)
+                    Nothing => rwApp (fuel - 1) defs head args st
+              Nothing =>
+                case tryInline defs name args st of
+                  Just hit => rw (fuel - 1) defs (firstOf hit) (secondOf hit)
+                  Nothing => rwApp (fuel - 1) defs head args st
           _ => rwApp (fuel - 1) defs head args st
       IrCtor fam ctor ty args => mapList (fuel - 1) (IrCtor fam ctor ty) defs args st
       IrRecord fam ty fields => mapFields (fuel - 1) (IrRecord fam ty) defs fields st
@@ -91,7 +121,20 @@ rw fuel defs ir st =
           b = rw (fuel - 1) defs base st
           f = mapFieldsKeep (fuel - 1) defs fields (secondOf b)
         in (IrRecUpd (firstOf b) fam (firstOf f) ty, secondOf f)
-      IrRtApp sym args => mapList (fuel - 1) (IrRtApp sym) defs args st
+      IrRtApp sym args =>
+        let
+          p = mapIrs (fuel - 1) defs args st
+          args1 = firstOf p
+        in case splitIfArgs args1 of
+          Just (pre, c, t, e, post) =>
+            if memStr sym scalarArgSyms && smallOtherArgs pre post then
+              let
+                tApp = IrRtApp sym (append pre (append [t] post))
+                eApp = IrRtApp sym (append pre (append [e] post))
+              in rw (fuel - 1) defs (IrIf c tApp eApp) (secondOf p)
+            else
+              (IrRtApp sym args1, secondOf p)
+          Nothing => (IrRtApp sym args1, secondOf p)
       IrCast from to inner =>
         let
           p = rw (fuel - 1) defs inner st
@@ -133,6 +176,47 @@ rw fuel defs ir st =
           p = rw (fuel - 1) defs prim st
         in (IrEffThunk fam ctor ty arity (firstOf p), secondOf p)
       _ => (ir, st)
+
+-- | 找第一个 `IrIf` 实参，返回 (前缀, 条件, then, else, 后缀)。
+splitIfArgs : List Ir -> Maybe (List Ir, Ir, Ir, Ir, List Ir)
+splitIfArgs [] = Nothing
+splitIfArgs (a :: rest) =
+  case a of
+    IrIf c t e => Just ([], c, t, e, rest)
+    _ =>
+      case splitIfArgs rest of
+        Just (pre, c, t, e, post) => Just (a :: pre, c, t, e, post)
+        Nothing => Nothing
+
+-- | 分到两支后其余实参会被复制一份代码；只对小的其余实参做，避免代码膨胀。
+smallOtherArgs : List Ir -> List Ir -> Bool
+smallOtherArgs pre post = irSizeList pre + irSizeList post <= 16
+
+irSizeList : List Ir -> Int
+irSizeList [] = 0
+irSizeList (x :: rest) = irSize x + irSizeList rest
+
+-- | 把剩余实参接到已经改写过的 head 上；head 是 `if` 时先分到两支。
+rwApplied : Int -> List IrDef -> Ir -> List Ir -> Inl -> (Ir, Inl)
+rwApplied fuel defs head rest st =
+  let
+    applied =
+      case head of
+        IrIf c t e => IrIf c (Synthetic.applyAllIr t rest) (Synthetic.applyAllIr e rest)
+        _ => Synthetic.applyAllIr head rest
+  in rw (fuel - 1) defs applied st
+
+splitAt : Int -> List a -> (List a, List a)
+splitAt n xs =
+  if n <= 0 then
+    ([], xs)
+  else
+    case xs of
+      [] => ([], [])
+      x :: rest =>
+        let
+          p = splitAt (n - 1) rest
+        in (x :: firstOf p, secondOf p)
 
 rwApp : Int -> List IrDef -> Ir -> List Ir -> Inl -> (Ir, Inl)
 rwApp fuel defs head args st =
@@ -224,15 +308,16 @@ tryInline defs name args st =
                     rbs = runtimeBindersOf bs
                   in if length rbs /= length args then
                     Nothing
-                  else if not (allInlinableArg args) then
+                  else if not (allInlinableArg defs args) then
                     Nothing
-                  else if irSize inner > inlineSize then
+                  else if not (bodySmallEnough inner) then
                     Nothing
                   else if hasLam inner then
                     Nothing
                   else
                     let
-                      body2 = Tail.stripTail (inlineBody (pairBinders rbs args) inner)
+                      reps = inlineReps rbs args inner
+                      body2 = Tail.stripTail (wrapInlineLets (secondOf reps) (inlineBody (firstOf reps) inner))
                       st2 = { st | inlUsed = st.inlUsed + 1, inlCount = st.inlCount + 1 }
                     in Just (body2, st2)
                 _ => Nothing
@@ -273,17 +358,44 @@ anyHasLamAltM : Maybe IrAlt -> Bool
 anyHasLamAltM Nothing = False
 anyHasLamAltM (Just a) = hasLam a.irAltBody
 
--- | 实参可以是平凡值，也可以是**不会失败的小标量表达式**（加减乘、位运算、比较）。
---   这类表达式不分配、不产生效应、不会 trap，所以体内即使用了两次也只是重算几条指令，
---   求值顺序与语义都不变。
-allInlinableArg : List Ir -> Bool
-allInlinableArg [] = True
-allInlinableArg (a :: rest) = if inlinableArg a then allInlinableArg rest else False
+-- | 实参可以是平凡值、可重复求值的标量表达式，或**同作用域内**的已知定义部分应用
+--   （`mk k`）：内联会把形参换成实参表达式，部分应用留在调用方作用域里，不涉及捕获。
+allInlinableArg : List IrDef -> List Ir -> Bool
+allInlinableArg _ [] = True
+allInlinableArg defs (a :: rest) = if inlinableArg defs a then allInlinableArg defs rest else False
 
-inlinableArg : Ir -> Bool
-inlinableArg (IrRtApp sym args) =
-  (memStr sym scalarArgSyms || (isDivLike sym && divisorSafe args)) && allInlinableArg args
-inlinableArg ir = trivialArg ir
+inlinableArg : List IrDef -> Ir -> Bool
+inlinableArg defs (IrRtApp sym args) =
+  (memStr sym scalarArgSyms || (isDivLike sym && divisorSafe args)) && allInlinableArg defs args
+inlinableArg defs (IrApp _ f a) =
+  case appHeadGlobal f of
+    Just n =>
+      case defRuntimeArity n defs of
+        Just ar => 1 + appArgCount f <= ar && allInlinableArg defs (a :: appArgs f)
+        Nothing => False
+    Nothing => False
+inlinableArg _ ir = trivialArg ir
+
+-- | 已知顶层定义的欠应用（`mk k`）：实参个数小于运行时 binder 数。
+appHeadGlobal : Ir -> Maybe String
+appHeadGlobal (IrApp _ f _) = appHeadGlobal f
+appHeadGlobal (IrGlobal n) = Just n
+appHeadGlobal _ = Nothing
+
+appArgCount : Ir -> Int
+appArgCount (IrApp _ f _) = 1 + appArgCount f
+appArgCount _ = 0
+
+-- | 应用的实参（顺序无关，只用于逐个判可内联）。递归在函数位（直接子项）上。
+appArgs : Ir -> List Ir
+appArgs (IrApp _ f a) = a :: appArgs f
+appArgs _ = []
+
+defRuntimeArity : String -> List IrDef -> Maybe Int
+defRuntimeArity n defs =
+  case findDef n defs of
+    Just (IrDef _ _ _ _ (IrLam bs _ _) _ _ _) => Just (length (runtimeBindersOf bs))
+    _ => Nothing
 
 -- | 可以安全重复求值的标量运行时符号。除法 / 取模只收「除数是非零字面量」的形状
 --   （其余形状会在运行时 trap，重复求值就改变了失败点的位置）。
@@ -328,6 +440,65 @@ divisorSafe : List Ir -> Bool
 divisorSafe [_, IrInt d] = d /= 0
 divisorSafe _ = False
 
+-- | 普通内联的上限（`inlineSize`）；纯标量体（全由变量 / 字面量 / 白名单标量叶子组成）
+--   放宽到 `scalarInlineSize`：这类体没有分配、调用与分支，展开只是多几条算术。
+scalarInlineSize : Int
+scalarInlineSize = 64
+
+bodySmallEnough : Ir -> Bool
+bodySmallEnough inner =
+  if irSize inner <= inlineSize then True else irSize inner <= scalarInlineSize && scalarOnly inner
+
+scalarOnly : Ir -> Bool
+scalarOnly (IrVar _) = True
+scalarOnly (IrInt _) = True
+scalarOnly (IrBool _) = True
+scalarOnly (IrFloatLit _) = True
+scalarOnly (IrRtApp sym args) = memStr sym scalarArgSyms && allScalar args
+scalarOnly (IrCast _ _ inner) = scalarOnly inner
+scalarOnly (IrTail inner) = scalarOnly inner
+scalarOnly _ = False
+
+allScalar : List Ir -> Bool
+allScalar [] = True
+allScalar (x :: rest) = if scalarOnly x then allScalar rest else False
+
+countBinderUses : Int -> Ir -> Int
+countBinderUses id (IrVar b) = if b.irBinderId == id then 1 else 0
+countBinderUses id (IrLam _ _ body) = countBinderUses id body
+countBinderUses id (IrLet _ scrut body) = countBinderUses id scrut + countBinderUses id body
+countBinderUses id (IrApp _ f a) = countBinderUses id f + countBinderUses id a
+countBinderUses id (IrIf c t e) = countBinderUses id c + countBinderUses id t + countBinderUses id e
+countBinderUses id (IrCase _ _ scrut alts) = countBinderUses id scrut + sumAltUses id alts
+countBinderUses id (IrNatCase scrut _ z s c) =
+  countBinderUses id scrut + (altUse id z + altUse id s + altUse id c)
+countBinderUses id (IrCtor _ _ _ args) = sumUses id args
+countBinderUses id (IrRecord _ _ fields) = sumFieldUses id fields
+countBinderUses id (IrProj base _ _ _) = countBinderUses id base
+countBinderUses id (IrRecUpd base _ fields _) = countBinderUses id base + sumFieldUses id fields
+countBinderUses id (IrRtApp _ args) = sumUses id args
+countBinderUses id (IrCast _ _ inner) = countBinderUses id inner
+countBinderUses id (IrTail inner) = countBinderUses id inner
+countBinderUses id (IrConcatMany parts) = sumUses id parts
+countBinderUses id (IrEffThunk _ _ _ _ prim) = countBinderUses id prim
+countBinderUses _ _ = 0
+
+sumUses : Int -> List Ir -> Int
+sumUses _ [] = 0
+sumUses id (x :: rest) = countBinderUses id x + sumUses id rest
+
+sumAltUses : Int -> List IrAlt -> Int
+sumAltUses _ [] = 0
+sumAltUses id (a :: rest) = countBinderUses id a.irAltBody + sumAltUses id rest
+
+altUse : Int -> Maybe IrAlt -> Int
+altUse _ Nothing = 0
+altUse id (Just a) = countBinderUses id a.irAltBody
+
+sumFieldUses : Int -> List (String, Ir) -> Int
+sumFieldUses _ [] = 0
+sumFieldUses id (p :: rest) = countBinderUses id (secondOf p) + sumFieldUses id rest
+
 trivialArg : Ir -> Bool
 trivialArg (IrVar _) = True
 trivialArg (IrGlobal _) = True
@@ -337,6 +508,23 @@ trivialArg (IrStr _) = True
 trivialArg (IrBool _) = True
 trivialArg (IrFloatLit _) = True
 trivialArg _ = False
+
+-- | 平凡或只出现一次的实参直接替换；会复制多次的非平凡实参改成一条 `let`，
+--   保证内联不重复求值（也让寄存器压力不随使用次数翻倍）。
+inlineReps : List IrBinder -> List Ir -> Ir -> (List (Int, Ir), List (IrBinder, Ir))
+inlineReps [] _ _ = ([], [])
+inlineReps _ [] _ = ([], [])
+inlineReps (b :: brest) (a :: arest) inner =
+  let
+    rest = inlineReps brest arest inner
+  in if trivialArg a || countBinderUses b.irBinderId inner <= 1 then
+    ((b.irBinderId, a) :: firstOf rest, secondOf rest)
+  else
+    (firstOf rest, (b, a) :: secondOf rest)
+
+wrapInlineLets : List (IrBinder, Ir) -> Ir -> Ir
+wrapInlineLets [] body = body
+wrapInlineLets (p :: rest) body = IrLet [firstOf p] (secondOf p) (wrapInlineLets rest body)
 
 pairBinders : List IrBinder -> List Ir -> List (Int, Ir)
 pairBinders [] _ = []
@@ -531,7 +719,7 @@ tryTailInline defs current name args st =
                     rbs = runtimeBindersOf bs
                   in if length rbs /= length args then
                     Nothing
-                  else if not (allInlinableArg args) then
+                  else if not (allInlinableArg defs args) then
                     Nothing
                   else if irSize inner > tailInlineSize then
                     Nothing
