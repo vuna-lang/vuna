@@ -46,6 +46,7 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Base.Version
 import Vuna.Index
+import Vuna.EffectRun
 import Vuna.Interp
 import Vuna.Repl.Edit
 import Vuna.Repl.History
@@ -1450,7 +1451,7 @@ evalIOWith st text sigText tyText =
   let
     source = "${ioTypeImports st tyText}${bufferProgram st}\nmain : ${sigText}\nmain = ${text}\n"
   in do
-    result <- runEffectProgram st.stateCtx source (ioPrintResult tyText)
+    result <- runEffectSource st.stateCtx source (ioPrintResult tyText)
     case result of
       ErrC e =>
         do

@@ -218,10 +218,11 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 签名，`u = Type 1` 自动推断为 `u : Type 2`。同名 `DFun` 再次输入即重定义
 （文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
 
-**效果表达式**：顶层类型是 `Eff r a` 的表达式放进临时包走 `compile` + 运行，效果输出直接到
-终端、按进程退出码判定，因此需要 PATH 里有 `ocamlopt`。Nil 行可以直接求值；行里带标签时
-要先定义成带显式签名的值（`prog : Eff [ConsoleOp] Int`，再求值 `prog`），REPL 用源码里的
-签名合成入口。包上下文取最近 `vuna.toml` 的本地依赖闭包（不在包内时 base-only）。
+**效果表达式**：顶层类型是 `Eff r a` 的表达式编译成可执行文件运行（`compileToDir` + `build.sh`
++ 产物），效果输出直接到终端、按进程退出码判定，因此需要 PATH 里有 `ocamlopt`。入口源码按
+内容寻址缓存在 `$VUNA_STORE/views/effectbin/<digest>/`，命中直接运行。Nil 行可以直接求值；
+行里带标签时要先定义成带显式签名的值（`prog : Eff [ConsoleOp] Int`，再求值 `prog`），REPL
+用源码里的签名合成入口。包上下文取最近 `vuna.toml` 的本地依赖闭包（不在包内时 base-only）。
 
 **加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
 

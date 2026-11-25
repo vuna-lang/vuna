@@ -233,8 +233,9 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
   持锁者**直接在最终视图路径构建**（codegen 里的绝对路径保持稳定）；成功后用原子写提交
   `.complete`（内容 = digest），失败则删 partial view 再放锁。等锁者轮询 `.complete`，
   拿不到锁且超时才报错。显式 `--out` 不经过视图锁。
-- **views/testbin**：effect 测试二进制按 `testbin 3|指纹|rootsHash|源码` 摘要寻址；与 bin
-  视图共用 scratch claim/publish（`storeView*Eff`），命中直接运行。
+- **views/testbin**：effect 测试二进制按 `testbin 4|指纹|rootsHash|源码|工具链` 摘要寻址；与 bin
+  视图共用 scratch claim/publish（`storeView*Eff`），命中直接运行。REPL 的动作表达式用同一套
+  机制，摘要口径是 `effectbin 1|指纹|rootsHash|源码|printResult|工具链`。
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
 - **units**：只做**当前 entry 桶内**的过期 key 清理；不跨 entry 删目录。并发构建不同入口
   不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或

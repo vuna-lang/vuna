@@ -3,16 +3,15 @@
 -- 包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；类别由
 -- `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。`String`
 -- 核心求值后空串通过，`Int` / `Nat` 为 0 通过，`Bool` 为 True 通过，`Eff r a` 走
--- 「临时包编译 + 运行」并按进程退出码判定（0 通过，失败的测试显式 `exit 1`）；其它
+-- 「编译 + 运行」并按进程退出码判定（0 通过，失败的测试显式 `exit 1`）；其它
 -- 返回类型明确失败，错误信息里写清支持的类型。编译 / 精化失败也按 FAIL 记录诊断，
 -- 单测失败不中断其余测试。
 --
 -- 效果测试有单测超时：默认 120s，`VUNA_TEST_TIMEOUT` 覆盖（0 = 关闭，非数字回落
--- 默认）。实现是在 scratch 目录（store scratch，或退回 TMPDIR 私有目录）里 `compileToDir`
--- 测试入口；`compileToDir` 是进程内调用、不受外部超时，随后用 coreutils `timeout` 包住
--- 「`sh build.sh` 链接」与「运行产物」两步，任一步超时记 FAIL 并清理。没有 `timeout`
--- 命令时降级到 `runEffectProgram`（无外部超时）。纯测试走 `interpretFile`，终止性由
--- 核心求值器的 fuel 守卫保证。
+-- 默认）。实现是在 store scratch 目录里 `compileToDir` 测试入口；`compileToDir` 是进程内
+-- 调用、不受外部超时，随后用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
+-- 产物」两步，任一步超时记 FAIL 并清理。没有 `timeout` 命令时同一路径不加外部超时。
+-- 纯测试走 `interpretFile`，终止性由核心求值器的 fuel 守卫保证。
 --
 -- 入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文；测试模块与包内模块走
 -- 同一套模块可见性规则。`vuna test <workspace-root>` 对 workspace 里每个包各跑自己
@@ -29,6 +28,7 @@ import Vuna.Compiler.Loader.Fingerprint
 import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
+import Vuna.EffectRun
 import Vuna.Files
 import Vuna.Interp
 import Base.Effect.Clock as EffClock
@@ -422,31 +422,15 @@ pureTest : String -> String -> String -> TestOutcome
 pureTest name output expected =
   if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
 
--- | 内部：效果测试——`timeout` 命令存在且超时未关闭时走 `runIOTestTimed`，否则退回
--- `runIOTestLegacy`。退出码 0 通过；编译 / 链接失败按 FAIL 记录诊断。
+-- | 内部：效果测试——`timeout` 命令存在且超时未关闭时包外部超时，否则同一路径不加
+-- 超时（`runIOTestTimed` 的 `secs <= 0` 分支）。退出码 0 通过；编译 / 链接失败按
+-- FAIL 记录诊断。
 runIOTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
 runIOTest ctx path name =
   do
     secs <- testTimeoutSecs 0
     has <- hasTimeoutCmd 0
-    if secs <= 0 || not has then
-      runIOTestLegacy ctx path name
-    else
-      runIOTestTimed ctx path name secs
-
--- | 内部：无外部超时的效果测试——临时包编译 + 运行，效果输出直接写终端，只看进程
--- 退出码。
-runIOTestLegacy : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
-runIOTestLegacy ctx path name =
-  do
-    source <- fsReadFile path
-    res <- runEffectProgram ctx source False
-    pure (
-        case res of
-          ErrC e => TestFailed (diagText e)
-          OkC 0 => TestPassed
-          OkC code => TestFailed "effect program exited with code ${code}"
-      )
+    runIOTestTimed ctx path name (if secs <= 0 || not has then 0 else secs)
 
 -- ---------------------------------------------------------------
 -- 效果测试的超时执行
@@ -469,39 +453,26 @@ testTimeoutSecs _ =
           Just n => if n < 0 then 120 else n
       )
 
--- | 内部：`timeout`（coreutils）是否在 PATH 里；不在时降级为无外部超时路径。
+-- | 内部：`timeout`（coreutils）是否在 PATH 里；不在时同一路径不加外部超时。
 hasTimeoutCmd : Member nProcess ProcessOp r => Int -> Eff r Bool
 hasTimeoutCmd _ =
   do
     code <- processRunIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]
     pure (code == 0)
 
--- | 内部：临时目录根——`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
-tempBase : Member nEnv EnvOp r => Int -> Eff r String
-tempBase _ =
-  do
-    env <- envGetEnv "TMPDIR"
-    pure
-      (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
-
--- | 内部：从 `base-fuel` 往下找第一个不存在的目录名；`fuel` 用完就退回 `base`。
-freshTempDir : Member nFs FsOp r => Int -> String -> Eff r String
-freshTempDir fuel base =
-  if fuel <= 0 then
-    pure base
-  else
-    do
-      exists <- fsFileExists "${base}-${fuel}"
-      if exists then freshTempDir (fuel - 1) base else pure "${base}-${fuel}"
-
 -- | 内部：在 `dir` 里跑命令，外部 `timeout` 包住（TERM，5s 后 KILL）。GNU timeout 的
 -- 超时退出码是 124（`-k` 兜底杀掉时 137），命令自身以这两个码退出也会被当作超时
 -- （实际不可能来自 vuna 产物，可接受）。
 runTimedCmd : Member nProcess ProcessOp r => String -> List String -> Int -> Eff r CmdOutcome
 runTimedCmd dir argv secs =
-  do
-    code <- processRunIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
-    pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
+  if secs <= 0 then
+    do
+      code <- processRunIn dir argv
+      pure (CmdDone code)
+  else
+    do
+      code <- processRunIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
+      pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
 -- | effect 测试二进制的缓存对象种类：产物落在
 -- `$VUNA_STORE/views/testbin/<digest>/bin/vuna-test`，命中直接运行，跳过 compile 与
@@ -516,31 +487,6 @@ absInt n = if n < 0 then 0 - n else n
 -- | 内部：`Int` → 十进制文本。
 strOfInt : Int -> String
 strOfInt n = strFromInt n
-
--- | 内部：按顺序把每个文件内容的哈希混进一个整数累积值。
-hashFilesContent : Member nFs FsOp r => List String -> Eff r Int
-hashFilesContent files = hashFilesGo 0 files
-
--- | 内部：`hashFilesContent` 的递归主体。
-hashFilesGo : Member nFs FsOp r => Int -> List String -> Eff r Int
-hashFilesGo acc [] = pure acc
-hashFilesGo acc (f :: rest) =
-  do
-    text <- fsReadFile f
-    hashFilesGo (acc * 1000003 + absInt (textHashOf text)) rest
-
--- | 内部：对每个目录先收集源码文件再混哈希。
-hashRoots : Member nFs FsOp r => List String -> Eff r Int
-hashRoots dirs = hashRootsGo 0 dirs
-
--- | 内部：`hashRoots` 的递归主体。
-hashRootsGo : Member nFs FsOp r => Int -> List String -> Eff r Int
-hashRootsGo acc [] = pure acc
-hashRootsGo acc (d :: rest) =
-  do
-    files <- collectSourceFiles d
-    h <- hashFilesContent files
-    hashRootsGo (acc * 1000003 + h) rest
 
 -- | 内部：effect 测试二进制的缓存 key——编译器指纹 + 包源码闭包内容 + 测试源码内容
 -- + 工具链标识。

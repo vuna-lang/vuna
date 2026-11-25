@@ -125,7 +125,7 @@
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
 | D7 | 自举锚点**当前**是 OCaml（`seed/`，同时是语义 oracle）；方向是 native 自举成熟后用 native 产物（`.s` 文件集）当锚点，OCaml 后端可在那之后退役并归档；wasm 不做自举、不设 wasm seed | native 产物只需要 `cc`/`as`/`ld` 且字节确定；wasm 仍只能跑浏览器 / 边缘能力子集，不能承担自举所需的宿主面 | 自举链平台锁定 x86-64 Linux（其它平台用发布二进制）；OCaml 退役后固定点从「独立实现互证」降级为「同一 codegen 自洽」，跨后端差分 oracle 需由 suite + wasm 交叉承担（[bootstrap.md](reference/bootstrap.md)「锚点演进」） |
 | D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由两段外部工具生成——`wasm-tools parse` 汇编、`wasm-opt`（binaryen）优化；WAT 仍不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖 `wasm-tools` 与 `wasm-opt` 两个由 Nix 固定的版本；WAT 布局不承诺跨版本稳定 |
-| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 第二执行语义（`runEffectProgram` 临时包）仍待清理；REPL / test 需改接对象库与后端 |
+| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 已落地：REPL 与 `vuna test` 的动作程序都走对象库视图（`views/effectbin` / `views/testbin`）+ 后端链接，临时包 `runEffectProgram` 已删除 |
 | D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |
 | D17 | 包内依赖方向是**包格式的一部分**：`vuna.toml` 的 `[layers]` 声明层（= 模块前缀 = 目录）及允许的直接依赖，由 loader 在 import 时强制；不用「拆包」表达方向（[packages.md](reference/packages.md)「层约束」） | 方向是包的语义契约，应该随包一起被校验、被缓存身份覆盖；拆包会把一个编译单元切成多个包，代价远大于收益 | 层内 / 向下但跨子系统的 import 不受约束；只在需要严格方向的层上写表；层表与目录不同构时只能靠改目录（不改表）来纠正 |

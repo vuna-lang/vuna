@@ -758,4 +758,5 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 `vuna test` 的 effect 测试（`main : Eff ...`）编译产物按内容寻址缓存在
 `$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器身份、包源码闭包、context roots
 内容与测试源内容；命中直接运行缓存二进制，跳过 `compile + build.sh`。pure 测试仍走
-`interpretFile`，不缓存。
+`interpretFile`，不缓存。没有 coreutils `timeout` 时同一路径不加外部超时（不再有临时包
+fallback）。REPL 的动作表达式用同一套视图机制，产物在 `$VUNA_STORE/views/effectbin/<digest>/`。

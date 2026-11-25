@@ -72,11 +72,11 @@
     时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、纯表达式经 DT 求值（支持 import/记录/
     trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
-    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`Eff r a` 表达式一律经
-    临时包 compile + 运行执行（每次约 1–2s，需要 `ocamlopt`）：`Nil` 行可直接求值，带行
-    （非 `Nil`）的要先定义带显式签名的值（如 `prog : Eff [ConsoleOp] Int`）再求值 `prog`；
-    server 模式拒绝效果表达式（子进程会写真实 stdout）；tty 下有行编辑（方向键、Ctrl-R、
-    Tab 补全）与颜色，`:load` 接受文件/目录/模块名；
+    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`Eff r a` 表达式编译成
+    可执行文件运行（按内容寻址缓存在 `views/effectbin`，首跑需要 `ocamlopt`，之后命中直接
+    跑）：`Nil` 行可直接求值，带行（非 `Nil`）的要先定义带显式签名的值（如
+    `prog : Eff [ConsoleOp] Int`）再求值 `prog`；server 模式拒绝效果表达式（子进程会写真实
+    stdout）；tty 下有行编辑（方向键、Ctrl-R、Tab 补全）与颜色，`:load` 接受文件/目录/模块名；
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
     API 文档（默认 `DIR/docs/api.html`，gitignored；workspace 根含所有成员包）；`--check`
     报告缺失 docstring 的顶层导出项；docstring / 搜索框 / 类型检索见 [api-docs.md](api-docs.md)；
