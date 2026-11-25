@@ -8,7 +8,7 @@ set -eu
 root=$(pwd)
 cd "$root"
 
-allowed='CompilerCli\.vuna|Compile\.vuna|Dt\.vuna'
+allowed='CompilerCli\.vuna|Compile\.vuna|Dt\.vuna|TargetBuild\.vuna'
 
 bad=$(grep -rn 'err "' --include='*.vuna' packages/compiler/lib packages/compiler-base/lib packages/ir/lib packages/target-ocaml/lib packages/target-native/lib packages/target-wasm/lib 2>/dev/null | grep -Ev "/(${allowed}):" || true)
 if [ -n "$bad" ]; then

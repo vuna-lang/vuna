@@ -14,7 +14,7 @@ trap 'rm -rf "$tmp"' EXIT
 build_pkg() {
   d=$1
   mkdir -p "$d/app"
-  printf '[package]\nname = "%s"\n\n[dependencies]\nvuna-base = "%s"\n' "$2" "${VUNA_BASE:-$PWD/base}" >"$d/vuna.toml"
+  printf '[package]\nname = "%s"\n\n[dependencies]\nvuna-base = "%s"\n' "$2" "${VUNA_BASE:-$PWD/packages/base}" >"$d/vuna.toml"
   printf '%s' "$3" >"$d/app/Main.vuna"
   (cd "$d" && "$VUNA" build --target wasm --out "$d/out" . >/dev/null)
 }
