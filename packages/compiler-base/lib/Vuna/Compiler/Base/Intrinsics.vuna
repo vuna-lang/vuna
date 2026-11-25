@@ -1192,8 +1192,16 @@ effIntrinsics =
 threadIntrinsics : List Intrinsic
 threadIntrinsics =
   [
-    Intrinsic "@vuna@prim_eff_threadSpawn" (IPi "a" (IFun (IFun IInt (IVar "a")) (IEff (IThread (IVar "a"))))) OpNone False,
-    Intrinsic "@vuna@prim_eff_threadJoin" (IPi "a" (IFun (IThread (IVar "a")) (IEff (IVar "a")))) OpNone False,
+    Intrinsic
+      "@vuna@prim_eff_threadSpawn"
+      (IPi "a" (IFun (IFun IInt (IVar "a")) (IEff (IThread (IVar "a")))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim_eff_threadJoin"
+      (IPi "a" (IFun (IThread (IVar "a")) (IEff (IVar "a"))))
+      OpNone
+      False,
     Intrinsic "@vuna@prim_eff_threadYield" (IEff IInt) OpNone False,
     Intrinsic "@vuna@prim_eff_threadId" (IEff IInt) OpNone False,
     Intrinsic "@vuna@prim_eff_threadParallelism" (IEff IInt) OpNone False,
@@ -1210,7 +1218,11 @@ threadIntrinsics =
     Intrinsic "@vuna@prim_eff_atomicStore" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
     Intrinsic "@vuna@prim_eff_atomicFetchAdd" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
     Intrinsic "@vuna@prim_eff_atomicExchange" (IFun IAtomic (IFun IInt (IEff IInt))) OpNone False,
-    Intrinsic "@vuna@prim_eff_atomicCompareExchange" (IFun IAtomic (IFun IInt (IFun IInt (IEff IInt)))) OpNone False
+    Intrinsic
+      "@vuna@prim_eff_atomicCompareExchange"
+      (IFun IAtomic (IFun IInt (IFun IInt (IEff IInt))))
+      OpNone
+      False
   ]
 
 -- | 线程原语名（全部隐藏；`Base.Thread` 是唯一用户面入口）。
@@ -1255,9 +1267,7 @@ internalIntrinsicNames = map intrinsicName internalIntrinsics
 -- | 所有内建声明：基础表 + 浮点表 + 宿主效应表 + 编译器 tracing 表。
 export allIntrinsics : List Intrinsic
 allIntrinsics =
-  append
-    baseIntrinsics
-    (append floatIntrinsics (append effIntrinsics internalIntrinsics))
+  append baseIntrinsics (append floatIntrinsics (append effIntrinsics internalIntrinsics))
 
 -- | 全部与 Float 有关的内建名（字面量/算术/比较/转换/格式化）：核心求值/REPL 的
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。
