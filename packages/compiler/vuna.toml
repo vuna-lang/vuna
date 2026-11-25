@@ -56,6 +56,7 @@ modules = [
   "Vuna.Compiler.Elab.Types",
   "Vuna.Compiler.Elab.Usage",
   "Vuna.Compiler.Frontend.Ast",
+  "Vuna.Compiler.Frontend.AstView",
   "Vuna.Compiler.Frontend.Canonical.Ast",
   "Vuna.Compiler.Frontend.Canonical.Pkg",
   "Vuna.Compiler.Frontend.Cst",

@@ -15,6 +15,8 @@ module Vuna.Compiler.Frontend.Cst where
 --     所以事件流天然真嵌套；本模块只做一遍线性组装，**不从缩进或括号反推布局**。
 --     offside 布局是文法的一部分（块起始列、case 分支列、`canContinue`），只有 parser
 --     知道自己在哪个块里；让 token 流自己猜就是第二套布局语义，会静默漂移。
+--     分支节点还带该区间产出的 AST 值（语义载荷 `CstSem`，`EvSem` 在关闭前挂上），
+--     AST 因此是树上的投影（`Frontend.AstView.ofTree`），不是并行的第二份结构。
 -- 节点树不复制 token 文本：叶节点直接持有 `CstToken`，所以 `renderCstTree` 与
 -- `renderCst` 对同一份源码逐字节一致。
 --
@@ -43,6 +45,7 @@ import Vuna.Compiler.Base.Obs
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 
 -- | trivia 的种类：空白、行注释、块注释。
@@ -402,52 +405,96 @@ export record CstSurface(..) where
 export emptyCstSurface : CstSurface
 emptyCstSurface = CstSurface 0 False Nothing Nothing []
 
--- | 节点：叶是 token，分支是 kind + id + span + 表面形状 + 有序 children。
+-- | 节点：叶是 token，分支是 kind + id + span + 表面形状 + 语义载荷 + 有序 children。
 --
 -- 分支的 id 是**先序序号**（文件根 = 0，按 parser 的 `withExtent` 打开顺序递增），
 -- 它是节点的身份：span 可以被改写（宏展开、编辑），id 在一次解析内不变。叶节点
 -- 没有身份（它们的位置由所属分支与 token 流给出）。
+--
+-- `CstSem` 是分支的**语义载荷**：parser 在关闭节点时把该区间产出的 AST 值挂上去。
+-- AST 因此不是与树并行的第二份结构，而是树上的类型化投影（`Frontend.AstView.ofTree`
+-- 只按树节点收集载荷）；工具拿到树节点后直接读它的语法值，不需要再按 id 回查另一棵树。
 export data CstNode(..) : Type where
   -- | 叶：一个 token（含其前置 trivia）。
   CstLeaf : CstToken -> CstNode
-  -- | 分支：kind / 节点 id / span / 表面形状 / 按源码顺序排列的 children。
-  CstBranch : CstKind -> Int -> Span -> CstSurface -> List CstNode -> CstNode
+  -- | 分支：kind / 节点 id / span / 表面形状 / 语义载荷 / 按源码顺序排列的 children。
+  CstBranch : CstKind -> Int -> Span -> CstSurface -> Maybe CstSem -> List CstNode -> CstNode
+
+-- | 分支节点的语义载荷：parser 在该区间产出的 AST 值。
+--
+-- 载荷只在**产生它的那一个节点**上：类型 / 条目节点带 `Decl` / `Import` / `Ctor` 等，
+-- 表达式 / 模式 / 绑定 / 分支 / do 语句各自带自己的构造子。文件级投影
+-- （`Frontend.AstView.ofTree`）只读顶层节点的载荷；嵌套节点的载荷供工具做
+-- 「源码位置 → 语法位置」与后续宏展开使用。
+--
+-- `SemDecl` 的后两个字段是该声明携带的逐定义导出 / 归约修饰（同一条 `export ...`
+-- 只产生一个 `decl` 节点，两者都是这次解析的产物）。
+--
+-- 载荷是 parser 在该节点**直接产出**的值：后续对 AST 的变换（相邻同名子句合并、
+-- 宏展开）不回写树；需要「变换后视图」的消费者仍以自己的 AST 为准。
+export data CstSem(..) : Type where
+  SemModHead : ModDecl -> CstSem
+  SemImport : Import -> CstSem
+  -- | `export import B (...)`：普通 import + 重导出项。
+  SemReexportImport : Import -> List ExportItem -> CstSem
+  -- | `export module C [as X]`：只产生重导出项，没有 `Import`。
+  SemExportNamespace : ExportItem -> CstSem
+  -- | 模块头里的一个导出项。
+  SemExportItem : ExportItem -> CstSem
+  SemFixity : FixityDecl -> CstSem
+  -- | 顶层 / instance 方法声明；后两个字段是逐定义导出与归约修饰。
+  SemDecl : Decl -> Maybe ExportSpec -> Maybe OpacitySpec -> CstSem
+  SemCtor : Ctor -> CstSem
+  SemField : Field -> CstSem
+  SemMethod : TraitMethod -> CstSem
+  SemBinding : Binding -> CstSem
+  -- | `let` / `where` 的签名行（名字 + 类型 + 该 `binding` 节点的身份）。
+  SemBindingSig : String -> Expr -> NodeRef -> CstSem
+  SemAlt : Alt -> CstSem
+  SemExpr : Expr -> CstSem
+  SemPat : Pat -> CstSem
+  SemDoStmt : DoStmt -> CstSem
+
+-- | 分支节点的语义载荷；叶节点没有。
+export nodeSem : CstNode -> Maybe CstSem
+nodeSem (CstLeaf _) = Nothing
+nodeSem (CstBranch _ _ _ _ sem _) = sem
 
 -- | 节点的 span（叶取 token span）。
 export nodeSpan : CstNode -> Span
 nodeSpan (CstLeaf t) = t.cstSpan
-nodeSpan (CstBranch _ _ sp _ _) = sp
+nodeSpan (CstBranch _ _ sp _ _ _) = sp
 
 -- | 分支节点的表面形状；叶节点没有。
 export nodeSurface : CstNode -> CstSurface
 nodeSurface (CstLeaf _) = emptyCstSurface
-nodeSurface (CstBranch _ _ _ surface _) = surface
+nodeSurface (CstBranch _ _ _ surface _ _) = surface
 
 -- | 分支节点的 id；叶节点没有身份。
 export nodeId : CstNode -> Maybe Int
 nodeId (CstLeaf _) = Nothing
-nodeId (CstBranch _ nid _ _ _) = Just nid
+nodeId (CstBranch _ nid _ _ _ _) = Just nid
 
 -- | 节点的 kind；叶节点给 `Nothing`。
 export nodeKind : CstNode -> Maybe CstKind
 nodeKind (CstLeaf _) = Nothing
-nodeKind (CstBranch k _ _ _ _) = Just k
+nodeKind (CstBranch k _ _ _ _ _) = Just k
 
 -- | 节点的 children；叶节点为空列表。
 export nodeChildren : CstNode -> List CstNode
 nodeChildren (CstLeaf _) = []
-nodeChildren (CstBranch _ _ _ _ kids) = kids
+nodeChildren (CstBranch _ _ _ _ _ kids) = kids
 
 -- | 叶 token；分支给 `Nothing`。
 export nodeToken : CstNode -> Maybe CstToken
 nodeToken (CstLeaf t) = Just t
-nodeToken (CstBranch _ _ _ _ _) = Nothing
+nodeToken (CstBranch _ _ _ _ _ _) = Nothing
 
 -- | 节点种类的短名（叶为 `"leaf"`）；工具侧做结构断言与 dump 时不需要对
 -- `CstKind` 自建相等。
 export nodeKindTag : CstNode -> String
 nodeKindTag (CstLeaf _) = "leaf"
-nodeKindTag (CstBranch k _ _ _ _) = cstKindTag k
+nodeKindTag (CstBranch k _ _ _ _ _) = cstKindTag k
 
 export cstKindTag : CstKind -> String
 cstKindTag CstFileKind = "file"
@@ -478,15 +525,18 @@ export data NodeEvent(..) : Type where
   -- | 在 token 下标 `at` 打开节点 `nid`：起点是第 `at` 个 token 的起点。
   -- `nid` 由 parser 分配（文件根 0，其余按 `withExtent` 打开顺序递增），AST 侧存的是同一个值。
   EvOpen : CstKind -> Int -> Int -> NodeEvent
+  -- | 给栈顶节点挂语义载荷（body 成功回流、`EvClose` 之前发一次）。
+  EvSem : Int -> CstSem -> NodeEvent
   -- | 关闭最近一个打开的节点：终点是 token 下标（半开，`at` = 最后一个成员之后）。
   EvClose : Int -> NodeEvent
 
--- | 建树时的打开帧：kind + id + 起点 span + children（逆序累积）。
+-- | 建树时的打开帧：kind + id + 起点 span + children（逆序累积）+ 语义载荷。
 record NestFrame where
   nfKind : CstKind
   nfId : Int
   nfStart : Span
   nfKids : List CstNode
+  nfSem : Maybe CstSem
 
 -- | 两个 span 的合并：取前者的起点、后者的终点。
 spanFrom : Span -> Span -> Span
@@ -524,22 +574,27 @@ finishFrame f =
   let
     kids = reverse f.nfKids
     endSp = lastSpanOf f.nfStart kids
-  in CstBranch f.nfKind f.nfId (spanFrom f.nfStart endSp) emptyCstSurface kids
+  in CstBranch f.nfKind f.nfId (spanFrom f.nfStart endSp) emptyCstSurface f.nfSem kids
 
 -- | 叶节点并进栈顶帧（栈为空时丢弃：框架外的事件由收尾统一处理）。
 pushLeaves : List CstNode -> List NestFrame -> List NestFrame
 pushLeaves nodes [] = []
 pushLeaves nodes (f :: rest) =
-  NestFrame f.nfKind f.nfId f.nfStart (append (reverse nodes) f.nfKids) :: rest
+  NestFrame f.nfKind f.nfId f.nfStart (append (reverse nodes) f.nfKids) f.nfSem :: rest
 
 -- | 子节点并进单个帧。
 pushInto : CstNode -> NestFrame -> NestFrame
-pushInto node f = NestFrame f.nfKind f.nfId f.nfStart (node :: f.nfKids)
+pushInto node f = NestFrame f.nfKind f.nfId f.nfStart (node :: f.nfKids) f.nfSem
 
 -- | 子节点并进栈顶帧。
 pushNode : CstNode -> List NestFrame -> List NestFrame
 pushNode node [] = []
 pushNode node (f :: rest) = pushInto node f :: rest
+
+-- | 给栈顶帧挂语义载荷（`EvSem` 在 `EvClose` 之前发出，栈顶就是刚解析完的节点）。
+attachSem : CstSem -> List NestFrame -> List NestFrame
+attachSem sem [] = []
+attachSem sem (f :: rest) = NestFrame f.nfKind f.nfId f.nfStart f.nfKids (Just sem) :: rest
 
 -- | 关闭栈顶帧：并入它的父帧。根帧（栈底）不关闭。
 closeTopFrame : List NestFrame -> List NestFrame
@@ -565,6 +620,7 @@ closeAllFrames fuel frames =
 -- | 事件携带的 token 下标。
 eventIndex : NodeEvent -> Int
 eventIndex (EvOpen _ at _) = at
+eventIndex (EvSem _ _) = 0
 eventIndex (EvClose at) = at
 
 -- | 遍历事件流：`live` 是尚未并入树的 token，`cursor` 是已并入的个数；事件里的下标是
@@ -575,6 +631,8 @@ eventIndex (EvClose at) = at
 nestEvents : List CstToken -> Int -> List NestFrame -> List NodeEvent -> List NestFrame
 nestEvents live cursor frames [] =
   closeAllFrames (nestFrameCount frames + 1) (pushLeaves (map (\t => CstLeaf t) live) frames)
+nestEvents live cursor frames ((EvSem _ sem) :: rest) =
+  nestEvents live cursor (attachSem sem frames) rest
 nestEvents live cursor frames (ev :: rest) =
   let
     at = eventIndex ev
@@ -582,14 +640,19 @@ nestEvents live cursor frames (ev :: rest) =
     live2 = drop n live
     frames1 = pushLeaves (map (\t => CstLeaf t) (take n live)) frames
   in case ev of
+    EvSem _ sem => nestEvents live2 at (attachSem sem frames1) rest
     EvOpen kind _ nid =>
-      nestEvents live2 at (NestFrame kind nid (headSpan degenerateSpan live2) [] :: frames1) rest
+      nestEvents
+        live2
+        at
+        (NestFrame kind nid (headSpan degenerateSpan live2) [] Nothing :: frames1)
+        rest
     EvClose _ => nestEvents live2 at (closeTopFrame frames1) rest
 
 -- | 根帧收尾：children 反转成源码顺序，span 用整份 token 流。
 finishRoot : Span -> List NestFrame -> CstNode
-finishRoot sp (f :: _) = CstBranch CstFileKind f.nfId sp emptyCstSurface (reverse f.nfKids)
-finishRoot sp [] = CstBranch CstFileKind 0 sp emptyCstSurface []
+finishRoot sp (f :: _) = CstBranch CstFileKind f.nfId sp emptyCstSurface f.nfSem (reverse f.nfKids)
+finishRoot sp [] = CstBranch CstFileKind 0 sp emptyCstSurface Nothing []
 
 -- | 单个 token 的 span（字段投影写成具名 helper，`map` 里需要已知类型）。
 tokenSpanOf : CstToken -> Span
@@ -607,7 +670,7 @@ tokensSpan (t :: rest) = spanFrom t.cstSpan (lastSpanOfList t.cstSpan (map token
 export nestToTree : List CstToken -> List NodeEvent -> CstNode
 nestToTree toks events =
   let
-    root = NestFrame CstFileKind 0 (headSpan degenerateSpan toks) []
+    root = NestFrame CstFileKind 0 (headSpan degenerateSpan toks) [] Nothing
     frames = nestEvents toks 0 [root] events
     sp = tokensSpan toks
   in finishRoot sp frames
@@ -631,7 +694,7 @@ nestToTreeWithSurface toks events parenEntries backticks sections interps holeTr
 
 applySurfaceTree : HashMap Int Int -> List (Int, Bool) -> List (Int, SectionShape) -> List (Int, Bool) -> List (Int, List CstNode) -> CstNode -> CstNode
 applySurfaceTree parens backticks sections interps holeTrees (CstLeaf t) = CstLeaf t
-applySurfaceTree parens backticks sections interps holeTrees (CstBranch kind nid sp _ kids) =
+applySurfaceTree parens backticks sections interps holeTrees (CstBranch kind nid sp _ sem kids) =
   let
     parenDepth =
       case HashMap.lookup nid parens of
@@ -653,6 +716,7 @@ applySurfaceTree parens backticks sections interps holeTrees (CstBranch kind nid
     nid
     sp
     surface
+    sem
     (map (applySurfaceTree parens backticks sections interps holeTrees) kids)
 
 lookupHoleTrees : Int -> List (Int, List CstNode) -> Maybe (List CstNode)
@@ -727,7 +791,7 @@ emptyFactEntries = FactEntries [] [] []
 
 factsGo : CstNode -> FactEntries -> FactEntries
 factsGo (CstLeaf _) acc = acc
-factsGo (CstBranch _ nid sp surface kids) acc =
+factsGo (CstBranch _ nid sp surface _ kids) acc =
   let
     acc1 =
       if surface.cstParenDepth > 0 then
@@ -765,12 +829,12 @@ fixityFactsOfParts parens backticks sections holeRoots =
 -- | 树的叶序列（源码顺序）。无损断言用它对齐 token 流。
 export collectLeaves : CstNode -> List CstToken
 collectLeaves (CstLeaf t) = [t]
-collectLeaves (CstBranch _ _ _ _ kids) = concatMap collectLeaves kids
+collectLeaves (CstBranch _ _ _ _ _ kids) = concatMap collectLeaves kids
 
 -- | 先序的分支节点表（id → 节点）。
 nodeTable : CstNode -> List (Int, CstNode)
 nodeTable (CstLeaf _) = []
-nodeTable (n@(CstBranch _ nid _ _ kids)) = (nid, n) :: concatMap nodeTable kids
+nodeTable (n@(CstBranch _ nid _ _ _ kids)) = (nid, n) :: concatMap nodeTable kids
 
 -- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
 -- 而不是再按区间比较。
@@ -801,7 +865,7 @@ cstIndexOf root =
 
 indexGo : CstNode -> IndexAcc -> IndexAcc
 indexGo (CstLeaf _) acc = acc
-indexGo (n@(CstBranch _ nid sp surface kids)) acc =
+indexGo (n@(CstBranch _ nid sp surface _ kids)) acc =
   let
     hasIdFact = surface.cstParenDepth > 0 || surface.cstBacktick
     hasSpanFact =
@@ -830,7 +894,7 @@ emptyNodeTable : HashMap Int CstNode
 emptyNodeTable =
   HashMap.remove
     emptyKey
-    (HashMap.fromList [(emptyKey, CstBranch CstFileKind emptyKey spanEmpty emptyCstSurface [])])
+    (HashMap.fromList [(emptyKey, CstBranch CstFileKind emptyKey spanEmpty emptyCstSurface Nothing [])])
 
 -- | 表达式节点的括号层数（没有条目 = 0）。
 export parenDepthOfIndex : CstIndex -> Int -> Int
@@ -877,7 +941,7 @@ interpMultiOfIndex ix sp =
 -- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
 export renderCstTree : CstNode -> String
 renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
-renderCstTree (CstBranch _ _ _ _ kids) = strConcatMany (map renderCstTree kids)
+renderCstTree (CstBranch _ _ _ _ _ kids) = strConcatMany (map renderCstTree kids)
 
 -- ---------------------------------------------------------------
 -- 条目锚点（注释归属的挂载点）
@@ -887,7 +951,7 @@ renderCstTree (CstBranch _ _ _ _ kids) = strConcatMany (map renderCstTree kids)
 -- 锚点集合就是渲染器的挂载点；注释归属按节点 id 查槽，顺序无关（调用方会按起点排序）。
 export anchorRefsOfTree : (CstKind -> Bool) -> CstNode -> List (Int, Span)
 anchorRefsOfTree keep (CstLeaf _) = []
-anchorRefsOfTree keep (CstBranch kind nid sp _ kids) =
+anchorRefsOfTree keep (CstBranch kind nid sp _ _ kids) =
   append (if keep kind then [(nid, sp)] else []) (concatMap (anchorRefsOfTree keep) kids)
 
 -- ---------------------------------------------------------------
@@ -990,6 +1054,8 @@ headTokOf (t :: _) = Just t.ptokTok
 -- | 事件流 → `(节点 id, 括号层数)` 表项（逆序累积；键不重复）。
 parenWalk : List (Int, Int) -> List ParenFrame -> Int -> Maybe Tok -> List PTok -> List NodeEvent -> List (Int, Int)
 parenWalk acc frames cursor lastTok toks [] = acc
+parenWalk acc frames cursor lastTok toks ((EvSem _ _) :: rest) =
+  parenWalk acc frames cursor lastTok toks rest
 parenWalk acc frames cursor lastTok toks ((EvOpen kind at nid) :: rest) =
   let
     step = consumeParen (at - cursor) lastTok toks

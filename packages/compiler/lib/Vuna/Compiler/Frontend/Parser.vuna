@@ -1,12 +1,13 @@
 module Vuna.Compiler.Frontend.Parser where
 
--- vuna 源码 parser：offside layout，返回 AST 与 imports。
+-- vuna 源码 parser：offside layout，返回 AST 与 imports；表示层产物是无损树 + AST 载荷。
 import Base.Data.List as List
 import Base.Data.Nat as Nat
 import qualified Base.Data.Vec as Vec
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstView
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Frontend.Lexer
@@ -31,7 +32,7 @@ psAt st e args = psErrAt (tokSpan st) e args
 -- 才付那份成本，纯切片消费者（lint / index / doc）不该为它分配。fmt 用
 -- `Cst.lexTokensOf` 从 `parsedRawToks` + `parsedComments` 组装。
 export record ParsedSource(..) where
-  -- | 语法树。
+  -- | 语法树（从 `parsedCst` 投影：值在树节点的语义载荷里）。
   parsedFile : SourceFile
   -- | 注释表（源码顺序；抑制指令与 docstring 用）。
   parsedComments : List Comment
@@ -66,6 +67,9 @@ parseSourceCore file source =
 -- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
 -- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
 -- 不必为注释或原文切片再扫一遍源码。
+--
+-- `parsedFile` **从树投影**（`AstView.ofTree`）：tree 是 parser 的结构产物，AST 值在
+-- 节点载荷里，这里不另取 parser 的直接 AST——两边的漂移由测试锁住。
 export parseSourceDetailed : String -> String -> Check ParsedSource
 parseSourceDetailed file source =
   case parseSourceCore file source of
@@ -82,7 +86,7 @@ parseSourceDetailed file source =
             c.pcFin.sectionShapes
             c.pcFin.interpMultis
             c.pcFin.templateHoles
-      in OkC (ParsedSource c.pcSource c.pcComments c.pcToks cst)
+      in OkC (ParsedSource (AstView.ofTree cst) c.pcComments c.pcToks cst)
 
 -- | 只要 AST 与注释表的入口。
 --
@@ -136,6 +140,69 @@ record DeclStart where
 declRefAt : PState -> DeclStart -> PState -> NodeRef
 declRefAt st ds end = NodeRef ds.declStartId (spanFromStart (fileOf st) ds.declStartPos end)
 
+-- ---------------------------------------------------------------
+-- 语义载荷：节点区间产出的 AST 值挂到树节点上（`withExtent` 的 `toSem`）。
+-- 这些映射是「AST 是树的投影」的唯一接线点：除这里外，树与 AST 不互相引用。
+-- ---------------------------------------------------------------
+semModHead : Maybe ModDecl -> Maybe CstSem
+semModHead Nothing = Nothing
+semModHead (Just m) = Just (SemModHead m)
+
+semImport : Import -> Maybe CstSem
+semImport i = Just (SemImport i)
+
+semReexportImport : (Import, List ExportItem) -> Maybe CstSem
+semReexportImport p = Just (SemReexportImport (firstOf p) (secondOf p))
+
+semExportNamespace : ExportItem -> Maybe CstSem
+semExportNamespace item = Just (SemExportNamespace item)
+
+semExportItem : ExportItem -> Maybe CstSem
+semExportItem item = Just (SemExportItem item)
+
+semFixity : FixityDecl -> Maybe CstSem
+semFixity f = Just (SemFixity f)
+
+semDecl : Decl -> Maybe CstSem
+semDecl d = Just (SemDecl d Nothing Nothing)
+
+semParsedDecl : ParsedDecl -> Maybe CstSem
+semParsedDecl (ParsedDecl _ (Just d) mexp mop) = Just (SemDecl d mexp mop)
+semParsedDecl _ = Nothing
+
+semCtor : Ctor -> Maybe CstSem
+semCtor c = Just (SemCtor c)
+
+semField : Field -> Maybe CstSem
+semField f = Just (SemField f)
+
+semMethod : TraitMethod -> Maybe CstSem
+semMethod m = Just (SemMethod m)
+
+semBindingItem : BindingItem -> Maybe CstSem
+semBindingItem (BISig name ty r) = Just (SemBindingSig name ty r)
+semBindingItem (BIBind b) = Just (SemBinding b)
+
+semAlt : Alt -> Maybe CstSem
+semAlt a = Just (SemAlt a)
+
+semExpr : Expr -> Maybe CstSem
+semExpr e = Just (SemExpr e)
+
+semPat : Pat -> Maybe CstSem
+semPat p = Just (SemPat p)
+
+semDoStmt : DoStmt -> Maybe CstSem
+semDoStmt s = Just (SemDoStmt s)
+
+-- `handle` 的 return 子句在 AST 里合成到 `ELam`，没有独立的语义构造。
+semHandleRet : (String, Expr, NodeRef) -> Maybe CstSem
+semHandleRet _ = Nothing
+
+-- op 子句的 AST 形态就是它降级出的 `Alt`（与 `handleAlt` 同一形状）。
+semHandleOp : HandleOp -> Maybe CstSem
+semHandleOp op = Just (SemAlt (handleAlt op))
+
 -- 把逐定义导出/重导出/归约修饰符挂到模块头上；入口文件没有模块头（这些信息也无下游）。
 -- 可选模块头：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : Bool -> PState -> Check ((SourceFile, PState), List Diagnostic)
@@ -164,7 +231,7 @@ parseSourceFile recover st =
 parseModDecl : PState -> Check (Maybe ModDecl, PState)
 parseModDecl st =
   if atKw st "module" then
-    withExtent CstModHeadKind st (\st0 => parseModDeclBody st0)
+    withExtent CstModHeadKind semModHead st (\st0 => parseModDeclBody st0)
   else
     OkC (Nothing, st)
 
@@ -198,6 +265,7 @@ parseExportItemAt : Bool -> PState -> Check (ExportItem, PState)
 parseExportItemAt True st =
   withExtent
     CstExportItemKind
+    semExportItem
     st
     (\st0 => Vuna.Compiler.Base.Common.step (parseExportItem st0) (\item, st1 => OkC (withExportItemRef (NodeRef st0.openNodeId (spanOf st st1)) item, st1)))
 parseExportItemAt False st = parseExportItem st
@@ -250,7 +318,8 @@ exportItemOf name (EMOnly members) sp = XTypeSome name members sp
 -- | `export import [qualified] B [as L] [(x, T(..), T(A, B))]`。
 -- 返回普通 `Import`（与 `import` 同语义）+ 重导出项。
 parseExportImport : PState -> Check ((Import, List ExportItem), PState)
-parseExportImport st = withExtent CstImportKind st (\st0 => parseExportImportBody st0)
+parseExportImport st =
+  withExtent CstImportKind semReexportImport st (\st0 => parseExportImportBody st0)
 
 parseExportImportBody : PState -> Check ((Import, List ExportItem), PState)
 parseExportImportBody st =
@@ -261,7 +330,8 @@ parseExportImportBody st =
 -- | `export module C [as X]`：整模块重导出；带 alias 时导出命名空间路径。
 -- 不带 Import：加载期按需合成/复用 `import C [as X]`。
 parseExportNamespace : PState -> Check (ExportItem, PState)
-parseExportNamespace st = withExtent CstImportKind st (\st0 => parseExportNamespaceBody st0)
+parseExportNamespace st =
+  withExtent CstImportKind semExportNamespace st (\st0 => parseExportNamespaceBody st0)
 
 parseExportNamespaceBody : PState -> Check (ExportItem, PState)
 parseExportNamespaceBody st =
@@ -304,7 +374,7 @@ qualifyExportItem prefix (XModule name sp) = XModule name sp
 qualifyExportItem prefix (XNamespace name alias sp) = XNamespace name alias sp
 
 parseImportSpec : PState -> Check (Import, PState)
-parseImportSpec st = withExtent CstImportKind st (\st0 => parseImportSpecBody st0)
+parseImportSpec st = withExtent CstImportKind semImport st (\st0 => parseImportSpecBody st0)
 
 parseImportSpecBody : PState -> Check (Import, PState)
 parseImportSpecBody st =
@@ -608,6 +678,7 @@ parseExportDecl : PState -> Int -> Check (ParsedDecl, PState)
 parseExportDecl st blockCol =
   withExtent
     CstDeclKind
+    semParsedDecl
     st
     (\st0 => parseExportDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
@@ -740,6 +811,7 @@ parseOpacityDecl : PState -> Int -> Check (ParsedDecl, PState)
 parseOpacityDecl st blockCol =
   withExtent
     CstDeclKind
+    semParsedDecl
     st
     (\st0 => parseOpacityDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
@@ -956,7 +1028,11 @@ parseOptionalMembers st = if atSym st "(" then parseExportMembers st else OkC (E
 -- | 一条 `infix*` 声明的建树节点。
 parseFixityDecl : PState -> Int -> Int -> Pos -> Check (FixityDecl, PState)
 parseFixityDecl st blockCol assoc kwPos =
-  withExtent CstFixityKind st (\st0 => parseFixityDeclBody st0 blockCol assoc kwPos st0.openNodeId)
+  withExtent
+    CstFixityKind
+    semFixity
+    st
+    (\st0 => parseFixityDeclBody st0 blockCol assoc kwPos st0.openNodeId)
 
 parseFixityDeclBody : PState -> Int -> Int -> Pos -> Int -> Check (FixityDecl, PState)
 parseFixityDeclBody st blockCol assoc kwPos nid =
@@ -1015,6 +1091,7 @@ parseDecl : PState -> Int -> Check (Decl, PState)
 parseDecl st blockCol =
   withExtent
     CstDeclKind
+    semDecl
     st
     (\st0 => parseDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
 
@@ -1176,7 +1253,7 @@ parseBindingItem fuel st bindCol =
   if fuel <= 0 then
     icFuel "parser"
   else
-    withExtent CstBindingKind st (\st0 => parseBindingItemBody fuel st0 bindCol)
+    withExtent CstBindingKind semBindingItem st (\st0 => parseBindingItemBody fuel st0 bindCol)
 
 parseBindingItemBody : Int -> PState -> Int -> Check (BindingItem, PState)
 parseBindingItemBody fuel st bindCol =
@@ -1426,7 +1503,7 @@ parseFieldList fuel st fieldCol =
 -- | 一个记录字段（`name : Ty`）；单独成节点是因为注释可以挂在字段上。
 parseField : PState -> Int -> Check (Field, PState)
 parseField st fieldCol =
-  withExtent CstFieldKind st (\st0 => parseFieldBody st0 fieldCol st0.openNodeId)
+  withExtent CstFieldKind semField st (\st0 => parseFieldBody st0 fieldCol st0.openNodeId)
 
 parseFieldBody : PState -> Int -> Int -> Check (Field, PState)
 parseFieldBody st fieldCol nid =
@@ -1521,7 +1598,7 @@ parseMethodSigList fuel st methodCol =
 -- | 一条 trait 方法签名（`m : Ty`）；单独成节点是因为注释可以挂在方法上。
 parseMethodSig : PState -> Int -> Check (TraitMethod, PState)
 parseMethodSig st methodCol =
-  withExtent CstMethodKind st (\st0 => parseMethodSigBody st0 methodCol st0.openNodeId)
+  withExtent CstMethodKind semMethod st (\st0 => parseMethodSigBody st0 methodCol st0.openNodeId)
 
 parseMethodSigBody : PState -> Int -> Int -> Check (TraitMethod, PState)
 parseMethodSigBody st methodCol nid =
@@ -1611,6 +1688,7 @@ parseInstanceDecl st blockCol =
   if instanceMethodStart st then
     withExtent
       CstDeclKind
+      semDecl
       st
       (\st0 => parseInstanceDeclBody st0 blockCol (DeclStart st0.openNodeId (peekPos st0)))
   else
@@ -1669,7 +1747,8 @@ parseCtorList fuel st ctorCol =
 
 -- | 一个构造器（`Name : Ty`）；单独成节点是因为注释可以挂在构造器上。
 parseCtor : PState -> Int -> Check (Ctor, PState)
-parseCtor st ctorCol = withExtent CstCtorKind st (\st0 => parseCtorBody st0 ctorCol st0.openNodeId)
+parseCtor st ctorCol =
+  withExtent CstCtorKind semCtor st (\st0 => parseCtorBody st0 ctorCol st0.openNodeId)
 
 parseCtorBody : PState -> Int -> Int -> Check (Ctor, PState)
 parseCtorBody st ctorCol nid =
@@ -1682,6 +1761,7 @@ parseExpr : Int -> PState -> Int -> Check (Expr, PState)
 parseExpr fuel st blockCol =
   withExtent
     CstExprKind
+    semExpr
     st
     (\st0 => Vuna.Compiler.Base.Common.step (parseExprBody fuel st0.openNodeId st0 blockCol) (\e, st1 => OkC (withExprId st0.openNodeId e, rekeyInfix (nodeRefId (exprRef e)) st0.openNodeId st1)))
 
@@ -1713,7 +1793,7 @@ parseInfix fuel nid st blockCol lhs =
       PTok (TSym op) p =>
         if canContinue st blockCol && not (isSyntaxSym op) then
           if closeParenNext st then
-            withExtent CstExprKind st (
+            withExtent CstExprKind semExpr st (
                 \st0 =>
                   let
                     -- 右 section 的语法节点只覆盖运算符：操作数 `lhs` 已有自己的子树，`)` 由外层
@@ -1863,7 +1943,7 @@ parseAtomBase fuel st blockCol =
       PTok (TInt n) p => OkC (EInt n (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TFloat raw) p => OkC (EFloat raw (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TStr s) p => OkC (EStr s (detachedNodeRef (spanOf st (advance st))), advance st)
-      PTok (TTmpl multi parts endP) p => withExtent CstExprKind st (\st0 => parseTemplateAtom (fuel - 1) st0 multi parts endP)
+      PTok (TTmpl multi parts endP) p => withExtent CstExprKind semExpr st (\st0 => parseTemplateAtom (fuel - 1) st0 multi parts endP)
       PTok (TKw "Type") p => OkC (EVar "Type" (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TSym "(") p =>
         case binderHead (advance st) of
@@ -1871,7 +1951,7 @@ parseAtomBase fuel st blockCol =
           -- `(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
           Nothing =>
             case sectionOpAt st of
-              Just op => withExtent CstExprKind st (\st0 => parseSectionAtom (fuel - 1) st0 blockCol op)
+              Just op => withExtent CstExprKind semExpr st (\st0 => parseSectionAtom (fuel - 1) st0 blockCol op)
               Nothing => parseParenAtom (fuel - 1) st blockCol
       PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
       -- 命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
@@ -2239,6 +2319,7 @@ parseAlt : Int -> PState -> Int -> Check (Alt, PState)
 parseAlt fuel st altCol =
   withExtent
     CstAltKind
+    semAlt
     st
     (\st0 => Vuna.Compiler.Base.Common.step (parseAltBody fuel st0 altCol) (\alt, st1 => OkC (Alt alt.altPat alt.altBody (NodeRef st0.openNodeId (spanOf st st1)), st1)))
 
@@ -2382,6 +2463,7 @@ parseHandleRetClause fuel st clauseCol =
   else
     withExtent
       CstAltKind
+      semHandleRet
       st
       (\st0 => Vuna.Compiler.Base.Common.step (expectIdent st0) (\_kw, st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\x, st2 => Vuna.Compiler.Base.Common.bind (expectSym st2 "->") (\st3 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st3 clauseCol) (\body, st4 => OkC ((x, body, NodeRef st0.openNodeId (spanOf st0 st4)), st4))))))
 
@@ -2391,7 +2473,11 @@ parseHandleOpClause fuel st clauseCol =
   if fuel <= 0 then
     icFuel "parser"
   else
-    withExtent CstAltKind st (\st0 => parseHandleOpClauseBody fuel st0 clauseCol st0.openNodeId)
+    withExtent
+      CstAltKind
+      semHandleOp
+      st
+      (\st0 => parseHandleOpClauseBody fuel st0 clauseCol st0.openNodeId)
 
 -- | op 子句体（`nid` 是子句的 `alt` 节点 id）。
 parseHandleOpClauseBody : Int -> PState -> Int -> Int -> Check (HandleOp, PState)
@@ -2526,7 +2612,7 @@ parseDoStmts fuel st stmtCol acc =
 -- | 一条 do 语句的建树节点。
 parseDoStmt : Int -> PState -> Int -> Check (DoStmt, PState)
 parseDoStmt fuel st stmtCol =
-  withExtent CstDoStmtKind st (\st0 => parseDoStmtBody fuel st0 stmtCol st0.openNodeId)
+  withExtent CstDoStmtKind semDoStmt st (\st0 => parseDoStmtBody fuel st0 stmtCol st0.openNodeId)
 
 parseDoStmtBody : Int -> PState -> Int -> Int -> Check (DoStmt, PState)
 parseDoStmtBody fuel st stmtCol nid =
@@ -2615,6 +2701,7 @@ parsePatternSingle : Int -> PState -> Int -> Check (Pat, PState)
 parsePatternSingle fuel st blockCol =
   withExtent
     CstPatKind
+    semPat
     st
     (\st0 => Vuna.Compiler.Base.Common.step (parsePatternSingleBody fuel st0 blockCol) (\p, st1 => OkC (withPatId st0.openNodeId p, st1)))
 

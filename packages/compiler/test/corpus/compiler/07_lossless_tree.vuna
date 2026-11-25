@@ -7,6 +7,7 @@ import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Canonical.Ast as CanonicalAst
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Parser
 
@@ -97,7 +98,7 @@ kidsInside sp (k :: rest) =
 -- | 递归：每个分支的 children 有序、都在自己的区间里，且自身也被父层检查过。
 nestedOk : CstNode -> Bool
 nestedOk (CstLeaf _) = True
-nestedOk (CstBranch _ _ sp _ kids) =
+nestedOk (CstBranch _ _ sp _ _ kids) =
   orderedKids kids && kidsInside sp kids && List.length kids > 0 && nestedAll kids
 
 nestedAll : List CstNode -> Bool
@@ -113,7 +114,7 @@ kindTagsAt fuel n =
   else
     case n of
       CstLeaf _ => []
-      CstBranch _ _ _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
+      CstBranch _ _ _ _ _ kids => nodeKindTag n :: concatMap (kindTagsAt (fuel - 1)) kids
 
 -- | 每层至少 1 个 token，所以 token 数是树高的安全上界。
 kindTags : List CstToken -> CstNode -> List String
@@ -377,7 +378,7 @@ nodesOfKindDeep tag (n :: rest) =
   append (if nodeKindTag n == tag then [n] else []) (
       case n of
         CstLeaf _ => nodesOfKindDeep tag rest
-        CstBranch _ _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
+        CstBranch _ _ _ _ _ kids => append (nodesOfKindDeep tag kids) (nodesOfKindDeep tag rest)
     )
 
 countIdentified : List NodeRef -> Int
@@ -537,7 +538,7 @@ importsAlign (n :: nodes) (i :: imports) =
 -- | 先序的分支 id 序列（含文件根）。
 nodeIds : CstNode -> List Int
 nodeIds (CstLeaf _) = []
-nodeIds (CstBranch _ nid _ _ kids) = nid :: concatMap nodeIds kids
+nodeIds (CstBranch _ nid _ _ _ kids) = nid :: concatMap nodeIds kids
 
 -- | `from` 起的连续序列。
 idsFrom : Int -> List Int -> Bool
@@ -563,6 +564,121 @@ sameSpanIn index tag r =
   case HashMap.lookup (nodeRefId r) index of
     Nothing => False
     Just n => nodeKindTag n == tag && sameSpan (nodeSpan n) (nodeRefSpan r)
+
+-- | 投影锁：`parseSourceDetailed` 的 AST 是树的投影，必须与 parser 直接产出的 AST
+-- 语义相同。规范编码丢弃 span / 节点 id，比的是语法结构与名字；身份一致性由
+-- `declsAlign` / `exprIdsOk` / `patIdsOk` 那组树检查锁住。
+projectionOk : Bool
+projectionOk = projectionOkOn sample && projectionOkOn reexportSample
+
+-- 重导出 / 命名空间 / 归约修饰符的投影（主样例只覆盖了 `export import`）。
+reexportSample : String
+reexportSample =
+  "module M where\n"
+    ++ "\n"
+    ++ "export module Base.Data as Data\n"
+    ++ "export module Base.Trait\n"
+    ++ "export import Base.Data.Pair (fst)\n" ++ "\n" ++ "opaque hidden : Int\n" ++ "hidden = 1\n"
+
+projectionOkOn : String -> Bool
+projectionOkOn src =
+  case parseSourceDetailed "<tree>" src of
+    ErrC _ => False
+    OkC detailed =>
+      case parseSourceWithComments "<tree>" src of
+        ErrC _ => False
+        OkC direct => encOf detailed.parsedFile == encOf (firstOf direct)
+
+encOf : SourceFile -> String
+encOf f = strConcatMany (CanonicalAst.encSourceFile f [])
+
+-- ---------------------------------------------------------------
+-- 语义载荷与节点种类对齐：每个 AST 值都挂在自己那一类节点上，且该挂的节点都有载荷。
+-- 这锁住的是「AST 在树上」而不只是文件级投影能重建。
+-- ---------------------------------------------------------------
+semTagOk : CstKind -> Maybe CstSem -> Bool
+semTagOk CstFileKind sem = noSem sem
+semTagOk CstModHeadKind sem = isModHeadSem sem
+semTagOk CstImportKind sem = isImportSem sem
+semTagOk CstFixityKind sem = isFixitySem sem
+semTagOk CstExportItemKind sem = isExportItemSem sem
+semTagOk CstDeclKind sem = isDeclSem sem
+semTagOk CstCtorKind sem = isCtorSem sem
+semTagOk CstFieldKind sem = isFieldSem sem
+semTagOk CstMethodKind sem = isMethodSem sem
+semTagOk CstBindingKind sem = isBindingSem sem
+-- `handle` 的 return 子句是 `alt` 节点，但 AST 里合成到 `ELam`，没有载荷。
+semTagOk CstAltKind sem = noSem sem || isAltSem sem
+semTagOk CstExprKind sem = isExprSem sem
+semTagOk CstPatKind sem = isPatSem sem
+semTagOk CstDoStmtKind sem = isDoStmtSem sem
+
+noSem : Maybe CstSem -> Bool
+noSem Nothing = True
+noSem _ = False
+
+isModHeadSem : Maybe CstSem -> Bool
+isModHeadSem (Just (SemModHead _)) = True
+isModHeadSem _ = False
+
+isImportSem : Maybe CstSem -> Bool
+isImportSem (Just (SemImport _)) = True
+isImportSem (Just (SemReexportImport _ _)) = True
+isImportSem (Just (SemExportNamespace _)) = True
+isImportSem _ = False
+
+isFixitySem : Maybe CstSem -> Bool
+isFixitySem (Just (SemFixity _)) = True
+isFixitySem _ = False
+
+isExportItemSem : Maybe CstSem -> Bool
+isExportItemSem (Just (SemExportItem _)) = True
+isExportItemSem _ = False
+
+isDeclSem : Maybe CstSem -> Bool
+isDeclSem (Just (SemDecl _ _ _)) = True
+isDeclSem _ = False
+
+isCtorSem : Maybe CstSem -> Bool
+isCtorSem (Just (SemCtor _)) = True
+isCtorSem _ = False
+
+isFieldSem : Maybe CstSem -> Bool
+isFieldSem (Just (SemField _)) = True
+isFieldSem _ = False
+
+isMethodSem : Maybe CstSem -> Bool
+isMethodSem (Just (SemMethod _)) = True
+isMethodSem _ = False
+
+isBindingSem : Maybe CstSem -> Bool
+isBindingSem (Just (SemBinding _)) = True
+isBindingSem (Just (SemBindingSig _ _ _)) = True
+isBindingSem _ = False
+
+isAltSem : Maybe CstSem -> Bool
+isAltSem (Just (SemAlt _)) = True
+isAltSem _ = False
+
+isExprSem : Maybe CstSem -> Bool
+isExprSem (Just (SemExpr _)) = True
+isExprSem _ = False
+
+isPatSem : Maybe CstSem -> Bool
+isPatSem (Just (SemPat _)) = True
+isPatSem _ = False
+
+isDoStmtSem : Maybe CstSem -> Bool
+isDoStmtSem (Just (SemDoStmt _)) = True
+isDoStmtSem _ = False
+
+semTreeOk : CstNode -> Bool
+semTreeOk (CstLeaf _) = True
+semTreeOk (CstBranch kind _ _ _ sem kids) = semTagOk kind sem && semAll kids
+
+semAll : List CstNode -> Bool
+semAll [] = True
+semAll (k :: rest) = semTreeOk k && semAll rest
 
 -- | 每种结构都得真的建出来了：只靠「根是 file」会放过把 token 全平铺在根上的实现。
 hasKinds : List String -> Bool
@@ -610,3 +726,4 @@ main =
         + (if exprIdsOk (nodeIndex tree) tree p.parsedFile.sourceFileDecls then 32768 else 0)
         + (if patIdsOk (nodeIndex tree) tree p.parsedFile.sourceFileDecls then 65536 else 0)
         + (if headerIdsOk (nodeIndex tree) p.parsedFile.sourceFileModDecl then 131072 else 0)
+        + (if projectionOk then 262144 else 0) + (if semTreeOk tree then 524288 else 0)

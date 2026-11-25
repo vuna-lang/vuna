@@ -13,12 +13,12 @@
 OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,wasm}`），
 只消费 `vuna-ir`。依赖方向由
 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
-[packages.md](packages.md)「层约束」）。全包 **72 个模块，全部在 `[export]` 里**——
+[packages.md](packages.md)「层约束」）。全包 **74 个模块，全部在 `[export]` 里**——
 没有内部模块，纯门面模块已删除（`Core` / `Elab` / `Loader` 的 `*.vuna` 门面，以及随 OCaml 后端
 迁到 `packages/target-ocaml` 的 `Codegen` 门面；`Ir` 的校验入口拆到 `Ir.Validate`），
 消费方直接 import 具体子模块；`Elab` 的选择性重导出也一并消失，子模块即公开面
 （见 [debt.md](debt.md) 的封装债务）。目标每模块 ≤~800 行，实际已有明显超标的模块：
-`Driver/Compile.vuna` / `Frontend/Parser.vuna` / `Driver/Dt.vuna` 约 2.1–2.7k 行，
+`Driver/Compile.vuna` / `Frontend/Parser.vuna` / `Driver/Dt.vuna` 约 2.1–2.9k 行，
 `Elab/Trait.vuna` / `Elab/Term/Impl.vuna` 约 1.7k / 3.8k 行。
 
 ### Base（位置、诊断、编码、摘要、落盘）
@@ -47,10 +47,11 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`）。`Decl` / `Import` / `FixityDecl` / `Ctor` / `Field` / `TraitMethod` / `DoStmt` / `Expr` / `Pat` / `ModDecl` / `ExportItem` 的末位是 `NodeRef`（节点 id + 区间）：id 由 parser 的 `withExtent` 分配、与建树事件同一个，`declSpan` / `importSpan` / `exprSpan` / `patSpan` 等访问器从 `NodeRef` 取区间。表达式的区间根由 `parseExpr` / `parsePatternSingle` 在区间出口贴 id（`withExprId` / `withPatId`，只换 id、不改构造子自己的 span：链步的 span 从运算符起，树节点覆盖整个表达式）。where/let 签名行是 `Binding.bindSig`（类型 + 签名行 `binding` 节点），不再编码成表达式标注；`ELet` 的绑定是 `Binding`（`bindPat` / `bindValue` / `bindSig` / `bindRef` = 定义行的 `binding` 节点），`bindValue` 是 `BindingValue`（`BVal` 普通表达式 / `BClauses` 局部函数子句组）；`ECase` 的分支是 `Alt`（`altPat` / `altBody` / `altRef` = `alt` 节点），局部函数组的子句是 `LocalClause`（参数模式 + 体 + 子句 `binding` 节点 + 子句头 `pat` 节点）：每个条目都用自己树节点的 id 挂注释。`(e : T)` 保持 parser 的 `@vuna@ascribe` 应用，Elab 在应用处按标注类型检查；工具侧按 `BindingValue`（`BVal` / `BClauses`）与 `Binding.bindSig` 分别遍历值与签名。括号与中缀链**不是构造函数**：括号层数由 `Frontend.Cst` 按节点 id 记；中缀链在 parser 里降级成普通应用 `EApp (EVar op) [l, r]`（符号名作函数的 2 参应用只可能来自中缀降级），反引号写法记在同一张表面形状表里。Fmt 打印与 `Loader.Fixity` 的括号边界 / 链识别都读它。没有解析身份的路径（接口解码 / 合成节点）用 `detachedNodeRef` / `noNodeRef` | `clausesFor`、`funArity`、`declNames`、`declRef` |
+| `Frontend.AstView` | AST 作为无损树的投影：`ofTree` 只按文件根 children 的语义载荷与顺序重建 `SourceFile`（模块头 / import / fixity / 声明 + 逐定义导出与重导出）；不重读 token、没有第二套文法。嵌套节点的载荷（表达式 / 模式 / 绑定 / 分支 / do 语句）留给需要「源码位置 → 语法位置」的消费者 | `ofTree` |
 | `Frontend.Lexer` | 字符游标、token 与位置。token 路径（`lexChars`，不分配注释）与注释路径（`lexSourceWithComments`：一次扫描同时给 token 与注释）分开；注释正文规则（`collectLineBody` / `collectBlockBody`）只有一份 | `lexSource`、`lexSourceWithComments`、`lexComments` |
-| `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；位置由一条**单调前进**的行/列游标给出（O(bytes)，不再按 token 走行表）。`lexTokensOf` 由已完成的词法（token + 注释）纯组装 trivia 流，工具路径不重复词法。节点树的区间由 **parser 发射**（`NodeEvent`：解析点成功后再补一对 open/close），`nestToTree` 只做一遍线性组装，**不从缩进或括号反推布局**；`collectLeaves` 与 token 流对齐即是无损断言。分支节点带 **parser 分配的 id**（文件根 0，`withExtent` 处递增并由 `EvOpen` 携带，`nodeIndex` 给 id → 节点的 O(1) 索引），这是节点身份：span 可被改写，id 在一次解析内不变；AST 的每个可挂注释条目都携带同一个 id（`NodeRef`）。`anchorRefsOfTree` 在树上按种类取条目节点，注释锚点因此来自树而不遍历 AST；分支节点还携带 `CstSurface`（括号层数 / 反引号 / section / 模板 `"""` / 模板洞子树 `cstHoleTrees`），消费者只读节点字段：Fmt 用 `cstIndexOf` 建 id / span 定位表，加载器用 `fixityFactsOfParts` 直接从 parser 直出的括号 / 反引号 / section 表派生三条中缀重排事实（不建主树）。洞内节点不在主树里（`TTmpl` 叶已覆盖那段字节），洞的子树挂在所属模板节点上，索引与事实派生一起走 | `lexCst`、`lexTokensOf`、`renderCst`、`roundtripOk`、`nestToTree`、`holeRootOf`、`nodeId`、`nodeIndex`、`anchorRefsOfTree`、`collectLeaves`、`cstIndexOf`、`parenDepthOfIndex`、`fixityFactsOf`、`fixityFactsOfParts` |
-| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C A =>`）。需要注释与原文的工具用 `parseSourceDetailed`（**一次**词法同时给出 AST / 注释表 / token 流 / 无损树 / 表面形状）；`ParseMode` 分档：编译器路径 `PmStrict` 拒绝非线性格（重复 binder），只读工具 `PmTool` 只报语法、把语义留给诊断 | `parseSource`、`parseSourceWithComments`、`parseSourceDetailed`、`parseExpressionSource` |
-| `Frontend.Parser.Support` | parser 的状态与 token 小工具（`PState` 游标、span、期望符号、`ParseMode`）；`withExtent` 在区间入口发 `EvOpen` 并分配节点 id；模板洞是独立 token 子流（`subStream`，洞内 id 取负、与主文件不相交），子流的事件不进主树，洞内子树随模板节点携带（`templateHoles`）；运算符表不在 parser：fixity 由 `Loader.Fixity` 按可见表重排 | `mkState`、`spanOf`、`expectSym`、`ParseMode` |
+| `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；位置由一条**单调前进**的行/列游标给出（O(bytes)，不再按 token 走行表）。`lexTokensOf` 由已完成的词法（token + 注释）纯组装 trivia 流，工具路径不重复词法。节点树的区间由 **parser 发射**（`NodeEvent`：解析点成功后再补一对 open/close），`nestToTree` 只做一遍线性组装，**不从缩进或括号反推布局**；`collectLeaves` 与 token 流对齐即是无损断言。分支节点带 **parser 分配的 id**（文件根 0，`withExtent` 处递增并由 `EvOpen` 携带，`nodeIndex` 给 id → 节点的 O(1) 索引），这是节点身份：span 可被改写，id 在一次解析内不变；AST 的每个可挂注释条目都携带同一个 id（`NodeRef`）。`anchorRefsOfTree` 在树上按种类取条目节点，注释锚点因此来自树而不遍历 AST；分支节点还携带 `CstSurface`（括号层数 / 反引号 / section / 模板 `"""` / 模板洞子树 `cstHoleTrees`）与**语义载荷** `CstSem`（`withExtent` 在 `EvClose` 前发 `EvSem`；`nodeSem` 读回），消费者只读节点字段：Fmt 用 `cstIndexOf` 建 id / span 定位表，加载器用 `fixityFactsOfParts` 直接从 parser 直出的括号 / 反引号 / section 表派生三条中缀重排事实（不建主树）。洞内节点不在主树里（`TTmpl` 叶已覆盖那段字节），洞的子树挂在所属模板节点上，索引与事实派生一起走 | `lexCst`、`lexTokensOf`、`renderCst`、`roundtripOk`、`nestToTree`、`holeRootOf`、`nodeId`、`nodeIndex`、`anchorRefsOfTree`、`collectLeaves`、`cstIndexOf`、`parenDepthOfIndex`、`fixityFactsOf`、`fixityFactsOfParts`、`nodeSem` |
+| `Frontend.Parser` | offside layout parser → 无损树 + AST（值在树的 `CstSem` 载荷里）；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C A =>`）。需要注释与原文的工具用 `parseSourceDetailed`（**一次**词法同时给出注释表 / token 流 / 无损树 / 表面形状；`parsedFile` 由 `AstView.ofTree` 投影）；`ParseMode` 分档：编译器路径 `PmStrict` 拒绝非线性格（重复 binder），只读工具 `PmTool` 只报语法、把语义留给诊断 | `parseSource`、`parseSourceWithComments`、`parseSourceDetailed`、`parseExpressionSource` |
+| `Frontend.Parser.Support` | parser 的状态与 token 小工具（`PState` 游标、span、期望符号、`ParseMode`）；`withExtent` 在区间入口发 `EvOpen` 并分配节点 id、成功回流后发 `EvSem` 挂语义载荷再 `EvClose`；模板洞是独立 token 子流（`subStream`，洞内 id 取负、与主文件不相交），子流的事件不进主树，洞内子树随模板节点携带（`templateHoles`）；运算符表不在 parser：fixity 由 `Loader.Fixity` 按可见表重排 | `mkState`、`spanOf`、`expectSym`、`ParseMode` |
 | `Frontend.Reserved` | 保留 / 合成名的唯一编码：`?hole`、表面语法糖标记（`data Reserved`：list / tuple / ascribe / perform / handle / row / app / inst-arg / over-ctor / over-value / macro / do，载荷是构造子字段）、`classify` / `reservedText` 是唯一一对线上字符串编解码，以及编译器合成的 `#...` 名（`#section` / `#dict…` / `#eta…` / `#tele` / `#ov…`）。`isParserSurface` 是 Loader 放行普通包 `@vuna@…` 的白名单（无通配分支）。`Frontend.Ast` 重导出它 | `Reserved`、`classify`、`reservedText`、`isParserSurface`、`isInternalSyntaxName`、`sectionBinderName`、`isSynthName` |
 | `Frontend.Name` | 名字身份与字符串分类：`RName`（局部、全局(module,name)、内建、宏、洞）与 `classifyName`（唯一按前缀分类的入口，`Loader` / 工具不得自行按包名前缀判别）；`splitGlobalKey` 按最后一个点切 canonical 名。注：`Elab` 不读 `RName`——引用名就是字符串，变量解析按名字先查局部 ctx，特殊形式名（`Type` / `->` / `@vuna@…`）不可能被 binder 遮蔽 | `RName`、`classifyName`、`splitGlobalKey` |
 | `Frontend.AstQuery` | 语法树规模查询：`patWeight` / `exprWeight` 与入口预算 `patBudget` / `exprBudget`（节点数派生步数预算；权重按 `weightCap` 截断，纯遍历也用它作显式燃料） | `exprBudget`、`patBudget`、`exprWeight` || `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
@@ -164,7 +165,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Driver.Target` | 非 OCaml 目标的后端驱动：检查 + lowering，把 `IrProgram` 编码后交独立进程 `vuna-target-<t>`（`--ir` / `--out` / `--print` / `--diag`），产物缓存见 `Driver.TargetCache`；不 import 任何后端实现 | `compileBackend`、`dispatch` |
 | `Driver.TargetCache` | 后端插件产物缓存：键 = IR 文本摘要 + 目标 + 后端版本，读侧回放产物与诊断 | `irHashOf`、`outputsKeyOf`、`readOutputsEff`、`writeOutputsEff`、`materializeEff` |
 
-`packages/compiler/vuna.toml` 的 `[export]` 列出全部 72 个模块（模块即公开面，没有内部模块；
+`packages/compiler/vuna.toml` 的 `[export]` 列出全部 74 个模块（模块即公开面，没有内部模块；
 `seed/` 闭包另含 `vuna-ir` / `vuna-compiler-base` / `vuna-target-ocaml`）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 

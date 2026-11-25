@@ -1,0 +1,78 @@
+-- | CST → AST 的投影：文件级 AST 只按树节点的语义载荷与顺序重建。
+module Vuna.Compiler.Frontend.AstView where
+
+-- Vuna.Compiler.Frontend.AstView：AST 作为无损树上的**投影**。
+--
+-- 树是 parser 的唯一结构产物：节点带着区间、身份与语义载荷（`CstSem`），AST 值就在
+-- 载荷里，不再是与树并行的第二份结构。本模块只做「按树取载荷」这一件事：
+-- 文件根的直接 children 按源码顺序分成模块头 / import / fixity / 声明，每类的 AST
+-- 值从该节点的载荷读出来。没有第二遍 token 重读、也没有第二套文法。
+--
+-- 文件级三个列表（`exports` / `reexports` / `opacity`）与声明同源：
+--   * 逐定义 `export` / `opaque` 是同一条声明节点上的载荷（`SemDecl` 的后两个字段）；
+--   * `export import` / `export module` 各自是一个 import 节点上的载荷。
+--
+-- 嵌套节点的载荷（表达式 / 模式 / 绑定 / 分支 / do 语句等）不参与文件级投影，
+-- 它们留给需要「源码位置 → 语法位置」的消费者（LSP / 宏展开）。
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+
+-- | 文件根 → `SourceFile`：按树节点的顺序与载荷投影。
+export ofTree : CstNode -> SourceFile
+ofTree tree =
+  let
+    kids = nodeChildren tree
+  in SourceFile
+    (List.firstJust (List.map modHeadOf kids))
+    (List.mapMaybe importOf kids)
+    (List.mapMaybe fixityOf kids)
+    (List.mapMaybe declOf kids)
+    (List.mapMaybe exportOf kids)
+    (List.concatMap reexportsOf kids)
+    (List.mapMaybe opacityOf kids)
+
+modHeadOf : CstNode -> Maybe ModDecl
+modHeadOf n =
+  case nodeSem n of
+    Just (SemModHead m) => Just m
+    _ => Nothing
+
+importOf : CstNode -> Maybe Import
+importOf n =
+  case nodeSem n of
+    Just (SemImport i) => Just i
+    Just (SemReexportImport i _) => Just i
+    _ => Nothing
+
+fixityOf : CstNode -> Maybe FixityDecl
+fixityOf n =
+  case nodeSem n of
+    Just (SemFixity f) => Just f
+    _ => Nothing
+
+declOf : CstNode -> Maybe Decl
+declOf n =
+  case nodeSem n of
+    Just (SemDecl d _ _) => Just d
+    _ => Nothing
+
+exportOf : CstNode -> Maybe ExportSpec
+exportOf n =
+  case nodeSem n of
+    Just (SemDecl _ (Just spec) _) => Just spec
+    _ => Nothing
+
+opacityOf : CstNode -> Maybe OpacitySpec
+opacityOf n =
+  case nodeSem n of
+    Just (SemDecl _ _ (Just spec)) => Just spec
+    _ => Nothing
+
+reexportsOf : CstNode -> List ExportItem
+reexportsOf n =
+  case nodeSem n of
+    Just (SemReexportImport _ items) => items
+    Just (SemExportNamespace item) => [item]
+    _ => []

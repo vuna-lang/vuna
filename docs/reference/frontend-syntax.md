@@ -14,10 +14,13 @@
 ## 0. 分层约定
 
 ```text
-源码文本 → Lexer → Parser/Ast（surface，含糖）→ Loader（fixity/section/do/模板/宏）
+源码文本 → Lexer → Parser（无损树 + AST 投影）→ Loader（fixity/section/do/模板/宏）
         → Elab（名字已解析、糖已消失）→ Core → IR → 后端
 ```
 
+- **AST 是树的投影**：`parseSourceDetailed` 返回的 `parsedFile` 由 `Frontend.AstView.ofTree`
+  只按树节点的语义载荷与顺序重建；树是 parser 的唯一结构产物（区间 / 身份 / 表面形状 /
+  载荷），不重读 token，也没有第二套文法。编译器路径（`parseSource`）只取 AST、不建主树。
 - **表面语法只活到 `Frontend.Ast`**：括号 / 中缀 / section 在 parser 里就降级成普通
   `EVar` / `EApp` / 单 binder λ；section 的书写形态记在 `Frontend.Cst.surfaceSections`，
   `Loader.Fixity` 只按 fixity 重排并折叠立即应用，Elab 的输入里没有 section 构造子。

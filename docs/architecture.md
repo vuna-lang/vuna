@@ -30,9 +30,9 @@ packages/target-wasm/lib/Vuna/Target/Wasm/      （独立包 vuna-target-wasm �
 ├─ Instr Model Module Render Runtime Types Plugin    IR→WAT 文本
 packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
                                 的 [layers] 执行，见 reference/packages.md「层约束」）
-├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest Reserved
+├─ Frontend/    Ast AstView Lexer Cst Parser Parser/Support Toml Manifest Reserved
 │               Canonical/{Ast,Pkg} Packages/{Pkg,Source} Name AstQuery
-│                             词法（含无损 CST）/ 语法 / vuna.toml / 规范编码 / 包图
+│                             词法（含无损 CST）/ 语法 / AST 投影 / vuna.toml / 规范编码 / 包图
 ├─ Loader/      Modules Resolve Flatten Expand Fixity Addr Fingerprint Layers
 │                             模块图 / 名字解析 / flatten / fixity / 地址与身份 / 层约束
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码

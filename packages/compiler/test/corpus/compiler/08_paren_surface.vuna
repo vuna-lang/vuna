@@ -236,7 +236,7 @@ hasHoleTree : CstNode -> Bool
 hasHoleTree n =
   case n of
     CstLeaf _ => False
-    CstBranch _ _ _ surface kids => holeTreesPresent surface.cstHoleTrees || anyHoleTree kids
+    CstBranch _ _ _ surface _ kids => holeTreesPresent surface.cstHoleTrees || anyHoleTree kids
 
 anyHoleTree : List CstNode -> Bool
 anyHoleTree [] = False
@@ -263,7 +263,7 @@ countExprNodes : CstNode -> Int
 countExprNodes node =
   case node of
     CstLeaf _ => 0
-    CstBranch kind _ _ _ kids => (if kindTagIsExpr kind then 1 else 0) + sumExprNodes kids
+    CstBranch kind _ _ _ _ kids => (if kindTagIsExpr kind then 1 else 0) + sumExprNodes kids
 
 sumExprNodes : List CstNode -> Int
 sumExprNodes [] = 0
