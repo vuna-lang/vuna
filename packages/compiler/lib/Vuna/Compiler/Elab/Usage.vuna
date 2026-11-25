@@ -13,6 +13,7 @@ module Vuna.Compiler.Elab.Usage where
 -- 类型级定义的 body 是类型，不参与用量检查（由 `isTypeForming` 判定）。
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List
+import qualified Base.Data.Vec as Vec
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -445,7 +446,7 @@ withUseSpans (sp :: rest) d = withUseSpans rest (withField (FieldSpan "use" sp) 
 -- 这里只做「构造 Diagnostic + 追加进 Ec」。本模块被 Case / Dt 复用（同一份状态语义）。
 -- ---------------------------------------------------------------
 -- | 在 span 上发一条 warning，追加进显式状态 `Ec`，返回更新后的 Ec。
-warnAt : Ec -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Ec
+warnAt : Ec -> Span -> {n : Nat} -> WarnErr n -> Vec.Vec n String -> Ec
 warnAt ec sp e args = ecAddWarning ec (warnDiagAt sp e args)
 
 -- | arity 0 的 warning。

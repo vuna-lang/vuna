@@ -414,17 +414,17 @@ import / 导出的形式表见 [frontend-syntax.md](frontend-syntax.md) §6；�
 - **构造子名重载**：裸构造子名在解析期收集候选（本模块 data/record 构造子 + 所有
   open import 的 data/record 构造子），多于一个候选时不立即报歧义，而是交给精化器按
   **期望类型 / scrutinee 族**选 canonical 构造子（值位置、应用实参、类型位置、`case`
-  分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.Data.List`
-  的 `Nil`/`(::)` 则默认 List（与 `[]`/`Nil` 的写法一致），否则报
-  `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
-  同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
+  分支、多子句函数、实例方法、局部函数都参与）。期望族未知时不默认到 `List`：
+  多候选报 `[TC_AmbiguousCtor]`（列表字面量 `[]` / `[a, b]` 的展开另有默认，见下条）。
+  显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**同名的 record /
+  双命名空间构造子仍保持本地词法遮蔽。
 - **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名
   `@vuna@list@nil` / `@vuna@list@cons`，精化器按期望族的短名 `Nil` / `(::)` 展开
   （`List` / `Vec` / `Base.Effect.Core.Row` / 用户自定义同形族都可用）；期望未知时默认
   `Base.Data.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
-- **`::` 的家族定向解析**：`::` 是普通构造子名，`List` 与 `Base.Effect.Core.Row` 都声明了它；
+- **`::` 的家族定向解析**：`::` 是普通构造子名，`List`、`Vec` 与 `Base.Effect.Core.Row` 都声明了它；
   写 `x :: xs` 时按期望族 / scrutinee 族选 canonical 构造子（`Row` 位置选 `Row.(::)`，
-  `List` 位置选 `List.(::)`），期望族未知时默认 `List`，多候选且无法定向时报
+  `List` 位置选 `List.(::)`，`Vec` 位置选 `Vec.(::)`），期望族未知时报
   `[TC_AmbiguousCtor]`。这也是 `Eff [..]` 行字面量与普通列表字面量能共用同一套糖的原因。
 - **`Named` 是普通类型构造子**：`Named : String -> Type -> Type`，在类型位置正常引用
   （`Named "audit" ConsoleOp`、`Named n Op`）；它只在行条目/`Member` 语境下被编译器当作

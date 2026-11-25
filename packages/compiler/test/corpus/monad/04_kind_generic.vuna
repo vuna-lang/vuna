@@ -10,46 +10,46 @@ data Maybe a : Type where
 
 data LList a : Type where
   LNil : LList a
-  LCons : a -> LList a -> LList a
+  (::) : a -> LList a -> LList a
 
 data Pair a b : Type where
   Pair : a -> b -> Pair a b
 
 append : LList a -> LList a -> LList a
 append LNil ys = ys
-append (LCons x xs) ys = LCons x (append xs ys)
+append (x :: xs) ys = x :: append xs ys
 
 concatMap : (a -> LList b) -> LList a -> LList b
 concatMap f LNil = LNil
-concatMap f (LCons x xs) = append (f x) (concatMap f xs)
+concatMap f (x :: xs) = append (f x) (concatMap f xs)
 
 instance Monad Maybe where
-  (>>=) m f = case m of
-    Nothing => Nothing
-    Just x => f x
+  (>>=) m f =
+    case m of
+      Nothing => Nothing
+      Just x => f x
   pure x = Just x
 
 instance Monad LList where
   (>>=) xs f = concatMap f xs
-  pure x = LCons x LNil
+  pure x = x :: LNil
 
 bindPair : m a -> m b -> m (Pair a b)
-bindPair ma mb = do
-  a <- ma
-  b <- mb
-  pure (Pair a b)
+bindPair ma mb =
+  do
+    a <- ma
+    b <- mb
+    pure (Pair a b)
 
 showM : Maybe (Pair Int Int) -> String
-showM m = case m of
-  Nothing => "Nothing"
-  Just (Pair a b) => "Just " ++ strFromInt a ++ ":" ++ strFromInt b
+showM m =
+  case m of
+    Nothing => "Nothing"
+    Just (Pair a b) => "Just " ++ strFromInt a ++ ":" ++ strFromInt b
 
 showL : LList (Pair Int Int) -> String
 showL LNil = "[]"
-showL (LCons (Pair a b) rest) = strFromInt a ++ ":" ++ strFromInt b ++ " " ++ showL rest
+showL ((Pair a b) :: rest) = strFromInt a ++ ":" ++ strFromInt b ++ " " ++ showL rest
 
 main : String
-main =
-  showM (bindPair (Just 1) (Just 2))
-    ++ "/"
-    ++ showL (bindPair (LCons 1 (LCons 2 LNil)) (LCons 3 LNil))
+main = showM (bindPair (Just 1) (Just 2)) ++ "/" ++ showL (bindPair (1 :: 2 :: LNil) (3 :: LNil))

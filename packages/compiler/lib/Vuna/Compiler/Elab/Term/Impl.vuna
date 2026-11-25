@@ -1318,9 +1318,9 @@ export inferArgsFuel : Int -> List (String, Term) -> Ctx -> Ec -> Value -> List 
 inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then icFuel "inference" else inferArgsGo 64 globals ctx ec ty args sp hint
 
--- 列表字面量（parser 保留名）按期望族的 Nil/Cons 通用展开；期望未知时默认
--- `Base.Data.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
--- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/Cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
+-- 列表字面量（parser 保留名）按期望族的 Nil/cons 通用展开；期望未知时默认
+-- `Base.Data.List.List`。族内按短名 `Nil` / `::` 找构造子，`Cons` 作为同形用户族的拼写。
+-- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
 listLitElems : Expr -> Maybe (List Expr)
 listLitElems (EVar name sp) =
   case classify (rnameKey name) of
@@ -1352,7 +1352,7 @@ litFamilyCtor ec fam short =
     Nothing => Nothing
     Just dd => findCtorByShort short (dtDataCtors dd)
 
--- | 按给定 Nil/Cons 全名把元素列表折成构造子应用表达式。
+-- | 按给定 Nil/cons 全名把元素列表折成构造子应用表达式。
 expandListLitGo : String -> String -> List Expr -> Span -> Check Expr
 expandListLitGo nilName consName [] sp = OkC (EVar (classifyName nilName) sp)
 expandListLitGo nilName consName (e :: rest) sp =
@@ -1360,11 +1360,10 @@ expandListLitGo nilName consName (e :: rest) sp =
     (expandListLitGo nilName consName rest sp)
     (\t => OkC (EApp (EVar (classifyName consName) sp) [e, t] sp))
 
--- 命名行：行字面量的条目形状是 `Cons <name> <label> <tail>`。
+-- 命名行：行字面量的条目形状是 `Named <name> <label> :: <tail>`（`rowConsArgs` 负责补 `Named`）。
 --   * 裸标签（`Fetch`、`ConsoleOp`、`StateOp Nat`）→ 名字取 `defaultInstance`；
 --   * `label@name`（`ConsoleOp@audit`、`StateOp Nat@counter`）→ 名字取 `@` 右侧；
---     parser 已把裸标识符名字转成字符串字面量（`[Op@audit]` → 名字 "audit"），
---     变量名必须写 `Cons n label tail`。
+--     parser 已把裸标识符名字转成字符串字面量（`[Op@audit]` → 名字 "audit"）。
 rowAtParts : Expr -> Maybe (Expr, Expr)
 rowAtParts (EApp (EVar name _) [e, n] _) =
   case classify (rnameKey name) of
@@ -1435,9 +1434,9 @@ wrapRowEntry : Expr -> Span -> Expr
 wrapRowEntry e sp =
   EApp (EVar (classifyName effNamedName) sp) [rowLitNameExpr e sp, rowLitLabel e] sp
 
--- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
+-- | 列表族的 cons 构造子：`::` 为主，`Cons` 供同形用户族。
 litFamilyCons : Ec -> String -> Maybe DtCtor
-litFamilyCons ec fam = firstCtorOf ec fam ["::", "Cons", "RCons", "VCons"]
+litFamilyCons ec fam = firstCtorOf ec fam ["::", "Cons"]
 
 firstCtorOf : Ec -> String -> List String -> Maybe DtCtor
 firstCtorOf ec fam [] = Nothing

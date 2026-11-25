@@ -24,7 +24,7 @@ main =
                     MutArray.get xs 0
               )
           v <-
-            MutVec.withMutVec (VCons 5 (VCons 2 Nil)) (
+            MutVec.withMutVec [5, 2] (
                 \vec =>
                   do
                     MutVec.set vec FZero 7

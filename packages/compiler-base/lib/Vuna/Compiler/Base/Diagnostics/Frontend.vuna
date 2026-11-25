@@ -9,8 +9,45 @@ module Vuna.Compiler.Base.Diagnostics.Frontend where
 -- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
 import Vuna.Compiler.Base.Diagnostics.Common
+import qualified Base.Data.Vec as Vec
 export module Vuna.Compiler.Base.Common
-export module Base.Data
+-- 只重导出除 `Base.Data.Vec` 外的数据模块：Vec 的 `(::)` 与 List 的 `::` 同名，
+-- 重导出会让推断位的 `(::)` 变成 `TC_AmbiguousCtor`；需要 Vec 的模块显式 import。
+export module Base.Data.Pair
+export module Base.Data.Pair as Pair
+export module Base.Data.Function
+export module Base.Data.Function as Function
+export module Base.Data.Bool
+export module Base.Data.Bool as Bool
+export module Base.Data.List
+export module Base.Data.List as List
+export module Base.Data.Maybe
+export module Base.Data.Maybe as Maybe
+export module Base.Data.Result
+export module Base.Data.Result as Result
+export module Base.Data.String
+export module Base.Data.String as String
+export module Base.Data.Unit
+export module Base.Data.Unit as Unit
+export module Base.Data.Fin
+export module Base.Data.Fin as Fin
+export module Base.Data.Nat
+export module Base.Data.Nat as Nat
+export module Base.Data.Int
+export module Base.Data.Int as Int
+export module Base.Data.Float
+export module Base.Data.Float as Float
+export module Base.Data.Bits
+export module Base.Data.Bits as Bits
+export module Base.Data.Sha1
+export module Base.Data.Sha1 as Sha1
+export module Base.Data.Base64
+export module Base.Data.Base64 as Base64
+export module Base.Data.Sort
+export module Base.Data.Sort as Sort
+export module Base.Data.Stream as Stream
+export module Base.Data.Log
+export module Base.Data.Log as Log
 
 -- ---------------------------------------------------------------
 -- LX_：词法诊断
@@ -409,18 +446,18 @@ psAll =
 -- `Loader.Flatten` 的 parse 入口经 `withSpanFileIfEmpty` 注入），语法错误用当前 token
 -- 的 span。这里只有带位置的出口。
 -- ---------------------------------------------------------------
-export lexMsg : {n : Nat} -> LexDiag n -> Vec n String -> Diagnostic
+export lexMsg : {n : Nat} -> LexDiag n -> Vec.Vec n String -> Diagnostic
 lexMsg e args = mkDiag SevError PhLex CatSyntax (lexCode e) (diagBody (lexTemplate e) args)
 
-export psMsg : {n : Nat} -> PsDiag n -> Vec n String -> Diagnostic
+export psMsg : {n : Nat} -> PsDiag n -> Vec.Vec n String -> Diagnostic
 psMsg e args = mkDiag SevError PhParse CatSyntax (psCode e) (diagBody (psTemplate e) args)
 
 -- | 带位置的词法诊断：span 的 `file` 可以为空（由入口注入）。
-export lexErrAt : Span -> {n : Nat} -> LexDiag n -> Vec n String -> Check a
+export lexErrAt : Span -> {n : Nat} -> LexDiag n -> Vec.Vec n String -> Check a
 lexErrAt sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (lexMsg e args))
 
 -- | 带位置的语法诊断。
-export psErrAt : Span -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
+export psErrAt : Span -> {n : Nat} -> PsDiag n -> Vec.Vec n String -> Check a
 psErrAt sp e args =
   case e of
     ExpectedToken s =>

@@ -1,5 +1,5 @@
 -- do 在自定义 LList monad 上生效（bind = concatMap，顺序化用 >> 语义）。
--- 本地列表类型取名 LList（构造子 LNil/LCons），避开 base 的 List/Nil/Cons；
+-- 本地列表类型 LList（构造子 LNil / (::)），不依赖 base 的 List；
 -- 本地同名 data 的解析优先级见 docs/reference/type-system.md。
 trait Monad m where
   (>>=) : m a -> (a -> m b) -> m b
@@ -10,32 +10,33 @@ data Pair a b : Type where
 
 data LList a : Type where
   LNil : LList a
-  LCons : a -> LList a -> LList a
+  (::) : a -> LList a -> LList a
 
 append : LList a -> LList a -> LList a
 append LNil ys = ys
-append (LCons x xs) ys = LCons x (append xs ys)
+append (x :: xs) ys = x :: append xs ys
 
 concatMap : (a -> LList b) -> LList a -> LList b
 concatMap f LNil = LNil
-concatMap f (LCons x xs) = append (f x) (concatMap f xs)
+concatMap f (x :: xs) = append (f x) (concatMap f xs)
 
 instance Monad LList where
   (>>=) xs f = concatMap f xs
-  pure x = LCons x LNil
+  pure x = x :: LNil
 
 pairs : LList (Pair Int Int)
-pairs = do
-  x <- LCons 1 (LCons 2 LNil)
-  y <- LCons 10 (LCons 20 LNil)
-  pure (Pair x y)
+pairs =
+  do
+    x <- 1 :: 2 :: LNil
+    y <- 10 :: 20 :: LNil
+    pure (Pair x y)
 
 showPair : Pair Int Int -> String
 showPair (Pair a b) = strFromInt a ++ ":" ++ strFromInt b
 
 showPairs : LList (Pair Int Int) -> String
 showPairs LNil = "[]"
-showPairs (LCons p ps) = showPair p ++ " " ++ showPairs ps
+showPairs (p :: ps) = showPair p ++ " " ++ showPairs ps
 
 main : String
 main = showPairs pairs

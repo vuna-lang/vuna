@@ -9,13 +9,14 @@ import Base.Trait.Monad
 
 main : Int
 main =
-  MutVec.withMutVecPure (VCons 10 (VCons 20 (VCons 30 Nil))) (\xs =>
-      do
-        MutVec.set xs FZero 7
-        MutVec.set xs (FSucc FZero) 9
-        a <- MutVec.get xs FZero
-        b <- MutVec.get xs (FSucc FZero)
-        c <- MutVec.get xs (FSucc (FSucc FZero))
-        n <- MutVec.size xs
-        pure (a * 1000 + b * 100 + c * 10 + natToInt n)
-  )
+  MutVec.withMutVecPure [10, 20, 30] (
+      \xs =>
+        do
+          MutVec.set xs FZero 7
+          MutVec.set xs (FSucc FZero) 9
+          a <- MutVec.get xs FZero
+          b <- MutVec.get xs (FSucc FZero)
+          c <- MutVec.get xs (FSucc (FSucc FZero))
+          n <- MutVec.size xs
+          pure (a * 1000 + b * 100 + c * 10 + natToInt n)
+    )

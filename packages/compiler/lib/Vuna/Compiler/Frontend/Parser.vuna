@@ -3,6 +3,7 @@ module Vuna.Compiler.Frontend.Parser where
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
 import Base.Data.List as List
 import Base.Data.Nat as Nat
+import qualified Base.Data.Vec as Vec
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -21,7 +22,7 @@ ps0 st e = psErr0At (tokSpan st) e
 ps1 : PState -> PsDiag 1 -> String -> Check a
 ps1 st e a0 = psErr1At (tokSpan st) e a0
 
-psAt : PState -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
+psAt : PState -> {n : Nat} -> PsDiag n -> Vec.Vec n String -> Check a
 psAt st e args = psErrAt (tokSpan st) e args
 
 -- | 一次词法的全部产物：AST + 注释表 + 词法 token 流。

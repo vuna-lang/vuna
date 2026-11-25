@@ -2,7 +2,7 @@
 -- 覆盖声明/实例/约束投影，以及非 Type 类参数（Row）的实例搜索。
 data Row : Type 1 where
   RNil : Row
-  RCons : Type -> Row -> Row
+  (::) : Type -> Row -> Row
 
 trait Member (e : Type) (r : Row) where
   witness : Int

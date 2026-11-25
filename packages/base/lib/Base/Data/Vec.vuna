@@ -1,4 +1,4 @@
--- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `VCons` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Data.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查；[Base.Data.Vec.get] 用 [Base.Data.Fin] 的 `Fin n` 做全安全索引。
+-- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `(::)` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Data.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查；[Base.Data.Vec.get] 用 [Base.Data.Fin] 的 `Fin n` 做全安全索引。
 module Base.Data.Vec where
 
 import Base.Data.Nat
@@ -9,47 +9,47 @@ import Base.Data.Maybe
 import Base.Data.List
 import Base.Trait.Num
 
--- | 长度索引向量：`n : Nat` 在类型层锁定元素个数，`Nil` 对应 `Zero`、`VCons` 对应 `Succ n`；`n` 与 `a` 都是 Rig0，运行时擦除，因此不携带长度字段。
+-- | 长度索引向量：`n : Nat` 在类型层锁定元素个数，`Nil` 对应 `Zero`、`(::)` 对应 `Succ n`；`n` 与 `a` 都是 Rig0，运行时擦除，因此不携带长度字段。
 export data Vec(..) : Nat -> Type -> Type where
   -- | 空向量（长度 `Zero`）。
   Nil : {a : Type} -> Vec 0 a
   -- | 非空向量：头 `a` 与尾 `Vec n a`，长度 `Succ n`。
-  VCons : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
+  (::) : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
 
 -- | 取首元素；签名要求长度至少 1（`Vec (Succ n) a`），`Nil` 分支在类型层被排除，无需运行期空检查。`n` 是隐式 Rig0，由索引反推。
 export vhead : {n : Nat} -> Vec (Succ n) a -> a
 vhead xs =
   case xs of
-    VCons y ys => y
+    y :: ys => y
 
 -- | 去掉首元素，结果长度为 `n`；同样只对非空向量定义，无需运行期空检查。
 export vtail : {n : Nat} -> Vec (Succ n) a -> Vec n a
 vtail xs =
   case xs of
-    VCons y ys => ys
+    y :: ys => ys
 
 -- | 返回向量长度（运行时线性递归计数；`n` 是 Rig0 索引，运行时擦除）。
 export vlen : {n : Nat} -> Vec n a -> Nat
 vlen xs =
   case xs of
     [] => 0
-    VCons y ys => 1 + vlen ys
+    y :: ys => 1 + vlen ys
 
 -- | 按 `Fin n` 取元素：下标类型保证 `0 <= i < n`，`Nil` 分支在类型层被排除，无需运行期越界检查。
 export get : {n : Nat} -> Vec n a -> Fin n -> a
-get (VCons y ys) FZero = y
-get (VCons y ys) (FSucc j) = get ys j
+get (y :: ys) FZero = y
+get (y :: ys) (FSucc j) = get ys j
 
 -- | 用 `Nat` 下标取值：越过向量末端返回 `Nothing`，用于外部数字输入这类没有 `Fin` 证明的场景。
 export getMaybe : {n : Nat} -> Vec n a -> Nat -> Maybe a
 getMaybe [] _ = Nothing
-getMaybe (VCons y ys) 0 = Just y
-getMaybe (VCons y ys) (Succ k) = getMaybe ys k
+getMaybe (y :: ys) 0 = Just y
+getMaybe (y :: ys) (Succ k) = getMaybe ys k
 
 -- | 按位置函数生成向量：`n` 显式传入（长度是运行时值），第 `i` 项是 `f i`。
 export tabulate : (n : Nat) -> (Fin n -> a) -> Vec n a
 tabulate 0 f = []
-tabulate (Succ k) f = VCons (f FZero) (tabulate k (\i => f (FSucc i)))
+tabulate (Succ k) f = f FZero :: tabulate k (\i => f (FSucc i))
 
 -- ---------------------------------------------------------------
 -- 模板渲染：占位符 `<0>` `<1>` `<2>`…（序号 = 实参位置）
@@ -63,4 +63,4 @@ substTemplate template args = strSubstTemplate template (vecToList args)
 -- | 把 `Vec n a` 转成 `List a`。
 export vecToList : {n : Nat} -> Vec n a -> List a
 vecToList [] = []
-vecToList (VCons x rest) = x :: vecToList rest
+vecToList (x :: rest) = x :: vecToList rest

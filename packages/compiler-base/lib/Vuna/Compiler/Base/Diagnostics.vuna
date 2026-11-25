@@ -36,7 +36,43 @@ import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Base.Diagnostics.Loader
 export module Vuna.Compiler.Base.Common
-export module Base.Data
+-- 只重导出除 `Base.Data.Vec` 外的数据模块：Vec 的 `(::)` 与 List 的 `::` 同名，
+-- 重导出会让推断位的 `(::)` 变成 `TC_AmbiguousCtor`；需要 Vec 的模块显式 import。
+export module Base.Data.Pair
+export module Base.Data.Pair as Pair
+export module Base.Data.Function
+export module Base.Data.Function as Function
+export module Base.Data.Bool
+export module Base.Data.Bool as Bool
+export module Base.Data.List
+export module Base.Data.List as List
+export module Base.Data.Maybe
+export module Base.Data.Maybe as Maybe
+export module Base.Data.Result
+export module Base.Data.Result as Result
+export module Base.Data.String
+export module Base.Data.String as String
+export module Base.Data.Unit
+export module Base.Data.Unit as Unit
+export module Base.Data.Fin
+export module Base.Data.Fin as Fin
+export module Base.Data.Nat
+export module Base.Data.Nat as Nat
+export module Base.Data.Int
+export module Base.Data.Int as Int
+export module Base.Data.Float
+export module Base.Data.Float as Float
+export module Base.Data.Bits
+export module Base.Data.Bits as Bits
+export module Base.Data.Sha1
+export module Base.Data.Sha1 as Sha1
+export module Base.Data.Base64
+export module Base.Data.Base64 as Base64
+export module Base.Data.Sort
+export module Base.Data.Sort as Sort
+export module Base.Data.Stream as Stream
+export module Base.Data.Log
+export module Base.Data.Log as Log
 export module Vuna.Compiler.Base.Diagnostics.Cg
 export module Vuna.Compiler.Base.Diagnostics.Ic
 export module Vuna.Compiler.Base.Diagnostics.Tc

@@ -131,7 +131,7 @@
 
 | 形式 | 例子 | 说明 | 入口 |
 | --- | --- | --- | --- |
-| `data` | `data Vec : Nat -> Type -> Type where VCons : ...` | 参数是裸名字（不能写 kind 注解）；构造子逐行 `C : Ty`；Type-1 族合法 | `Elab.Data`、[type-system.md](type-system.md) |
+| `data` | `data Vec : Nat -> Type -> Type where (::) : ...` | 参数是裸名字（不能写 kind 注解）；构造子逐行 `C : Ty`；Type-1 族合法 | `Elab.Data`、[type-system.md](type-system.md) |
 | `record` | `record Pair a b where first : a` | 名义类型 + 合成位置构造子；字段访问 / 更新 / 模式都按字段表 | `Elab.Records`、[records-traits.md](records-traits.md) |
 | 表示档位前缀 | `alias record R` / `boxed record R` / `linear record R` | 声明级表示选择，不改类型检查 | [records-traits.md](records-traits.md) |
 | 派生 | `deriving (Show, Eq)` / `deriving via field (Show)` | `Elab.Derive` 展开；`via field` 走字典委托 | `Elab.Derive` |

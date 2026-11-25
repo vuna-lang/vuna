@@ -523,7 +523,7 @@ isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
 -- 通用效应系统把行/成员证明/行删除编码在 `vuna-base` 的数据里；编译器
 -- 按**这些全名**识别该编码（不是内建：base 是唯一真源，名字集中在此处，不再散落）。
 -- 消费方：`Core/Eval.rowRemReduce`（行删除归约）、`Elab/Dict`（行成员证明构造）。
--- 形状：`Row : Type 1`（`Nil`/`Cons`；二元行的标签可包 `Named`），
+-- 形状：`Row : Type 1`（`Nil` / `(::)`；二元行的标签可包 `Named`），
 -- `Member` 3 索引（实例名、标签、行）或 2 索引（标签、行），
 -- `rowRem : Type -> Row -> Row`（axiom，由编译器按标签值结构相等归约）。
 -- | 效应行族 `Base.Effect.Core.Row`（Type-1 数据）。
@@ -546,7 +546,7 @@ effNamedName = "Base.Effect.Core.Named"
 export effRowRemName : String
 effRowRemName = "Base.Effect.Core.rowRem"
 
--- | 行拼接 `Base.Effect.Core.rowAppend`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
+-- | 行拼接 `Base.Effect.Core.rowAppend`（axiom，由编译器归约：Nil 单位 + `::` 递归）。
 export effRowAppendName : String
 effRowAppendName = "Base.Effect.Core.rowAppend"
 
@@ -580,7 +580,7 @@ effUnitTypeName = "Base.Effect.Core.EffUnit"
 export effMkCtor : String
 effMkCtor = "Base.Effect.Core.Eff.MkEff"
 
--- | 默认实例名：裸标签条目 `Cons "default" e Nil` 与 `handleWithAt` 共用；
+-- | 默认实例名：裸标签条目 `Named "default" e :: Nil` 与 `handleWithAt` 共用；
 -- 单点定义在 `Base.Effect.Core.defaultInstance`，此处是编译器侧的镜像常量。
 export effDefaultInstance : String
 effDefaultInstance = "default"
@@ -760,7 +760,7 @@ listFamilyName = "Base.Data.List.List"
 export listNilCtor : String
 listNilCtor = "Base.Data.List.List.Nil"
 
--- | canonical `Cons` 构造子的完整符号。
+-- | canonical cons 构造子（`::`）的完整符号。
 export listConsCtor : String
 listConsCtor = "Base.Data.List.List.::"
 
@@ -806,22 +806,6 @@ canonicalFamilies =
     CanonicalFamily natTypeName [natZeroCtor, natSuccCtor] FamReprNat,
     CanonicalFamily listFamilyName [listNilCtor, listConsCtor] FamReprBoxed
   ]
-
--- | 构造子拼写的等价键：列表/行族的 cons 在库里可能叫 `Cons`、`::` 或 `(::)`，
--- 过渡期按「最后一段是这三种之一」归一（`Base.Data.List.List.Cons` / `Base.Data.List.List.::`
--- / `Base.Data.List.List.(::)` 同键），其余名字原样。
-export ctorSpellingKey : String -> String
-ctorSpellingKey name =
-  if endsWith ".Cons" name || endsWith ".RCons" name || endsWith ".VCons" name || endsWith ".::" name || endsWith ".(::)" name then
-    "${dropLastSegment name}.CONS"
-  else
-    name
-
--- 去掉最后一个 `.` 之后的段。
-dropLastSegment : String -> String
-dropLastSegment name =
-  case splitLastDot (splitOnDot name) of
-    (rev, last) => joinDots rev
 
 -- | 按完整符号查 canonical 族。
 export findCanonicalFamily : String -> Maybe CanonicalFamily
