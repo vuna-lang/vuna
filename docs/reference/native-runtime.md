@@ -293,7 +293,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   循环头 `rt_safepoint`、futex 等待与阻塞宿主 syscall 的 `block_begin`/`block_end` 标记）。
   宿主态按线程隔离：状态槽与 cleanup 链头在 TCB，其余固定缓冲在每线程的 mmap scratch 块；
   进程级的只剩子进程 pid 表（`child_push` / `child_drop` 用 futex 锁串行）。仍有的边界：
-  线程体是 `Eff []`，宿主效应族在子线程里还没有收口入口；线程表固定 1024 槽。
+  worker 体内用 `runFsHost` + `runFsError` 显式装 handler 后并行 fs 可用；线程表固定 1024 槽。
   见 [debt.md](debt.md) D135。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧

@@ -1,0 +1,68 @@
+-- 并行 worker 的 fs：两个线程各自写读自己的文件（不同负载、不同长度），并列举目录。
+-- 回读内容必须逐字节等于自己写入的负载，目录里必须有自己的文件。
+-- native 的宿主 scratch（路径 / stat / getdents / 读缓冲）按线程隔离；共用一份时路径
+-- 会被对方改写，操作作用到别人的文件上。竞态窗口小，这条是并行 fs 的功能回归，
+-- 隔离本身由每线程 mmap 的构造保证。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Data.List as List
+import Base.Data.Result
+import Base.Thread as Thread
+
+pad : Int -> String -> String
+pad n s = if n <= 0 then s else pad (n - 1) (s ++ "0123456789abcdef")
+
+once : Int -> Eff [FsOp] Bool
+once k =
+  do
+    let path = "worker-par-" ++ strFromInt k ++ ".txt"
+    let want = pad (16 + k * 12) ("w" ++ strFromInt k)
+    _ <- fsWriteFile path want
+    back <- fsReadFile path
+    names <- fsReadDir "."
+    let seen = List.length (List.filter (\n => n == path) names) == 1
+    pure (back == want && seen)
+
+loop : Int -> Int -> Eff [FsOp] Bool
+loop k n =
+  if n <= 0 then
+    pure True
+  else
+    do
+      ok <- once k
+      if ok then loop k (n - 1) else pure False
+
+body : Int -> Eff [FsOp] Bool
+body k = loop k 16
+
+worker : Int -> Eff [] (Result Bool)
+worker k = runFsError "fs-error" (runFsHost (body k))
+
+reportErr : String -> Eff [ConsoleOp] Int
+reportErr e =
+  do
+    _ <- consolePrint ("err:" ++ e ++ "\n")
+    pure 1
+
+report : Result Bool -> Result Bool -> Eff [ConsoleOp] Int
+report r0 r1 =
+  case r0 of
+    Ok a =>
+      case r1 of
+        Ok b =>
+          do
+            _ <-
+              consolePrint ("pair " ++ (if a then "1" else "0") ++ (if b then "1" else "0") ++ "\n")
+            pure 0
+        Err e => reportErr e
+    Err e => reportErr e
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    t0 <- Thread.spawn (worker 0)
+    t1 <- Thread.spawn (worker 1)
+    r0 <- Thread.join t0
+    r1 <- Thread.join t1
+    report r0 r1

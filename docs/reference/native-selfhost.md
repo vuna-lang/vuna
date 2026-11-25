@@ -119,7 +119,7 @@ minor 回收频繁、整堆周期把 live 再抬一档。整仓 RSS 到 21 GB �
   函数的库 handler 三端不一致（D114）。
 - **多线程**：`clone` + futex 与 STW GC 可用；宿主持有态按线程隔离（状态槽 / cleanup 链在 TCB，
   路径等固定缓冲在每线程 scratch），阻塞的宿主 syscall 也发布停车标记；线程体仍是
-  `Eff []`，宿主效应族在子线程里还没有收口入口（D135）。
+  `Eff []`，宿主效应族要在 worker 体内显式装 handler（`runFsHost`，D135）。
 - **能力面**：FFI / extern、stdin 的 `readLine` / `readBytes`、net 不在支持面；native 目标
   没有 entry 能力检查（DR-05）。
 - **优化边界**：带捕获的高阶参数、部分应用 shim、逐点 `alloc` 调用仍按慢路径走（D129）；
