@@ -1,0 +1,92 @@
+-- 数值转换策略：clamp / 饱和 / 截断 / 可失败，以及十进制解析。
+-- 边界（NaN、±inf、超界）只用 floatToIntSat / floatToIntMaybe，避免 wasm 的 trunc trap。
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+
+showMaybeInt : Maybe Int -> String
+showMaybeInt m =
+  case m of
+    Nothing => "-"
+    Just n => strFromInt n
+
+showMaybeNat : Maybe Nat -> String
+showMaybeNat m =
+  case m of
+    Nothing => "-"
+    Just n => strFromInt (Nat.toInt n)
+
+main : String
+main =
+  let
+    nan = 0.0 / 0.0
+    inf = 1.0 / 0.0
+    big = 4600000000000000000.0
+  in "clamp="
+    ++ strFromInt (Nat.toInt (Nat.fromIntClamp (0 - 7)))
+    ++ "|ord="
+    ++ strFromInt (clamp 1 5 9)
+    ++ ","
+    ++ strFromInt (clamp 1 5 (0 - 2))
+    ++ "|trunc="
+    ++ strFromInt (floatToIntTrunc (0.0 - 2.7))
+    ++ ","
+    ++ show (trunc 2.7)
+    ++ "|floor="
+    ++ show (floor (0.0 - 2.1))
+    ++ ","
+    ++ show (floor 2.9)
+    ++ "|ceil="
+    ++ show (ceil (0.0 - 2.9))
+    ++ ","
+    ++ show (ceil 2.1)
+    ++ "|round="
+    ++ show (round 2.5)
+    ++ ","
+    ++ show (round (0.0 - 2.5))
+    ++ "|sat="
+    ++ strFromInt (floatToIntSat nan)
+    ++ ","
+    ++ strFromInt (floatToIntSat inf)
+    ++ ","
+    ++ strFromInt (floatToIntSat (0.0 - inf))
+    ++ ","
+    ++ strFromInt (floatToIntSat big)
+    ++ "|fm="
+    ++ showMaybeInt (floatToIntMaybe 3.9)
+    ++ ","
+    ++ showMaybeInt (floatToIntMaybe nan)
+    ++ ","
+    ++ showMaybeInt (floatToIntMaybe inf)
+    ++ "|nat="
+    ++ showMaybeNat (floatToNatMaybe 3.9)
+    ++ ","
+    ++ showMaybeNat (floatToNatMaybe (0.0 - 0.5))
+    ++ ","
+    ++ strFromInt (Nat.toInt (floatToNat (0.0 - 2.5)))
+    ++ "|pred="
+    ++ show (isNaN nan)
+    ++ ","
+    ++ show (isInfinite inf)
+    ++ ","
+    ++ show (isFinite 1.5)
+    ++ "|parse="
+    ++ showMaybeInt (String.parseInt "-42")
+    ++ ","
+    ++ showMaybeInt (String.parseInt "+7")
+    ++ ","
+    ++ showMaybeInt (String.parseInt " 7")
+    ++ ","
+    ++ showMaybeInt (String.parseInt "")
+    ++ ","
+    ++ showMaybeInt (String.parseInt "-")
+    ++ ","
+    ++ showMaybeInt (String.parseInt "4611686018427387903")
+    ++ ","
+    ++ showMaybeInt (String.parseInt "4611686018427387904")
+    ++ ","
+    ++ strFromInt (String.parseIntOr 5 "oops")
+    ++ "|natp="
+    ++ showMaybeNat (String.parseNat "42")
+    ++ ","
+    ++ showMaybeNat (String.parseNat "-1")
+    ++ "," ++ showMaybeNat (String.parseNat "4611686018427387904")

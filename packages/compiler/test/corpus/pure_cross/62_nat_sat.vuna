@@ -3,15 +3,15 @@
 import Base.Data.Nat as Nat
 
 maxNat : Nat
-maxNat = Nat.fromInt 4611686018427387903
+maxNat = Nat.fromIntClamp 4611686018427387903
 
 main : String
 main =
-  strFromInt (Nat.toInt (Nat.plus maxNat (Nat.fromInt 5)))
+  strFromInt (Nat.toInt (Nat.plus maxNat (Nat.fromIntClamp 5)))
     ++ "|"
     ++ strFromInt (Nat.toInt (Nat.plus maxNat maxNat))
     ++ "|"
-    ++ strFromInt (Nat.toInt (Nat.minus (Nat.fromInt 3) (Nat.fromInt 5)))
+    ++ strFromInt (Nat.toInt (Nat.minus (Nat.fromIntClamp 3) (Nat.fromIntClamp 5)))
     ++ "|"
-    ++ strFromInt (Nat.toInt (Nat.mult maxNat (Nat.fromInt 2)))
-    ++ "|" ++ strFromInt (Nat.toInt (Nat.fromInt (0 - 7)))
+    ++ strFromInt (Nat.toInt (Nat.mult maxNat (Nat.fromIntClamp 2)))
+    ++ "|" ++ strFromInt (Nat.toInt (Nat.fromIntClamp (0 - 7)))

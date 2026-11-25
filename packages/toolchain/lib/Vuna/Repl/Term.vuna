@@ -18,6 +18,7 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
+import Base.Data.String as String
 import Base.Data.Nat as Nat
 import Base.Effect.Types as EffTypes
 
@@ -134,21 +135,11 @@ termWidth _ =
         pure (
             case parts of
               _ :: cols :: rest =>
-                case parseDigitsInt cols of
+                case String.parseInt cols of
                   Just n => if n > 0 then n else 80
                   Nothing => 80
               _ => 80
           )
-
--- | 内部：把纯数字串解析成非负整数；空串或含非数字字符给 `Nothing`。
-parseDigitsInt : String -> Maybe Int
-parseDigitsInt s = if s == "" then Nothing else parseDigits (strUnpack s) 0
-
--- | 内部：逐位累加十进制数（`acc` 是已累加的值）。
-parseDigits : List Int -> Int -> Maybe Int
-parseDigits [] acc = Just acc
-parseDigits (c :: rest) acc =
-  if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
 -- | 往 stdout 写一段文本（不换行），返回写入的字节数。
 export writeOut : Member nConsole ConsoleOp r => String -> Eff r Int

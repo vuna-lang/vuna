@@ -2,6 +2,7 @@
 module Base.Data.Float where
 
 import Base.Trait.Eq
+import Base.Data.Bool
 import Base.Data.List
 import Base.Data.Maybe
 import Base.Data.Nat
@@ -58,9 +59,125 @@ sqrt = floatSqrt
 export intToFloat : Int -> Float
 intToFloat = floatFromInt
 
--- | Float → Int（向零截断；NaN/无穷/超出范围的行为由 OCaml `int_of_float` 决定）。
-export floatToInt : Float -> Int
-floatToInt = intFromFloat
+-- | Float → Int，向零截断。NaN / ±inf / 超界时结果由后端 `intFromFloat` 决定；
+-- 需要定义良好的边界行为时用 `floatToIntSat` 或 `floatToIntMaybe`。
+export floatToIntTrunc : Float -> Int
+floatToIntTrunc = intFromFloat
+
+-- | Float → Int，向零截断后饱和：NaN → 0，≥ 2^62 → max_int，< -2^62 → min_int。
+export floatToIntSat : Float -> Int
+floatToIntSat x =
+  if x /= x then
+    0
+  else if x >= 4611686018427387903.0 then
+    4611686018427387903
+  else if x < 0.0 - 4611686018427387903.0 then 0 - 4611686018427387903 - 1 else floatToIntTrunc x
+
+-- | Float → Int，可表示才给 `Just`：`-2^62 <= x < 2^62` 且非 NaN / ±inf；向零截断。
+export floatToIntMaybe : Float -> Maybe Int
+floatToIntMaybe x =
+  if x /= x then
+    Nothing
+  else if x >= 4611686018427387903.0 then
+    Nothing
+  else if x < 0.0 - 4611686018427387903.0 then Nothing else Just (floatToIntTrunc x)
+
+-- | 向零截断后夹到 `Nat`：NaN 与负数都变成 0。
+export floatToNat : Float -> Nat
+floatToNat x = natFromInt (floatToIntSat x)
+
+-- | 向零截断后转 `Nat`：负数、NaN、±inf、超界都返回 `Nothing`。
+export floatToNatMaybe : Float -> Maybe Nat
+floatToNatMaybe x =
+  if x < 0.0 then
+    Nothing
+  else
+    case floatToIntMaybe x of
+      Nothing => Nothing
+      Just n => Just (natFromInt n)
+
+-- | 是否 NaN（NaN 不等于自身）。
+export isNaN : Float -> Bool
+isNaN x = x /= x
+
+-- | 是否 ±inf。
+export isInfinite : Float -> Bool
+isInfinite x = abs x == 1.0 / 0.0
+
+-- | 是否有限（非 NaN、非 ±inf）。
+export isFinite : Float -> Bool
+isFinite x = not (isNaN x) && not (isInfinite x)
+
+-- ---------------------------------------------------------------
+-- 取整（全部不引入新原语：绝对值 ≥ 2^52 的 double 已经是整数）
+-- ---------------------------------------------------------------
+-- | 2^52：double 的 ulp 到 1，绝对值不小于它的浮点值已经是整数。
+_integralLimit : Float
+_integralLimit = 4503599627370496.0
+
+-- | 负零没有字面量形式，用 `-1.0 * 0.0` 构造。
+_negZero : Float
+_negZero = (0.0 - 1.0) * 0.0
+
+-- | 结果为零时保留输入符号：`trunc (-0.5)` 是 `-0.` 而不是 `0.`。
+_keepZeroSign : Float -> Float -> Float
+_keepZeroSign x y = if y == 0.0 && 1.0 / x < 0.0 then _negZero else y
+
+-- | 截断到整数（向零），返回 `Float`；NaN / ±inf / 绝对值 ≥ 2^52 时原样返回。
+export trunc : Float -> Float
+trunc x =
+  if x /= x then
+    x
+  else if abs x >= _integralLimit then x else _keepZeroSign x (intToFloat (floatToIntTrunc x))
+
+-- | 向下取整，返回 `Float`；NaN / ±inf / 绝对值 ≥ 2^52 时原样返回。
+export floor : Float -> Float
+floor x =
+  if x /= x then
+    x
+  else if abs x >= _integralLimit then
+    x
+  else
+    let
+      t = trunc x
+    in _keepZeroSign x (if t > x then t - 1.0 else t)
+
+-- | 向上取整，返回 `Float`；NaN / ±inf / 绝对值 ≥ 2^52 时原样返回。
+export ceil : Float -> Float
+ceil x =
+  if x /= x then
+    x
+  else if abs x >= _integralLimit then
+    x
+  else
+    let
+      t = trunc x
+    in _keepZeroSign x (if t < x then t + 1.0 else t)
+
+-- | 四舍五入到整数（`.5` 远离零），返回 `Float`；NaN / ±inf / 绝对值 ≥ 2^52 时原样返回。
+export round : Float -> Float
+round x =
+  if x /= x then
+    x
+  else if abs x >= _integralLimit then
+    x
+  else
+    let
+      t = trunc x
+      d = x - t
+    in _keepZeroSign x (if d >= 0.5 then t + 1.0 else if d <= 0.0 - 0.5 then t - 1.0 else t)
+
+-- | `floor` 后转 `Int`；不可表示 → `Nothing`。
+export floorToInt : Float -> Maybe Int
+floorToInt x = floatToIntMaybe (floor x)
+
+-- | `ceil` 后转 `Int`；不可表示 → `Nothing`。
+export ceilToInt : Float -> Maybe Int
+ceilToInt x = floatToIntMaybe (ceil x)
+
+-- | `round` 后转 `Int`；不可表示 → `Nothing`。
+export roundToInt : Float -> Maybe Int
+roundToInt x = floatToIntMaybe (round x)
 
 -- ---------------------------------------------------------------
 -- 展示（`%.12g`）
@@ -80,7 +197,7 @@ digStep p _ =
   let
     m = firstOf p
     ds = secondOf p
-    d = floatToInt m
+    d = floatToIntTrunc m
   in ((m - intToFloat d) * 10.0, append ds [d])
 
 -- | 内部：逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
@@ -168,7 +285,7 @@ floatRender x =
         e0 = firstOf p
         m0 = secondOf p
         dp = foldl (\q => \i => digStep q i) (m0, []) (range 0 12)
-        d13 = floatToInt (firstOf dp)
+        d13 = floatToIntTrunc (firstOf dp)
         raw = secondOf dp
         ed =
           if d13 >= 5 then

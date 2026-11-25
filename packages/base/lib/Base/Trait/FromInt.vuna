@@ -2,7 +2,7 @@
 --
 -- 字面量本身没有一元负号（负数写 `0 - n`），实例收到的值是非负的。
 --
--- 期望类型是 `Nat` 时字面量仍展开成 `Zero`/`Succ` 链，不走本 trait；显式 Int→Nat 用 `Base.Data.Nat.fromInt`。
+-- 期望类型是 `Nat` 时字面量仍展开成 `Zero`/`Succ` 链，不走本 trait；显式 Int→Nat 用 `Base.Data.Nat.fromIntClamp`。
 module Base.Trait.FromInt where
 
 -- | 把整数字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`42` 等价于 `fromInt 42`。

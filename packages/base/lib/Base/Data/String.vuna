@@ -3,6 +3,7 @@ module Base.Data.String where
 
 import Base.Data.List
 import Base.Data.Bool
+import Base.Data.Maybe
 -- `String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
 import Base.Trait.Eq
 import Base.Trait.Hashable
@@ -119,6 +120,66 @@ repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
 -- | 取子串 `(start, len)`；越界由 `strSubstring` 原语 clamp，不走 List 桥接。
 export substring : Nat -> Nat -> String -> String
 substring start len s = strSubstring (natToInt start) (natToInt len) s
+
+-- | 十进制非负整数解析：只接受 `[+]?[0-9]+`；空串、负号、非数字、溢出 → `Nothing`。
+export parseNat : String -> Maybe Nat
+parseNat s =
+  case strUnpack s of
+    [] => Nothing
+    43 :: rest => _natDigits rest
+    cs => _natDigits cs
+
+-- | 十进制整数解析：只接受 `[+-]?[0-9]+`；空串、非数字、溢出 → `Nothing`。
+export parseInt : String -> Maybe Int
+parseInt s =
+  case strUnpack s of
+    [] => Nothing
+    [45] => Nothing
+    45 :: rest => _digitsToNegInt rest 0
+    [43] => Nothing
+    43 :: rest => _digitsToInt rest 0
+    cs => _digitsToInt cs 0
+
+-- | `parseInt` 的默认值版：解析失败给 `d`。
+export parseIntOr : Int -> String -> Int
+parseIntOr d s =
+  case parseInt s of
+    Nothing => d
+    Just n => n
+
+-- | 内部：非负数字串 → `Nat`；空串或含非数字给 `Nothing`。
+_natDigits : List Int -> Maybe Nat
+_natDigits [] = Nothing
+_natDigits cs =
+  case _digitsToInt cs 0 of
+    Nothing => Nothing
+    Just n => Just (natFromInt n)
+
+-- | 内部：`min_int`（没有 `-2^62` 的字面量，用减法构造）。
+_minInt : Int
+_minInt = 0 - 4611686018427387903 - 1
+
+-- | 内部：逐位累加非负十进制数；超过 max_int 或遇到非数字给 `Nothing`。
+_digitsToInt : List Int -> Int -> Maybe Int
+_digitsToInt [] acc = Just acc
+_digitsToInt (c :: rest) acc =
+  if c < 48 || c > 57 then
+    Nothing
+  else
+    let
+      d = c - 48
+    in if acc > (4611686018427387903 - d) / 10 then Nothing else _digitsToInt rest (acc * 10 + d)
+
+-- | 内部：逐位累加负数（`acc` 保持负号）；低于 min_int 或遇到非数字给 `Nothing`。
+_digitsToNegInt : List Int -> Int -> Maybe Int
+_digitsToNegInt [] acc = Just acc
+_digitsToNegInt (c :: rest) acc =
+  if c < 48 || c > 57 then
+    Nothing
+  else
+    let
+      d = c - 48
+    in if acc < (_minInt + d) / 10 then Nothing else _digitsToNegInt rest (acc * 10 - d)
 
 -- | 内部：空格 / `\t` / `\n` / `\r` 的字节判定。
 _isSpace : Int -> Bool

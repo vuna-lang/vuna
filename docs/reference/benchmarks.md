@@ -529,7 +529,7 @@ T0 仍是 0.36x c / 0.23x ml（§1.6.2 的裁剪不改变地板读数）。
 - **常量除法与 Nat 库调用已收口**：
   - `scalar_idiv` native 1.39x c：非 2 幂常量除法改走 magic 乘法（`imul` 高半）+
     符号修正，不再 `cqo` + `idiv`；`d = 3` / 负常量仍回退 `idiv` / 运行时。
-  - `nat_bits` native 0.79x c / 1.03x ml：`Nat.plus` / `Nat.mult` / `Nat.fromInt` 的零参
+  - `nat_bits` native 0.79x c / 1.03x ml：`Nat.plus` / `Nat.mult` / `Nat.fromIntClamp` 的零参
     别名在调用点展开成 `IrRtApp`，饱和乘法用 `imul` + `cmov` 内联，热点循环里没有
     `call rt_nat_*`。
 - **剩余固定成本**：`scalar_bit` 1.44x C（63-bit wrap 与剩余搬运）、

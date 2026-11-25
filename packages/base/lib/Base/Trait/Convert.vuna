@@ -1,7 +1,7 @@
 -- | 显式类型转换 trait：`Convert` 是全函数、无损的规范转换，`ConvertMaybe` 是可失败转换。
 --
 -- 两者都只由显式调用触发：编译器不做隐式插入，也没有 `deriving`。`Convert` 的实例必须总能
--- 返回且不丢信息；有损转换（`Nat.fromInt` 的负数 clamp、`floatToInt` 的截断）保留具名函数。
+-- 返回且不丢信息；有损转换（`Nat.fromIntClamp` 的负数 clamp、`floatToIntTrunc` 的截断）保留具名函数。
 -- 目标带运行时索引（如 `Fin n` 的界）时同样用具名函数，因为类方法没有位置接收这个界。
 module Base.Trait.Convert where
 

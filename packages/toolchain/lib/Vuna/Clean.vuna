@@ -29,7 +29,6 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
 import Base.Data.List as List
-import Base.Data.Nat as Nat
 import Base.Data.String as String
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -347,39 +346,13 @@ runStoreGc args =
           keep <- allRootDigests
           gcSweep root keep graceSec maxBytes dry
 
--- | 十进制整数解析：只接受纯数字，解析失败返回默认值 `d`
+-- | 十进制非负整数解析：解析失败或负值返回默认值 `d`
 -- （`--older-than` / `--max-size` 都是非负整数）。
--- 语言侧没有 char 级原语，这里用 `substring` 逐字符取一位再比对字面量；递归用显式 fuel
--- （长度上限即 fuel），这样终止性检查不需要理解 `i` 的递增。
 strToIntOr : String -> Int -> Int
 strToIntOr s d =
-  case readNatFuel (toInt (byteLength s)) 0 s 0 of
-    Just v => v
+  case String.parseInt s of
+    Just v => if v < 0 then d else v
     Nothing => d
-
--- | 内部：单个十进制数字字符 → 数值；非数字给 `Nothing`。
-digitOf : String -> Maybe Int
-digitOf "0" = Just 0
-digitOf "1" = Just 1
-digitOf "2" = Just 2
-digitOf "3" = Just 3
-digitOf "4" = Just 4
-digitOf "5" = Just 5
-digitOf "6" = Just 6
-digitOf "7" = Just 7
-digitOf "8" = Just 8
-digitOf "9" = Just 9
-digitOf _ = Nothing
-
--- | 内部：从 `pos` 起逐位累加；`fuel` 从长度递减到 0，遇到非数字给 `Nothing`。
-readNatFuel : Int -> Int -> String -> Int -> Maybe Int
-readNatFuel fuel pos s acc =
-  if fuel <= 0 then
-    Just acc
-  else
-    case digitOf (substring (Nat.fromInt pos) (Nat.fromInt 1) s) of
-      Nothing => Nothing
-      Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
 
 -- | 内部：裁剪死项目根 —— `.project` 缺失（legacy 布局）或记录的目录已不存在时整个 roots
 -- 条目丢掉。只缩小保留集（其中的对象因此成为 GC 候选），不影响正确性。返回裁剪条数；

@@ -379,7 +379,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   - **零参运行时别名**（`Alias.irAliasTargetOf` + `Module.resolveDefAliases`）：
     `Nat.plus = natAdd` / `Nat.mult = natMul` / `Nat.toInt = natToInt` 这类定义在应用位置
     直接改写成 `IrRtApp`，参数顺序不变；标量树因此能看到运行时叶子，嵌套在实参里的
-    `Nat.mult` / `Nat.fromInt` 也能继续内联。
+    `Nat.mult` / `Nat.fromIntClamp` 也能继续内联。
   - **条件直发分支**（`Select.branchInverse`）：`IrIf` 的条件是标量比较时，直接发
     `cmp` + 反向 `jcc`，不再物化 0/1 再 `test`；比较的左侧可以是任意可内联的标量树，
     右侧是字面量或槽变量。

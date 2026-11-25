@@ -1,4 +1,4 @@
--- | 非负整数。类型层是普通归纳族 `Zero` / `Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用）。算术语义：`plus` / `mult` 饱和到 max_int，`minus` 截断到 0（永不产生负数），`div` 向下取整，除零与 `Int` 的 `/` 一样在运行期失败。[Base.Data.Nat.toInt] 是无损提升，[Base.Data.Nat.fromInt] 有损（负数 clamp 成 0），需要区分时用 [Base.Data.Nat.fromIntMaybe]。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化到同一组原语。
+-- | 非负整数。类型层是普通归纳族 `Zero` / `Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用）。算术语义：`plus` / `mult` 饱和到 max_int，`minus` 截断到 0（永不产生负数），`div` 向下取整，除零与 `Int` 的 `/` 一样在运行期失败。[Base.Data.Nat.toInt] 是无损提升，[Base.Data.Nat.fromIntClamp] 有损（负数 clamp 成 0），需要区分时用 [Base.Data.Nat.fromIntMaybe]。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化到同一组原语。
 module Base.Data.Nat where
 
 import Base.Data.Bool
@@ -37,12 +37,12 @@ export toInt : Nat -> Int
 toInt = natToInt
 
 -- | 有损转换：负数 clamp 成 0；需要区分时用 `fromIntMaybe`。
-export fromInt : Int -> Nat
-fromInt = natFromInt
+export fromIntClamp : Int -> Nat
+fromIntClamp = natFromInt
 
--- | `fromInt` 的可失败版：负数返回 `Nothing`，否则 `Just`。
+-- | `fromIntClamp` 的可失败版：负数返回 `Nothing`，否则 `Just`。
 export fromIntMaybe : Int -> Maybe Nat
-fromIntMaybe n = if n < 0 then Nothing else Just (fromInt n)
+fromIntMaybe n = if n < 0 then Nothing else Just (fromIntClamp n)
 
 -- | 前驱 `minus n 1`：零的前驱仍是零。
 export pred : Nat -> Nat
@@ -81,7 +81,7 @@ instance Semigroup Nat where
 instance Monoid Nat where
   mempty = 0
 
--- 显式转换：`Nat -> Int` 无损；`Int -> Nat` 可失败（负数 `Nothing`），有损 clamp 版仍是 `fromInt`。
+-- 显式转换：`Nat -> Int` 无损；`Int -> Nat` 可失败（负数 `Nothing`），有损 clamp 版是 `fromIntClamp`。
 instance Convert Nat Int where
   convert = toInt
 

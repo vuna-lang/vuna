@@ -512,7 +512,7 @@ perfShortOf last =
   if endsWith "Op" last then
     let
       n = strLength last
-    in if n > 2 then Just (substring 0 (Nat.fromInt (n - 2)) last) else Nothing
+    in if n > 2 then Just (substring 0 (Nat.fromIntClamp (n - 2)) last) else Nothing
   else
     Nothing
 

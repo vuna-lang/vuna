@@ -30,16 +30,32 @@ OCaml IEEE-754 double。字面量语法只有一种：
 * **没有隐式 Int↔Float 转换**：`1 + 1.5` 是类型错误。显式转换：
 
 ```vuna
-floatFromInt : Int -> Float     -- 见 Base.Data.Float.intToFloat（更可读的别名）
-intFromFloat : Float -> Int     -- 向零截断
+intToFloat : Int -> Float              -- 见 Base.Data.Float.intToFloat
+floatToIntTrunc : Float -> Int         -- 向零截断；边界由后端 intFromFloat 决定
+floatToIntSat : Float -> Int           -- 向零截断后饱和（NaN → 0）
+floatToIntMaybe : Float -> Maybe Int   -- 不可表示 → Nothing
 ```
 
-这两条都是有损的全函数（`Int -> Float` 超过 53 位尾数会丢精度，`Float -> Int` 截断小数），
+这三条都是有损的全函数（`Int -> Float` 超过 53 位尾数会丢精度，`Float -> Int` 截断小数），
 因此不进入显式转换 trait `Convert`；`Convert` / `ConvertMaybe` 的契约见
-[conversions.md](conversions.md)。
+[conversions.md](conversions.md)。底层 intrinsic 仍是 `floatFromInt` / `intFromFloat`：
+`intFromFloat` 对 NaN / ±inf / 超界的行为由后端决定（wasm 的 `i64.trunc_f64_s` 会 trap），
+需要稳定语义时用 `floatToIntSat` / `floatToIntMaybe`。
 
-`Base.Data.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
-`intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
+取整与判定同样不需要新原语：
+
+```vuna
+trunc / floor / ceil / round : Float -> Float   -- .5 远离零；|x| >= 2^52 时原样返回
+isNaN / isInfinite / isFinite : Float -> Bool
+floorToInt / ceilToInt / roundToInt : Float -> Maybe Int
+floatToNat / floatToNatMaybe : Float -> Nat / Maybe Nat
+```
+
+`floorToInt` 等先取整再判可表示性，所以仍返回 `Maybe`。`floatToNatMaybe` 先拒绝负数
+（`-0.5` 不会经截断变成 `0`），`floatToNat` 则把负数与 NaN 都夹成 0。
+
+`Base.Data.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、上述转换/取整 helper、
+`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
 import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`
 一致（`%.12g`：12 位有效数字、去掉尾随零、定点范围 `[-4, 12)`、整数值保留结尾 `.`）：
 
@@ -110,7 +126,7 @@ instance FromFloat Float where fromFloat x = x
 
 只有 **checking 位置**会降级（注解、函数实参、返回类型已知的分支等）；`let x = 42` 这类
 inference 位置仍默认 `Int`。`Nat` 的整数字面量特例优先于 `FromInt`（`x : Nat` 时 `42`
-是 `Succ` 链，不会调用 `fromInt`）；显式 Int→Nat 用 `Base.Data.Nat.fromInt`。
+是 `Succ` 链，不会调用 `fromInt`）；显式 Int→Nat 用 `Base.Data.Nat.fromIntClamp`。
 
 ### deriving
 
@@ -149,7 +165,8 @@ main =
 `Base.Data.Float` 进入 `Prelude`（`module Base.Data.Float` + `import Base.Data.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
 Prelude 的是 trait、实例与 helper。取舍：
 
-* `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToInt` 与 `Show/Eq/Ord Float`
+* `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToIntTrunc` / `floatToIntSat` /
+  `floatToIntMaybe` / 取整 helper 与 `Show/Eq/Ord Float`
   随 Prelude 自动可见；`deriving (Show, Eq, Ord)` 的包装类型字段是 Float 时也不需要
   额外 import。
 * 代价：Prelude 闭包包含 `Base.Data.Float`，`Driver.SplitGen` 按**全部定义**扫描浮点用法，

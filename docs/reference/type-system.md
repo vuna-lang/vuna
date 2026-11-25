@@ -33,7 +33,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - `Nat` 是 `Int` 的数值子集；精化器只在**检查点**（函数实参、返回、构造子字段、`if`
   分支汇合、`==`/比较、算术特化）把 `Nat` 项包装成 `natToInt` 当 `Int` 用。运行时
   `natToInt` 恒等，类型规则仍是定义性相等（`Nat` 与 `Int` 不相等，包装后的项才是 `Int`）。
-- 反向没有隐式：`Int → Nat` 必须显式 `Base.Data.Nat.fromInt`（负数 clamp 0）或 `fromIntMaybe`。
+- 反向没有隐式：`Int → Nat` 必须显式 `Base.Data.Nat.fromIntClamp`（负数 clamp 0）或 `fromIntMaybe`。
 - 这与宇宙/一般子类型无关：`Vec 3 Nat` 与 `Vec 3 Int` 仍不相等。
 
 ## data 与索引归纳族

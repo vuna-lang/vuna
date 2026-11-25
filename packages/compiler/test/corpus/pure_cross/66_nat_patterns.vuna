@@ -33,9 +33,9 @@ main =
   let
     three = Succ (Succ (Succ Zero))
     four = Succ three
-    shifted = Nat.fromInt 4
-    clamped = Nat.fromInt (0 - 5)
-    roundTrip = Nat.fromInt (Nat.toInt three)
+    shifted = Nat.fromIntClamp 4
+    clamped = Nat.fromIntClamp (0 - 5)
+    roundTrip = Nat.fromIntClamp (Nat.toInt three)
   in String.join
     ","
     ["count=" ++ show (count three), "eq=" ++ show (eqNat three (Succ (Succ (Succ Zero)))), "neq=" ++ show (eqNat three four), "zero=" ++ show (Nat.isZero Zero), "nonzero=" ++ show (Nat.isZero three), "mbNeg=" ++ showMaybeNat (Nat.fromIntMaybe (0 - 5)), "mbZero=" ++ showMaybeNat (Nat.fromIntMaybe 0), "mbPos=" ++ showMaybeNat (Nat.fromIntMaybe 4), "toInt=" ++ show (Nat.toInt four), "fromInt=" ++ show (Nat.toInt shifted), "clamp=" ++ show (Nat.toInt clamped), "roundTrip=" ++ show (Nat.toInt roundTrip), "lt=" ++ show (Zero < three), "le=" ++ show (three <= three), "gt=" ++ show (three > four), "eqOp=" ++ show (three == Succ (Succ (Succ Zero))), "cmpZero=" ++ show (compare Zero three), "cmpLt=" ++ show (compare three four), "cmpEq=" ++ show (compare three three)]

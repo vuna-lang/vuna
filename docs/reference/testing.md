@@ -103,7 +103,7 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
   （WASI preopen），native 直接跑静态产物，三者都以 case 私有目录为 cwd，FS 用例不污染源码树。
 - 期望文件按目标覆盖：`<base>.<backend>.out` 优先，否则共享 `<base>.out`——共享期望即三端
   差分。没有 `--backend` 时只跑 ocaml；`effect-*` 分类即使只跑 ocaml 也走私有包目录。
-- `vuna-base` 的 `stdlib` family 也声明 `pure-cross`：40 个标准库夹具在三个后端上对拍。
+- `vuna-base` 的 `stdlib` family 也声明 `pure-cross`：40+ 个标准库夹具在三个后端上对拍。
 - 机制断言（trap 文本、WAT / ELF 形状、import 缺失、ABI）留在 steps 的单后端用例，不进差分。
 
 ### 声明式步进用例（`*.steps`）

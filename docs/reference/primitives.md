@@ -110,7 +110,7 @@
   同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。核心求值与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
 - **提升**：只允许 `Nat → Int`（精化期插入 `natToInt`，零成本）；`Int → Nat` 必须显式
-  `Base.Data.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
+  `Base.Data.Nat.fromIntClamp`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
   两侧 Nat（或 Nat 与字面量）→ Nat；出现真正的 `Int` → `Int`（Nat 侧经 `natToInt` 提升）。
   低层原语（`strLength` / `arrayLength` 等）仍是 Int，Base 负责暴露 Nat 度量。
 - **算术 = `Num` 方法**：`+ - * /` 是 `Base.Trait.Num` 方法 `add` / `sub` / `mul` / `div`

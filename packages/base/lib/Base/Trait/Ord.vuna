@@ -86,6 +86,10 @@ min x y = if x <= y then x else y
 export max : Ord a => a -> a -> a
 max x y = if x <= y then y else x
 
+-- | 把 `x` 夹到 `[lo, hi]`；调用方保证 `lo <= hi`（否则结果落在 `lo`）。
+export clamp : Ord a => a -> a -> a -> a
+clamp lo hi x = max lo (min hi x)
+
 instance Hashable Ordering where
   hash o =
     case o of

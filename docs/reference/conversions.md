@@ -11,8 +11,25 @@
 | `Convert a b` | `convert : a -> b` | 全函数、无损：总能返回，且不丢信息 |
 | `ConvertMaybe a b` | `convertMaybe : a -> Maybe b` | 可失败：不成立返回 `Nothing`，不用 clamp / 截断兜底 |
 
-有损但仍全函数的转换（`Nat.fromInt` 的负数 clamp、`floatToInt` 的截断）**不进入**这两个
-trait，保留具名函数：损失写在名字上。
+有损但仍全函数的转换（`Nat.fromIntClamp` 的负数 clamp、`floatToIntTrunc` / `floatToIntSat`
+的截断）**不进入**这两个 trait，保留具名函数：损失写在名字上。
+
+## 有损转换的命名
+
+每个有损转换的失败策略都要能从名字读出来，不允许「裸名 + 后端未定义行为」：
+
+| 后缀 | 语义 | 例子 |
+| --- | --- | --- |
+| 裸名 | 无损，或该类型的规范算术语义 | `Nat.toInt`、`Nat.minus` |
+| `Clamp` | 夹到目标区间 | `Nat.fromIntClamp` |
+| `Sat` | 饱和到极值 | `floatToIntSat`、`Nat.plus` |
+| `Trunc` | 向零截断 | `floatToIntTrunc` |
+| `Maybe` | 不可表示 → `Nothing` | `Nat.fromIntMaybe`、`floatToIntMaybe` |
+| `Or` | 解析失败 → 调用方给默认值 | `String.parseIntOr` |
+
+`Float` 的取整用动词名（`trunc` / `floor` / `ceil` / `round`，都返回 `Float`）；转 `Int` 的
+版本（`floorToInt` / `ceilToInt` / `roundToInt`）返回 `Maybe`，因为取整后仍可能超出 `Int`。
+`Ord.clamp` 是通用的三参夹取（`lo hi x`），不替代各类型自己的具名转换。
 
 ## base 实例
 

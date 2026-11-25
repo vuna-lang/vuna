@@ -20,6 +20,7 @@ import Base.Effect.Console as EffConsole
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
+import Base.Data.String as String
 
 -- | 检索模式：类型检索，或名称 / doc 检索（两个布尔分别表示只算名称分、只算 doc 分）。
 data SearchMode : Type where
@@ -103,19 +104,9 @@ limitOf parsed =
   case flagValue parsed "limit" of
     Nothing => OkC 20
     Just text =>
-      case parseInt text of
+      case String.parseInt text of
         Just n => if n > 0 then OkC n else err "--limit must be a positive integer"
         Nothing => err "--limit is not an integer: ${text}"
-
--- | 内部：只接受纯十进制数字串的整数解析。
-parseInt : String -> Maybe Int
-parseInt s = parseIntChars (strUnpack s) 0
-
--- | 内部：`parseInt` 的字符级累加实现；遇到非数字给 `Nothing`。
-parseIntChars : List Int -> Int -> Maybe Int
-parseIntChars [] acc = Just acc
-parseIntChars (c :: rest) acc =
-  if c >= 48 && c <= 57 then parseIntChars rest (acc * 10 + (c - 48)) else Nothing
 
 -- | 内部：取前 `n` 条（`n <= 0` 时为空）。
 takeHits : Int -> List SearchHit -> List SearchHit

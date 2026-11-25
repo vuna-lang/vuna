@@ -11,4 +11,4 @@ main =
     strings = ["a", "b"]
   in String.join
     "|"
-    [show escapes, strShow escapes, show utf8, show (0 - 42), show (Nat.fromInt 7), show True, show False, show nums, show strings]
+    [show escapes, strShow escapes, show utf8, show (0 - 42), show (Nat.fromIntClamp 7), show True, show False, show nums, show strings]
