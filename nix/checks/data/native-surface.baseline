@@ -20,7 +20,7 @@ heapLockFn                       "futex"
 heapUnlockFn                     "futex"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
 initStackFn                      "mmap" "mprotect"
-initThreadsFn                    "arch_prctl"
+initTcbFn                        "arch_prctl"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
 lstatPathFn                      "newfstatat"
@@ -78,7 +78,6 @@ envChildLabel 8192
 envpLabel 8
 heapLockLabel 8
 hostErrnoLabel 8
-hostStatusLabel 8
 memLimitLabel 8
 nativeArenaEndLabel 8
 nativeCurSegLabel 8

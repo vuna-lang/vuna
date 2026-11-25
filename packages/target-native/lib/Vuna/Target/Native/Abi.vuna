@@ -217,7 +217,7 @@ nativeGcForceMajorLabel = "rt_gc_force_major"
 export nativeCleanupHeadLabel : String
 nativeCleanupHeadLabel = "rt_cleanups"
 
--- | 活着的子线程数（不含主线程）。`alloc` 据此拿堆锁，GC 在 `> 0` 时不回收。
+-- | 活着的子线程数（不含主线程）。`alloc` 据此拿堆锁。
 export nativeThreadCountLabel : String
 nativeThreadCountLabel = "rt_thread_count"
 
@@ -237,6 +237,11 @@ nativeTcbSavedRspOff = 16
 -- | 0 = running，1 = blocked（阻塞在 futex），2 = parked（safepoint），3 = dead。
 export nativeTcbStateOff : Int
 nativeTcbStateOff = 24
+
+-- | 当前线程的宿主状态槽（fs / process 的 `try*` 写这里，`@vuna@prim_eff_hostStatus` 读）。
+--   放在 TCB 里而不是 `.bss`：并行区两个线程各写各的。
+export nativeTcbHostStatusOff : Int
+nativeTcbHostStatusOff = 32
 
 -- | 主线程 TCB（`.bss`；子线程 TCB 放在自己的栈顶下方）。
 export nativeMainTcbLabel : String
