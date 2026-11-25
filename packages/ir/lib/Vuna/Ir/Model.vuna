@@ -44,7 +44,7 @@ export data IrTy(..) : Type where
   IrTyOpaque : IrTy
   -- | `Array a` 内建类型构造子。
   IrTyArray : IrTy -> IrTy
-  -- | `IORef a` 内建类型构造子。
+  -- | 单槽堆单元（`@vuna@Cell a` 等隐藏可变单元）。
   IrTyRef : IrTy -> IrTy
   -- | 程序数据族应用（族名 + 运行时类型实参）。
   IrTyData : String -> List IrTy -> IrTy

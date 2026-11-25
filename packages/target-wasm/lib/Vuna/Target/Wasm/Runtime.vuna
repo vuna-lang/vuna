@@ -1068,33 +1068,33 @@ rtArrayOob c =
     (append (failWithConst c.rtcOobOff c.rtcOobLen) [ICall "$rt_failStr", IUnreachable])
 
 -- ---------------------------------------------------------------
--- 效应原语（宿主层叶子 + IORef）
+-- 效应原语（宿主层叶子 + 可变单元）
 -- ---------------------------------------------------------------
 -- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
 -- 续延与 handler 由 base 的效应机器（`Base.Effect.Core.Control` + `machineRun`）驱动；
 -- cleanup 登记表只维护 LIFO，正常路径由 `bracket` pop，异常路径由机器弹帧前跑。
-rtEffNewRef : WatFunc
-rtEffNewRef =
+rtCellNew : WatFunc
+rtCellNew =
   rtFunc
-    "$rt_newRef"
+    "$rt_cellNew"
     [("$p0", WvAnyRef)]
     [WvAnyRef]
     [("$out", WvRef "$arr")]
     [IConstI32 1, IArrayNewDefault "$arr", ILocalSet "$out", ILocalGet "$out", IConstI32 0, ILocalGet "$p0", IArraySet "$arr", ILocalGet "$out"]
 
-rtEffReadRef : WatFunc
-rtEffReadRef =
+rtCellRead : WatFunc
+rtCellRead =
   rtFunc
-    "$rt_readRef"
+    "$rt_cellRead"
     [("$p0", WvAnyRef)]
     [WvAnyRef]
     []
     [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, IArrayGet "$arr"]
 
-rtEffWriteRef : WatFunc
-rtEffWriteRef =
+rtCellWrite : WatFunc
+rtCellWrite =
   rtFunc
-    "$rt_writeRef"
+    "$rt_cellWrite"
     [("$p0", WvAnyRef), ("$p1", WvAnyRef)]
     [WvAnyRef]
     []
@@ -2154,9 +2154,9 @@ rtFunctions c =
     rtExecPath,
     rtTimeUs,
     rtPrintln,
-    rtEffNewRef,
-    rtEffReadRef,
-    rtEffWriteRef,
+    rtCellNew,
+    rtCellRead,
+    rtCellWrite,
     rtEffPrint "$rt_effPrint" 1,
     rtEffPrint "$rt_effEprint" 2,
     rtEffExit,
@@ -2359,12 +2359,9 @@ rtImplOf "@vuna@host@exitOp" = RtFunc 1 "$rt_effExit"
 rtImplOf "@ir@m@runEff" = RtFunc 2 "$rt_mRunEff"
 rtImplOf "prim_cleanupPush" = RtFunc 1 "$rt_cleanupPush"
 rtImplOf "prim_cleanupPop" = RtFunc 1 "$rt_cleanupPop"
-rtImplOf "@vuna@prim_eff_newRef" = RtFunc 1 "$rt_newRef"
-rtImplOf "@vuna@prim_eff_readRef" = RtFunc 1 "$rt_readRef"
-rtImplOf "@vuna@prim_eff_writeRef" = RtFunc 2 "$rt_writeRef"
-rtImplOf "@vuna@prim_mrefNew" = RtFunc 1 "$rt_newRef"
-rtImplOf "@vuna@prim_mrefRead" = RtFunc 1 "$rt_readRef"
-rtImplOf "@vuna@prim_mrefWrite" = RtFunc 2 "$rt_writeRef"
+rtImplOf "@vuna@prim_mrefNew" = RtFunc 1 "$rt_cellNew"
+rtImplOf "@vuna@prim_mrefRead" = RtFunc 1 "$rt_cellRead"
+rtImplOf "@vuna@prim_mrefWrite" = RtFunc 2 "$rt_cellWrite"
 rtImplOf "@vuna@prim_marrNew" = RtFunc 2 "$rt_arrayMake"
 rtImplOf "@vuna@prim_marrGet" = RtFunc 2 "$rt_arrayGet"
 rtImplOf "@vuna@prim_marrSet" = RtFunc 3 "$rt_marrSet"

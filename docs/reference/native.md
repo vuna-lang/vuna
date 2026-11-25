@@ -10,7 +10,7 @@
 > 堆是段链表 + 尺寸类复用 + **两代标记-清扫 GC**（非移动；沿 `rbp` 链逐帧保守扫根，
 > 老代靠写屏障标记的卡片）；对象布局见 §2，回收契约见 §5.2。
 > `main : Eff r a`（含带行的宿主效应，
-> 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 走**库机器**
+> 入口自动预装 `runXHost`）与命名可变单元（`MutRef` / `MutArray` / `MutBuffer`）可用；`perform` / `handle` 走**库机器**
 > （`Control` 循环 + trampoline）实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Target.Native.{Model,Abi,Pal,Gc,Runtime,Module,Render}`，
 > 插件入口 `Vuna.Target.Native.Plugin`。边界见 §8。
@@ -446,7 +446,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）在块头上打 `leaf` 标志。变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
-- 效应叶子：`@vuna@prim_eff_newRef` / `readRef` / `writeRef`（`@vuna@Ref`，单槽对象）、
+- 效应叶子：`@vuna@prim_mrefNew` / `@vuna@prim_mrefRead` / `@vuna@prim_mrefWrite`
+  （`@vuna@Cell`，单槽对象；运行时 `mref_new` / `mref_read` / `mref_write`）、
   `@vuna@prim_eff_print` / `_eprint`（写 fd 后返回字节数）、`@vuna@prim_eff_exit`；预装宿主 handler
   用到的 `@vuna@host@*` / `@vuna@prim_eff_*_host` 名字映射到同一批叶子。
 - 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`@vuna@prim_eff_getArgs`
@@ -602,7 +603,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   年轻代回收在扫完普通根之后逐段遍历卡片表：脏卡片清 0，并把该卡片覆盖的 512 字节
   `[起点, 起点 + 512) ∩ [块区, 段尾)` 当额外根保守扫一遍。卡片按段分配、容量随段走，
   所以没有固定容量上限；死块/复用块留下的陈旧脏位只会多扫一格，不会漏根。
-  可变点只有 `@vuna@prim_eff_writeRef` 与 `insert_sorted` / `sort_list` 的原地改接；
+  可变点只有 `@vuna@prim_mrefWrite`（运行时 `mref_write`）与 `insert_sorted` / `sort_list` 的原地改接；
   构造器 / 闭包字段只在对象刚分配（年轻代）时写，数组是 COW、record 不可变，都不需要
   屏障。
 - **动态实参**：`rt_apply` 慢路径把实参压成调用栈数组交给运行时；数组本身不在任何帧的

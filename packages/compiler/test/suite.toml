@@ -36,7 +36,7 @@ compare_interp = false
 matrix = "pure-cross"
 tags = ["parity"]
 
-# 三端共有的宿主副作用：Console / IORef / getenv / getArgs / exit / 经标签的 FS。
+# 三端共有的宿主副作用：Console / MutRef / getenv / getArgs / exit / 经标签的 FS。
 [family.effect_common]
 dir = "corpus/effect/common"
 interp = false

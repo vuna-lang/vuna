@@ -680,7 +680,7 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 
 `x : Maybe (Maybe … Int)`（`x = Nothing`）与 `data W where MkW : <同深类型> -> W` 的
 `check` 成本必须随嵌套层数线性。`Lowering.Ty` 的渲染器过去先把族实参渲染成 `List IrTy`
-交给 intrinsic 探测（`Array` / `IORef`），非 intrinsic 族再把这份结果丢掉、由
+交给 intrinsic 探测（`Array` 等），非 intrinsic 族再把这份结果丢掉、由
 `renderFamilyArgs` 重新渲染同一批实参 ⇒ 每层乘 2。改成按需渲染的探测
 （`renderTyIntrinsicWith`）后，同一批次读数（`VUNA_OBS=2` 的 `vuna.codegen.unit`）：
 

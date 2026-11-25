@@ -1409,7 +1409,6 @@ ivarBound env IFloat = True
 ivarBound env (IGlobal _) = True
 ivarBound env (IList e) = ivarBound env e
 ivarBound env (IArray e) = ivarBound env e
-ivarBound env (IRef e) = ivarBound env e
 ivarBound env (ICell e) = ivarBound env e
 ivarBound env (IMArray e) = ivarBound env e
 ivarBound env (IMDynArray e) = ivarBound env e

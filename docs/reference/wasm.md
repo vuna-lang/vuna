@@ -176,7 +176,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | `IrRt` | 支持 | `RtValue` 直接内联；`RtFunc` 作值 eta 展开成闭包；符号表外的符号在引用点拒绝 |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Data.Float.floatRender` |
-| Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
+| Eff thunk / 可变单元 | 支持 | `MkEff` 包装原语；`@vuna@Cell` 是长度 1 的 `$arr` |
 | Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [effect-machine.md](effect-machine.md) |
 | `IrEffBind` | 拒绝 | effect 的 bind 降级；与 native 同一限制 |
 | extern / FFI | 拒绝 | `IrExternDef` 在生成期报 `WasmUnsupported` |
@@ -235,9 +235,8 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `strConcatMany` / `strSubstTemplate`。
 - 数组：`$rt_arrayLength` / `$rt_arrayGet` / `$rt_arraySet` / `$rt_arrayMake`；越界走
   `$rt_arrayOob`（`Invalid_argument("index out of bounds")` + exit 2）。
-- Console / Ref 的 `@vuna@prim_eff_*` 变体（`_print` / `_eprint` / `_exit` /
-  `_newRef` / `_readRef` / `_writeRef`）直连同一组实现：写 fd 1/2、`proc_exit`、
-  长度 1 的 `$arr`。
+- Console 的 `@vuna@prim_eff_*` 变体（`_print` / `_eprint` / `_exit`）直连同一组实现：
+  写 fd 1/2、`proc_exit`；可变单元的 `@vuna@prim_mref*` 用 `$rt_cell*`（长度 1 的 `$arr`）。
 
 **宿主层**：直接实现 WASI preview1，不引入自定义 host import。线性内存只有固定 scratch
 （iov、两条路径区、64 KiB 读写缓冲、`filestat`、4 KiB `readdir` 缓冲），GC 堆在引擎侧；

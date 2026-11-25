@@ -32,7 +32,7 @@ import Vuna.Ir.Kinds as Kinds
 -- ---------------------------------------------------------------
 -- | 一个槽/值的运行时 kind。
 export data NKind(..) : Type where
-  -- | 堆指针（String / Float / Array / IORef / data / record / 闭包）。
+  -- | 堆指针（String / Float / Array / 可变单元 / data / record / 闭包）。
   NKindPtr : NKind
   -- | 只读指针（`.rodata` 静态闭包），GC 不需要扫描或清零。
   NKindStatic : NKind

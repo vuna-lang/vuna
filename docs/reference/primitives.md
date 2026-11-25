@@ -193,7 +193,10 @@
 | 类型 | kind | OCaml 表示 |
 | --- | --- | --- |
 | `Array a` | `Type -> Type` | `'a array`（不可变语义：不暴露原地写） |
-| `@vuna@Ref a` | `Type -> Type` | `'a ref`（隐藏类型构造子：源码写不出，只有 base 内部与隐藏原语用它） |
+
+隐藏的可变单元类型（`@vuna@Cell a` / `@vuna@MArray a` / `@vuna@MDynArray a` /
+`@vuna@MBuffer`）同样在这张表里：它们只由精化器在 `withMut*` 作用域内合成，任何模块都
+写不出可用的句柄值（见 [effects.md](effects.md) §8.8–§8.10）。
 
 这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
 类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
@@ -209,13 +212,11 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`Eff []`；不触碰外部世界）：用户面的局部可变是 `Base.Effect.MutRef`
-（命名单元 + 编译期绑定 + 三端 `@vuna@prim_mref*`）。可逃逸的引用只剩隐藏原语，供 base /
-工具链内部使用：
-
-| 原语 | 签名 | runtime |
-| --- | --- | --- |
-| `@vuna@prim_eff_newRef` / `@vuna@prim_eff_readRef` / `@vuna@prim_eff_writeRef` | `a -> Eff [] (@vuna@Ref a)` / `@vuna@Ref a -> Eff [] a` / `@vuna@Ref a -> a -> Eff [] Int` | `ref` / `!` / `:=` |
+**可变数据原语**（`Eff []`；不触碰外部世界）：用户面只有命名单元（`Base.Effect.MutRef` /
+`MutArray` / `MutBuffer`），精化器把调用改写成隐藏原语 `@vuna@prim_mrefNew` /
+`@vuna@prim_mrefRead` / `@vuna@prim_mrefWrite`（数组 / 缓冲同族：`@vuna@prim_marr*` /
+`@vuna@prim_dyn*` / `@vuna@prim_mbuf*`）。没有可逃逸的引用原语：单元参数由精化器按
+`@vuna@Cell` 参数合成，只在 `withMut*` 作用域内有值（[effects.md](effects.md) §8.8–§8.10）。
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
@@ -224,8 +225,8 @@
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：`@vuna@prim_eff_*Ref` 的实现都返回 `Eff []`；用户面局部可变走命名句柄
-  （`MutableRef` / `MutArray` / `MutBuffer`，见 [effects.md](effects.md) §8.8–§8.10），
+- 可变数据的安全边界：可变单元的公开操作与实现都返回 `Eff []`；局部可变走命名单元
+  （`MutRef` / `MutArray` / `MutBuffer`，见 [effects.md](effects.md) §8.8–§8.10），
   没有 region/ST 令牌；也没有依赖 multiplicity / 线性箭头（多用未禁止，见
   [effects.md](effects.md)、[debt.md](debt.md) D22）。
 
@@ -251,7 +252,7 @@
 | `Base.Effect.Args` | `ArgsOp` | `argsGetArgs` | `@vuna@prim_eff_getArgs` |
 | `Base.Effect.Exit` | `ExitOp` | `exitWith` | `@vuna@prim_eff_exit`（库路径）/ `@vuna@host@exitOp`（宿主行） |
 | `Base.Effect.Net` | `NetOp` | `netListen` / `netPort` / `netAccept` / `netRecv` / `netSend` / `netClose` / `netConnect`（含 `Within` 变体） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
-| （隐藏）`@vuna@Ref` | base / 工具链内部 | — | `@vuna@prim_eff_newRef` / `readRef` / `writeRef`；`Base.Effect.MutRef` 走 `@vuna@prim_mref*` |
+| （隐藏）`@vuna@Cell` | `Base.Effect.MutRef` 的私有单元 | — | `@vuna@prim_mrefNew` / `read` / `write`（句柄由精化器在 `withMutRef` 作用域里合成） |
 
 **执行与求值**：宿主原语是 `Eff []` 动作叶子；codegen 按 arity 包成 `MkEff`（零参原语是动作
 **值**，引用不执行、不重新求值），`@vuna@prim_eff_bind1`（线性绑定）由 `effLinearBindText` 生成。
@@ -290,7 +291,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | `clock` | `clockNow` / `clockSleepMicros` | `effTimeUs`、`@vuna@prim_eff_sleep` |
 | `stdin` | `stdinReadLine` / `stdinReadBytes` | `@vuna@host@{readLine,readBytes}`、`@vuna@prim_eff_{readLine,readBytes}` |
 | `net` | `net*`（`NetOp`，含 `Within`） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
-| `ref` | （隐藏）`@vuna@Ref` / `Base.Effect.MutRef` | `@vuna@prim_eff_{newRef,readRef,writeRef}`、`@vuna@prim_mref*` |
+| `ref` | `Base.Effect.MutRef`（`@vuna@Cell`，隐藏） | `@vuna@prim_mref*` |
 | 运行时核心 | — | `prim_effectPerformId` / `prim_effectHandleId` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`、`effectId` |
 
 - **宿主原语不是用户 API**：源码写不出这些名字；用户面只有标签 + handler（`runPure` 执行
@@ -330,7 +331,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | `@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd | `processRunIn` |
 | `@vuna@prim_eff_spawn` / `wait` | 异步启动子进程（argv 列表，继承 stdio）返回 pid；等待返回退出码（signal/stopped 归 1） | `processSpawn` / `processWait` |
 | `@vuna@host@tryNet*`（含 `Within`） | 失败写状态槽（1 = 对端关闭、2 = refused、3/7 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、8 = bad-handle、其它 = io）；`recv` 对端关闭是 `Nothing` | `net*`；base 抛 `NetErrorOp` |
-| `@vuna@prim_eff_newRef` / `readRef` / `writeRef`、`@vuna@prim_mref*` | `ref` / `!` / `:=` 与命名可变单元（原地读写） | （隐藏）`@vuna@Ref` / `Base.Effect.MutRef` |
+| `@vuna@prim_mrefNew` / `read` / `write` | `ref` / `!` / `:=`（命名可变单元，原地读写） | `Base.Effect.MutRef`（句柄由精化器合成） |
 | `@vuna@prim_eff_hostStatus` | 宿主 try 变体的失败码状态槽（0 = 成功；OCaml 用 Domain.DLS） | 仅 base 的 handler 读取 |
 | `@vuna@prim_eff_bind1` | 线性绑定（`effLinearBindText` 生成） | `>>=` / `do` |
 

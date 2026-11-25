@@ -114,7 +114,7 @@
 | --- | --- | --- | --- |
 | D1 | 非总性只在 runtime；语言层不提供 `partial` / `assert_total` 逃生舱 | 特权必须显式、可列举、可拒绝 | "循环"只剩 runtime 组合子一个出口，组合子 API 下限被抬高 |
 | D2 | 效应一次性续延；单一操作语义（CBV）；宿主交互走事件队列 | 两套操作语义会让差分测试与两端复用同时失效 | 外壳与 runtime 承担全部循环与事件分发 |
-| D3 | 原生后端用**保守根集 + 分代标记-清扫**：沿 `rbp` 链整帧扫根，年轻代按分配预算先收、整堆按连续次数与晋升压力触发。wasm 后端用 WasmGC（宿主 tracing GC） | 续延已由库机器执行，机器状态全是堆/栈上的普通值，没有栈拷贝；对非移动 GC 来说保守扫根已经足够，逐 call 栈图/槽 kind 只会引入漏根风险。深递归按扫栈成本抬阈值（[performance.md](reference/performance.md)「槽 kind 分布」）。Perceus RC 仍不做：dup/drop 需要精确指针与生命周期，且 `IORef` 的环收不了 | 非移动老代 → 仍有内部碎片、不压缩；写屏障点分散在模块与运行时（`IORef` / cleanup / list 原地改接）；移动/压缩要等精确指针与槽 kind 全部可判定（debt D125） |
+| D3 | 原生后端用**保守根集 + 分代标记-清扫**：沿 `rbp` 链整帧扫根，年轻代按分配预算先收、整堆按连续次数与晋升压力触发。wasm 后端用 WasmGC（宿主 tracing GC） | 续延已由库机器执行，机器状态全是堆/栈上的普通值，没有栈拷贝；对非移动 GC 来说保守扫根已经足够，逐 call 栈图/槽 kind 只会引入漏根风险。深递归按扫栈成本抬阈值（[performance.md](reference/performance.md)「槽 kind 分布」）。Perceus RC 仍不做：dup/drop 需要精确指针与生命周期，且可变单元的环收不了 | 非移动老代 → 仍有内部碎片、不压缩；写屏障点分散在模块与运行时（可变单元 / cleanup / list 原地改接）；移动/压缩要等精确指针与槽 kind 全部可判定（debt D125） |
 | D4 | 宏终局是 typed macro / elaborator reflection，先做 AST→AST | 声明式宏够用一阵，reflection 才是终态 | 精化器要成为稳定库值；LSP 必须能跑宏并支持超时取消 |
 | D5 | 内容寻址身份停在"依赖按哈希固定 + 包身份接线"：`identityHash` 进 manifest/registry/pin/fetch/check，不做分发服务器 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash`·`implHash` / `identityHash` 三者从一开始就分开**；依赖类型语言还需要 iface/impl 双摘要（包级 `pkgIfaceHash` / `pkgImplHash`），因此 D11 是它的前提；分发真实性仍是非目标 |
 | D11 | 引入 `opaque` / `abstract` 定义修饰符 | 让 iface/impl 双摘要真正生效：`ifaceHash` 不含不展开体（不影响下游精化），`implHash` 含它（只影响产物） | 多一个语言特性，用户要理解"能不能展开"的差别 |

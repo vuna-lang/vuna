@@ -12,9 +12,13 @@
 -- 返回值刻意不用 `Maybe (Check a)`：把 `Check` 放进 `Maybe` 再由别的模块解构会触发
 -- 精化器的 `TC_UnknownConstructorInCase` 误报。因此改用普通记录 `CheckSample` /
 -- `EvalSample`，`Check` 的构造与解构只发生在 [Vuna.Test.InProc]。
+--
+-- 会话本身存在 runner 入口用 `MutRef.withMutRef "session"` 引入的命名单元里：状态跨
+-- case 复用、生命周期与一次 `runSuite` 相同，外部签名（`Eff r` 的行）显式带上
+-- `Named "session" (MutRefOp Session)`，不能逃出该作用域。
 module Vuna.Test.Session where
 
-import Vuna.Test.Ref as IORef
+import Base.Effect.MutRef as MutRef
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
@@ -93,10 +97,10 @@ readBaseIfaces baseDir =
 
 -- | 内部：会话可用性——缓存目录命中就直接用，否则读一次接口并写回（读失败或为空
 -- 给 `Nothing`）。
-ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => @vuna@Ref Session -> String -> Eff r (Maybe (List ModuleIface))
-ensureSession ref baseDir =
+ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member (Named "session" (MutRefOp Session)) r => String -> Eff r (Maybe (List ModuleIface))
+ensureSession baseDir =
   do
-    s <- readRef ref
+    s <- MutRef.read
     if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then
       pure (Just (sesIfacesOf s))
     else
@@ -109,14 +113,14 @@ ensureSession ref baseDir =
               pure Nothing
             else
               do
-                _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
+                MutRef.write (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
                 pure (Just ifaces)
 
 -- | check 样本：会话不可用返回 `Nothing`（调用方改走全量 `checkFile`）。
-export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Maybe CheckSample)
-sessionCheckSample ref baseDir source =
+export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Maybe CheckSample)
+sessionCheckSample baseDir source =
   do
-    ses <- ensureSession ref baseDir
+    ses <- ensureSession baseDir
     case ses of
       Nothing => pure Nothing
       Just ifaces =>
@@ -127,14 +131,14 @@ sessionCheckSample ref baseDir source =
             OkC ctx =>
               do
                 text <- fsReadFile source
-                s <- readRef ref
+                s <- MutRef.read
                 result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
-                applyCheckResult ref s baseDir ifaces result
+                applyCheckResult s baseDir ifaces result
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyCheckResult : {r : Row} -> @vuna@Ref Session -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
-applyCheckResult ref s baseDir ifaces result =
+applyCheckResult : {r : Row} -> {w : Member (Named "session" (MutRefOp Session)) r} -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
+applyCheckResult s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (CheckSample (Just e) []))
     OkC p =>
@@ -142,14 +146,14 @@ applyCheckResult ref s baseDir ifaces result =
         pure Nothing
       else
         do
-          _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
+          MutRef.write (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
           pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
 -- | interp 样本：会话不可用返回 `Nothing`（调用方改走全量 `dtEvalFile`）。
-export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Maybe EvalSample)
-sessionEvalSample ref baseDir source =
+export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Maybe EvalSample)
+sessionEvalSample baseDir source =
   do
-    ses <- ensureSession ref baseDir
+    ses <- ensureSession baseDir
     case ses of
       Nothing => pure Nothing
       Just ifaces =>
@@ -160,14 +164,14 @@ sessionEvalSample ref baseDir source =
             OkC ctx =>
               do
                 text <- fsReadFile source
-                s <- readRef ref
+                s <- MutRef.read
                 result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
-                applyEvalResult ref s baseDir ifaces result
+                applyEvalResult s baseDir ifaces result
 
 -- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyEvalResult : {r : Row} -> @vuna@Ref Session -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
-applyEvalResult ref s baseDir ifaces result =
+applyEvalResult : {r : Row} -> {w : Member (Named "session" (MutRefOp Session)) r} -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
+applyEvalResult s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (EvalSample (Just e) ""))
     OkC p =>
@@ -175,7 +179,7 @@ applyEvalResult ref s baseDir ifaces result =
         pure Nothing
       else
         do
-          _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
+          MutRef.write (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
           pure (Just (EvalSample Nothing (firstOf (secondOf p))))
 
 -- | 内部：列表长度。

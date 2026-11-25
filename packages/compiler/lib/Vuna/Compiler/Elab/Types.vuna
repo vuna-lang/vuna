@@ -312,7 +312,7 @@ export record Ec(..) where
   ecCtorTbl : HashMap String DtCtor
   -- 是否含线性数据族（O(1) 早退，避免每个 Pi 都线性扫 ecdatas）。
   ecHasLinear : Bool
-  -- 元变量创建点 / QTT 使用点登记表（显式状态，替代进程内 IORef）。
+  -- 元变量创建点 / QTT 使用点登记表（显式状态线程，不依赖可变单元）。
   ecMetaSpans : List (Int, Span)
   ecUseSpans : List (String, Span)
   -- 本次精化发射的 warning（按发射顺序；由 Elab 显式线程，精化出口挂到 DtProgram）。

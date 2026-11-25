@@ -13,7 +13,7 @@
 -- 岛」）：`build.sh`（ocamlopt 链接）、产物执行、`repl` / `lsp` / `seed` / 包管理器。
 module Vuna.Test.InProc where
 
-import Vuna.Test.Ref as IORef
+import Base.Effect.MutRef as MutRef
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.String as String
@@ -159,10 +159,10 @@ pathExistsFileEff path =
 -- 正例专用：增量路径（`dtCheckSourceIncremental`）只汇总 loader + `dtProgWarnings`，
 -- 不跑全量路径尾部的 `warnUnusedDefsIn`；负例夹具要断言「未使用定义 / 遮蔽」这类
 -- warning，必须走全量 `checkFile`。
-export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Check (List Diagnostic))
-checkFileSessioned ref base source =
+export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Check (List Diagnostic))
+checkFileSessioned base source =
   do
-    probed <- sessionCheckSample ref base source
+    probed <- sessionCheckSample base source
     case probed of
       Nothing => checkFile source
       Just sample =>
@@ -172,10 +172,10 @@ checkFileSessioned ref base source =
 
 -- | 会话优先的 interp：增量会话命中就用求值展示文本，返回 `Nothing` 时退回全量
 -- `interpFile`。
-export interpFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Check String)
-interpFileSessioned ref base source =
+export interpFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member (Named "session" (MutRefOp Session)) r => String -> String -> Eff r (Check String)
+interpFileSessioned base source =
   do
-    probed <- sessionEvalSample ref base source
+    probed <- sessionEvalSample base source
     case probed of
       Nothing => interpFile source
       Just sample =>

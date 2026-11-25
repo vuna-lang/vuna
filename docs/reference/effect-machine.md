@@ -284,7 +284,7 @@ run : Control -> Obj
 ### 9.2.1 进度（现状）
 
 - `Base/Effect/Machine.vuna` 已有：`Control v`（Done/Apply/Perform/Handle/Return/
-  KDone/Resume）+ `Frame`/`Ctx` + **纯函数式**状态（`MSt`，不依赖 IORef）+ `run`；
+  KDone/Resume）+ `Frame`/`Ctx` + **纯函数式**状态（`MSt`，不依赖可变单元）+ `run`；
   一次性约束用 used id 列表，遍历都带 fuel。夹具 `pure_cross/56_machine_skeleton`
   手搭 `handle (perform) {k 2}`，三端 6 checks 绿。
 - lowering 侧已写好「机器步骤 → 库构造函数」的改写（`Ir.Cps.mSteps`）并验证会触发：

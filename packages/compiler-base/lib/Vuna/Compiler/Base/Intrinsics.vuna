@@ -43,7 +43,6 @@ export data IType(..) : Type where
   -- 内建类型构造子与签名里的类型变量（必须由外层 `IPi` 绑定；`checkRuntimeContract` 自证）。
   IVar : String -> IType
   IArray : IType -> IType
-  IRef : IType -> IType
   -- `@vuna@Cell a`：`Base.Effect.MutRef` 私有的可变单元类型（源码写不出）。
   ICell : IType -> IType
   -- `@vuna@MArray a`：`Base.Effect.MutArray` 私有的定长原地数组类型（源码写不出）。
@@ -74,7 +73,7 @@ arityOfType _ = 0
 -- 参数个数的唯一真源在此；Elab.Prelude 据此生成 kind，Target.Ocaml.Decl 据此渲染。
 -- | 内建类型构造子：带参数的类型构造子，名字恒可见，参数个数在此定。
 export record TypeIntrinsic(..) where
-  -- | 构造子的源码名字（`Array` / `IORef`）。
+  -- | 构造子的源码名字（`Array` / `@vuna@Cell` 等）。
   typeIntrinsicCtorName : String
   -- | 类型参数个数。
   typeIntrinsicCtorArity : Int
@@ -92,7 +91,6 @@ export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
   [
     TypeIntrinsic "Array" 1,
-    TypeIntrinsic "@vuna@Ref" 1,
     TypeIntrinsic "@vuna@Cell" 1,
     TypeIntrinsic "@vuna@MArray" 1,
     TypeIntrinsic "@vuna@MDynArray" 1,
@@ -801,8 +799,7 @@ fromFloatMethodName = "Base.Data.Float.fromFloat"
 baseIntrinsics : List Intrinsic
 -- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 `Base.Effect.Core` 标签 + handler）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
--- 内建类型构造子 Array / IORef 的原语。
--- 纯 Array 原语不触碰外部世界；IORef 是 `Eff []` 动作。
+-- 内建类型构造子 Array 的原语（纯函数，不触碰外部世界）。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
 -- 字节切片（clamp 语义与 Base.Data.String.substring 一致），避免 List 桥接。
 -- 编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
@@ -955,7 +952,7 @@ effIntrinsics : List Intrinsic
 -- 内建 ConsoleOp 宿主打印（宿主原语叶子不在行里）。
 -- 带内建 FsOp 行的宿主原语（entry 自动预装用）。
 -- 带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
--- Ref / Net 的带行宿主原语。
+-- Net 的带行宿主原语。
 -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
 -- MutRef 的私有单元原语：类型 `@vuna@Cell a` 不对用户开放，
 -- 只能由精化器在 `withMutRef` 作用域里合成引用。
@@ -982,21 +979,6 @@ effIntrinsics =
       False,
     Intrinsic "effTimeUs" (IEff IInt) OpNone True,
     Intrinsic "@vuna@prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic
-      "@vuna@prim_eff_newRef"
-      (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a")))))
-      OpNone
-      False,
-    Intrinsic
-      "@vuna@prim_eff_readRef"
-      (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a"))))
-      OpNone
-      False,
-    Intrinsic
-      "@vuna@prim_eff_writeRef"
-      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
-      OpNone
-      False,
     Intrinsic "@vuna@prim_mrefNew" (IPi "a" (IFun (IVar "a") (ICell (IVar "a")))) OpNone False,
     Intrinsic
       "@vuna@prim_mrefRead"

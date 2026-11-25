@@ -6,7 +6,7 @@
 用户面只有 `Base.Effect.*` 标签 + handler 这一条路径；Int/Nat 归一化只留在 handler 的结果索引
 （`Print`、`WriteFile`/`FileSize` 返回 `Nat`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
 `runX = joinEff (handleXHost …)`。用户面
-执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
+执行一个已处理干净的动作用 `runPure`；可变单元的隐藏原语实现也是 `Eff []`。
 
 运行时核心（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
 一阶效应（`Base.Effect.Core` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
@@ -90,7 +90,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 ## 4. 局部可变：命名句柄，没有 region/ST
 
 `Base.ST`（region 隔离的局部可变、`ST r a` / `Ref` / `SArray`）不存在：局部可变走
-`Base.Effect.{MutableRef,MutArray,MutBuffer}` 的**命名句柄**（编译期名字绑定，
+`Base.Effect.{MutRef,MutArray,MutBuffer}` 的**命名单元**（编译期名字绑定，
 见 §8.8–§8.10），没有可逃逸的 region 令牌。语言保留 `linear record` / `linear data` 与 QTT 规则。
 
 ## 5. 表示轴：不透明擦除值
@@ -114,7 +114,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
 类型头不可表示：
-- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `@vuna@Ref`
+- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array`
   （即类型族定义 / axiom / 未知全局；`resIdx`、`sigOf` 属于这一类）；
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`m : Type -> Type` 这类普通类型构造子
   参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
@@ -149,9 +149,9 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 2. **handler 是解释器**：`runPure` 是唯一的执行入口；`runConsole` / `runFs` 等是
    handler（answer 为 `Eff []`，由 `joinEff` 组装），本身不执行动作；没有「隐式生效的
    handler 栈」。
-3. **可变数据边界**：用户面局部可变是 `Base.Effect.MutRef`（不可逃逸，§8.8）；可逃逸的引用只剩
-   隐藏类型 `@vuna@Ref` + 隐藏原语（base / 工具链内部），用户包写不出类型名。没有 region 形式
-   （见 [debt.md](debt.md) D63）。
+3. **可变数据边界**：用户面可变只有命名单元——局部 `Base.Effect.MutRef`（不可逃逸，§8.8）
+   与定长/变长容器（§8.9/§8.10）。单元没有句柄值：`@vuna@Cell` 等隐藏类型只出现在精化器
+   合成的参数里，任何可逃逸的引用都不在用户面上。没有 region 形式（见 [debt.md](debt.md) D63）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerformId` / `prim_effectHandleId` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
@@ -234,7 +234,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.Core` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Effect.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `@vuna@mrefReadOp`/`@vuna@mrefWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
+| `Base.Effect.MutRef` | 命名可变单元（原地读写，不是状态线程化）：行条目 `Named n (MutRefOp a)` 是唯一语言级表示；`withMutRef n init body` 引入单元、`withMutRefPure` 是纯端点；`read`/`write` 的实例名是隐式 `String`（`read@x` 消歧）。没有句柄值，单元只在编译期名字→运行时参数绑定里存在：精化器把调用改写成 `Base.Effect.MutRef.cellReadOp`/`cellWriteOp`，签名里出现具体 `MutRefOp` 条目时自动补 `{@vuna@cell@n : Cell a}` 参数（跨函数传递）。逃逸由 `Member` 约束挡住（闭包进更窄行 → 无实例），`withMutRef` 结果行删掉条目。见 §8.8 |
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsReadFileRange n`/`fsWriteFile n`/…/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
 | `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `@vuna@prim_eff_sleep`） |
@@ -242,7 +242,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `@vuna@prim_eff_getArgs`/`@vuna@prim_eff_exit`/`@vuna@prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
 | `Base.Effect.Error` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
 | `Base.Effect.Exn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
-| `Base.EffMutex` | Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
+| `Base.EffMutex` | Mutex/Semaphore（可变单元 + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | cooperative Channel：`send`/`tryRecv`/`recvWait` |
 | `Base.EffSched` | 单线程 fiber 调度器：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
 
@@ -429,7 +429,7 @@ withMutRefPure : (n : String) -> a -> Eff [Named n (MutRefOp a)] b -> b
 - **单元是编译期绑定**：`withMutRef "x" init body` 在精化期展开成
   `cellWith "x" init (\@vuna@cell@x => body)`；`read`/`write` 的调用点改写成
   `cellReadOp @x @vuna@cell@x` / `cellWriteOp @x @vuna@cell@x v`，
-  运行时只剩三个隐藏原语（OCaml `ref` / wasm `$rt_*Ref` / native heap cell），
+  运行时只剩三个隐藏原语（OCaml `ref` / wasm `$rt_cell*` / native heap cell），
   **没有 handler 派发、没有名字查找**。
 - **跨函数**：签名里出现具体 `MutRefOp` 条目的函数，精化器自动补
   `{@vuna@cell@x : @vuna@Cell a}` 参数（RigOmega 运行时值）；调用点按 binder 名从

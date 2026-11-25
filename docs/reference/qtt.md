@@ -15,8 +15,8 @@ f : (0 n : Nat) -> (1 x : Int) -> Int
 f n x = x
 
 -- 线性数据类型/记录
-linear record Ref r a where
-  refSlot : IORef a
+linear record Slot a where
+  slotData : Array a
 
 linear data Token : Type where
   MkToken : (1 h : Int) -> Token

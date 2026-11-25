@@ -31,7 +31,7 @@
 | `Base.Data.Sha1` | SHA-1（RFC 3174）：`sha1` 给 40 字符小写十六进制摘要，`sha1Raw` 给 20 字节；输入按 UTF-8 字节串处理 |
 | `Base.Data.Base64` | Base64（RFC 4648 标准字母表、带 padding）：`base64Encode` / `base64EncodeString` / `base64Decode`；解码严格（长度、字母表、padding 位置），失败是 `Nothing` |
 | `Base.Container.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
-| `Base.Effect.Cursor` | 有界消费的**持久游标**（`Cursor r a` = 初始状态 + 一步函数 `s -> Eff r (Maybe a, s)`，状态类型对调用方隐藏）：`next` 返回「前进后的游标」，`mapC` / `ofList` / `takeC` / `foldC` 都返回剩余游标；状态是纯数据（没有内部 IORef），只有带 `Int` 上界的消费者，库内无无界递归 |
+| `Base.Effect.Cursor` | 有界消费的**持久游标**（`Cursor r a` = 初始状态 + 一步函数 `s -> Eff r (Maybe a, s)`，状态类型对调用方隐藏）：`next` 返回「前进后的游标」，`mapC` / `ofList` / `takeC` / `foldC` 都返回剩余游标；状态是纯数据（没有内部可变单元），只有带 `Int` 上界的消费者，库内无无界递归 |
 | `Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Effect.Core`（[effects.md](effects.md) §8） |
 | `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` / `Convert Nat Int` / `ConvertMaybe Int Nat` 实例 |
 | `Base.Data.Fin` | 长度索引位置：`Fin n` 恰有 n 个值（`FZero` / `FSucc`），`n` 是 Rig0、运行时擦除；`finToNat` / `finWeaken` / `finLast` / `finFromNat` / `finFromInt`（带界转换，越界与负数 `Nothing`）+ `Convert (Fin n) Nat` / `Convert (Fin n) Int` 实例 |
@@ -67,7 +67,7 @@
 | `Base.Effect.Exn` | 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
 | `Base.EffSched` | 单线程 fiber 调度器：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
-| `Base.EffMutex` | cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
+| `Base.EffMutex` | cooperative Mutex/Semaphore（可变单元 + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
 | `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `effTimeUs` 与原生 `@vuna@prim_eff_sleep`） |
 | `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetEnvNonEmpty`（未设置或空串 ⇒ `Nothing`）/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`） |
@@ -259,10 +259,10 @@ packages/base/lib/
   覆盖 primitive 与常用容器，用户类型可 `deriving (Hashable)`。有序需求用 `TreeMap` / `TreeSet`
   （AVL，`Ord` 键，O(log n)）；只排一次序用 `Base.Data.Sort`。二者都不提供批量
   union / 区间删除；`PriorityQueue` 同优先级元素的出队顺序确定但**不是插入序**；
-- **容器与可变数据**：不可变 `Base.Container.Array`、`Eff []` 内 `IORef`；`Array.get` 越界是
-  宿主 `Invalid_argument`；`Array.set` 返回新数组；局部可变用 `Base.Effect.MutableRef` /
-  `MutArray` / `MutBuffer` 的命名句柄（见 [effects.md](effects.md) §8.8–§8.10），没有
-  region/ST 式可逃逸令牌；
+- **容器与可变数据**：不可变 `Base.Container.Array`；局部可变是 `Eff []` 内的
+  `Base.Effect.MutRef` / `MutArray` / `MutBuffer` 命名单元；`Array.get` 越界是
+  宿主 `Invalid_argument`；`Array.set` 返回新数组；命名单元见 [effects.md](effects.md) §8.8–§8.10，
+  没有 region/ST 式可逃逸令牌；
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；语言级 `perform`/`handle`
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
@@ -279,7 +279,7 @@ packages/base/lib/
   cast 一次，`pure` / `ap` 各自按调用点实例化（回归夹具
   `packages/compiler/test/corpus/dt/95_lifta2_derive.vuna`，见 [records-traits.md](records-traits.md)）；
 - `Array` 的 `Show` / `Eq` 实例在 `Base.Container.Array`（`Array` 是内建类型构造子、没有
-  定义模块；孤儿规则对 `Array` / `IORef` 放宽）。实例体经 `toList`
+  定义模块；孤儿规则对 `Array` 放宽）。实例体经 `toList`
   复用 `List`：`show (fromList [1, 2, 3]) == "[1, 2, 3]"`；`Eq` 逐元素比较。
 
 ## 相关阅读

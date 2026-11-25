@@ -41,7 +41,7 @@ export data IrKind(..) : Type where
   KBool : IrKind
   -- | 字符串（堆值）。
   KStr : IrKind
-  -- | 其它堆引用：data / record / array / IORef / 闭包。
+  -- | 其它堆引用：data / record / array / 可变单元 / 闭包。
   KRef : IrKind
   -- | `IrTyOpaque`：擦除后不可命名的值。
   KOpaque : IrKind

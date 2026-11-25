@@ -198,8 +198,8 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
 - 宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`：只在内建模块（模块前缀 `Base.` /
   `Vuna.`，即 base / 编译器 / 工具链）里可引用，普通包源码写 `prim_eff_print` 与
   `@vuna@prim_eff_print` 都报 `RN_UnknownVariable`；`prim_schedNewScope` 这类纯原语仍是可见内建。
-- 内建动作类型不存在；`@vuna@prim_eff_*` / `IORef` 等宿主面就是宿主层，`IORef` 的实现全是
-  `Eff []`。
+- 内建动作类型不存在；`@vuna@prim_eff_*` 与可变单元的隐藏原语（`@vuna@prim_mref*` 等）就是
+  宿主层，后者的实现全是 `Eff []`。
 
 ## 5. 表示收敛
 

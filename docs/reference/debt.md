@@ -75,7 +75,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | LD-17 · B | `Expand.vuna` 的宏入口：只在表达式位置、只认裸 `EVar` 应用头 | `Loader/Expand.vuna` | 后续 |
 | LD-19 · D | fixity 有两套可见性真源：重排吃 `dedupeFixitiesOf` 汇总的**全部已加载模块**声明，unused-import 判据只看**直接 import** 并宣称 import 是唯一手段；`Module.moduleFixitiesOf` 的注释与实现相反 | `Loader/Fixity.vuna`、`Loader/Flatten.vuna`（`dedupeFixitiesOf` / `importProvidesUsedFixity`）、`Loader/Modules.vuna` | 后续 |
 | LD-20 · D | 同一 AST 形状有四份手写遍历（Fixity / Expand / Resolve / Flatten）：Fixity 用 catch-all `icInternal`，新增节点只在这条链「编译期不报错」；Flatten 的 `declRefNames` 漏节点会静默影响 unused-import | `Loader/{Fixity,Expand,Resolve,Flatten}.vuna` | 后续 |
-| LD-21 · D | Loader 的 prelude 名单与 `Elab.Sig` 不同：`Resolve.dtPreludeNames` 含内建类型构造子，`Sig.topPreludeNames` 不含；值位置的裸 `Array`/`IORef` 在两层得到不同结论 | `Loader/Resolve.vuna`、`Elab/Sig.vuna`、`Base/Intrinsics.vuna` | 后续 |
+| LD-21 · D | Loader 的 prelude 名单与 `Elab.Sig` 不同：`Resolve.dtPreludeNames` 含内建类型构造子，`Sig.topPreludeNames` 不含；值位置的裸 `Array` / `@vuna@Cell` 在两层得到不同结论 | `Loader/Resolve.vuna`、`Elab/Sig.vuna`、`Base/Intrinsics.vuna` | 后续 |
 | LD-22 · ⚠️C | `Layers.vuna` 的层闭包靠手算上界，`closureGo` 耗尽**返回部分闭包不报错** ⇒ 越层 import 可被静默放过；`LayerViolation` 的字段先塞空串再由 `ldErr4` 另带参数；`checkProjectLayers` 的计数被调用方丢弃 | `Loader/Layers.vuna`、`Loader/Flatten.vuna` | 后续 |
 | LD-23 · ⚠️C | 缓存身份回落：`cacheTagEff` 无 `cache-tag` 时回落到源码闭包身份（同一源码由不同 seed 构建的二进制会共享缓存键）；`projectIdAddrOf` 只做词法绝对化（symlink / 未规范化路径得到两个 project id） | `Loader/Fingerprint.vuna`、`Loader/Addr.vuna`、`Frontend/Packages/Pkg.vuna` | 后续 |
 | LD-24 · D | 导出表索引只迁移了一半：`modulesExporting*In` 用索引，其余限定名 / 命名空间路径仍 `exportsOf` 后线性扫；`namespacesOfWith` 每个模块重建整张 module 表（O(n²)），列表版与索引版两套实现需同步修 | `Loader/Modules.vuna`、`Loader/Resolve.vuna` | 后续 |

@@ -55,7 +55,7 @@
    编译器/工具链内部使用）；用户面只有 `Base.Effect.Core.*` 标签 + handler 这一条路径
    （`consolePrint` / `fsReadFile` / `envGetEnv` / `exitWith` …）。Int/Nat 归一化只在
    handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
-   `IORef` 实现全是 `Eff []`。
+   可变单元的隐藏原语（`@vuna@prim_mref*` 等）实现全是 `Eff []`。
    **无 manifest 门控**：没有能力/特权/信任机制；`prim_*`（纯原语）任何包（含 ad-hoc 文件）都可直调。
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
    `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；

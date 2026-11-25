@@ -189,7 +189,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 | `String` | `Eq` / `Ord` → `Base.Data.String`；`Show` → `Base.Trait.Show` | String 经 `Base.Trait.Interp` 依赖 `Base.Trait.Show`，把 `Show String` 放回 String 会成环 |
 | `List` / `Maybe` / `Pair` / `Result` | 各自模块 | 约束 `Show`；另有 `Eq`（List/Maybe/Pair/Result）、`Ord`（List/Maybe/Pair）、`Hashable`、`Applicative` / `Foldable` / `Traversable` 实例 |
 | `Ordering` / `Unit` | `Base.Trait.Ord` / `Base.Data.Unit` | `Ordering` 定义在 trait 模块 `Base.Trait.Ord`（`compare` 依赖它）；`Unit` 是普通 data，实例跟类型模块 |
-| `Array`（`@vuna@Ref` 是隐藏的内部类型） | 内建类型，实例可放任意模块（约定 `Base.Container.Array` 等） | 没有定义模块；孤儿规则对它们放行（`isGlobalHeadType` 对内建类型放行）。`Show` / `Eq (Array a)` 已落在 `Base.Container.Array`（实例体经 `toList` 复用 List） |
+| `Array` | 内建类型，实例可放任意模块（约定 `Base.Container.Array` 等） | 没有定义模块；孤儿规则对它们放行（`isGlobalHeadType` 对内建类型放行）。`Show` / `Eq (Array a)` 已落在 `Base.Container.Array`（实例体经 `toList` 复用 List） |
 | `HashMap` / `HashSet` | 各自模块 | 抽象类型，构造器不导出；`Show` 实例经 `toList`（`HashMap` 的 `toList` 需要 `Eq k`） |
 
 实例实现：data 类型用模式匹配（`Bool` 按 `True`/`False` 穷尽；`deriving (Eq)` 生成

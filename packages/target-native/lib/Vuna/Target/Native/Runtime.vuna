@@ -570,26 +570,26 @@ pow2CeilFn =
     [IMov (OpReg Rax) (OpImm 64), ILabel ".Lrt_pow2_loop", ICmp (OpReg Rax) (OpReg Rdi), IJcc "jae" ".Lrt_pow2_done", IBinReg "shl" Rax (OpImm 1), IJmp ".Lrt_pow2_loop", ILabel ".Lrt_pow2_done", IRet]
 
 -- ---------------------------------------------------------------
--- 效应原语（宿主层叶子 + IORef）
+-- 效应原语（宿主层叶子 + 可变单元）
 -- ---------------------------------------------------------------
 -- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
 -- `perform` / `handle` 由库机器（`Base.Effect.Core.Control`）执行，不经 native 运行时。
--- | `IORef` 单元：一个 8 字节槽（`[value]`）。
-effNewRefFn : NativeFunc
-effNewRefFn =
+-- | 可变单元（`@vuna@Cell`）：一个 8 字节槽（`[value]`）。
+mrefNewFn : NativeFunc
+mrefNewFn =
   rtFunc
-    "prim_eff_new_ref"
+    "mref_new"
     8
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc"), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rax 0) (OpReg Rdx)]
 
-effReadRefFn : NativeFunc
-effReadRefFn = rtFunc "prim_eff_read_ref" 0 [IMov (OpReg Rax) (OpMem Rdi 0)]
+mrefReadFn : NativeFunc
+mrefReadFn = rtFunc "mref_read" 0 [IMov (OpReg Rax) (OpMem Rdi 0)]
 
--- | 写 IORef：先落值，再登记写屏障（老代单元指向年轻代值时，脏卡片保它）。
-effWriteRefFn : NativeFunc
-effWriteRefFn =
+-- | 写单元：先落值，再登记写屏障（老代单元指向年轻代值时，脏卡片保它）。
+mrefWriteFn : NativeFunc
+mrefWriteFn =
   rtFunc
-    "prim_eff_write_ref"
+    "mref_write"
     0
     [IMov (OpMem Rdi 0) (OpReg Rsi), ICall (nativeRtLabel "write_barrier"), IMov (OpReg Rax) (OpImm 0)]
 
@@ -1547,7 +1547,7 @@ envFilterFn =
 export nativeRtFuncs : List NativeFunc
 nativeRtFuncs =
   append
-    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, logOnFn, logEmitFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, marrSetFn, mbufNewFn, mbufGrowFn, mbufAppendFn, mbufAppendCharFn, mbufLenFn, mbufClearFn, mbufToStringFn, dynNewFn, dynGrowFn, dynPushFn, dynGetFn, dynSetFn, dynLenFn, dynClearFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, effNewRefFn, effReadRefFn, effWriteRefFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatOrderedCmp "sete"), floatCmpFn "float_neq" floatNeqCmp, floatCmpFn "float_lt" (floatOrderedCmp "setb"), floatCmpFn "float_le" (floatOrderedCmp "setbe"), floatCmpFn "float_gt" (floatOrderedCmp "seta"), floatCmpFn "float_ge" (floatOrderedCmp "setae"), floatAbsFn, floatSqrtFn]
+    [intBinary "add" "add", intBinary "sub" "sub", intBinary "mul" "imul", divFn, intBitBinary "bit_and" "and", intBitBinary "bit_or" "or", intBitBinary "bit_xor" "xor", bitNotFn, bitShlFn, bitShrFn, intCompare "eq_int" "sete", intCompare "neq_int" "setne", intCompare "lt_int" "setl", intCompare "le_int" "setle", intCompare "gt_int" "setg", intCompare "ge_int" "setge", natAddFn, natSubFn, natMulFn, natDivFn, natToIntFn, natFromIntFn, natSuccFn, obsZeroFn "obs_level", obsZero2Fn "obs_counter", obsZeroFn "obs_mark", obsZero2Fn "obs_span_begin", obsZeroFn "obs_span_end", obsZero2Fn "obs_sample_start", obsZeroFn "obs_sample_stop", obsSpanFn, obsSpanLabFn, logOnFn, logEmitFn, strAllocFn, strLengthFn, strConcatFn, bytesEqFn, bytesCmpFn, strEqFn, strNeqFn, strCompareFn, strCompareFnOf "str_lt" "setl", strCompareFnOf "str_le" "setle", strCompareFnOf "str_gt" "setg", strCompareFnOf "str_ge" "setge", strFromIntFn, strAtFn, strSubstringFn, strHashFn, effectIdFn, strShowFn, printIntFn, printBoolFn, printStrFn, assertFn, primFailFn, todoFn, trapMsgFn, trapAssertFn, trapTodoFn, allocFn, allocLeafFn, applyFn, applyExactFn, applyShimFn, strFromBytesFn, strFromCFn, strOneCharFn, strEmptyFn, getenvFn, getcwdFn, execPathFn, nowUsFn, sleepUsFn, isTtyFn, hostStatusFn, cleanupPushFn, cleanupPopFn, fsFailFn, strToCFn, strToC2Fn, strCopyIntoFn, cStrCpyFn, u64ToDecFn, statPathFn, lstatPathFn, fileExistsFn, fileMtimeFn, fileSizeFn, tryIsDirFn, tryReadFileFn, tryReadFileRangeFn, tryWriteFileFn, tryWriteFileAtomicFn, tryMakeDirFn, tryMakeDirExclusiveFn, tryRemoveFileFn, tryRenameFn, trySymlinkFn, removeTreeFn, tryRemoveTreeFn, dirOpenFn, dirNamesFn, dirCloseFn, childPushFn, childDropFn, sigBlockFn, sigUnblockFn, cmdRunShFn, spawnExecFn, waitPidFn, exitWithFn, trapImpossibleFn, trapDivZeroFn, trapArrayOobFn, trapOomFn, trapPathLongFn, trapMemLimitFn, initStackFn, initMemFn, initCpusFn, initTimeoutFn, envLookupFn, parseU64Fn, cgroupCpusFn, envFilterFn, sigreturnStubFn, sigalrmFn, arrayEmptyFn, arrayLengthFn, arrayGetFn, arraySetFn, arrayMakeFn, marrSetFn, mbufNewFn, mbufGrowFn, mbufAppendFn, mbufAppendCharFn, mbufLenFn, mbufClearFn, mbufToStringFn, dynNewFn, dynGrowFn, dynPushFn, dynGetFn, dynSetFn, dynLenFn, dynClearFn, trapRmtreeDeepFn, mRunEffFn, pow2CeilFn, eraseFn, mrefNewFn, mrefReadFn, mrefWriteFn, effPrintFn "prim_eff_print" 1, effPrintFn "prim_eff_eprint" 2, effExitFn, floatFromIntFn, intFromFloatFn, floatBinFn "float_add" "add", floatBinFn "float_sub" "sub", floatBinFn "float_mul" "mul", floatBinFn "float_div" "div", floatCmpFn "float_eq" (floatOrderedCmp "sete"), floatCmpFn "float_neq" floatNeqCmp, floatCmpFn "float_lt" (floatOrderedCmp "setb"), floatCmpFn "float_le" (floatOrderedCmp "setbe"), floatCmpFn "float_gt" (floatOrderedCmp "seta"), floatCmpFn "float_ge" (floatOrderedCmp "setae"), floatAbsFn, floatSqrtFn]
     nativeGcFuncs
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -1678,10 +1678,10 @@ hostLeafGroups =
     ("now_us", ["effTimeUs", "effTimeUs_host"]),
     ("prim_eff_eprint", ["@vuna@prim_eff_eprint"]),
     ("prim_eff_exit", ["@vuna@host@exitOp", "@vuna@prim_eff_exit"]),
-    ("prim_eff_new_ref", ["@vuna@prim_eff_newRef", "@vuna@prim_mrefNew"]),
+    ("mref_new", ["@vuna@prim_mrefNew"]),
     ("prim_eff_print", ["@vuna@host@print", "@vuna@prim_eff_print"]),
-    ("prim_eff_read_ref", ["@vuna@prim_eff_readRef", "@vuna@prim_mrefRead"]),
-    ("prim_eff_write_ref", ["@vuna@prim_eff_writeRef", "@vuna@prim_mrefWrite"]),
+    ("mref_read", ["@vuna@prim_mrefRead"]),
+    ("mref_write", ["@vuna@prim_mrefWrite"]),
     ("sleep_us", ["@vuna@prim_eff_sleep", "@vuna@host@sleep"]),
     ("spawn_self", ["@vuna@prim_eff_spawn"]),
     ("tryReadDir", ["@vuna@host@tryReadDir"]),
@@ -1783,9 +1783,6 @@ nativeRtValueArityBase _ = 0
 nativeRtValueArityHost : String -> Int
 nativeRtValueArityHost "@vuna@host@print" = 1
 nativeRtValueArityHost "@vuna@host@exitOp" = 1
-nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
-nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
-nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
 nativeRtValueArityHost "@vuna@prim_mrefNew" = 1
 nativeRtValueArityHost "@vuna@prim_mrefRead" = 1
 nativeRtValueArityHost "@vuna@prim_mrefWrite" = 2

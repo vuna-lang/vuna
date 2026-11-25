@@ -84,7 +84,7 @@ API（`packages/base/lib/Base/EffSched.vuna`）：
 - **句柄**：`Task`/`Scope` 不是线性数据；重复 `await` 幂等。线性 `TaskLin`：
   `awaitTaskLin`/`cancelTaskLin` 各消费一次，二次使用在用量检查拒绝
   （夹具 `dt_base/38`、负例 `dt_err/77`）。
-- **Mutex/Semaphore**：`Base.EffMutex` 用 IORef + yield 忙等；`acquire/release`、
+- **Mutex/Semaphore**：`Base.EffMutex` 用可变单元 + yield 忙等；`acquire/release`、
   `newSemaphore/semWait/semSignal`；夹具 `dt_base/37`（2）。
 
 夹具（均关闭 interp 阶段，只 `check` + `compile` + 运行）：

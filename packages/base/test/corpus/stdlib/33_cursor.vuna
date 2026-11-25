@@ -1,4 +1,4 @@
--- stdlib：持久游标；takeC / foldC 都返回剩余游标，消费进度显式接住（没有内部 IORef）。
+-- stdlib：持久游标；takeC / foldC 都返回剩余游标，消费进度显式接住（没有内部可变单元）。
 import Base.Effect.Core
 import Base.Effect.Cursor as Cursor
 import Base.Effect.Console as EffConsole
