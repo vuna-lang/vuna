@@ -6,10 +6,11 @@ module Vuna.Compiler.Loader.Expand where
 -- `Loader.Flatten` 在 fixity 重排之后、名字解析之前调用本模块。展开后 AST 里不再有
 -- 标记，Elab / Codegen / 接口缓存都只看到普通表达式。
 --
--- 规则：先递归展开实参，再套用宏；插入节点的 span 一律取调用点 span（实参保留自身
--- span），满足「宏携带 span」不变量。展开结果只引用隐藏原语 `@vuna@log@*` /
--- `@vuna@obs@*`（见 `Intrinsics.internalIntrinsics`），不依赖库模块、不捕获调用方名字，
--- 任何包都可用。
+-- 规则：先递归展开实参，再套用宏；插入节点的 span 一律取调用点 span、id 取
+-- `Ast.synthNodeRef`（由调用点区间起点决定，见 `Ast.synthNodeIdBase`），实参保留自身
+-- span / id。于是任何生成节点都能按 id 反查到它是从哪个宏调用展开的（source map）。
+-- 展开结果只引用隐藏原语 `@vuna@log@*` / `@vuna@obs@*`（见
+-- `Intrinsics.internalIntrinsics`），不依赖库模块、不捕获调用方名字，任何包都可用。
 --
 -- 内置宏（注册表在 `expandMacro`；文本日志规范见 `docs/reference/logging.md`，
 -- 事件规范见 `docs/reference/observability.md` §4.3）：
@@ -227,7 +228,7 @@ expandInterpParts fuel scope parts =
 -- 写不出这个形态）；`Loader.Resolve` 只对带 `!` 前缀的名字直通（剥前缀后交给
 -- 隐藏 intrinsic 的签名），源码手写的 `@vuna@…` 一律 RN_UnknownName。
 internalRef : String -> NodeRef -> Expr
-internalRef name sp = EVar ("!" ++ name) sp
+internalRef name sp = EVar ("!" ++ name) (synthNodeRef sp)
 
 -- | `log!` 的级别字面量 → 整数（与运行时 `dtp_log_*` 的排序一致）。
 logLevelOf : String -> Maybe Int
@@ -235,17 +236,22 @@ logLevelOf s = lookupPair s [("error", 0), ("warn", 1), ("info", 2), ("debug", 3
 
 -- `log!` 的开关查询：级别 + 模块 scope。
 logOnRef : Int -> String -> NodeRef -> Expr
-logOnRef level scope sp = EApp (internalRef logOnIntrinsicName sp) [EInt level sp, EStr scope sp] sp
+logOnRef level scope sp =
+  let
+    sref = synthNodeRef sp
+  in EApp (internalRef logOnIntrinsicName sref) [EInt level sref, EStr scope sref] sref
 
 -- | `log!` 的展开：`if @vuna@log@on level scope then @vuna@log@emit level scope msg else 0`。
 -- 关闭或 scope 被过滤时只付一次门控查询，`msg` 不求值。
 logExpand : String -> Int -> Expr -> NodeRef -> Expr
 logExpand scope level msg sp =
-  EIf
-    (logOnRef level scope sp)
-    (EApp (internalRef logEmitIntrinsicName sp) [EInt level sp, EStr scope sp, msg] sp)
-    (EInt 0 sp)
-    sp
+  let
+    sref = synthNodeRef sp
+  in EIf
+    (logOnRef level scope sref)
+    (EApp (internalRef logEmitIntrinsicName sref) [EInt level sref, EStr scope sref, msg] sref)
+    (EInt 0 sref)
+    sref
 
 macroArityMismatch : String -> Int -> List Expr -> NodeRef -> Check Expr
 macroArityMismatch name expected args sp =
@@ -274,7 +280,10 @@ expandMacro scope name args sp =
       _ => macroArityMismatch name 2 args sp
   else if name == "mark" then
     case args of
-      [msg] => OkC (EApp (internalRef obsMarkIntrinsicName sp) [msg] sp)
+      [msg] =>
+        let
+          sref = synthNodeRef sp
+        in OkC (EApp (internalRef obsMarkIntrinsicName sref) [msg] sref)
       _ => macroArityMismatch name 1 args sp
   else
     rnAt1 (nodeRefSpan sp) (UnknownMacro name) name

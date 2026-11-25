@@ -24,6 +24,30 @@ noNodeRef = NodeRef (0 - 1) spanEmpty
 export detachedNodeRef : Span -> NodeRef
 detachedNodeRef sp = NodeRef (0 - 1) sp
 
+-- | 合成节点身份（宏展开等**没有树节点**的 AST）的 id 空间起点。
+--
+-- 解析期身份：文件根 0、`withExtent` 从 1 起递增；模板洞用负数（见
+-- `Parser/Support`）；`-1` 表示「没有身份」。合成身份从 2^40 起，与这三类都不相交，
+-- 并保持「id >= 0 有身份、< 0 无身份」的既有判据。
+--
+-- 合成 id 由**调用点 span 的起始字节偏移**决定（`synthNodeRef`）：同一文件里每个宏调用
+-- 的展开节点共享一个 id，因此「节点 → 它是从哪个调用展开的」直接由 id 给出；跨文件不复用
+-- （解析期 id 同样只在一次解析内唯一）。
+export synthNodeIdBase : Int
+synthNodeIdBase = 1099511627776
+
+-- | 合成身份：保留节点区间，id 由区间起点决定。
+export synthNodeRef : NodeRef -> NodeRef
+synthNodeRef r = synthRefAt (nodeRefSpan r)
+
+-- | 合成身份（只要区间时用；`synthNodeRef` 的 `Span` 版本）。
+export synthRefAt : Span -> NodeRef
+synthRefAt sp = NodeRef (synthNodeIdBase + spanStartOffset sp) sp
+
+-- | 是不是合成身份（宏展开生成、没有对应的无损树节点）。
+export isSynthNodeRef : NodeRef -> Bool
+isSynthNodeRef r = nodeRefId r >= synthNodeIdBase
+
 -- 记录字段：字段名 + 类型表达式 + span。
 export record Field(..) where
   fieldName : String

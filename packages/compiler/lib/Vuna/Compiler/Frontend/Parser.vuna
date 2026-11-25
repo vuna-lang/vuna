@@ -195,6 +195,18 @@ semPat p = Just (SemPat p)
 semDoStmt : DoStmt -> Maybe CstSem
 semDoStmt s = Just (SemDoStmt s)
 
+-- 宏调用节点的载荷：名字 + 实参个数（AST 里的根构造子是保留名标记）。
+semMacroAtom : Expr -> Maybe CstSem
+semMacroAtom (EVar n _) = semMacroNamed 0 n
+semMacroAtom (EApp (EVar n _) args _) = semMacroNamed (natToInt (length args)) n
+semMacroAtom _ = Nothing
+
+semMacroNamed : Int -> String -> Maybe CstSem
+semMacroNamed arity n =
+  case macroNameOf n of
+    Just name => Just (SemMacro name arity)
+    Nothing => Nothing
+
 -- `handle` 的 return 子句在 AST 里合成到 `ELam`，没有独立的语义构造。
 semHandleRet : (String, Expr, NodeRef) -> Maybe CstSem
 semHandleRet _ = Nothing
@@ -1930,6 +1942,16 @@ macroAtom name [] appSp headSp = EVar (reservedText (RsMacro name)) (detachedNod
 macroAtom name args appSp headSp =
   EApp (EVar (reservedText (RsMacro name)) (detachedNodeRef headSp)) args (detachedNodeRef appSp)
 
+-- | 一次宏调用（`name! args...`）：整段是树的 `macro` 节点，载荷记名字与实参个数。
+-- AST 仍是 `EVar` / `EApp` 的保留名标记（没有宏构造子），节点身份只服务语法层工具。
+parseMacroAtom : Int -> PState -> Int -> String -> Check (Expr, PState)
+parseMacroAtom fuel st blockCol name =
+  withExtent
+    CstMacroKind
+    semMacroAtom
+    st
+    (\st0 => Vuna.Compiler.Base.Common.bind (expectSym (advance st0) "!") (\st1 => Vuna.Compiler.Base.Common.step (parseArgs fuel st1 blockCol) (\args, st2 => OkC (macroAtom name args (spanOf st st2) (spanOf st st1), st2))))
+
 parseAtomBase : Int -> PState -> Int -> Check (Expr, PState)
 parseAtomBase fuel st blockCol =
   if fuel <= 0 then
@@ -1939,7 +1961,7 @@ parseAtomBase fuel st blockCol =
       PTok (TIdent name) p =>
         let
           st1 = advance st
-        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (ERecord name fields (detachedNodeRef (spanOf st st2)), st2))) else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!") (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (macroAtom name args (spanOf st st2) (spanOf st st1b), st2))) else OkC (EVar name (detachedNodeRef (spanOf st st1)), st1)
+        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (ERecord name fields (detachedNodeRef (spanOf st st2)), st2))) else if macroBangAt st1 p name then parseMacroAtom (fuel - 1) st blockCol name else OkC (EVar name (detachedNodeRef (spanOf st st1)), st1)
       PTok (TInt n) p => OkC (EInt n (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TFloat raw) p => OkC (EFloat raw (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TStr s) p => OkC (EStr s (detachedNodeRef (spanOf st (advance st))), advance st)

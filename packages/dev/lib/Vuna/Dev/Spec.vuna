@@ -11,8 +11,15 @@ commands =
       ["dev"]
       GDev
       "开发/维护命令（本仓库专用）"
-      "vuna dev suite|obs|errors ..."
+      "vuna dev suite|macro|ir|obs|errors ..."
       []
+      [],
+    subCmd
+      ["dev", "macro"]
+      GDev
+      "打印内置宏调用表（调用点 + 展开合成 id）"
+      "vuna dev macro FILE [--json]"
+      [boolFlag "json" "单行 JSON（file + macros 表）"]
       [],
     subCmd
       ["dev", "suite"]

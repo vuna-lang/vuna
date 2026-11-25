@@ -15,6 +15,7 @@ import Vuna.Cli.Err
 import Vuna.Cli.Suite
 import Vuna.Compiler.Base.Common
 import Vuna.Cli.IrDump
+import Vuna.Cli.Macro
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.GenErrors
 import Vuna.Obs
@@ -34,11 +35,12 @@ devArgs ("suite" :: more) = suiteArgs more
 devArgs ("obs" :: more) = runObs more
 devArgs ("ir" :: "dump" :: more) = irDumpArgs more
 devArgs ("ir" :: "decode" :: more) = irDecodeArgs more
+devArgs ("macro" :: more) = macroArgs more
 devArgs ("errors" :: "gen" :: genArgs) = genErrorsArgs genArgs
 devArgs ["errors"] = usageErrorForIn DevSpec.commands ["dev", "errors"]
 devArgs ("errors" :: bad :: _) = unknownSubcommand ["dev", "errors"] bad ["gen"]
 devArgs [] = usageErrorForIn DevSpec.commands ["dev"]
-devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "ir"]
+devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "ir", "macro"]
 
 -- | `vuna dev ir dump [--out FILE] DIR`：检查 + lowering 后打印确定性 IR。
 irDumpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int

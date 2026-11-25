@@ -177,6 +177,8 @@
 | 匿名洞 `_` | 只能在表达式 check 位；模式位报 `ExpectedPattern`，类型位按未绑定名报错 | `Elab.Term.Support` |
 | 命名洞 `?name` | `?` 与标识符紧邻；同名多次是互相独立的洞；未解报 `TC_UnsolvedHole` | `Elab.Term.Support` |
 | 宏调用 `name!` | `!` 与名字**紧邻**才算宏；`a ! b`（有空格）是普通中缀；`!=` / `!!` 不触发 | `Frontend.Parser.macroBangAt` |
+| 宏调用的语法节点 | 每次调用（含嵌套）是树里的 `macro` 节点（载荷 `SemMacro name arity`）；`Frontend.Macro.macroCallsOf` 直接列出调用表，`vuna dev macro FILE` 打印它 | `Frontend.Cst`、`Frontend.Macro` |
+| 展开节点的身份 | 生成节点的 span = 调用点、id = `Ast.synthNodeRef`（`synthNodeIdBase + 调用点起点`）；`isSynthNodeRef` 可判定、`macroCallSynthId` 给出对应调用 | `Frontend.Ast`、`Frontend.Macro`、`Loader.Expand` |
 | 参数贪婪 | `f log! "debug" x` 解析为 `f (log! "debug" x)`；块实参用括号 | `Frontend.Parser` |
 | 内置宏集合 | `log!` / `mark!`；都展开成隐藏 runtime 原语，不需要 import | `Loader.Expand`、[logging.md](logging.md)、[observability.md](observability.md) |
 | 用户自定义宏 | **不支持**（宏 / DSL 在 `architecture-target.md` 的独立轨道） | — |

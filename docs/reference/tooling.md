@@ -463,7 +463,15 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 只用于 diff / 观测，不是稳定 ABI，也不写构建产物。
 
-## 6. `vuna dev obs`（可观测性工具链）
+## 7. `vuna dev macro`（宏调用表 / source map）
+
+| 命令 | 行为 |
+|---|---|
+| `vuna dev macro FILE [--json]` | 解析一个源文件，按源码顺序打印内置宏调用：`路径:行:列-行:列  name! arity=N synth-id=X`。`synth-id` 是该调用展开生成的 AST 节点共享的合成身份（`Ast.synthNodeIdBase + 调用点起点`），所以任何展开节点都能由 id 反查调用点。`--json` 输出 `{"file":..., "macros":[...]}`。 |
+
+只用于调试与工具对齐，不展开、不写产物。
+
+## 8. `vuna dev obs`（可观测性工具链）
 
 规范见 [observability.md](observability.md)（本页只说命令面）：
 
@@ -478,7 +486,7 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 | `vuna dev obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
 | `vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]` | CDP Profiler 子集（自带 HTTP 发现端点 + WebSocket 传输，经中立库 `vuna-http`；串行 accept，连接间空闲即退出；**离线**：`Profiler.stop` 由 TRACE 的 cpu 采样换算，非 live 采样；退出码 0/1/2） |
 
-## 7. 尚未实现（工具链自身缺口）
+## 9. 尚未实现（工具链自身缺口）
 
 - `rewrite` / `with` 等证明工程 ergonomics：未实现。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。

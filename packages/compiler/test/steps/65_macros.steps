@@ -62,3 +62,16 @@ run: VUNA_LOG=debug "$TMPDIR/mac-e2e/.output/bin/mac-app" >/dev/null 2>"$TMPDIR/
 exit: 2
 read: $TMPDIR/mac-e2e/eager.err
 out-contains: runtime error: eager
+
+# 65e) 调用表（source map 的调用侧）：`vuna dev macro` 给出名字 / arity / 合成 id；
+# 空格分隔的 `!` 是中缀，不算宏。
+run: printf 'f : Int\nf =\n  log! "info" (mark! "inner")\n\ng : Int -> Int -> Int\ng a b = a ! b\n' > "$TMPDIR/mac-map.vuna"
+run: "$VUNA" dev macro "$TMPDIR/mac-map.vuna" 2>&1
+out-contains: log! arity=2 synth-id=
+out-contains: mark! arity=1 synth-id=
+run: "$VUNA" dev macro "$TMPDIR/mac-map.vuna" 2>&1 | grep -c '! arity='
+out-equals: 2
+run: "$VUNA" dev macro --json "$TMPDIR/mac-map.vuna" 2>&1
+out-contains: "name":"log"
+out-contains: "name":"mark"
+out-contains: "macros":

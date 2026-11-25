@@ -94,6 +94,7 @@ vuna help [<command>...]
 ```text
 vuna dev suite [FILE]               原生 suite（test/suite.toml）
 vuna dev errors gen [ROOT]          错误码文档生成
+vuna dev macro FILE [--json]        内置宏调用表 / 展开合成 id
 vuna dev obs run|summarize|validate|convert|render|merge|symbols|serve
 ```
 

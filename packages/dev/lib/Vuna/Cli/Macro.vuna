@@ -1,0 +1,59 @@
+-- | `vuna dev macro FILE`：打印一个源文件的内置宏调用表（source map 的调用侧）。
+module Vuna.Cli.Macro where
+
+-- 宏调用在语法层是树节点（`CstMacroKind`），展开生成的节点用 `Ast.synthNodeRef`
+-- 指回调用点；本命令把这张表落成可读文本 / JSON，供调试与工具对齐。
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Vuna.Cli.Err
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Macro
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Dev.Spec as DevSpec
+import Vuna.Json
+
+-- | `vuna dev macro FILE [--json]`。
+export macroArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
+macroArgs rest =
+  case rest of
+    ["--json", path] => runMacro True path
+    [path] => runMacro False path
+    _ => usageErrorForIn DevSpec.commands ["dev", "macro"]
+
+runMacro : Member nFs FsOp r, Member nConsole ConsoleOp r => Bool -> String -> Eff r Int
+runMacro json path =
+  do
+    text <- EffFs.fsReadFile path
+    case parseSourceDetailed path text of
+      ErrC e => toolError (diagText e)
+      OkC p =>
+        do
+          let calls = macroCallsOf p.parsedCst
+          _ <- consolePrint (if json then callsJson path calls else callsText path calls)
+          pure 0
+
+-- | 文本：每行一个调用，`路径:行:列-行:列  name! arity=N synth-id=X`。
+callsText : String -> List MacroCall -> String
+callsText path calls = strConcatMany (map (callLine path) calls)
+
+callLine : String -> MacroCall -> String
+callLine path c =
+  let
+    sp = macroCallSpan c
+  in "${path}:${strFromInt (spanStartLine sp)}:${strFromInt (spanStartCol sp)}-${strFromInt (spanEndLine sp)}:${strFromInt sp.spanEndCol}  ${macroCallName c}! arity=${strFromInt (macroCallArity c)} synth-id=${strFromInt (macroCallSynthId c)}\n"
+
+-- | JSON：`{"file": ..., "macros": [{name, arity, line, col, endLine, endCol, synthId}]}`。
+callsJson : String -> List MacroCall -> String
+callsJson path calls =
+  renderJson (JObj [("file", JStr path), ("macros", JArr (map callJson calls))]) ++ "\n"
+
+callJson : MacroCall -> Json
+callJson c =
+  let
+    sp = macroCallSpan c
+  in JObj
+    [("name", JStr (macroCallName c)), ("arity", JNum (macroCallArity c)), ("line", JNum (spanStartLine sp)), ("col", JNum (spanStartCol sp)), ("endLine", JNum (spanEndLine sp)), ("endCol", JNum sp.spanEndCol), ("synthId", JNum (macroCallSynthId c))]

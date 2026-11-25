@@ -612,6 +612,7 @@ semTagOk CstAltKind sem = noSem sem || isAltSem sem
 semTagOk CstExprKind sem = isExprSem sem
 semTagOk CstPatKind sem = isPatSem sem
 semTagOk CstDoStmtKind sem = isDoStmtSem sem
+semTagOk CstMacroKind sem = isMacroSem sem
 
 noSem : Maybe CstSem -> Bool
 noSem Nothing = True
@@ -671,6 +672,10 @@ isPatSem _ = False
 isDoStmtSem : Maybe CstSem -> Bool
 isDoStmtSem (Just (SemDoStmt _)) = True
 isDoStmtSem _ = False
+
+isMacroSem : Maybe CstSem -> Bool
+isMacroSem (Just (SemMacro _ _)) = True
+isMacroSem _ = False
 
 semTreeOk : CstNode -> Bool
 semTreeOk (CstLeaf _) = True

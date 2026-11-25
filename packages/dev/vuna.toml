@@ -19,6 +19,7 @@ modules = [
   "Vuna.Cli.Dev",
   "Vuna.Cli.IrDump",
   "Vuna.Cli.IrRender",
+  "Vuna.Cli.Macro",
   "Vuna.Cli.Suite",
   "Vuna.Dev.Registry",
   "Vuna.Dev.Spec",

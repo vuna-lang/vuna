@@ -1,0 +1,61 @@
+-- | 内置宏调用在无损树上的投影：调用点（名字 / 实参个数 / 区间 / 合成身份）。
+module Vuna.Compiler.Frontend.Macro where
+
+-- Vuna.Compiler.Frontend.Macro：宏调用的 source map 视图。
+--
+-- 宏调用在 AST 里只是保留名标记（`EVar` / `EApp`，见 `Frontend.Reserved`），没有构造子；
+-- parser 在语法层把它落成树节点（`CstMacroKind`，载荷 `SemMacro name arity`），所以
+-- 「源码里有哪些宏调用、各自位置与实参个数」是树上的事实，不需要重读 token 或重走 AST。
+--
+-- 展开期的生成节点由 `Ast.synthNodeRef` 给出 id：span 是调用点、id 由调用点区间起点决定
+-- （`synthNodeIdBase + offset`）。因此任何 AST 节点只要 `Ast.isSynthNodeRef` 成立，就能
+-- 用 `macroCallSynthId` 在调用表里找到它的来源；这正是 D115 的 source map 的两端。
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+
+-- | 一次宏调用：名字 + 实参个数 + 调用点（树节点身份与区间）。
+export record MacroCall(..) where
+  macroCallName : String
+  macroCallArity : Int
+  macroCallRef : NodeRef
+
+export macroCallSpan : MacroCall -> Span
+macroCallSpan c = nodeRefSpan c.macroCallRef
+
+-- | 该调用的展开节点共享的合成 id。与 `Ast.synthNodeRef` 用同一条公式。
+export macroCallSynthId : MacroCall -> Int
+macroCallSynthId c = nodeRefId (synthRefAt (macroCallSpan c))
+
+-- | 树里的全部宏调用（含模板洞子树），按源码起点排序。
+export macroCallsOf : CstNode -> List MacroCall
+macroCallsOf tree = sortCalls (callsGo tree [])
+
+-- 累积器遍历：与 `Cst.factsGo` 同形（SCT 看得到「节点 → children 列表」的下降）。
+callsGo : CstNode -> List MacroCall -> List MacroCall
+callsGo (CstLeaf _) acc = acc
+callsGo (CstBranch _ nid sp surface sem kids) acc =
+  let
+    acc1 =
+      case sem of
+        Just (SemMacro name arity) => MacroCall name arity (NodeRef nid sp) :: acc
+        _ => acc
+  in callsGoList surface.cstHoleTrees (callsGoList kids acc1)
+
+callsGoList : List CstNode -> List MacroCall -> List MacroCall
+callsGoList [] acc = acc
+callsGoList (n :: rest) acc = callsGoList rest (callsGo n acc)
+
+-- 树的前序顺序在模板洞处会偏离源码顺序（洞是模板 token 里的子流）；调用很少，插入排序。
+sortCalls : List MacroCall -> List MacroCall
+sortCalls [] = []
+sortCalls (c :: rest) = insertCall c (sortCalls rest)
+
+insertCall : MacroCall -> List MacroCall -> List MacroCall
+insertCall c [] = [c]
+insertCall c (d :: rest) =
+  if spanStartOffset (macroCallSpan c) <= spanStartOffset (macroCallSpan d) then
+    c :: d :: rest
+  else
+    d :: insertCall c rest

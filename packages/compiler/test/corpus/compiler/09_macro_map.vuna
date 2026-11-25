@@ -1,0 +1,132 @@
+-- 宏调用的 source map：语法节点（`CstMacroKind`）给调用点身份，展开生成的节点用
+-- `Ast.synthNodeRef`（id = 调用点起点 + `synthNodeIdBase`）指回调用。
+--
+-- 断言三件事：
+--   1. 树里的宏调用表按源码顺序给出名字 / 实参个数，空格分隔的 `!` 不是宏；
+--   2. 每个调用的合成 id 与展开节点实际使用的 id 一致；
+--   3. `log!` 的展开根与内层 `mark!` 的展开根都是合成身份、span 等于各自调用点。
+import Prelude
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Macro
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Loader.Expand
+
+sample : String
+sample =
+  "f : Int\n"
+    ++ "f =\n"
+    ++ "  log! \"info\" (mark! \"inner\")\n"
+    ++ "\n" ++ "g : Int -> Int -> Int\n" ++ "g a b = a ! b\n"
+
+callsOfSample : Maybe (List MacroCall)
+callsOfSample =
+  case parseSourceDetailed "<macro>" sample of
+    ErrC _ => Nothing
+    OkC p => Just (macroCallsOf p.parsedCst)
+
+nthCall : Int -> List MacroCall -> Maybe MacroCall
+nthCall i [] = Nothing
+nthCall i (c :: rest) = if i <= 0 then Just c else nthCall (i - 1) rest
+
+callAt : Int -> Maybe MacroCall
+callAt i =
+  case callsOfSample of
+    Nothing => Nothing
+    Just calls => nthCall i calls
+
+synthIdAt : Int -> Int
+synthIdAt i =
+  case callAt i of
+    Just c => macroCallSynthId c
+    Nothing => 0 - 1
+
+-- 1) 两次调用、顺序与 arity；`a ! b` 不算第三次。
+callsOk : Bool
+callsOk =
+  case callsOfSample of
+    Nothing => False
+    Just calls =>
+      List.length calls
+        == 2
+        && nameAt 0 calls
+        == Just "log"
+        && arityAt 0 calls == Just 2 && nameAt 1 calls == Just "mark" && arityAt 1 calls == Just 1
+
+nameAt : Int -> List MacroCall -> Maybe String
+nameAt i calls =
+  case nthCall i calls of
+    Just c => Just (macroCallName c)
+    Nothing => Nothing
+
+arityAt : Int -> List MacroCall -> Maybe Int
+arityAt i calls =
+  case nthCall i calls of
+    Just c => Just (macroCallArity c)
+    Nothing => Nothing
+
+-- 2) 合成 id 与公式一致，且两次调用不同。
+synthOk : Bool
+synthOk =
+  case callsOfSample of
+    Nothing => False
+    Just calls =>
+      case nthCall 0 calls of
+        Nothing => False
+        Just c0 =>
+          case nthCall 1 calls of
+            Nothing => False
+            Just c1 =>
+              macroCallSynthId c0
+                == synthNodeIdBase
+                + spanStartOffset (macroCallSpan c0)
+                && macroCallSynthId c1
+                == synthNodeIdBase
+                + spanStartOffset (macroCallSpan c1) && macroCallSynthId c0 /= macroCallSynthId c1
+
+sameOffsetSpan : Span -> Span -> Bool
+sameOffsetSpan a b = spanStartOffset a == spanStartOffset b && spanEndOffset a == spanEndOffset b
+
+-- 3) 展开结果：
+--    f = if ... then @vuna@log@emit ... (mark 的展开) else 0
+--    根是 log 的合成身份；emit 的第三个实参（原 mark!）根是 mark 的合成身份。
+expandedOk : Bool
+expandedOk =
+  case parseSourceWithComments "<macro>" sample of
+    ErrC _ => False
+    OkC p =>
+      case expandDecls "MacroMap" (firstOf p).sourceFileDecls of
+        ErrC _ => False
+        OkC ds => bodyOk ds
+
+bodyOk : List Decl -> Bool
+bodyOk [] = False
+bodyOk (d :: rest) =
+  case d of
+    DFun "f" _ body _ => ifOk body
+    _ => bodyOk rest
+
+ifOk : Expr -> Bool
+ifOk (EIf _ thenB _ ref) =
+  isSynthNodeRef ref && nodeRefId ref == synthIdAt 0 && callSpanOk 0 ref && emitMsgOk thenB
+ifOk _ = False
+
+emitMsgOk : Expr -> Bool
+emitMsgOk (EApp _ args _) =
+  case args of
+    [_level, _scope, msg] =>
+      isSynthNodeRef (exprRef msg)
+        && nodeRefId (exprRef msg) == synthIdAt 1 && callSpanOk 1 (exprRef msg)
+    _ => False
+emitMsgOk _ = False
+
+callSpanOk : Int -> NodeRef -> Bool
+callSpanOk i r =
+  case callAt i of
+    Just c => sameOffsetSpan (nodeRefSpan r) (macroCallSpan c)
+    Nothing => False
+
+main : Int
+main = (if callsOk then 1 else 0) + (if synthOk then 2 else 0) + (if expandedOk then 4 else 0)

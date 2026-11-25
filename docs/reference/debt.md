@@ -39,7 +39,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D66 · B | 宿主效应内建化的剩余项：Sched（`forkTask` 携带子计算、不是一阶 op，`EffSched` 仍 `Eff []`）、旧 `handleXHost`/`runX` 迁移、工具链自身 IO（`Cli.consoleLine`/`CompilerCli`） | `Base/Intrinsics.vuna`、`Elab/Prelude.vuna`、`Elab/Driver.vuna`、`Lowering/Program.vuna`、`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base/Effect/*.vuna`；[effects.md](effects.md) §2.1 | 后续 |
 | D104 · B | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：升序一律报 `TC_CannotProveTermination` | `Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；夹具 `term_err/08_up_counter.vuna` | 后续（需要上界推理） |
 | D113 · C | 转发器已按定义性归约参与判据；剩余：回调实参不是纯形参（`k (g x)`）、转发器被部分应用后再调用、跨实例字典派发（需要类型信息） | `Elab/Termination/Measure.vuna`（`forwardersOf` / `expandForwarders`）；夹具 `term/20_forwarder.vuna`、`term_err/23_forwarder_equal.vuna` | 后续 |
-| D115 · C | 宏展开只有调用点 span：展开出的节点共享 `name!` 的 span，没有 per-展开节点的 source map；LSP 不能 goto 宏定义 / 展开视图，fmt / lint / index 只按调用形式处理 | `Loader/Expand.vuna` 的 span 约定；`Vuna.Fmt.Expr`、`Vuna.Index.Scan` | 后续（与 D65 一起做） |
+| D115 · C | 内置宏的 source map 已落地：调用是树里的 `macro` 节点（`SemMacro name arity`），展开节点用 `Ast.synthNodeRef` 指回调用点（每次展开共享一个合成 id），`vuna dev macro` 可列出调用表。剩余：LSP 还没有展开视图 / goto 宏定义；用户宏（D65）的 per-模板节点映射未做；fmt / lint / index 仍只按调用形式处理 | `Loader/Expand.vuna`、`Frontend/Macro.vuna`、`Vuna.Lsp.*` | 后续（与 D65 一起做） |
 | D120 · C | 未选中的 `if` 分支在纯求值器里也被弱头求值：`TIf` 落成 `evalIf (eval c) (eval th) (eval el)`，`VIf` 只存 `Value`；`normalize` / codegen 只处理选中支 | `Core/Eval.vuna`（`TIf`、`evalIf`、`normalizeIfFuel`）；[language.md](language.md)「`&&`/`\|\|` 短路」 | 后续（把 `VIf` 两支改成 `Closure`） |
 
 ## 前端（Frontend）

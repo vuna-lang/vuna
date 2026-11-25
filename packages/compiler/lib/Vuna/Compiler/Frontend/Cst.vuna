@@ -384,6 +384,8 @@ export data CstKind(..) : Type where
   CstPatKind : CstKind
   -- | `do` 块里的一条语句。
   CstDoStmtKind : CstKind
+  -- | 一次内置宏调用（`name! args...`，含名字与 `!`；嵌套调用各自成节点）。
+  CstMacroKind : CstKind
 
 -- | 表面形状（「怎么写」而不是「是什么」）。挂在产生它的分支节点上。
 export record CstSurface(..) where
@@ -454,6 +456,8 @@ export data CstSem(..) : Type where
   SemExpr : Expr -> CstSem
   SemPat : Pat -> CstSem
   SemDoStmt : DoStmt -> CstSem
+  -- | 宏调用的名字与实参个数（`name!` 的语法事实；AST 里没有宏构造子）。
+  SemMacro : String -> Int -> CstSem
 
 -- | 分支节点的语义载荷；叶节点没有。
 export nodeSem : CstNode -> Maybe CstSem
@@ -511,6 +515,7 @@ cstKindTag CstAltKind = "alt"
 cstKindTag CstExprKind = "expr"
 cstKindTag CstPatKind = "pat"
 cstKindTag CstDoStmtKind = "doStmt"
+cstKindTag CstMacroKind = "macro"
 
 -- ---------------------------------------------------------------
 -- 建树：由 parser 给出的区间组装
