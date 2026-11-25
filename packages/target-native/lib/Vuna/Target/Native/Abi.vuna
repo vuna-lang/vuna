@@ -251,6 +251,10 @@ nativeTcbScratchOff = 40
 export nativeTcbCleanupOff : Int
 nativeTcbCleanupOff = 48
 
+-- | 当前线程的逻辑标识（线程表槽号；主线程 = 0）。`@vuna@prim_eff_threadId` 读它。
+export nativeTcbIdOff : Int
+nativeTcbIdOff = 56
+
 -- ---------------------------------------------------------------
 -- 线程私有宿主 scratch 块
 -- ---------------------------------------------------------------

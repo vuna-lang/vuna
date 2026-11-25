@@ -98,7 +98,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
-| `VUNA_NATIVE_STACK_MB` | `512` | 自带栈容量（MiB）：启动时 mmap 的私有匿名区，与进程栈的 `RLIMIT_STACK` 无关；`MAP_NORESERVE`，RSS 只随实际递归深度增长。`0` = 不切换、沿用进程栈；mmap 失败也回落进程栈 |
+| `VUNA_NATIVE_STACK_MB` | `512`（线程栈 `64`） | 自带栈容量（MiB）：启动时 mmap 的私有匿名区，与进程栈的 `RLIMIT_STACK` 无关；`MAP_NORESERVE`，RSS 只随实际递归深度增长。`0` = 不切换、沿用进程栈；mmap 失败也回落进程栈。子线程栈同一口径，下限 1 MiB |
 | `VUNA_NATIVE_MEM_LIMIT` | 自动：`max(1 GiB, 2 × live + 256 MiB)`，每次回收后按 live 抬高 | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2。缺省只升不降——固定的 1 GiB 在 live 见顶后会让每次分配都触发一次整堆回收（死锁）；显式设置时是硬上限，`0` = 不限 |
 | `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 回收阈值的下限（也是新堆段的最小尺寸）：年轻代回收后阈值 = `max(GC_MIN, live/8, 上次扫到的栈字节数)`，整堆回收后 = `max(GC_MIN, 2 × live, 上次扫到的栈字节数)` |
 | `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> cards=<本次扫过的脏卡片数> gen=<minor 或 full>` |
@@ -290,10 +290,11 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **多线程原语**：`clone` + futex 已实现（`thread_*` / `mutex*` / `condvar*` / `atomic*`），
   并行区用 **STW + safepoint** 回收（TCB 在 `%fs`、线程表、`saved_rsp` / park 协议、
-  循环头 `rt_safepoint`、futex 等待的 `block_begin`/`block_end` 标记）。仍有边界：
-  `bracket` cleanup 链与 fs/process 宿主戳记/缓冲仍是全局的（并发使用不安全）；阻塞在
-  宿主 syscall 的线程没有停车标记（GC 等它返回）；线程栈固定 64 MiB，`threadId` 是
-  `gettid`。见 [debt.md](debt.md) D135。
+  循环头 `rt_safepoint`、futex 等待与阻塞宿主 syscall 的 `block_begin`/`block_end` 标记）。
+  宿主态按线程隔离：状态槽与 cleanup 链头在 TCB，其余固定缓冲在每线程的 mmap scratch 块；
+  进程级的只剩子进程 pid 表（`child_push` / `child_drop` 用 futex 锁串行）。仍有的边界：
+  线程体是 `Eff []`，宿主效应族在子线程里还没有收口入口；线程表固定 1024 槽。
+  见 [debt.md](debt.md) D135。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
   保守扫根，入口自带栈（105 的 9u7）：深递归不再依赖 `ulimit -s`，40 万层非尾递归由 9u7 锁定。

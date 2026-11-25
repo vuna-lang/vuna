@@ -39,7 +39,6 @@ sigreturnStubFn                  "rt_sigreturn"
 sleepUsFn                        "nanosleep"
 spawnExecFn                      "fork" "setpgid" "setpgid" "execve" "exit"
 statPathFn                       "newfstatat"
-threadIdFn                       "gettid"
 threadJoinFn                     "futex" "munmap" "munmap"
 threadParallelismFn              "sched_getaffinity"
 threadSpawnFn                    "mmap" "mprotect" "mmap" "futex" "clone" "futex" "futex" "futex" "futex" "exit"
@@ -91,6 +90,7 @@ nativeThreadTabLabel 8192
 nativeThreadedLabel 8
 sigalrmSetLabel 8
 stackTopLabel 8
+threadStackBytesLabel 8
 timeoutArmedLabel 8
 # 内核路径 / env 键
 /bin/sh
