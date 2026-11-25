@@ -136,8 +136,9 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
 
 因此缓存键另有一层**二进制身份** `cache-tag`：`nix/build/packages.nix` 在构建
 `vuna-seed` / `vuna-compiler` / `vuna-native` 后写入 `$out/cache-tag`（= 产物二进制的 sha256），
-产品安装时复制同一个文件。运行时读取顺序：`VUNA_CACHE_TAG`（排障/测试）→ `$out/cache-tag` →
-回退 `build-id`（开发构建与旧安装）。
+产品安装时复制同一个文件。每个插件派生也把 stage 1 的 `cache-tag` / `build-id` 原样装到自己
+的 `$out/`：插件进程里的工具链读可执行文件旁的身份，必须与编译器插件一致。运行时读取顺序：
+`VUNA_CACHE_TAG`（排障/测试）→ `$out/cache-tag` → 回退 `build-id`（开发构建与旧安装）。
 
 它只参与缓存 key，不写进产物、不参与 rotation 的 fixed point（`seed/build-id` 仍是源码身份）。
 代价是同一源码的两次字节不同构建会各自冷一次缓存；这是正确性优先的取舍。
@@ -167,6 +168,8 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
 - 并发安全由既有机制承担：views 用 `mkdir` 锁串行、roots 只追加、units 只在桶内清理；
 - 代价：`vuna store clean --store` / `vuna store gc` 是**全局操作**，任一 worktree 执行都会影响
   所有使用者（只影响命中率，不影响正确性）。不要在别人构建时跑 `clean --store`。
+- Nix 里不共享可变 store：`packages.vuna-store` 先把依赖包 `check` 成只读快照，每个插件
+  派生把它拷进自己的 `$TMPDIR` 再构建——读到的对象跨派生复用，写只落在各自的副本上。
 
 必须隔离的四类（理由都不是权限，而是判据/口径）：
 

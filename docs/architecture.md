@@ -292,6 +292,12 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
  → vuna-compiler build . → .output/bin/vuna（同为逐模块输出）
 ```
 
+产品侧不是一次整包构建：`vuna-store` 先对依赖包逐个 `check`（写接口 / 模块顺序 / 包身份），
+每个插件派生拷这份 store 后只构建自己的包（`vuna-cli` / `vuna-toolchain` / `vuna-target-*` /
+`vuna-plugin-web` / `vuna-dev`），`vuna` 只把二进制拷进同一个 `bin/`——入口用可执行文件自身
+位置做插件发现，所以是拷贝而不是链接。改一个插件只重建它的派生；编译器身份 `cache-tag`
+随每个插件安装（见 [cache.md](reference/cache.md)「编译器身份」）。
+
 命令 / 入口：`build --no-compile --out`（`compileToDir` → `dtSplitProjectParts` / `dtSplitProjectWithIfaces` →
 `generateDtSplitProgram`）、`nix/seed/rotate.sh`、`checks.seed-selfhost`。**硬不变量**：
 旧 seed 能编译新源码；rotation 按需（见 [bootstrap.md](reference/bootstrap.md)）；之后

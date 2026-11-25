@@ -8,9 +8,10 @@ flag 词汇、帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.m
 
 ## 0. 树内开发循环（改工具链 / 插件时）
 
-改 `packages/{cli,toolchain,dev,target-native,target-wasm}` 时不要用 `nix run .#vuna`：
-产品派生一次构建 7 个插件（`nix build .#vuna` 实测约 105 s），而工具/插件改动只需要重建
-那一个包。`nix/tools/dev-loop.sh` 用当前工作树源码构建出的 stage 1 编译器增量构建指定包，再组装
+改 `packages/{cli,toolchain,dev,target-native,target-wasm}` 有两条循环：Nix 侧每个插件一个
+派生 + 一份 `vuna-store` 接口预热（`nix build .#vuna` 只重建改动的插件与安装拷贝）；树内
+`nix/tools/dev-loop.sh` 则不经 Nix，直接用宿主对象库。后者用当前工作树源码构建出的 stage 1
+编译器增量构建指定包，再组装
 `VUNA_BASE` / `VUNA_EXEC_PATH`（以及 `VUNA_OCAML_ID`、`VUNA_WASM_RUNNER`）把命令交给
 `packages/cli/.output/bin/vuna`：
 
@@ -42,6 +43,19 @@ $ eval "$(nix/tools/dev-loop.sh --print-env)"       # 进子 shell 手工反复�
 | 冷 store 首次构建 toolchain | 1–2 min（一次性） |
 
 稳态数字的前提是对象库已经热过：空 store 上跑一次 `check .` 约 45 s。
+
+Nix 侧（同一台机，`nix build .#vuna`，含安装拷贝；改的同样是注释）：
+
+| 场景 | 墙钟 |
+| --- | --- |
+| 全冷（`vuna-store` + 全部插件 + 安装） | ~84 s |
+| 改 wasm 后端 | ~3 s |
+| 改 cli | ~4 s |
+| 改 toolchain（含下游 dev） | ~46 s |
+| 改 compiler（stage 1 + 预热 + 全部插件） | ~80 s |
+
+旧的整包派生是 ~105 s，且任何改动都整包重建；现在改一个插件只重建它的派生。冷全量变快
+来自两点：`vuna-store` 只算一次接口，插件派生彼此独立、可以并行构建。
 
 ## 1. `vuna goal`：洞目标与上下文
 

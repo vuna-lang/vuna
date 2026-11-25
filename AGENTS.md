@@ -36,9 +36,9 @@
 3. 远端稳定版（`nix registry list` 的别名）：`nix run vuna -- <subcommand>`；
 4. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <owner/family>` 过滤，
    无参数等价 `vuna dev suite test/suite.toml`；`--jobs auto` 用全部可用核）；
-5. 改**工具链 / 插件**（`packages/{cli,toolchain,dev,target-*}`）时用 `nix/tools/dev-loop.sh`：
-   只重建改动的包，对象库沿用宿主 store；`nix run .#vuna` 会重建整个产品派生（7 个插件），
-   不适合这个循环。口径见 [tooling.md §0](docs/reference/tooling.md)。
+5. 改**工具链 / 插件**（`packages/{cli,toolchain,dev,target-*}`）时有两种循环：`nix build .#vuna`
+   已按插件拆分派生（只重建改动的插件 + 安装拷贝）；要绕开 Nix、直接用宿主对象库时用
+   `nix/tools/dev-loop.sh`。口径与读数见 [tooling.md §0](docs/reference/tooling.md)。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
 测试需要 PATH 里有 `ocamlopt`（`nix develop` 提供）。

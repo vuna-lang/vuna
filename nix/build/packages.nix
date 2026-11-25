@@ -1,6 +1,8 @@
 # 自举链的构建产物与按需 / 开发用包装：
-#   seed/ → vuna-seed（stage 0）→ vuna-compiler（stage 1）→ vuna（产品 CLI）
-#   vuna-native = stage 1 把编译器源码编到 native 的自举产物（后端 conformance 用）
+#   seed/ → vuna-seed（stage 0）→ vuna-compiler（stage 1）
+#   → vuna-store（依赖包的接口预热）→ 每插件一个派生 → vuna（拷贝式安装）
+#   每个插件派生只构建自己的包，改哪个插件只重建哪个派生；vuna-native = stage 1 把编译器
+#   源码编到 native 的自举产物（后端 conformance 用）
 #   vuna-web-cli / vuna-wasm-browser-smoke 按需构建；vuna-run-tests / vuna-bench /
 #   vuna-perf / vuna-artifacts / backend-check 是开发用包装
 #   （nix run .#vuna-run-tests / .#vuna-bench / .#vuna-perf / .#vuna-artifacts）。
@@ -47,6 +49,169 @@ let
       };
     } (build + stripBins);
 
+  # 每个包的传递依赖闭包（用于源码输入过滤）。构建走目录入口（`build packages/<pkg>`），
+  # 只认该目录的 manifest，不依赖 workspace 根。
+  pkgDeps = {
+    base = [ "base" ];
+    compiler-base = [
+      "base"
+      "compiler-base"
+    ];
+    ir = [
+      "base"
+      "compiler-base"
+      "ir"
+    ];
+    target-ocaml = [
+      "base"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+    ];
+    compiler = [
+      "base"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+    ];
+    plugin-kit = [
+      "base"
+      "plugin-kit"
+    ];
+    http = [
+      "base"
+      "http"
+    ];
+    web = [
+      "base"
+      "http"
+      "web"
+    ];
+    web-cli = [
+      "base"
+      "http"
+      "web"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+      "web-cli"
+    ];
+    toolchain = [
+      "base"
+      "http"
+      "plugin-kit"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+      "toolchain"
+    ];
+    cli = [
+      "base"
+      "http"
+      "plugin-kit"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+      "cli"
+    ];
+    target-native = [
+      "base"
+      "compiler-base"
+      "ir"
+      "target-native"
+    ];
+    target-wasm = [
+      "base"
+      "compiler-base"
+      "ir"
+      "target-wasm"
+    ];
+    plugin-web = [
+      "base"
+      "http"
+      "plugin-kit"
+      "web"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+      "web-cli"
+      "plugin-web"
+    ];
+    dev = [
+      "base"
+      "http"
+      "plugin-kit"
+      "compiler-base"
+      "ir"
+      "target-ocaml"
+      "compiler"
+      "target-native"
+      "toolchain"
+      "dev"
+    ];
+  };
+
+  # 预热 store 覆盖的包：所有「插件构建会当依赖读、但不作为插件单独构建」的库包。
+  storeDeps = [
+    "base"
+    "compiler-base"
+    "ir"
+    "target-ocaml"
+    "compiler"
+    "plugin-kit"
+    "http"
+    "web"
+    "web-cli"
+  ];
+
+  # 源码输入过滤：flake 的 `self` 是整棵树，`${../../packages/x}` 会让任何改动都失效。
+  # 每个派生只拿「本包 + 传递依赖」的 lib / app / vuna.toml，各自得到独立的 store 路径：
+  # 改一个包只失效引用它的派生（改 wasm 后端不再连带 stage1 与其它插件）。
+  srcFor =
+    name: deps:
+    builtins.path {
+      name = "vuna-src-${name}";
+      path = ../..;
+      filter =
+        p: _type:
+        let
+          isRoot = toString p == toString ../..;
+          rel = lib.removePrefix (toString ../.. + "/") (toString p);
+          segs = if isRoot then [ ] else lib.splitString "/" rel;
+          n = builtins.length segs;
+        in
+        if n == 0 then
+          true
+        else if n == 1 then
+          lib.elem (lib.head segs) [ "packages" ]
+        else if lib.head segs != "packages" then
+          false
+        else if n == 2 then
+          lib.elem (lib.elemAt segs 1) deps
+        else if n == 3 then
+          lib.elem (lib.elemAt segs 2) [
+            "lib"
+            "app"
+            "vuna.toml"
+          ]
+        else
+          true;
+    };
+
+  # 单目录源码（seed / base / wasm-host / 运行时安装的包源码）：同样避免整棵树进输入。
+  dirSrc = name: path: builtins.path { inherit name path; };
+
+  baseSrc = dirSrc "vuna-base-src" ../../packages/base;
+  httpSrc = dirSrc "vuna-http-src" ../../packages/http;
+  webSrc = dirSrc "vuna-web-src" ../../packages/web;
+  seedSrc = dirSrc "vuna-seed-src" ../../seed;
+  wasmHostSrc = dirSrc "vuna-wasm-host-src" ../../wasm-host;
+
   # stage 0：提交入库的多文件信任锚点种子，用 seed/build.sh 构建。
   # base 与可执行文件按「可执行文件相对布局」安装（$out/base），无 manifest 的
   # 单文件由 vuna-seed 直接编译时能找到 base。
@@ -56,8 +221,8 @@ let
     mainProgram = "vuna-seed";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../../seed} seed
-      cp -r ${../../packages/base} "$out/base"
+      cp -r ${seedSrc} seed
+      cp -r ${baseSrc} "$out/base"
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
@@ -73,14 +238,8 @@ let
     description = "vuna compiler (stage 1, split-compiled from compiler/)";
     mainProgram = "vuna-compiler";
     build = ''
-      mkdir -p "$out/bin" packages
-      cp -r ${../../packages/compiler} packages/compiler
-      cp -r ${../../packages/compiler-base} packages/compiler-base
-      cp -r ${../../packages/ir} packages/ir
-      cp -r ${../../packages/target-ocaml} packages/target-ocaml
-      cp -r ${../../packages/target-native} packages/target-native
-      cp -r ${../../packages/target-wasm} packages/target-wasm
-      cp -r ${../../packages/base} packages/base
+      mkdir -p "$out/bin"
+      cp -r ${srcFor "compiler" pkgDeps.compiler}/packages packages
       chmod -R u+w .
       # 构建在一次性对象库里跑：单元缓存不会命中，key 的逐模块声明编码是纯开销。
       export VUNA_UNIT_CACHE=0
@@ -94,41 +253,155 @@ let
     '';
   };
 
-  # 产品 CLI：由 stage 1 编译器构建 cli 包（compiler + 工具链）。
-  vuna = mkStage {
-    name = "vuna-${version}";
-    description = "vuna CLI (stage 1, tools + compiler library)";
-    mainProgram = "vuna";
-    build = ''
-      mkdir -p "$out/bin"
-      cp -r ${../../packages} packages
-      cp ${../../vuna.toml} vuna.toml
-      chmod -R u+w .
-      export VUNA_STORE="$TMPDIR/vuna-store"
-      # 每个包各一次构建、对象库随 TMPDIR 丢弃：单元缓存不会命中。
-      export VUNA_UNIT_CACHE=0
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna .
-      cp packages/cli/.output/bin/vuna "$out/bin/vuna"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-toolchain .
-      cp packages/toolchain/.output/bin/vuna-toolchain "$out/bin/vuna-toolchain"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
-      cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
-      cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-plugin-web .
-      cp packages/plugin-web/.output/bin/vuna-plugin-web "$out/bin/vuna-web"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-dev .
-      cp packages/dev/.output/bin/vuna-dev "$out/bin/vuna-dev"
-      # 编译器命令走独立插件（同一个 stage-1 产物，安装名即插件名）。
-      cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
-      cp ${vuna-compiler}/cache-tag "$out/cache-tag"
-      cp -r packages/base "$out/base"
-      # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
-      mkdir -p "$out/share/vuna"
-      cp -r ${../../wasm-host} "$out/share/vuna/wasm-host"
-      if [ -f packages/cli/.output/build-id ]; then cp packages/cli/.output/build-id "$out/build-id"; fi
-    '';
+  # 预热对象库：对「插件构建会当依赖读」的包逐个 check，写出接口 / 模块顺序 / 包身份。
+  # 插件派生把这份 store 拷进自己的 $TMPDIR 再构建；没有预热时每个插件都会把同一份依赖
+  # 闭包重新精化一遍（同机实测：toolchain 冷构建 71 s → 预热后 36 s）。对象按输入摘要
+  # 寻址，跨派生复用不需要额外身份；缺对象只影响命中率。
+  vuna-store =
+    pkgs.runCommand "vuna-store-${version}"
+      {
+        nativeBuildInputs = ocamlTools;
+        allowSubstitutes = false;
+        meta.description = "vuna object store prewarm (interfaces for plugin builds)";
+      }
+      ''
+        mkdir -p "$out"
+        cp -r ${srcFor "store" storeDeps}/packages packages
+        chmod -R u+w packages
+        export VUNA_STORE="$out/store"
+        export VUNA_UNIT_CACHE=0
+        # 依赖在前：后面的 check 读得到前面的接口与模块顺序。
+        for pkg in ${lib.concatStringsSep " " storeDeps}; do
+          ${vuna-compiler}/bin/vuna-compiler check "packages/$pkg"
+        done
+      '';
+
+  # 单个插件派生：拷贝工作树 + 预热 store，只构建一个包，安装成 `$out/bin/<installAs>`。
+  # `propagateStore` 把构建后的 store（预热 + 本包写的接口）留在 `$out/store`，供依赖它的
+  # 插件派生复用（`extraStores`）。
+  mkPlugin =
+    {
+      name,
+      pkg,
+      dir,
+      deps,
+      installAs ? pkg,
+      description,
+      store ? vuna-store,
+      extraStores ? [ ],
+      propagateStore ? false,
+    }:
+    mkStage {
+      inherit name description;
+      mainProgram = installAs;
+      build = ''
+        mkdir -p "$out/bin"
+        cp -r ${srcFor pkg deps}/packages packages
+        chmod -R u+w packages
+        cp -a --reflink=auto ${store}/store "$TMPDIR/vuna-store"
+        chmod -R u+w "$TMPDIR/vuna-store"
+        ${lib.concatMapStringsSep "\n" (
+          s: ''cp -a --reflink=auto --no-preserve=mode ${s}/store/. "$TMPDIR/vuna-store/"''
+        ) extraStores}
+        chmod -R u+w "$TMPDIR/vuna-store"
+        export VUNA_STORE="$TMPDIR/vuna-store"
+        export VUNA_UNIT_CACHE=0
+        ${vuna-compiler}/bin/vuna-compiler build "packages/${dir}" --out "$TMPDIR/vuna-out"
+        cp "$TMPDIR/vuna-out/bin/${pkg}" "$out/bin/${installAs}"
+        # 插件进程里的工具链读可执行文件旁的编译器身份：与 stage 1 对齐，否则它写出的
+        # 接口/产物与编译器插件各命中一套 key。
+        cp ${vuna-compiler}/cache-tag "$out/cache-tag"
+        if [ -f ${vuna-compiler}/build-id ]; then cp ${vuna-compiler}/build-id "$out/build-id"; fi
+        ${lib.optionalString propagateStore ''
+          cp -a --reflink=auto "$TMPDIR/vuna-store" "$out/store"
+        ''}
+      '';
+    };
+
+  vuna-cli = mkPlugin {
+    name = "vuna-cli-${version}";
+    pkg = "vuna";
+    dir = "cli";
+    deps = pkgDeps.cli;
+    installAs = "vuna";
+    description = "vuna CLI entry (plugin discovery + routing)";
   };
+
+  vuna-toolchain = mkPlugin {
+    name = "vuna-toolchain-${version}";
+    pkg = "vuna-toolchain";
+    dir = "toolchain";
+    deps = pkgDeps.toolchain;
+    description = "vuna product toolchain plugin";
+    propagateStore = true;
+  };
+
+  vuna-target-native = mkPlugin {
+    name = "vuna-target-native-${version}";
+    pkg = "vuna-target-native";
+    dir = "target-native";
+    deps = pkgDeps.target-native;
+    description = "vuna native backend plugin";
+    propagateStore = true;
+  };
+
+  vuna-target-wasm = mkPlugin {
+    name = "vuna-target-wasm-${version}";
+    pkg = "vuna-target-wasm";
+    dir = "target-wasm";
+    deps = pkgDeps.target-wasm;
+    description = "vuna wasm backend plugin";
+  };
+
+  vuna-plugin-web = mkPlugin {
+    name = "vuna-plugin-web-${version}";
+    pkg = "vuna-plugin-web";
+    dir = "plugin-web";
+    deps = pkgDeps.plugin-web;
+    installAs = "vuna-web";
+    description = "vuna web application plugin";
+  };
+
+  vuna-dev = mkPlugin {
+    name = "vuna-dev-${version}";
+    pkg = "vuna-dev";
+    dir = "dev";
+    deps = pkgDeps.dev;
+    description = "vuna repository-only dev plugin";
+    extraStores = [
+      vuna-toolchain
+      vuna-target-native
+    ];
+  };
+
+  # 产品安装：插件二进制 + base / wasm-host / 身份文件装进同一个 bin 目录。
+  # 必须**拷贝**而不是符号链接：入口用可执行文件自身位置（/proc/self/exe）定位
+  # `<exeDir>` 做插件发现，链接会让 exeDir 指回插件派生的 bin（那里只有它自己）。
+  vuna =
+    pkgs.runCommand "vuna-${version}"
+      {
+        allowSubstitutes = false;
+        meta = {
+          description = "vuna CLI (stage 1, plugins + compiler)";
+          mainProgram = "vuna";
+          license = lib.licenses.mit;
+        };
+      }
+      ''
+        mkdir -p "$out/bin" "$out/share/vuna"
+        cp ${vuna-cli}/bin/vuna "$out/bin/vuna"
+        cp ${vuna-toolchain}/bin/vuna-toolchain "$out/bin/vuna-toolchain"
+        cp ${vuna-dev}/bin/vuna-dev "$out/bin/vuna-dev"
+        cp ${vuna-target-native}/bin/vuna-target-native "$out/bin/vuna-target-native"
+        cp ${vuna-target-wasm}/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
+        cp ${vuna-plugin-web}/bin/vuna-web "$out/bin/vuna-web"
+        cp ${vuna-compiler}/bin/vuna-compiler "$out/bin/vuna-compiler"
+        cp ${vuna-compiler}/cache-tag "$out/cache-tag"
+        cp -r ${baseSrc} "$out/base"
+        # `vuna run --target wasm` 的执行宿主（Node/V8，`Vuna.Run.wasmRunner` 按此布局查找）。
+        cp -r ${wasmHostSrc} "$out/share/vuna/wasm-host"
+        if [ -f ${vuna-cli}/build-id ]; then cp ${vuna-cli}/build-id "$out/build-id"; fi
+      '';
 
   # 手动性能基准与原生测试 runner；编译器在运行时解析，不在构建期绑定。
   vuna-bench =
@@ -188,16 +461,15 @@ let
     mainProgram = "vuna-web-cli";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../../packages} packages
-      cp ${../../vuna.toml} vuna.toml
-      chmod -R u+w .
+      cp -r ${srcFor "web-cli" pkgDeps.web-cli}/packages packages
+      chmod -R u+w packages
       export VUNA_STORE="$TMPDIR/vuna-store"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-web-cli .
-      cp packages/web-cli/.output/bin/vuna-web-cli "$out/bin/vuna-web-cli"
-      cp -r packages/base "$out/base"
-      cp -r packages/http "$out/http"
-      cp -r packages/web "$out/web"
-      if [ -f packages/web-cli/.output/build-id ]; then cp packages/web-cli/.output/build-id "$out/build-id"; fi
+      ${vuna-compiler}/bin/vuna-compiler build packages/web-cli --out "$TMPDIR/webcli"
+      cp "$TMPDIR/webcli/bin/vuna-web-cli" "$out/bin/vuna-web-cli"
+      cp -r ${baseSrc} "$out/base"
+      cp -r ${httpSrc} "$out/http"
+      cp -r ${webSrc} "$out/web"
+      if [ -f "$TMPDIR/webcli/build-id" ]; then cp "$TMPDIR/webcli/build-id" "$out/build-id"; fi
     '';
   };
 
@@ -214,16 +486,23 @@ let
     mainProgram = "vuna-native";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../../packages} packages
-      cp ${../../vuna.toml} vuna.toml
-      chmod -R u+w .
+      cp -r ${
+        srcFor "native" (
+          pkgDeps.compiler
+          ++ [
+            "target-native"
+            "target-wasm"
+          ]
+        )
+      }/packages packages
+      chmod -R u+w packages
       export VUNA_STORE="$TMPDIR/vuna-store"
       # 后端插件先用 stage 1 编译器建好：parity / corpus 用 `vuna-native` 编到
       # native 与 wasm，插件必须与它同目录（`<exeDir>` 优先于 `$VUNA_EXEC_PATH`）。
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-native .
-      cp packages/target-native/.output/bin/vuna-target-native "$out/bin/vuna-target-native"
-      ${vuna-compiler}/bin/vuna-compiler build --package vuna-target-wasm .
-      cp packages/target-wasm/.output/bin/vuna-target-wasm "$out/bin/vuna-target-wasm"
+      ${vuna-compiler}/bin/vuna-compiler build packages/target-native --out "$TMPDIR/tnative"
+      cp "$TMPDIR/tnative/bin/vuna-target-native" "$out/bin/vuna-target-native"
+      ${vuna-compiler}/bin/vuna-compiler build packages/target-wasm --out "$TMPDIR/twasm"
+      cp "$TMPDIR/twasm/bin/vuna-target-wasm" "$out/bin/vuna-target-wasm"
       # 自举这一步本身就经插件边界：把刚建好的插件目录交给 stage 1 编译器。
       export VUNA_EXEC_PATH="$out/bin"
       ${vuna-compiler}/bin/vuna-compiler build packages/compiler --target native --out "$TMPDIR/native"
@@ -293,6 +572,13 @@ in
 
   inherit
     vuna
+    vuna-store
+    vuna-cli
+    vuna-toolchain
+    vuna-dev
+    vuna-target-native
+    vuna-target-wasm
+    vuna-plugin-web
     vuna-seed
     vuna-compiler
     vuna-bench
