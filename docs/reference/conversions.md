@@ -94,9 +94,10 @@ instance Convert Email String where
 
 - 转换走普通 trait 字典，不做精化特化；base 内部热路径继续直接调原语。
 - 实例是普通 vuna 定义，OCaml / WASM / Native 三端都走同一条 codegen。
-- 核心求值器（`vuna test` 纯测试 / REPL）不归约带 Rig0 索引构造子的 `Fin` 值，所以
-  `Fin` 相关夹具用 `.run.out`（compile + run），与 `34_fin` 相同；`Nat` / `Int` 转换在
-  interp 路径可用。
+- 核心求值器（`vuna test` 纯测试 / REPL）先 `force` 再做深度正规化：构造子字段与卡住
+  应用的实参都会继续归约，所以 `Nat` 结构递归（含 `finToNat` / `finLast`）在 interp
+  路径可用，`Fin` 夹具不需要专门改成 `.run.out`。仍只做 compile + run 的夹具限于
+  interp 无法表达的原语（List 桥接、宿主副作用等，见 [primitives.md](primitives.md)）。
 
 ## 相关
 

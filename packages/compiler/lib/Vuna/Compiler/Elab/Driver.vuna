@@ -863,7 +863,7 @@ dtEvalExprInInfoCore prog expr =
                     case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
                       Just m => onErrDiag (\d => withMetaCreated ec2 m d) (tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m))
                       Nothing =>
-                        case normalize (HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
+                        case normalize (HashMap.fromList bodies) (ecSolsP ec2) normalizeFuelBound (eval [] term) of
                           VInt n => OkC (strFromInt n, tyText)
                           v => OkC (showValueRepl datas ec2 v, tyText)
         )

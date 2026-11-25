@@ -1,4 +1,4 @@
--- 显式转换 trait：Fin 出向实例经泛型约束使用（核心求值器不归约 Fin 构造子，只走 compile+run）。
+-- 显式转换 trait：Fin 出向实例经泛型约束使用。
 import Base.Data.Fin as Fin
 import Base.Data.Nat as Nat
 import Base.Trait.Convert as Convert

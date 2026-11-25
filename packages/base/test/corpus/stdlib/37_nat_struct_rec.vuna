@@ -1,0 +1,13 @@
+-- stdlib：结构递归产出的 Nat 必须是完整构造子链，interp 与编译产物一致。
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+
+count : List Int -> Nat
+count [] = 0
+count (_ :: rest) = Succ (count rest)
+
+main : String
+main =
+  "n="
+    ++ strFromInt (Nat.toInt (count ((::) 1 ((::) 2 ((::) 3 [])))))
+    ++ " empty=" ++ strFromInt (Nat.toInt (count []))

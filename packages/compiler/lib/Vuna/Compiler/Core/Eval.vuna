@@ -793,8 +793,9 @@ dropBytes n xs =
       _ :: rest => dropBytes (n - 1) rest
 
 -- ---------------------------------------------------------------
--- 深度正规化（interp --dt 展示 main 用）：先 force，再递归 spine / if 分支。
--- 与 force 不同，它会继续深入中立项的实参，因此 `inc (dbl 20)` 能算成 41。
+-- 深度正规化（interp / REPL 展示用）：先 force，再递归 spine、构造子字段与卡住应用。
+-- 与 force 不同，它会继续深入中立项的实参与构造子字段，因此 `inc (dbl 20)` 能算成 41，
+-- Nat 结构递归（如 `finToNat`）也能展开成完整构造子链。
 --
 -- 两个 fuel：`fuel` 是深度正规化自己的递归深度预算（也是终止性判据的守卫 Int 见证），
 -- `evalFuel` 原样传给 force / primReduce（由它们的 fuel 控制定义展开深度）。
@@ -826,6 +827,10 @@ normalizeFuel fuel defs sols evalFuel v =
   else
     case force defs sols evalFuel v of
       VNeutral n => normalizeNeutralFuel (fuel - 1) defs sols evalFuel n
+      -- 构造子字段必须继续正规化：Nat 的结构递归结果形如 `Succ (f ...)`，
+      -- 而 `natToInt` / `strFromInt` / 展示都要求完整构造子链。
+      VCon c args => VCon c (map (normalizeFuel (fuel - 1) defs sols evalFuel) args)
+      VApp f a => VApp (normalizeFuel (fuel - 1) defs sols evalFuel f) (normalizeFuel (fuel - 1) defs sols evalFuel a)
       VIf c th el => normalizeIfFuel (fuel - 1) defs sols evalFuel c th el
       VCase scrut alts => normalizeCaseFuel (fuel - 1) defs sols evalFuel scrut alts
       VProj base c tele i fi => normalizeProjFuel (fuel - 1) defs sols evalFuel base c tele i fi
@@ -1128,6 +1133,12 @@ showValueAt depth v =
 
 export showValue : Value -> String
 showValue v = showValueAt 0 v
+
+-- | 展示 / interp 的深度正规化预算。值的递归深度由数据规模决定（100 层结构递归
+-- ≈ 600 步），不能复用精化用的 `defaultFuel`(512)；这里取「正常展示达不到」的上界。
+-- 耗尽只让 interp 报 `CG_MainNotValue`（`normalizeIf` 在条件卡住时不再展开两个分支）。
+export normalizeFuelBound : Int
+normalizeFuelBound = 262144
 
 export normalize : HashMap String Term -> Sols -> Int -> Value -> Value
 normalize a1 a2 a3 a4 = normalizeFuel a3 a1 a2 a3 a4

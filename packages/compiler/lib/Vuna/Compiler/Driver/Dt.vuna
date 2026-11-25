@@ -929,13 +929,6 @@ splitReplExpr decls =
 evalDtMain : DtProgram -> Check String
 evalDtMain program = evalDtMainCore program
 
--- | interp 深度正规化的预算。`main` 的递归深度由数据决定（与项规模无关），所以不复用
--- 精化用的 `defaultFuel`(512)——100 层递归就要 ~600 步，固定小预算会在正常程序上卡住。
--- 这里取「正常展示达不到」的上界；耗尽只会让 interp 报 `CG_MainNotValue`
--- （`Core.Eval.normalizeIf` 在条件卡住时不再展开两个分支）。
-interpFuelBound : Int
-interpFuelBound = 262144
-
 -- 核心求值器对 `main` 的求值边界（含 Float）：
 --   - 纯 `main : Int/Nat/String/Bool/Float`：核心求值并展示值（Float 用
 --     `string_of_float` 规范文本，与产物一致）；
@@ -953,7 +946,7 @@ evalDtMainCore program =
         table = defTableOf (dtProgDefs program)
         sols = solsEmpty
         mainVal =
-          normalize (HashMap.fromList table) sols interpFuelBound (VNeutral (NGlobal "main" []))
+          normalize (HashMap.fromList table) sols normalizeFuelBound (VNeutral (NGlobal "main" []))
       in if not (mainActionKind (dtDefType mainDef) == "") then
         cgErr0 InterpCannotExecuteEffects
       else
@@ -973,7 +966,7 @@ evalDtMainCore program =
 -- main 钩子走同一展示（Show 字典投影）。
 interpMainShow : List (String, Term) -> Sols -> Value -> Check String
 interpMainShow table sols mainVal =
-  case normalize (HashMap.fromList table) sols interpFuelBound (VNeutral (NGlobal mainShowDefName [mainVal])) of
+  case normalize (HashMap.fromList table) sols normalizeFuelBound (VNeutral (NGlobal mainShowDefName [mainVal])) of
     -- 与非内建 main 的编译路径一致：main 钩子直接 `print_endline (show T x)`（不加引号），
     -- 所以 interp 也返回 raw 文本（内建 String main 仍走 dt_show_string 的加引号形态）。
     VStr s => OkC s

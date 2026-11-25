@@ -58,7 +58,8 @@ data Term where
   （`IntrinsicOp` 分派）。delta 每次重新求值定义体，没有求值缓存（按定义记忆化的前置
   安全检查比命中收益更贵，见 [performance.md](performance.md)）。delta 只认 deftbl 里的
   定义体（签名表 `ecGlobalsTbl` 不参与展开）。
-- `quote` / `normalize`：值 → 项；深度正规化用于显示与终止性检查。
+- `quote` / `normalize`：值 → 项；深度正规化（构造子字段与卡住应用的实参也继续归约）
+  用于显示与终止性检查。
 - 类型级 `Vec n a` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
   定义性相等或可被元变量统一——这就是索引 unification 的用武之地。
 
