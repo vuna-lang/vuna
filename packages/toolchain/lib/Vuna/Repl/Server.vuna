@@ -25,7 +25,7 @@ import Vuna.Json.Frame
 import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
-import Base.Effect.Pure.IORef as IORef
+import Base.Effect.MutRef as MutRef
 import Base.Effect.Console as EffConsole
 import Base.Effect.Fs as EffFs
 import Base.Effect.Net as EffNet
@@ -83,7 +83,7 @@ data FeedResult : Type where
   FeedExit : FeedResult
 
 -- | 内部：把多行依次喂给 `inputStep`；`:q` / `:quit` 直接返回 `FeedExit`。
-feedLines : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> List String -> Eff r FeedResult
+feedLines : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> List String -> Eff r FeedResult
 feedLines st [] = pure (FeedContinue st)
 feedLines st (line :: rest) =
   do
@@ -94,7 +94,7 @@ feedLines st (line :: rest) =
 
 -- | 内部：处理 `eval`——code（必需，字符串）+ close（可选，默认 true）。返回
 -- (是否结束进程, (新状态, 响应帧))；`status` 为 `ok` / `incomplete` / `exit`。
-evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
+evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
 evalRequest msg st =
   case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
     Nothing =>
@@ -107,7 +107,7 @@ evalRequest msg st =
         case fed of
           FeedExit =>
             do
-              drained <- replOutputDrain st
+              drained <- replSinkDrain
               pure (True, st, [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))])
           FeedContinue st2 =>
             do
@@ -115,11 +115,11 @@ evalRequest msg st =
               case finished of
                 ReplExit _ =>
                   do
-                    drained <- replOutputDrain st2
+                    drained <- replSinkDrain
                     pure (True, st2, [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))])
                 ReplContinue st3 =>
                   do
-                    drained <- replOutputDrain st3
+                    drained <- replSinkDrain
                     pure (False, st3, [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))])
 
 -- | 内部：处理 `ping`——返回版本与包名（`base-only` 表示没有包上下文），不改状态。
@@ -134,7 +134,11 @@ pingRequest msg st =
 -- | 内部：请求分发——`eval` / `ping` / `shutdown`；未知方法回 `-32601`（不结束进程），
 -- 缺 `method` 回 `-32600`。
 handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
-handleRequest msg st =
+handleRequest msg st = withMutRef "replOut" "" (withMutRef "replErr" "" (handleRequestCore msg st))
+
+-- | 内部：请求本体——在本次请求的两个输出单元作用域里跑（`evalRequest` 收尾时读出）。
+handleRequestCore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member (Named "replOut" (MutRefOp String)) r, Member (Named "replErr" (MutRefOp String)) r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Bool, ReplState, List Json)
+handleRequestCore msg st =
   case methodOf msg of
     Nothing => pure (False, st, [responseErr (idOf msg) errInvalidRequest "missing method"])
     Just m =>
@@ -157,23 +161,18 @@ listeningText addr h =
 export runReplServer : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => PackageContext -> ReplStart -> String -> Eff r Int
 runReplServer ctx start addr =
   do
-    outRef <- newRef ""
-    errRef <- newRef ""
-    let
-      sink = SinkCapture outRef errRef
-    in do
-      session <- startReplSession ctx start sink
-      case session of
-        ErrC e =>
-          do
-            _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
-            pure 2
-        OkC (st0, _) =>
-          do
-            h <- netListen addr
-            ready <- listeningText addr h
-            _ <- consolePrint "listening ${ready}\n"
-            acceptLoop serverFuelBound addr h st0
+    session <- startReplSession ctx start True
+    case session of
+      ErrC e =>
+        do
+          _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
+          pure 2
+      OkC (st0, _) =>
+        do
+          h <- netListen addr
+          ready <- listeningText addr h
+          _ <- consolePrint "listening ${ready}\n"
+          acceptLoop serverFuelBound addr h st0
 
 -- | 连接循环的 fuel 上限（1G 个连接）。
 serverFuelBound : Int
