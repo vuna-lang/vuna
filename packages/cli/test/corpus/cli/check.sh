@@ -5,7 +5,8 @@
 #
 # 覆盖（全部在临时目录里跑，不依赖仓库自身状态）：
 #   - fmt：非 workspace / 不存在路径 / workspace 无源码 → 可读错误 + exit 2；
-#         无 PATH 时默认识别 workspace 并格式化/--check；
+#         无 PATH 时默认识别 workspace 并格式化/--check；一批多文件时坏文件不阻断、报告保序；
+#         跨批（每批 256 个文件）尾部同样被处理；
 #   - map/api：非 workspace → 可读错误 + exit 2；
 #   - doc：--with-comments 已删提示；目录/源文件校验；[export].modules 过滤（按
 #         manifest 顺序、缺模块报错）；默认 OUT=DIR/docs/api.html；输出父目录递归创建；
@@ -93,6 +94,44 @@ printf 'y : Int\ny    =   2\n' >"$tmp/fmtws/lib/B.vuna"
 run "fmt --check unformatted" "$tmp/fmtws" fmt --check
 check_eq "fmt --check dirty exit" "1" "$code"
 check_contains "fmt --check dirty report" "$out" "would reformat"
+
+# 一次多个文件：坏文件不阻断同批其它文件，报告顺序 = 文件顺序（纯格式化在 worker 线程里跑）。
+mkdir -p "$tmp/fmtmix/lib"
+printf '[package]\nname = "fmtmix"\n' >"$tmp/fmtmix/vuna.toml"
+printf 'a : Int\na = 1\n' >"$tmp/fmtmix/lib/A.vuna"
+printf 'b : Int\nb    =   2\n' >"$tmp/fmtmix/lib/B.vuna"
+printf 'c : Int\nc = (\n' >"$tmp/fmtmix/lib/C.vuna"
+printf 'd : Int\nd   =   4\n' >"$tmp/fmtmix/lib/D.vuna"
+run "fmt mixed batch --check" "$tmp/fmtmix" fmt --check lib
+check_eq "fmt mixed batch exit" "1" "$code"
+check_contains "fmt mixed batch dirty b" "$out" "would reformat: lib/B.vuna"
+check_contains "fmt mixed batch error c" "$out" "error: lib/C.vuna:"
+check_contains "fmt mixed batch dirty d" "$out" "would reformat: lib/D.vuna"
+check_contains "fmt mixed batch summary" "$out" "2 file(s) need formatting"
+check_eq "fmt mixed batch order" \
+  "$(printf '%s\n' "$out" | sed -n 's/^\(would reformat\|error\): \(lib\/[A-Z]\.vuna\).*/\2/p' | tr '\n' ' ')" \
+  "lib/B.vuna lib/C.vuna lib/D.vuna "
+run "fmt mixed batch write" "$tmp/fmtmix" fmt lib
+check_eq "fmt mixed batch write exit" "1" "$code"
+check_contains "fmt mixed batch wrote b" "$(cat "$tmp/fmtmix/lib/B.vuna")" "b = 2"
+check_contains "fmt mixed batch wrote d" "$(cat "$tmp/fmtmix/lib/D.vuna")" "d = 4"
+
+# 跨批（每批 256 个文件）：第二批的文件同样被读到、格式化并报告。
+mkdir -p "$tmp/fmtbatch/lib"
+printf '[package]\nname = "fmtbatch"\n' >"$tmp/fmtbatch/vuna.toml"
+i=0
+while [ "$i" -lt 260 ]; do
+  if [ "$i" -eq 258 ]; then
+    printf 'x%s : Int\nx%s    =   %s\n' "$i" "$i" "$i" >"$tmp/fmtbatch/lib/F$i.vuna"
+  else
+    printf 'x%s : Int\nx%s = %s\n' "$i" "$i" "$i" >"$tmp/fmtbatch/lib/F$i.vuna"
+  fi
+  i=$((i + 1))
+done
+run "fmt across batches" "$tmp/fmtbatch" fmt --check lib
+check_eq "fmt across batches exit" "1" "$code"
+check_contains "fmt across batches last file" "$out" "would reformat: lib/F258.vuna"
+check_contains "fmt across batches count" "$out" "1 file(s) need formatting"
 
 # ---------------------------------------------------------------
 # 2) map / api：非 workspace
