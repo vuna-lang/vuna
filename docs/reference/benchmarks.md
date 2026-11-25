@@ -23,8 +23,9 @@ C 对照的存在让「vuna 相对最优手写实现」有了第二条参照；`
 与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 三口径读数（`--target all --runs 5 --warmup 2`，x86_64 / 16 核 / 生成时 `meta.loadavg ≈ 2.8`；
-ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全部用例（55 项）、
-native / wasm 列与对手写 C 的对照见该文件）：
+ratio 对手写 OCaml，wasm 用 net；`bench/baselines/programs.json` 里的全部用例（63 项）、
+native / wasm 列与对手写 C 的对照见该文件；t3 新增行取 2026-11-26 的
+`--only … --runs 5 --warmup 2` 窗口，loadavg ≈ 2.3）：
 
 | benchmark | 场景 | wall | cpu | rss | vs_c (w/c/r) |
 | --- | --- | --- | --- | --- | --- |
@@ -36,6 +37,14 @@ native / wasm 列与对手写 C 的对照见该文件）：
 | array | 不可变 Array（get / set / length） | 0.94 | 0.94 | 1.30 | 6.05/6.20/4.23 |
 | records | record 更新 + variant 分派 | 2.52 | 2.56 | 4.89 | 5.07/5.16/12.67 |
 | closures | 高阶函数 / 每次迭代新建闭包 | 1.26 | 1.26 | 1.54 | 9.04/9.41/7.65 |
+| micro_apply_dyn | 运行期选闭包后的动态应用 | 0.92 | 0.92 | 1.83 | 1.52/1.54/3.00 |
+| micro_partial | 部分应用 shim（每轮分配） | 1.71 | 1.71 | 4.41 | 2.90/2.92/12.62 |
+| micro_overapply | 过度应用（一次给足两层） | 0.94 | 0.94 | 4.56 | 3.72/3.76/12.61 |
+| micro_capture | 捕获闭包 + 每轮分配 | 1.17 | 1.18 | 4.53 | 2.48/2.53/12.68 |
+| micro_closure8 | 8 参闭包（第 6~8 实参走栈） | 1.17 | 1.21 | 1.84 | 1.43/1.46/2.99 |
+| micro_args8 | 非尾 8 参直调（栈实参） | 1.10 | 1.10 | 1.81 | 1.04/1.05/2.92 |
+| micro_record_dispatch | record 字段里的闭包派发 | 1.45 | 1.43 | 1.81 | 1.53/1.51/2.93 |
+| closure_pipeline | 闭包表逐轮 fold 派发 | 1.40 | 1.40 | 1.80 | 2.44/2.51/2.93 |
 | sorting | 归并排序（List + Pair 拆半） | 1.22 | 1.21 | 3.72 | 0.63/0.63/0.86 |
 | float_math | Float 算术 / sqrt / abs / 转换 | 2.38 | 2.39 | 4.30 | 3.28/3.33/10.98 |
 | text_scan | 逐字节 `strAt` 扫描 | 1.73 | 1.75 | 1.91 | 2.66/2.76/3.54 |
@@ -65,6 +74,14 @@ native / wasm 列与对手写 C 的对照见该文件）：
 | array | 不可变 Array（get / set / length） | 不可变 `Array` 与手写 OCaml 持平 |
 | records | record 更新 + variant 分派 | record 直接映射 OCaml record；多字段更新无额外分配 |
 | closures | 高阶函数 / 每次迭代新建闭包 | 多参数 lambda 链 + 饱和调用直调 |
+| micro_apply_dyn | 运行期选闭包后动态应用 | 解析不出的 head 走 `rt_apply` 饱和快路径 |
+| micro_partial | 每轮部分应用 shim | 已知 arity 的 shim 调用；shim 仍逐轮分配 |
+| micro_overapply | 一次给足两层实参 | `rt_apply` 过度应用路径；首参闭包捕获 |
+| micro_capture | maker 返回捕获闭包 | 堆环境 + 每轮分配（D129 的剩余慢路径） |
+| micro_closure8 | 8 参闭包饱和应用 | 闭包 ABI：5 个寄存器 + 3 个栈实参 |
+| micro_args8 | 非尾 8 参直调 | 标准 ABI：6 个寄存器 + 2 个栈实参，返回后回收 |
+| micro_record_dispatch | 投影字段 head | 不参与去虚拟化，走 `rt_apply` |
+| closure_pipeline | 部分应用闭包表 | 列表元素构造为 shim，fold 里动态应用 |
 | sorting | 归并排序（List + Pair 拆半） | List 单元与模式匹配与手写一致 |
 | float_math | Float 算术 / sqrt / abs / 转换 | 浮点内建；盒装表示与 OCaml 相同 |
 | text_scan | 逐字节 `strAt` 扫描 | `strAt` 直调原语，不经 List 桥接 |
@@ -83,8 +100,8 @@ native / wasm 列与对手写 C 的对照见该文件）：
 | gc_retain | 高存活集（live ~19 MB）+ 等量 churn | 整堆回收要重扫整个存活集；整堆触发策略的测量项 |
 
 
-场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
-逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC / 线程与同步。新增场景按机制归入 `bench/programs/t<N>/`，
+场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数与闭包 / 调用约定 /
+算法 / 浮点 / 逐字节文本 / Nat 与位运算 / 尾调用与分支链 / GC / 线程与同步。新增场景按机制归入 `bench/programs/t<N>/`，
 清单见 [`bench/programs/TIERS.md`](../../bench/programs/TIERS.md)。
 
 关键设计决策与改动（`packages/target-ocaml/lib/Vuna/Target/Ocaml/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Target.Ocaml.Decl` 与
@@ -141,6 +158,14 @@ native / wasm 列与对手写 C 的对照见该文件）：
 | array | 20.5 | 13.9 | 14.8 | 1.38x | 1.47x | 27.4 MiB | 15.5 MiB | 1.77x |
 | records | 19.3 | 13.7 | 5.4 | 3.57x | 1.41x | 1.0 MiB | 4.7 MiB | 0.21x |
 | closures | 19.4 | 8.9 | 7.1 | 2.74x | 2.17x | 24.4 MiB | 8.8 MiB | 2.78x |
+| micro_apply_dyn | 23.6 | 8.8 | 9.6 | 2.47x | 2.70x | 1.0 MiB | 2.7 MiB | 0.37x |
+| micro_partial | 106.6 | 18.5 | 10.8 | 9.85x | 5.75x | 1.0 MiB | 4.7 MiB | 0.21x |
+| micro_overapply | 117.3 | 23.2 | 24.6 | 4.77x | 5.06x | 1.0 MiB | 4.6 MiB | 0.22x |
+| micro_capture | 104.0 | 18.2 | 15.6 | 6.67x | 5.70x | 1.0 MiB | 4.6 MiB | 0.22x |
+| micro_closure8 | 13.0 | 2.8 | 2.4 | 5.40x | 4.60x | 0.9 MiB | 2.7 MiB | 0.32x |
+| micro_args8 | 26.2 | 10.4 | 9.5 | 2.77x | 2.52x | 0.9 MiB | 2.7 MiB | 0.32x |
+| micro_record_dispatch | 15.5 | 9.3 | 6.5 | 2.40x | 1.66x | 0.9 MiB | 2.7 MiB | 0.32x |
+| closure_pipeline | 10.5 | 4.3 | 3.1 | 3.40x | 2.42x | 0.9 MiB | 2.7 MiB | 0.32x |
 | sorting | 38.5 | 19.1 | 15.7 | 2.45x | 2.01x | 16.3 MiB | 9.5 MiB | 1.71x |
 | float_math | 3.9 | 13.0 | 5.5 | 0.72x | 0.30x | 0.9 MiB | 4.7 MiB | 0.20x |
 | text_scan | 3.5 | 4.1 | 2.4 | 1.47x | 0.85x | 3.4 MiB | 3.6 MiB | 0.94x |
@@ -247,6 +272,14 @@ wasm 产物由仓库自带的宿主执行（`wasm-host/run.mjs`，Node/V8；与�
 | hashmap | 52.9 | 8.4 | 6.8 | 2.0 | 15.48x | 4.18x |
 | hashmap_remove | 109.5 | 116.1 | 37.3 | 3.8 | 23.29x | 30.89x |
 | micro_apply | 59.3 | 1.8 | 7.4 | 7.3 | 5.12x | 0.25x |
+| micro_apply_dyn | 88.4 | 23.6 | 8.8 | 9.6 | 7.04x | 2.47x |
+| micro_partial | 36.3 | 106.6 | 18.5 | 10.8 | 1.41x | 9.85x |
+| micro_overapply | 97.5 | 117.3 | 23.2 | 24.6 | 3.11x | 4.77x |
+| micro_capture | 36.8 | 104.0 | 18.2 | 15.6 | 1.01x | 6.67x |
+| micro_closure8 | 82.2 | 13.0 | 2.8 | 2.4 | 25.38x | 5.40x |
+| micro_args8 | 46.5 | 26.2 | 10.4 | 9.5 | 2.69x | 2.77x |
+| micro_record_dispatch | 55.6 | 15.5 | 9.3 | 6.5 | 5.35x | 2.40x |
+| closure_pipeline | 45.5 | 10.5 | 4.3 | 3.1 | 7.90x | 3.40x |
 | micro_concat | 80.1 | 16.7 | 27.7 | 14.0 | 4.17x | 1.19x |
 | nat_bits | 36.2 | 1.4 | 3.9 | 1.9 | 7.57x | 0.72x |
 | priority_queue | 69.1 | 34.5 | 17.4 | 8.4 | 5.59x | 4.08x |
@@ -672,6 +705,53 @@ T2 的控制流 / 尾调用 / 循环体差距里，大部分来自「每轮重�
 
 基线尚未重标：`bench/baselines/programs.json` 仍是旧口径，重标用
 `sh bench/update-baselines.sh --only programs`。
+
+#### 1.6.5 T3 覆盖矩阵
+
+t3 的每条用例锁一条调用约定 / 闭包生成路径；`micro_apply` 是层内基线（特化后的直调），
+其余 micro 把 `rt_apply`、部分应用 shim、过度应用、捕获闭包与栈实参分别拆开，
+`closures` / `closure_pipeline` 是真实程序验收：
+
+| 用例 | 形状 | 锁住的生成路径 |
+| --- | --- | --- |
+| `micro_apply` | 顶层函数作为实参传入循环 | 高阶参数特化后的直调 |
+| `micro_apply_dyn` | 运行期在闭包之间选择 | `rt_apply` 饱和快路径 |
+| `micro_partial` | 每轮 `add k` 后再饱和 | 部分应用 shim 分配 + 已知 arity 闭包调用 |
+| `micro_overapply` | 一次给足两层实参 | `rt_apply` 过度应用 |
+| `micro_capture` | maker 每轮返回捕获闭包 | 堆环境 + 闭包分配 |
+| `micro_closure8` | 8 参闭包饱和应用 | 闭包 ABI 第 6~8 个实参走栈 |
+| `micro_args8` | 非尾直调 8 参函数 | 标准 ABI 栈实参 + 返回后回收 |
+| `micro_record_dispatch` | record 字段里的闭包 | 投影 head 的 `rt_apply` |
+| `closures` | 高阶函数 / 每次迭代新建闭包 | 真实程序验收 |
+| `closure_pipeline` | `List (Int -> Int)` 逐轮 fold | 表内闭包派发的真实程序验收 |
+
+本机一档（`--target all --runs 5 --warmup 2`，2026-11-26，loadavg ≈ 2.3；
+`ns/op = median_ms × 1e6 / ops`，绝对 ms 只同机可比）：
+
+| 用例 | native ms | native ns/op | native vs c | native vs ml | vuna_ocaml vs c | vuna_ocaml vs ml |
+| --- | --- | --- | --- | --- | --- | --- |
+| micro_apply | 1.80 | 0.36 | 0.28x | 0.26x | 1.38x | 1.28x |
+| micro_apply_dyn | 23.62 | 4.72 | 4.10x | 2.47x | 1.52x | 0.92x |
+| micro_partial | 106.65 | 21.33 | 16.71x | 9.85x | 2.90x | 1.71x |
+| micro_overapply | 117.26 | 23.45 | 18.83x | 4.77x | 3.72x | 0.94x |
+| micro_capture | 103.98 | 20.80 | 14.15x | 6.67x | 2.48x | 1.17x |
+| micro_closure8 | 13.02 | 26.05 | 6.59x | 5.40x | 1.43x | 1.17x |
+| micro_args8 | 26.23 | 5.25 | 2.63x | 2.77x | 1.04x | 1.10x |
+| micro_record_dispatch | 15.46 | 3.09 | 2.54x | 2.40x | 1.53x | 1.45x |
+| closures | 18.98 | 94.91 | 18.43x | 2.72x | 8.60x | 1.27x |
+| closure_pipeline | 10.53 | 13.16 | 5.92x | 3.40x | 2.44x | 1.40x |
+
+（`micro_apply` / `closures` 取同一窗口的 `--only … --runs 5` 读数。）
+
+- 层的基线是 `micro_apply`：特化把高阶参数换成直调后，native 0.36 ns/op，低于手写 C。
+- 一旦落到 `rt_apply` 慢路径，读数按路径分开：`micro_apply_dyn` / `micro_args8` /
+  `micro_record_dispatch` 在 2.4–2.8x ml（饱和 / 直调；`micro_args8` 对 C 也只 2.63x）；
+  `micro_partial` / `micro_capture` / `micro_overapply` 在 4.8–9.9x ml——差价在
+  **每轮的 shim / 堆闭包分配**，与 D129 的剩余项一致，不是调用约定本身。
+- `micro_closure8` 的 native ns/op 比 `micro_apply` 高两个量级，但相对 ml 只有 5.40x：
+  8 参闭包走 5 个参数寄存器 + 3 个栈实参，栈搬运被 OCaml 对照同样承担。
+- `closure_pipeline` 是最接近真实程序的验收：闭包表 + fold 派发在 native 3.40x ml，
+  与 `closures`（2.72x）同档。
 
 ### 1.7 T10 线程 / 同步
 

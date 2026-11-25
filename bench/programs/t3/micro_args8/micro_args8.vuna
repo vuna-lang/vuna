@@ -1,0 +1,11 @@
+-- 标准 ABI 的栈实参：非尾直调 8 参函数，第 7、8 个实参压栈、返回后回收。
+-- 被调体超过内联阈值，调用点在产物里保留（见 .s 里的直接 call）。
+-- 一次 op 是一次 8 参直调；手写 OCaml 对照见 micro_args8.ml（同算法）。
+mix8 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+mix8 a b c d e f g h = a * 1 + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + h * 8
+
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (acc + mix8 n 1 2 3 4 5 6 7)
+
+main : Int
+main = loop 5000000 0

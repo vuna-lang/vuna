@@ -1,0 +1,14 @@
+-- 捕获闭包：maker 每轮返回一个捕获 k 的闭包，调用点再饱和应用
+-- （堆环境 + 每轮分配 + 经 apply1 形参的 rt_apply）。
+-- 一次 op 是一次闭包构造 + 饱和应用；手写 OCaml 对照见 micro_capture.ml（同算法）。
+mk : Int -> (Int -> Int)
+mk k = \x => x + k
+
+apply1 : (Int -> Int) -> Int -> Int
+apply1 g x = g x
+
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (apply1 (mk (n - n / 1000 * 1000)) acc)
+
+main : Int
+main = loop 5000000 0

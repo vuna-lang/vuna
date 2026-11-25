@@ -126,7 +126,8 @@
 - 调用点：按 CBV 从左到右把实参求值到槽；前 6 个装入参数寄存器，其余**逆序压栈**
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
-  另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。
+  另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。非尾 8 参直调的栈实参与
+  回收由 `micro_args8` 锁住（`mix8` 的体超过内联阈值，产物里保留 `call`）。
 - **闭包**：布局 `[0]`=code、`[8]`=arity（运行时 binder 数）、`[16..]`=捕获值。
   调用时 `rdi` = 闭包自身，实参从 `rsi` 起（`rsi/rdx/rcx/r8/r9`，第 6 个实参起压栈）。
   闭包函数入口先把捕获值拷进本帧槽，再按常规绑定形参。捕获只包含 body 真正引用到的
@@ -139,6 +140,11 @@
   拼成实参数组）；过多 → 先吃掉前 arity 个实参，再把返回值当闭包继续应用剩余实参。
   顶层函数 / 运行时符号**当值**时生成静态 wrapper（闭包 ABI → 标准 ABI）作为 code，
   arity 取定义参数个数 / `nativeRtValueArity` / `irInlineArity`。
+  回归基准按路径拆开：`micro_apply` 锁特化后的直调；`micro_apply_dyn` 锁饱和动态应用；
+  `micro_partial` / `micro_overapply` 分别锁部分应用 shim 与过度应用；`micro_capture`
+  锁捕获闭包的分配与 env 读；`micro_closure8` 锁闭包 ABI 的栈实参（第 6~8 个）；
+  `micro_record_dispatch` 锁投影字段 head；`closure_pipeline` 是表内闭包逐轮 fold 的
+  真实程序验收。
 - **调用点去虚拟化**：head 的被调用者能从构造点静态确定时（经 `IrGlobal` / `IrRt` /
   立即 lambda / 部分应用解析，含 let 绑定与跨闭包捕获的传递），饱和调用不再发
   `rt_apply`：已知标准 ABI 目标（顶层函数、运行时叶子）直接 `call`/尾 `jmp`，连闭包值

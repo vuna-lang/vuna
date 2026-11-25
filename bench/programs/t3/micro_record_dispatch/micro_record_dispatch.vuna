@@ -1,0 +1,17 @@
+-- 投影字段派发：闭包存在 record 字段里，经投影 head 饱和应用；head 解析不出，
+-- 走 rt_apply（每轮一次投影 + 一次动态应用，无分配）。
+-- 一次 op 是一次字段投影派发；手写 OCaml 对照见 micro_record_dispatch.ml（同算法）。
+record Step where
+  run : Int -> Int
+
+mkStep : Int -> Step
+mkStep k = Step { run = \x => x + k }
+
+applyStep : Step -> Int -> Int
+applyStep s x = s.run x
+
+loop : Step -> Int -> Int -> Int
+loop s n acc = if n <= 0 then acc else loop s (n - 1) (applyStep s acc)
+
+main : Int
+main = loop (mkStep 3) 5000000 0

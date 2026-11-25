@@ -145,7 +145,8 @@ nix run .#vuna-artifacts -- --json bench/baselines/artifacts.json   # 重标
 
 ## 当前基线
 
-`--target all --runs 5 --warmup 2`（生成时 `meta.loadavg ≈ 2.8`），x86_64 / 16 核 / ocamlopt 5.5.1
+`--target all --runs 5 --warmup 2`（生成时 `meta.loadavg ≈ 2.8`；t3 新增行取
+2026-11-26 窗口，loadavg ≈ 2.3），x86_64 / 16 核 / ocamlopt 5.5.1
 （非 flambda）。每格是 **wall/cpu/rss 三口径的 ratio（对手写 OCaml）**，wasm 列已是减地板的
 net；对手写 C 的对照与 `bench/baselines/programs.json` 里的全部用例见该文件，解读见
 [benchmarks.md](../docs/reference/benchmarks.md)：
@@ -160,6 +161,14 @@ net；对手写 C 的对照与 `bench/baselines/programs.json` 里的全部用�
 | array | 不可变 Array | 0.94/0.94/1.30 | 1.38/1.38/1.77 | skipped |
 | records | record 更新 + variant 分派 | 2.52/2.56/4.89 | 3.57/3.65/0.21 | 9.96/11.22/2.57 |
 | closures | 高阶函数 / 每次迭代新建闭包 | 1.26/1.26/1.54 | 2.74/2.71/2.78 | skipped |
+| micro_apply_dyn | 运行期选闭包后动态应用 | 0.92/0.92/1.83 | 2.47/2.49/0.37 | 7.04/7.51/4.47 |
+| micro_partial | 每轮部分应用 shim | 1.71/1.71/4.41 | 9.85/9.99/0.21 | 1.41/1.64/2.01 |
+| micro_overapply | 一次给足两层实参 | 0.94/0.94/4.56 | 4.77/4.80/0.22 | 3.11/3.25/2.60 |
+| micro_capture | maker 返回捕获闭包 | 1.17/1.18/4.53 | 6.67/6.75/0.22 | 1.01/1.15/2.01 |
+| micro_closure8 | 8 参闭包（3 个栈实参） | 1.17/1.21/1.84 | 5.40/5.59/0.32 | 25.38/27.47/4.44 |
+| micro_args8 | 非尾 8 参直调（2 个栈实参） | 1.10/1.10/1.81 | 2.77/2.80/0.32 | 2.69/2.79/3.44 |
+| micro_record_dispatch | record 字段闭包派发 | 1.45/1.43/1.81 | 2.40/2.41/0.32 | 5.35/5.49/4.35 |
+| closure_pipeline | 闭包表逐轮 fold 派发 | 1.40/1.40/1.80 | 3.40/3.45/0.32 | 7.90/9.14/4.52 |
 | sorting | 归并排序（List + Pair 拆半） | 1.22/1.21/3.72 | 2.45/2.46/1.71 | skipped |
 | float_math | Float 算术 / sqrt / abs | 2.38/2.39/4.30 | 0.72/0.72/0.20 | 3.52/4.30/2.45 |
 | text_scan | 逐字节 `strAt` 扫描 | 1.73/1.75/1.91 | 1.47/1.47/0.94 | skipped |

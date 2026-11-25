@@ -1,0 +1,19 @@
+-- 过度应用：maker 返回柯里化闭包（外层 arity 1、内层捕获 x），apply2 一次给足
+-- 两层实参。f 是 apply2 的形参，运行时 arity 是 1，多出的实参走 rt_apply 的
+-- 过度应用路径；每轮一次闭包分配。
+-- 一次 op 是一次过度应用；手写 OCaml 对照见 micro_overapply.ml（同算法）。
+mk : Int -> (Int -> Int -> Int)
+mk k = \x => \y => x + y + k
+
+apply2 : (Int -> Int -> Int) -> Int -> Int
+apply2 f x = f x x
+
+loop : Int -> Int -> Int
+loop n acc =
+  if n <= 0 then
+    acc
+  else
+    loop (n - 1) (acc + apply2 (mk (n - n / 1000 * 1000)) (n - n / 1000 * 1000))
+
+main : Int
+main = loop 5000000 0

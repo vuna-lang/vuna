@@ -1,0 +1,26 @@
+-- 闭包表派发：一组部分应用闭包（List (Int -> Int)）逐轮 fold；fold 的 lambda
+-- 把每个 op 当动态 head 应用（rt_apply），列表元素是启动时构造的部分应用 shim。
+-- 一次 op 是一次表内闭包应用；手写 OCaml 对照见 closure_pipeline.ml（同算法）。
+plus : Int -> Int -> Int
+plus a b = a + b
+
+mul : Int -> Int -> Int
+mul a b = a * b
+
+wrap : Int -> Int
+wrap x = x - x / 1000 * 1000
+
+applyOp : (Int -> Int) -> Int -> Int
+applyOp op x = op x
+
+ops : List (Int -> Int)
+ops = [plus 1, mul 2, wrap, plus 3]
+
+step : Int -> Int
+step x = foldl (\acc, op => applyOp op acc) x ops
+
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (step acc)
+
+main : Int
+main = loop 200000 0

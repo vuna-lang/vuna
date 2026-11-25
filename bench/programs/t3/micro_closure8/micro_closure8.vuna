@@ -1,0 +1,11 @@
+-- 闭包 ABI 的栈实参：捕获闭包有 8 个 binder，饱和应用时第 6~8 个实参走栈。
+-- 闭包由 mk8 返回后经 loop 的形参传入，head 解析不出，走 rt_apply。
+-- 一次 op 是一次 8 参闭包应用；手写 OCaml 对照见 micro_closure8.ml（同算法）。
+mk8 : Int -> (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int)
+mk8 k = \a, b, c, d, e, f, g, h => k + a + b + c + d + e + f + g + h
+
+loop : (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int) -> Int -> Int -> Int
+loop g n acc = if n <= 0 then acc else loop g (n - 1) (acc + g 1 2 3 4 5 6 7 8)
+
+main : Int
+main = loop (mk8 3) 500000 0

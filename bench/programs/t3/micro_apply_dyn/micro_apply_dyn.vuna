@@ -1,0 +1,21 @@
+-- 动态应用：运行期在 inc / add2 之间选一个闭包后饱和应用；head 是运行期分支的
+-- 结果，调用点解析不出，走 rt_apply 的饱和快路径（对照 micro_apply 的特化直调）。
+-- 一次 op 是一次动态应用；手写 OCaml 对照见 micro_apply_dyn.ml（同算法）。
+inc : Int -> Int
+inc x = x + 1
+
+add2 : Int -> Int
+add2 x = x + 2
+
+pick : Int -> (Int -> Int)
+pick k = if k == 0 then inc else add2
+
+apply1 : (Int -> Int) -> Int -> Int
+apply1 g x = g x
+
+loop : Int -> Int -> Int
+loop n acc =
+  if n <= 0 then acc else loop (n - 1) (acc + apply1 (pick (n - n / 2 * 2)) (n - n / 2 * 2))
+
+main : Int
+main = loop 5000000 0

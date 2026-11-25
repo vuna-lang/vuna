@@ -1,0 +1,14 @@
+-- 部分应用：每轮由两参函数生成一个部分应用闭包（shim）再饱和应用。
+-- 部分应用值经 apply1 的形参传入，head 解析不出，走 rt_apply；shim 每轮分配。
+-- 一次 op 是一次部分应用构造 + 饱和应用；手写 OCaml 对照见 micro_partial.ml（同算法）。
+add : Int -> Int -> Int
+add a b = a + b
+
+apply1 : (Int -> Int) -> Int -> Int
+apply1 g x = g x
+
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (apply1 (add (n - n / 1000 * 1000)) acc)
+
+main : Int
+main = loop 5000000 0
