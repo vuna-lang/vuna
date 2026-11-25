@@ -1,5 +1,6 @@
 -- | vuna-target-native：Native 后端插件入口（读 IR → 目标文本）。
 import Vuna.Target.Native.Plugin
+import Base.Data.Obs as Obs
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -8,9 +9,20 @@ import Base.Effect.Exit as EffExit
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Types as EffTypes
+import Base.Trait.Monad as Monad
 
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
 main =
   do
+    sample <- sampleWanted
+    _ <- if sample then pure (obsSampleStart "" 0) else pure 0
     code <- Vuna.Target.Native.Plugin.runPlugin
+    _ <- if sample then pure (obsSampleStop 0) else pure 0
     exitWith code
+
+-- | 内部：环境里 `VUNA_OBS_SAMPLE` 非空才返回 True。
+sampleWanted : Member nEnv EnvOp r => Eff r Bool
+sampleWanted =
+  do
+    mode <- envGetEnv "VUNA_OBS_SAMPLE"
+    pure (if mode == "" then False else True)

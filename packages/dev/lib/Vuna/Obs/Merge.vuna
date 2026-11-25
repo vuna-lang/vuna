@@ -163,6 +163,18 @@ mergedText members =
     lines0 = mergeLines members
   in if length lines0 == 0 then "" else join "\n" lines0 ++ "\n"
 
+-- | 读入多份 trace 并合并成一份文本（不打印、不写盘；`vuna dev obs run --out` 复用）。
+-- 任一文件读失败 / 为空即 `ErrC`，错误带路径前缀。
+export mergedTextOfPaths : Member nFs FsOp r => List String -> Eff r (Check String)
+mergedTextOfPaths paths =
+  do
+    membersR <- readMembers paths []
+    pure (
+        case membersR of
+          ErrC e => ErrC e
+          OkC members => OkC (mergedText (sortMembers members))
+      )
+
 -- | 内部：拼出整份合并文本的行：首份元数据 + 每份一条成员行 + 首份事件 + 其余成员分组事件。
 mergeLines : List MergeMember -> List String
 mergeLines [] = []

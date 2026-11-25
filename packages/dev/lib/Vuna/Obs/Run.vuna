@@ -7,9 +7,11 @@
 -- 注入、不拼 shell 片段。
 --
 -- `--level` 缺省 2（`--level 0` 显式关闭观测，用于关闭口径的对照）；`--sample` 与
--- `--interval` 分别映射到 `VUNA_OBS_SAMPLE` / `VUNA_OBS_INTERVAL`。`--out FILE` 映射到
--- `VUNA_OBS_FILE=<绝对路径>`（相对路径按调用方 cwd 拼接，父目录先建）；否则给本次运行一个
--- 全新的临时目录作为 `VUNA_OBS_DIR`，避免把上一轮的 trace 算进这次。
+-- `--interval` 分别映射到 `VUNA_OBS_SAMPLE` / `VUNA_OBS_INTERVAL`。
+--
+-- 输出位置：子进程一律拿到本次运行专属的 `VUNA_OBS_DIR`（每进程一份
+-- `vuna-<pid>.jsonl`，互不截断）。`--out FILE` 是**最终产物**：只产出一份时逐字节写到
+-- FILE，多份时按成员合并成一份合法 trace 再写入；没有 `--out` 时逐行打印各分文件路径。
 --
 -- 只覆盖 `VUNA_OBS*` 这组 env；`--obs` / `--obs-level` 是运行时 argv，由子命令自己读，
 -- 这里不透传也不注入。子进程没产出 trace（level 0 / 忽略 env / 在开文件前失败退出）不是
@@ -27,6 +29,7 @@ import Vuna.Cli.Spec
 import Vuna.Dev.Spec as DevSpec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
+import Vuna.Obs.Merge
 import Base.Data.Nat as Nat
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
@@ -142,20 +145,19 @@ runChild opts argv =
     _ <- printTracePaths target
     pure code
 
--- | 内部：输出目标是 `Pair (Maybe 精确文件) 目录`——`--out` 时第一项是绝对文件路径、目录为空；
--- 否则第一项是 `Nothing`、第二项是本次运行的临时目录。
+-- | 内部：输出目标是 `Pair (Maybe 最终文件) 本次运行目录`——`--out` 时第一项是绝对文件
+-- 路径、否则 `Nothing`；第二项永远是本次运行专属目录（子进程只拿 `VUNA_OBS_DIR`）。
 targetOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> String -> Eff r (Maybe String, String)
 targetOf opts cwd =
-  case opts.runOptsOut of
-    Just out =>
-      do
-        path <- absoluteOut out cwd
-        _ <- ensureDirPath (parentOf path)
-        pure (Just path, "")
-    Nothing =>
-      do
-        dir <- freshRunDir
-        pure (Nothing, dir)
+  do
+    dir <- freshRunDir
+    case opts.runOptsOut of
+      Nothing => pure (Nothing, dir)
+      Just out =>
+        do
+          path <- absoluteOut out cwd
+          _ <- ensureDirPath (parentOf path)
+          pure (Just path, dir)
 
 -- | 内部：`--out` 相对化——相对路径按调用方 cwd 拼成绝对路径（`runIn` 会先 chdir）。
 absoluteOut : {r : Row} -> String -> String -> Eff r String
@@ -192,7 +194,7 @@ envArgsOf opts cwd target =
     vars <- envVarsOf opts target
     pure (append ["env"] (map envPairText vars))
 
--- | 内部：变量集 = 级别 + 输出位置（`--out` 给 `VUNA_OBS_FILE`，否则给 `VUNA_OBS_DIR`）+ 采样。
+-- | 内部：变量集 = 级别 + 输出目录（`VUNA_OBS_DIR`，每进程一份文件）+ 采样。
 envVarsOf : {r : Row} -> RunOpts -> (Maybe String, String) -> Eff r (List (String, String))
 envVarsOf opts target =
   let
@@ -203,12 +205,9 @@ envVarsOf opts target =
         (append (sinkVars target) (append (sampleVar opts) (intervalVar opts)))
   in pure vars
 
--- | 内部：输出位置对应的 env（精确文件 `VUNA_OBS_FILE` / 目录 `VUNA_OBS_DIR`，二选一）。
+-- | 内部：输出位置对应的 env：子进程只拿 `VUNA_OBS_DIR`（每进程一份文件）。
 sinkVars : (Maybe String, String) -> List (String, String)
-sinkVars target =
-  case firstOf target of
-    Just path => [("VUNA_OBS_FILE", path)]
-    Nothing => [("VUNA_OBS_DIR", secondOf target)]
+sinkVars target = [("VUNA_OBS_DIR", secondOf target)]
 
 -- | 内部：`VUNA_OBS_SAMPLE`；未指定采样种类时不设置。
 sampleVar : RunOpts -> List (String, String)
@@ -225,23 +224,70 @@ intervalVar opts =
 envPairText : (String, String) -> String
 envPairText kv = "${firstOf kv}=${secondOf kv}"
 
--- | 内部：跑完打印 trace 路径——`--out` 直接给出文件；否则列临时目录里的 `vuna-*.jsonl`
--- （多进程 = 多个文件，目录序即字典序，输出确定）。
+-- | 内部：跑完打印 trace 路径——`--out` 时把本次运行的进程 trace 合成单文件；否则列目录
+-- 里的 `vuna-*.jsonl`（多进程 = 多个文件）。
 printTracePaths : Member nFs FsOp r, Member nConsole ConsoleOp r => (Maybe String, String) -> Eff r Int
 printTracePaths target =
   case firstOf target of
-    Just out => printOutTrace out
+    Just out => writeTraceOut out (secondOf target)
     Nothing => printDirTraces (secondOf target)
 
--- | 内部：`--out` 模式的收尾行：文件存在则打印路径，否则说明为什么没产出（仍不算错误）。
-printOutTrace : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
-printOutTrace out =
+-- | 内部：`--out` 收尾：没有分文件时给「没产出」诊断；一份时逐字节拷贝；多份时合并。
+writeTraceOut : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> String -> Eff r Int
+writeTraceOut out dir =
   do
-    exists <- pathExistsFile out
-    if exists then
-      obsLine "trace: ${out}"
+    exists <- pathExistsDir dir
+    if not exists then
+      noTraceOut out
     else
-      obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
+      do
+        names <- fsReadDir dir
+        case tracePaths dir names of
+          [] => noTraceOut out
+          [path] => copyTraceOut out path
+          paths => mergeTraceOut out paths
+
+-- | 内部：`--out` 模式的「没产出」诊断（仍不算错误）。
+noTraceOut : Member nConsole ConsoleOp r => String -> Eff r Int
+noTraceOut out =
+  obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
+
+-- | 内部：单进程 trace 逐字节写到 `--out`。先读再原子写，不用 `rename`：run 目录在
+-- `TMPDIR` 下，`--out` 可能落在别的文件系统。
+copyTraceOut : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> String -> Eff r Int
+copyTraceOut out path =
+  do
+    content <- fsReadFile path
+    _ <- fsWriteFileAtomic out content
+    obsLine "trace: ${out}"
+
+-- | 内部：多进程 trace 合并成一份合法 trace 写到 `--out`；合并失败时打印 `error:` 与分文件
+-- 路径（退出码仍由子命令决定）。
+mergeTraceOut : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> List String -> Eff r Int
+mergeTraceOut out paths =
+  do
+    textR <- mergedTextOfPaths paths
+    case textR of
+      OkC text =>
+        do
+          _ <- fsWriteFileAtomic out text
+          obsLine "trace: ${out}"
+      ErrC e =>
+        do
+          _ <- obsLine "error: trace merge failed: ${diagText e}"
+          obsLines (map (\p => "trace: ${p}") paths)
+
+-- | 内部：目录里的 trace 文件完整路径（`vuna-` 前缀 + `.jsonl` 后缀）。
+tracePaths : String -> List String -> List String
+tracePaths dir names = map (traceLinePath dir) (filter isTraceName names)
+
+-- | 内部：一条 `trace: <dir>/<name>` 行。
+traceLine : String -> String -> String
+traceLine dir name = "trace: ${traceLinePath dir name}"
+
+-- | 内部：拼接 `<dir>/<name>`。
+traceLinePath : String -> String -> String
+traceLinePath dir name = "${dir}/${name}"
 
 -- | 内部：临时目录模式的收尾行：目录不存在或没有 trace 文件也打印诊断。
 printDirTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
@@ -255,10 +301,6 @@ printDirTraces dir =
         names <- fsReadDir dir
         printer <- pure (tracesAfter dir names)
         printer
-
--- | 内部：一条 `trace: <dir>/<name>` 行。
-traceLine : String -> String -> String
-traceLine dir name = "trace: ${dir}/${name}"
 
 -- | 内部：过滤目录里的 trace 文件名；一个都没有则打印「没产出」，否则逐行打印路径。
 tracesAfter : Member nConsole ConsoleOp r => String -> List String -> Eff r Int

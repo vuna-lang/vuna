@@ -313,6 +313,7 @@ vunaEventVocabulary =
     "vuna.counter.core.reduce",
     "vuna.counter.core.force",
     "vuna.counter.core.conv",
+    "vuna.counter.core.delta",
     "vuna.counter.conv.mismatch",
     "vuna.counter.meta.solve",
     "vuna.counter.meta.zonk",
@@ -329,6 +330,8 @@ vunaEventVocabulary =
     "vuna.counter.alloc.words",
     "vuna.counter.heap.words",
     "vuna.counter.steps",
+    "vuna.counter.sample.cpu",
+    "vuna.counter.sample.mem",
     "vuna.sample.cpu",
     "vuna.sample.mem"
   ]

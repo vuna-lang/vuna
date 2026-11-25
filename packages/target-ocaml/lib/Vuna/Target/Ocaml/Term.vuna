@@ -1446,7 +1446,9 @@ let dtp_log_emit (lvl : int) (scope : string) (text : string) : int =
 -- 文本里**没有反斜杠**（JSON 的 `"` 全部经 `dtp_obs_qc = Char.chr 34` 拼出）：本文件是
 -- vuna 源码，多行字符串里每个 `\` 都要再转义一层，省掉它们才能让模板可读可 diff。
 -- 采样：CPU 用 `ITIMER_PROF` + `SIGPROF` + `Printexc.get_callstack`（handler 里只抓栈，
--- 不做 I/O/格式化）；内存用 `Gc.Memprof` 分配回调。两处都在停止时批量序列化。
+-- 不做 I/O/格式化）；内存用 `Gc.Memprof` 分配回调。两处共用一个 8192 槽 reservoir
+-- （Algorithm R，全程均匀抽样，不只是开头一段），停止时批量序列化，并用
+-- `vuna.counter.sample.{cpu,mem}` 报告抽样前的样本总数。
 dtObsRuntime : String
 dtObsRuntime = """(* ------------------------------------------------------------------ *)
 (* vuna observability runtime (generated; see docs/reference/          *)
@@ -1761,15 +1763,50 @@ let dtp_obs_mark (name : string) : int =
   else dtp_obs_mark_like \"i\" name \"vuna.mark\" None
 
 let dtp_obs_cap = 8192
-let dtp_obs_cpu : Printexc.raw_backtrace option array = Array.make 8192 None
-let dtp_obs_cpu_n = ref 0
+
+(* Reservoir (Algorithm R): keep a uniform sample of the whole run instead of
+   its first 8192 samples. Integer-only and allocation-free, so it is safe in
+   memprof callbacks and signal handlers. *)
+let dtp_obs_rand_state = ref 0x2545F4914F6CDD1D
+
+let dtp_obs_rand () =
+  let x = !dtp_obs_rand_state in
+  let x = (x lxor (x lsl 13)) land max_int in
+  let x = (x lxor (x lsr 7)) land max_int in
+  let x = (x lxor (x lsl 17)) land max_int in
+  dtp_obs_rand_state := x;
+  x
+
+type dtp_obs_ring = {
+  dtp_ring_slots : Printexc.raw_backtrace option array;
+  mutable dtp_ring_n : int;
+  mutable dtp_ring_seen : int;
+}
+
+let dtp_obs_ring_make () =
+  { dtp_ring_slots = Array.make dtp_obs_cap None; dtp_ring_n = 0; dtp_ring_seen = 0 }
+
+let dtp_obs_ring_add (r : dtp_obs_ring) (bt : Printexc.raw_backtrace) =
+  r.dtp_ring_seen <- r.dtp_ring_seen + 1;
+  if r.dtp_ring_n < dtp_obs_cap then begin
+    r.dtp_ring_slots.(r.dtp_ring_n) <- Some bt;
+    r.dtp_ring_n <- r.dtp_ring_n + 1
+  end else begin
+    let j = dtp_obs_rand () mod r.dtp_ring_seen in
+    if j < dtp_obs_cap then r.dtp_ring_slots.(j) <- Some bt
+  end
+
+let dtp_obs_ring_reset (r : dtp_obs_ring) =
+  for i = 0 to r.dtp_ring_n - 1 do r.dtp_ring_slots.(i) <- None done;
+  r.dtp_ring_n <- 0;
+  r.dtp_ring_seen <- 0
+
+let dtp_obs_cpu_ring = dtp_obs_ring_make ()
 let dtp_obs_cpu_on = ref false
 
 let dtp_obs_cpu_tick (_ : int) =
-  if !dtp_obs_cpu_on && !dtp_obs_cpu_n < dtp_obs_cap then begin
-    dtp_obs_cpu.(!dtp_obs_cpu_n) <- Some (Printexc.get_callstack 32);
-    incr dtp_obs_cpu_n
-  end
+  if !dtp_obs_cpu_on then
+    dtp_obs_ring_add dtp_obs_cpu_ring (Printexc.get_callstack 32)
 
 let dtp_obs_frames b (bt : Printexc.raw_backtrace) =
   let slots = match Printexc.backtrace_slots bt with None -> [||] | Some s -> s in
@@ -1788,15 +1825,11 @@ let dtp_obs_frames b (bt : Printexc.raw_backtrace) =
     slots;
   Buffer.add_char b dtp_obs_rs
 
-let dtp_obs_mem : Printexc.raw_backtrace option array = Array.make 8192 None
-let dtp_obs_mem_n = ref 0
+let dtp_obs_mem_ring = dtp_obs_ring_make ()
 let dtp_obs_mem_run : Gc.Memprof.t option ref = ref None
 
 let dtp_obs_mem_add (bt : Printexc.raw_backtrace) =
-  if !dtp_obs_mem_n < dtp_obs_cap then begin
-    dtp_obs_mem.(!dtp_obs_mem_n) <- Some bt;
-    incr dtp_obs_mem_n
-  end
+  dtp_obs_ring_add dtp_obs_mem_ring bt
 
 let dtp_obs_tracker : (unit, unit) Gc.Memprof.tracker =
   { alloc_minor =
@@ -1807,9 +1840,9 @@ let dtp_obs_tracker : (unit, unit) Gc.Memprof.tracker =
     dealloc_minor = (fun () -> ());
     dealloc_major = (fun () -> ()) }
 
-let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_backtrace option) =
-  for i = 0 to n - 1 do
-    match get i with
+let dtp_obs_emit_samples (name : string) (ring : dtp_obs_ring) =
+  for i = 0 to ring.dtp_ring_n - 1 do
+    match ring.dtp_ring_slots.(i) with
     | None -> ()
     | Some bt ->
       let b = Buffer.create 256 in
@@ -1831,6 +1864,8 @@ let dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_ba
 let dtp_obs_sample_start (mode : string) (interval_us : int) : int =
   if not (dtp_obs_on ()) then 0
   else begin
+    dtp_obs_ring_reset dtp_obs_cpu_ring;
+    dtp_obs_ring_reset dtp_obs_mem_ring;
     (* `mode` 为空串时按 `VUNA_OBS_SAMPLE`（env）取缺省（`cpu`）；这样 `vuna dev obs run
        --sample both` 的 env 注入能生效，而库层调用总是显式给 mode。 *)
     let mode2 =
@@ -1874,8 +1909,10 @@ let dtp_obs_sample_stop (_ : int) : int =
      with _ -> ());
     (try (match !dtp_obs_mem_run with Some _ -> Gc.Memprof.stop () | None -> ()) with _ -> ());
     dtp_obs_mem_run := None;
-    dtp_obs_emit_samples \"vuna.sample.cpu\" !dtp_obs_cpu_n (fun i -> dtp_obs_cpu.(i));
-    dtp_obs_emit_samples \"vuna.sample.mem\" !dtp_obs_mem_n (fun i -> dtp_obs_mem.(i));
+    dtp_obs_emit_samples \"vuna.sample.cpu\" dtp_obs_cpu_ring;
+    dtp_obs_emit_samples \"vuna.sample.mem\" dtp_obs_mem_ring;
+    ignore (dtp_obs_counter \"vuna.counter.sample.cpu\" dtp_obs_cpu_ring.dtp_ring_seen);
+    ignore (dtp_obs_counter \"vuna.counter.sample.mem\" dtp_obs_mem_ring.dtp_ring_seen);
     dtp_obs_flush ()
   end
 """

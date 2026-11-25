@@ -116,11 +116,27 @@ exit: 0
 out-contains: samples:cpu
 
 # 工具链自采样：`vuna` 自己也是被观测程序（`VUNA_OBS_SAMPLE` 驱动 Main 的
-# sampleStart/Stop）。冷 `check base` 作输入，至少要有 CPU 采样点。
-run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" dev obs run --level 1 --sample cpu --interval 1000 --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
+# sampleStart/Stop）。`check` 的真实工作在 `vuna-compiler` 子进程里，`--out` 必须把
+# 整棵进程树的 trace 合并成一份（不是最后 flush 的进程覆盖）；顺带验证 reservoir
+# 把抽样前总数写进 `vuna.counter.sample.mem`。
+run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" dev obs run --level 1 --sample mem --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
 exit: 0
-run: sh -c 'grep -c "vuna[.]sample[.]cpu" "$TMPDIR/tool-trace.jsonl"'
+run: sh -c '"$VUNA" dev obs validate "$TMPDIR/tool-trace.jsonl"'
 exit: 0
+out-contains: verified
+run: sh -c 'grep -q "vuna[.]parse[.]lex" "$TMPDIR/tool-trace.jsonl" && echo compiler-span'
+exit: 0
+out-contains: compiler-span
+run: sh -c 'pids=$(grep -o "\"pid\":[0-9]*" "$TMPDIR/tool-trace.jsonl" | sort -u | wc -l); test "$pids" -ge 2 && echo "pids $pids"'
+exit: 0
+out-contains: pids
+run: sh -c 'n=$(grep -c "vuna[.]sample[.]mem" "$TMPDIR/tool-trace.jsonl"); test "$n" -gt 100 && echo "mem $n"'
+exit: 0
+out-contains: mem
+# reservoir 的替换分支：抽样前总数 > 保留的 8192 槽（`check base` 的分配量足够大）。
+run: sh -c 'v=$(grep "vuna[.]counter[.]sample[.]mem" "$TMPDIR/tool-trace.jsonl" | grep -o "\"value\":[0-9]*" | cut -d: -f2 | sort -n | tail -1); test "$v" -gt 8192 && echo "sampled $v"'
+exit: 0
+out-contains: sampled
 
 # ---------------------------------------------------------------- 8) convert / render
 run: sh -c '"$VUNA" dev obs convert --to cpuprofile --out "$TMPDIR/a.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
@@ -180,16 +196,21 @@ run: sh -c 'cd "$TMPDIR/wspan-out" && node "$VUNA_SUITE_ROOT/wasm-host/run.mjs" 
 exit: 0
 out-equals: 1
 
-run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
+run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.ObsSpan as ObsSpan\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; VUNA_OBS=1 VUNA_OBS_SAMPLE=mem VUNA_OBS_DIR="$TMPDIR/nspan-trace" "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/nspan-out/bin/nspan"'
 exit: 0
 out-equals: 1
+# 后端插件入口也自采样：codegen 在 `vuna-target-native` 子进程里，trace 必须带分配栈
+# （`--vuna-describe` 那次调用也会写一份空 trace，所以扫全部文件）。
+run: sh -c 'for f in "$TMPDIR"/nspan-trace/*.jsonl; do grep -q "vuna-target-native" "$f" && grep -q "vuna[.]sample[.]mem" "$f" && echo native-sampled && break; done'
+exit: 0
+out-contains: native-sampled
 
 # ---------------------------------------------------------------- 对象库读写 span
 # `Store` 的对象读/写是工作单元：`VUNA_OBS=1` 的 trace 必须出现 vuna.cache.lookup /
 # vuna.cache.write 的 ph:"X" 事件（不是零宽 mark）。
-run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_OBS=1 VUNA_OBS_FILE="$TMPDIR/cache-trace.jsonl" "$VUNA" check "$TMPDIR/app" >/dev/null 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_OBS=1 VUNA_OBS_DIR="$TMPDIR/cache-trace" "$VUNA" check "$TMPDIR/app" >/dev/null 2>&1'
 exit: 0
-run: sh -c 'grep -q "\"name\":\"vuna.cache.lookup\"" "$TMPDIR/cache-trace.jsonl" && grep -q "\"name\":\"vuna.cache.write\"" "$TMPDIR/cache-trace.jsonl"'
+run: sh -c 'grep -q "\"name\":\"vuna.cache.lookup\"" "$TMPDIR"/cache-trace/*.jsonl && grep -q "\"name\":\"vuna.cache.write\"" "$TMPDIR"/cache-trace/*.jsonl'
 exit: 0

@@ -39,7 +39,7 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | `--obs` | 运行时 argv | 等同 `--obs-level 2` |
 | `--obs-level N` / `--obs-level=N` | 运行时 argv | 显式级别 0..3（0 = 关，覆盖 env） |
 | `VUNA_OBS=N` | env | 默认级别（缺省 0） |
-| `VUNA_OBS_FILE` | env | 精确输出文件（单进程场景） |
+| `VUNA_OBS_FILE` | env | 精确输出文件；**只适合单进程**（整棵进程树共用同一路径会互相截断），多进程用 `VUNA_OBS_DIR` |
 | `VUNA_OBS_DIR` | env | 目录；缺省 `${TMPDIR:-/tmp}/vuna-obs`；文件名 `vuna-<pid>.jsonl` |
 | `VUNA_OBS_INTERVAL` | env | 采样间隔 µs（缺省 1000） |
 | `VUNA_OBS_SAMPLE` | env | 采样种类 `cpu` / `mem` / `both`（缺省 `cpu`）：运行时在 `sampleStart` 的 `mode` 为空串时读它；`vuna dev obs run --sample` 把它写进子进程 env |
@@ -54,7 +54,7 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 | 0 | 无 | 每次探针一次 `Lazy.force`（无分配、无 I/O） |
 | 1 | 阶段 span + 计数器 | 每 span 两次时钟读 + 一行 JSON |
 | 2 | + 逐定义 span（文本日志独立，见 [logging.md](logging.md)） | 每定义两次时钟读（compiler 实测 12773 条 `vuna.def.elab`） |
-| 3 | + 逐表达式节点 span（`vuna.elab.term.core`）+ 高频计数器 + CPU/内存采样 | 每表达式节点一次时钟读（compiler 实测 3.4×10^5 条）；采样 1%/默认 1 ms、固定 8192 槽环形数组 |
+| 3 | + 逐表达式节点 span（`vuna.elab.term.core`）+ 高频计数器 + CPU/内存采样 | 每表达式节点一次时钟读（compiler 实测 3.4×10^5 条）；采样 1%/默认 1 ms、固定 8192 槽 reservoir（全程均匀抽样） |
 
 级差是**探针侧**的（`VUNA_OBS` 只被运行时读一次）：level 1 不发逐定义事件、level 1/2 不
 启采样。步数计数（`vuna.counter.steps`）**尚未实现**，见 §10。
@@ -148,7 +148,9 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
   `minor_words + major_words` 求差——`minor_words` 只在 minor GC 边界推进
   （minor heap 16M words ⇒ 量化到 134 MB/格，短 span 恒为 0）；
   峰值内存不可用 span 字段表达（进程高水位不是区间增量，同见 D81）；
-- 采样（`ph:"i"`，`args.stack`）：`vuna.sample.cpu`、`vuna.sample.mem`；
+- 采样（`ph:"i"`，`args.stack`）：`vuna.sample.cpu`、`vuna.sample.mem`；停止时各发一条
+  `ph:"C"` `vuna.counter.sample.cpu` / `.mem`，`args.value` 是 reservoir 之前收到的样本总数
+  （保留的是其中 8192 槽的均匀抽样）；
 - 标记（`ph:"i"`）：用户/编译器自定义名字（`vuna.mark.*` 前缀可选）。
 
 用户程序的事件名不加 `vuna.` 前缀限制：写 `app.render` 之类即可（`validate` 只查 `vuna.*`
@@ -221,8 +223,11 @@ obsSampleStop  : Int -> Int
   `Lazy.force` + 整数比较，见 [logging.md](logging.md) §5），不进 trace。
 - 打开时事件走 `Buffer`（256 事件或 `sampleStop` / `at_exit` flush），写失败只警告一次并降级
   丢事件（**不中止程序**、不改退出码）。
-- 采样：`SIGPROF` handler 只 `Printexc.get_callstack 32` + 存进固定 8192 槽环形数组，停止时
-  批量序列化（handler 里不做 I/O、不做格式化）。环形满即丢弃后续样本。
+- 采样：`SIGPROF` handler 只 `Printexc.get_callstack 32`，memprof 分配回调只存
+  `callstack`；两边共用一个固定 8192 槽的 reservoir（Algorithm R：前 8192 个直接落槽，
+  之后按 `seen` 均匀替换），停止时批量序列化。handler 里不做 I/O、不做格式化，回调里不分配。
+  trace 体积因此有上限，且样本覆盖整段运行而不是只有开头；抽样前总数见
+  `vuna.counter.sample.{cpu,mem}`。
 - **关闭路径的实测口径**是 `nix/checks/vuna-obs-overhead.sh`：`VUNA_OBS=0` 与不设观测的产物
   逐字节一致 + 关闭时不写 trace + 生成运行时的入口都以关闭快速路径开头。**不设墙钟阈值**
   （绝对性能不可跨机器比）。
@@ -233,11 +238,16 @@ obsSampleStop  : Int -> Int
 
 ## 6.1 工具链自采样
 
-`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `packages/cli/app/Main.vuna` 在
+`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU/内存采样由各入口（`packages/cli`、
+`toolchain`、`dev`、`compiler`、`target-native`、`target-wasm` 的 `app/Main.vuna`）在
 `VUNA_OBS_SAMPLE` 非空时调用 `obsSampleStart` / `obsSampleStop`（普通 `VUNA_OBS=1`
-不启动定时器）。所以可以直接 profile 工具链。下面的命令固定用 `./result/bin/vuna`（同一个
-二进制反复采样，避免 `nix run` 的每次求值开销影响读数）；先 `nix build .#vuna --out-link result`
-——`result` 是共享 out-link，可能指向旧二进制或别的产物（例如 `vuna-wasm-browser`）：
+不启动定时器）。所以可以直接 profile 工具链，包括 `vuna check/build` 拆出去的
+`vuna-compiler` 与后端插件子进程。`dev obs run --out` 会把整棵进程树的
+`vuna-<pid>.jsonl` 合并成一份，不会只剩最后一个 flush 的进程。
+
+下面的命令固定用 `./result/bin/vuna`（同一个二进制反复采样，避免 `nix run` 的每次求值
+开销影响读数）；先 `nix build .#vuna --out-link result`——`result` 是共享 out-link，可能指向
+旧二进制或别的产物（例如 `vuna-wasm-browser`）：
 
 ```console
 d=$(mktemp -d); VUNA_STORE="$d/store" ./result/bin/vuna dev obs run --level 1 --sample cpu \
@@ -245,8 +255,10 @@ d=$(mktemp -d); VUNA_STORE="$d/store" ./result/bin/vuna dev obs run --level 1 --
 ./result/bin/vuna dev obs convert --to cpuprofile --out "$d/tool.cpuprofile" "$d/tool.jsonl"
 ```
 
-采样事件的 `args.stack` 以信号处理帧 `dtp_obs_cpu_tick` 开头，取第二帧起才是用户栈；
-`samples` 数量有上限（当前每次运行 8192 条），长命令只看得到前一段的画像。
+采样事件的 `args.stack` 以信号处理帧 `dtp_obs_cpu_tick` 开头，取第二帧起才是用户栈。
+每次运行最多保留 8192 条采样，但它是**全程均匀抽样**（reservoir），不是只覆盖开头一段；
+抽样前的总数看同一进程的 `vuna.counter.sample.{cpu,mem}`，热点计数是保留样本的计数
+（相对排名有效，绝对规模按总数/8192 外推）。
 
 ## 7. 工具链 `vuna dev obs`
 
@@ -269,14 +281,15 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
   - `--level N`（缺省 **2**，`run` 的默认语义就是 level 2；`--level 0` 是关闭口径对照）
     → `VUNA_OBS`；`--sample cpu|mem|both` → `VUNA_OBS_SAMPLE`；`--interval US` →
     `VUNA_OBS_INTERVAL`；
-  - `--out FILE` → `VUNA_OBS_FILE`（相对路径按调用方 cwd 绝对化，父目录先建）；否则本次
-    运行给一个**全新**临时目录 `${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>` 作 `VUNA_OBS_DIR`，
-    跑完列出其中的 `vuna-*.jsonl`；
+  - `--out FILE` → 本次运行的**最终** trace（相对路径按调用方 cwd 绝对化，父目录先建）：
+    子进程统一拿到本次运行专属的 `VUNA_OBS_DIR`，跑完后把其中的 `vuna-*.jsonl` 合并成
+    一份写到 FILE（只有一份时逐字节拷贝；合并失败打印 `error:` 与分文件路径，退出码仍是
+    子命令的）。没有 `--out` 时保留该目录并逐行列出 `vuna-*.jsonl`；
   - 用户命令在 `--` 之后原样透传（不注入 argv、不拼 shell 片段）；`--obs` / `--obs-level`
     是运行时 argv，由子命令自己读，`run` 不代设。
   - **本批限制**：子进程没产出 trace（level 0、或它不读 `VUNA_OBS*`）不算错误——打印
-    `no trace file produced` 并仍返回子命令退出码；`run` 不做 trace 后处理（不自动
-    validate / summarize），需要时组合子命令。
+    `no trace file produced` 并仍返回子命令退出码；除 `--out` 的合并外，`run` 不做 trace
+    后处理（不自动 validate / summarize），需要时组合子命令。
 - `summarize`：span 树折叠 → 自用/总用时、计数表、采样热点；`--json` 机器可读；`--baseline`
   与旧 trace 做差值（回归判定）；`--threshold` 超差退出 1。**折叠简化规则**（规范未规定树
   算法，这里定死一条，实现在 `Vuna.Obs.Summarize`）：
@@ -286,6 +299,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
   - `self = dur − 直接子 dur 之和`；按 `name` 聚合 `count` / `total` / `self`；
   - 数字**一律整数微秒**（不引入 Float，跨机器逐字节可比）；`wallUs` = 最晚结束 − 最早开始；
   - 采样热点按叶子帧 `name@file:line` 聚合，每个种类 top 20（count 降序、帧名升序）；
+  count 是保留样本数（全程均匀抽样），规模看同一进程的 `vuna.counter.sample.*`；
   - `%self` 整数百分比；`--threshold` 只比较阶段 `total`（含子）的差值百分比。
 - `validate`：schema 版本、元数据首行、`ts` 同一 `pid`/`tid` 单调不减、`X` 的 `dur` 非负、
   `C` 的 `args.value` 是整数、采样有 `args.stack`（字符串数组）、
