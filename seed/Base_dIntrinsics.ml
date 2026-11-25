@@ -3,6 +3,7 @@ type t_IType = C_IType_ITy | C_IType_IInt | C_IType_IStr | C_IType_IBool | C_ITy
 and t_TypeIntrinsic = { f_TypeIntrinsic_typeIntrinsicCtorName : string; f_TypeIntrinsic_typeIntrinsicCtorArity : int }
 and t_HostClass = C_HostClass_HostHandled | C_HostClass_HostDirect of (string) * (string) | C_HostClass_HostAbort of (string) * (string)
 and t_BuiltinEffect = { f_BuiltinEffect_beTag : string; f_BuiltinEffect_beImpl : string; f_BuiltinEffect_beHost : t_HostClass; f_BuiltinEffect_beErrorImpl : string; f_BuiltinEffect_beErrorHost : t_HostClass }
+and t_HostSupport = { f_HostSupport_hsTag : string; f_HostSupport_hsOcaml : string; f_HostSupport_hsNative : string; f_HostSupport_hsWasm : string }
 and t_IntrinsicOp = C_IntrinsicOp_OpNone | C_IntrinsicOp_OpAdd | C_IntrinsicOp_OpSub | C_IntrinsicOp_OpMul | C_IntrinsicOp_OpDiv | C_IntrinsicOp_OpEqInt | C_IntrinsicOp_OpNeqInt | C_IntrinsicOp_OpLtInt | C_IntrinsicOp_OpLeInt | C_IntrinsicOp_OpGtInt | C_IntrinsicOp_OpGeInt | C_IntrinsicOp_OpEqStr | C_IntrinsicOp_OpNeqStr | C_IntrinsicOp_OpLtValue | C_IntrinsicOp_OpLeValue | C_IntrinsicOp_OpGtValue | C_IntrinsicOp_OpGeValue | C_IntrinsicOp_OpConcat | C_IntrinsicOp_OpAnd | C_IntrinsicOp_OpOr | C_IntrinsicOp_OpStrFromInt | C_IntrinsicOp_OpStrLength | C_IntrinsicOp_OpStrUnpack | C_IntrinsicOp_OpStrPack | C_IntrinsicOp_OpStrConcatMany | C_IntrinsicOp_OpStrSubstTemplate | C_IntrinsicOp_OpStrHash | C_IntrinsicOp_OpStrDispatchId | C_IntrinsicOp_OpStrAt | C_IntrinsicOp_OpStrSubstring | C_IntrinsicOp_OpStrShow | C_IntrinsicOp_OpNatAdd | C_IntrinsicOp_OpNatSub | C_IntrinsicOp_OpNatMul | C_IntrinsicOp_OpNatDiv | C_IntrinsicOp_OpNatToInt | C_IntrinsicOp_OpNatFromInt | C_IntrinsicOp_OpAddF | C_IntrinsicOp_OpSubF | C_IntrinsicOp_OpMulF | C_IntrinsicOp_OpDivF | C_IntrinsicOp_OpEqF | C_IntrinsicOp_OpNeqF | C_IntrinsicOp_OpLtF | C_IntrinsicOp_OpLeF | C_IntrinsicOp_OpGtF | C_IntrinsicOp_OpGeF | C_IntrinsicOp_OpFloatAbs | C_IntrinsicOp_OpFloatSqrt | C_IntrinsicOp_OpStrFromFloat | C_IntrinsicOp_OpFloatFromInt | C_IntrinsicOp_OpIntFromFloat | C_IntrinsicOp_OpIdentity | C_IntrinsicOp_OpBitAnd | C_IntrinsicOp_OpBitOr | C_IntrinsicOp_OpBitXor | C_IntrinsicOp_OpBitNot | C_IntrinsicOp_OpBitShl | C_IntrinsicOp_OpBitShr
 and t_Intrinsic = { f_Intrinsic_intrinsicName : string; f_Intrinsic_intrinsicSignature : t_IType; f_Intrinsic_intrinsicOp : t_IntrinsicOp; f_Intrinsic_intrinsicVisible : bool }
 and t_FamilyRepr = C_FamilyRepr_FamReprBool | C_FamilyRepr_FamReprNat | C_FamilyRepr_FamReprBoxed
@@ -113,369 +114,394 @@ let rec v_builtinEffectExistsRest = (fun (mc0 : string) (mc1 : t_BuiltinEffect B
 # 264 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isBuiltinEffectTag = (fun (tag : string) -> ((v_builtinEffectExistsRest tag) v_builtinEffects))
 
-# 274 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_effSendCoreName = "Base.Effect.Core.sendCore"
+# 276 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hostTargetNames = (B_dData_dList.C_List__x58__x58_ ("ocaml", (B_dData_dList.C_List__x58__x58_ ("native", (B_dData_dList.C_List__x58__x58_ ("wasm", B_dData_dList.C_List_Nil))))))
 
-# 277 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_effSendCoreIdName = "Base.Effect.Core.sendCoreId"
-
-# 281 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_isSendCoreName = (fun (name : string) -> (if (name = v_effSendCoreName) then true else (name = v_effSendCoreIdName)))
-
-# 286 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_primEffBind1Name = "@vuna@prim_eff_bind1"
-
-# 292 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_primEraseName = "prim_erase"
-
-# 298 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_mainShowDefName = "@vuna@main_show"
-
-# 302 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_effRunName = "Base.Effect.Core.runPure"
+# 303 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_unknownHostSupport = { f_HostSupport_hsTag = ""; f_HostSupport_hsOcaml = "none"; f_HostSupport_hsNative = "none"; f_HostSupport_hsWasm = "none" }
 
 # 307 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_effMainRunName = "Base.Effect.Core.runMain"
+let v_hostSupportTable = (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Console.ConsoleOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "full" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Fs.FsOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "partial" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Clock.ClockOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "partial" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Env.EnvOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "full" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Process.ProcessOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "none" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Exit.ExitOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "full" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Stdin.StdinOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "none"; f_HostSupport_hsWasm = "none" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Args.ArgsOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "full" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Net.NetOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "none"; f_HostSupport_hsWasm = "none" }, (B_dData_dList.C_List__x58__x58_ ({ f_HostSupport_hsTag = "Base.Effect.Tty.TtyOp"; f_HostSupport_hsOcaml = "full"; f_HostSupport_hsNative = "full"; f_HostSupport_hsWasm = "full" }, B_dData_dList.C_List_Nil))))))))))))))))))))
 
-# 330 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_logOnIntrinsicName = "@vuna@log@on"
+# 322 "Vuna/Compiler/Base/Intrinsics.vuna"
+let rec v_findHostSupport = (fun (mc0 : string) (mc1 : t_HostSupport B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__28, dtb__29) -> (if ((dtb__28).f_HostSupport_hsTag = mc0) then dtb__28 else ((v_findHostSupport mc0) dtb__29))
+  | B_dData_dList.C_List_Nil -> v_unknownHostSupport
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 326 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_pickHostSupport = (fun (mc0 : string) (mc1 : t_HostSupport) -> (if (mc0 = "ocaml") then (mc1).f_HostSupport_hsOcaml else (if (mc0 = "native") then (mc1).f_HostSupport_hsNative else (if (mc0 = "wasm") then (mc1).f_HostSupport_hsWasm else "none"))))
+
+# 290 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hostSupportOf = (fun (target : string) (tag : string) -> ((v_pickHostSupport target) ((v_findHostSupport tag) v_hostSupportTable)))
+
+# 294 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_unsupportedHostTags = (fun (target : string) (tags : string B_dData_dList.t_List) -> ((B_dData_dList.v_filter (fun (t : string) -> (((v_hostSupportOf target) t) <> "full"))) tags))
 
 # 334 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_effSendCoreName = "Base.Effect.Core.sendCore"
+
+# 337 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_effSendCoreIdName = "Base.Effect.Core.sendCoreId"
+
+# 341 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_isSendCoreName = (fun (name : string) -> (if (name = v_effSendCoreName) then true else (name = v_effSendCoreIdName)))
+
+# 346 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_primEffBind1Name = "@vuna@prim_eff_bind1"
+
+# 352 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_primEraseName = "prim_erase"
+
+# 358 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_mainShowDefName = "@vuna@main_show"
+
+# 362 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_effRunName = "Base.Effect.Core.runPure"
+
+# 367 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_effMainRunName = "Base.Effect.Core.runMain"
+
+# 390 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_logOnIntrinsicName = "@vuna@log@on"
+
+# 394 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_logEmitIntrinsicName = "@vuna@log@emit"
 
-# 349 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 409 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsLevelIntrinsicName = "@vuna@obs@level"
 
-# 353 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 413 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSpanIntrinsicName = "@vuna@obs@span"
 
-# 360 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 420 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSpanLabIntrinsicName = "@vuna@obs@spanLab"
 
-# 364 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 424 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsCounterIntrinsicName = "@vuna@obs@counter"
 
-# 368 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 428 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsMarkIntrinsicName = "@vuna@obs@mark"
 
-# 372 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 432 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSpanBeginIntrinsicName = "@vuna@obs@spanBegin"
 
-# 376 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 436 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSpanEndIntrinsicName = "@vuna@obs@spanEnd"
 
-# 380 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 440 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSampleStartIntrinsicName = "@vuna@obs@sampleStart"
 
-# 384 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 444 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsSampleStopIntrinsicName = "@vuna@obs@sampleStop"
 
-# 388 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 448 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_assertIntrinsicName = "assert"
 
-# 392 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 452 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_todoIntrinsicName = "todo"
 
-# 396 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 456 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isDebugOnlyName = (fun (name : string) -> (if (name = v_assertIntrinsicName) then true else (name = v_todoIntrinsicName)))
 
-# 409 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 469 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effRowFamilyName = "Base.Effect.Core.Row"
 
-# 413 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 473 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effRowNilCtor = "Base.Effect.Core.Row.Nil"
 
-# 417 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 477 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effRowConsCtor = "Base.Effect.Core.Row.::"
 
-# 421 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 481 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effNamedName = "Base.Effect.Core.Named"
 
-# 425 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 485 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effRowRemName = "Base.Effect.Core.rowRem"
 
-# 429 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 489 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effRowAppendName = "Base.Effect.Core.rowAppend"
 
-# 433 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 493 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effMemberFamilyName = "Base.Effect.Core.Member"
 
-# 437 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 497 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effMemberHereCtor = "Base.Effect.Core.Member.Here"
 
-# 441 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 501 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effMemberThereCtor = "Base.Effect.Core.Member.There"
 
-# 445 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 505 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effTypeName = "Base.Effect.Core.Eff"
 
-# 450 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 510 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effHostOpName = "Base.Effect.Host.HostOp"
 
-# 455 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 515 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effUnitTypeName = "Base.Effect.Core.EffUnit"
 
-# 459 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 519 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effMkCtor = "Base.Effect.Core.Eff.MkEff"
 
-# 464 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 524 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effDefaultInstance = "default"
 
-# 563 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 623 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicName = (fun (mc0 : t_Intrinsic) -> (match mc0 with
-  | { f_Intrinsic_intrinsicName = dtb__28; f_Intrinsic_intrinsicSignature = dtb__29; f_Intrinsic_intrinsicOp = dtb__30; f_Intrinsic_intrinsicVisible = dtb__31 } -> dtb__28
+  | { f_Intrinsic_intrinsicName = dtb__30; f_Intrinsic_intrinsicSignature = dtb__31; f_Intrinsic_intrinsicOp = dtb__32; f_Intrinsic_intrinsicVisible = dtb__33 } -> dtb__30
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 567 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 627 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicSignature = (fun (mc0 : t_Intrinsic) -> (match mc0 with
-  | { f_Intrinsic_intrinsicName = dtb__32; f_Intrinsic_intrinsicSignature = dtb__33; f_Intrinsic_intrinsicOp = dtb__34; f_Intrinsic_intrinsicVisible = dtb__35 } -> dtb__33
+  | { f_Intrinsic_intrinsicName = dtb__34; f_Intrinsic_intrinsicSignature = dtb__35; f_Intrinsic_intrinsicOp = dtb__36; f_Intrinsic_intrinsicVisible = dtb__37 } -> dtb__35
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 571 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 631 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicVisible = (fun (mc0 : t_Intrinsic) -> (match mc0 with
-  | { f_Intrinsic_intrinsicName = dtb__36; f_Intrinsic_intrinsicSignature = dtb__37; f_Intrinsic_intrinsicOp = dtb__38; f_Intrinsic_intrinsicVisible = dtb__39 } -> dtb__39
+  | { f_Intrinsic_intrinsicName = dtb__38; f_Intrinsic_intrinsicSignature = dtb__39; f_Intrinsic_intrinsicOp = dtb__40; f_Intrinsic_intrinsicVisible = dtb__41 } -> dtb__41
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 583 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 643 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicArity = (fun (i : t_Intrinsic) -> (v_arityOfType (v_intrinsicSignature i)))
 
-# 593 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 653 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_typeReturnsEff = (fun (mc0 : t_IType) -> (match mc0 with
-  | C_IType_IPi (dtb__40, dtb__41) -> (v_typeReturnsEff dtb__41)
-  | C_IType_IFun1 (dtb__42, dtb__43) -> (v_typeReturnsEff dtb__43)
-  | C_IType_IFun (dtb__44, dtb__45) -> (v_typeReturnsEff dtb__45)
-  | C_IType_IEffHost (dtb__46) -> true
-  | C_IType_IEff (dtb__47) -> true
+  | C_IType_IPi (dtb__42, dtb__43) -> (v_typeReturnsEff dtb__43)
+  | C_IType_IFun1 (dtb__44, dtb__45) -> (v_typeReturnsEff dtb__45)
+  | C_IType_IFun (dtb__46, dtb__47) -> (v_typeReturnsEff dtb__47)
+  | C_IType_IEffHost (dtb__48) -> true
+  | C_IType_IEff (dtb__49) -> true
   | _ -> false
 ))
 
-# 589 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 649 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicReturnsEff = (fun (i : t_Intrinsic) -> (v_typeReturnsEff (v_intrinsicSignature i)))
 
-# 606 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 666 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intTypeName = "Int"
 
-# 610 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 670 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_strTypeName = "String"
 
-# 614 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 674 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_floatTypeName = "Float"
 
 # 122 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isTypeConstructorName = (fun (name : string) -> (if (if (if (name = v_intTypeName) then true else (name = v_strTypeName)) then true else (name = v_floatTypeName)) then true else ((v_typeIntrinsicArityOf name) >= 0)))
 
-# 602 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 662 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_typeIntrinsicNames = (B_dData_dList.C_List__x58__x58_ (v_intTypeName, (B_dData_dList.C_List__x58__x58_ (v_strTypeName, (B_dData_dList.C_List__x58__x58_ (v_floatTypeName, B_dData_dList.C_List_Nil))))))
 
-# 468 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 528 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_preludeTypeNames = ((B_dData_dList.v_append v_typeIntrinsicNames) v_typeIntrinsicCtorNames)
 
-# 618 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 678 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_boolTypeName = "Base.Data.Bool.Bool"
 
-# 622 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 682 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_boolTrueCtor = "Base.Data.Bool.Bool.True"
 
-# 626 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 686 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_boolFalseCtor = "Base.Data.Bool.Bool.False"
 
-# 631 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 691 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_natTypeName = "Base.Data.Nat.Nat"
 
-# 635 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 695 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_natZeroCtor = "Base.Data.Nat.Nat.Zero"
 
-# 639 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 699 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_natSuccCtor = "Base.Data.Nat.Nat.Succ"
 
-# 643 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 703 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isIntrinsicTypeName = (fun (name : string) -> ((B_dData_dList.v_memName name) v_preludeTypeNames))
 
-# 647 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 707 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_listFamilyName = "Base.Data.List.List"
 
-# 651 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 711 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_listNilCtor = "Base.Data.List.List.Nil"
 
-# 655 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 715 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_listConsCtor = "Base.Data.List.List.::"
 
-# 659 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 719 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_hasFieldLabelName = "Base.Trait.Field.Field"
 
-# 663 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 723 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_hasFieldTraitName = "Base.Trait.Record.HasField"
 
-# 667 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 727 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_hasFieldGetFieldName = "Base.Trait.Record.getField"
 
-# 671 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 731 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_hasFieldMethodName = "getField"
 
-# 693 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 753 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_cfName = (fun (mc0 : t_CanonicalFamily) -> (match mc0 with
-  | { f_CanonicalFamily_cfName = dtb__48; f_CanonicalFamily_cfCtors = dtb__49; f_CanonicalFamily_cfRepr = dtb__50 } -> dtb__48
+  | { f_CanonicalFamily_cfName = dtb__50; f_CanonicalFamily_cfCtors = dtb__51; f_CanonicalFamily_cfRepr = dtb__52 } -> dtb__50
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 697 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 757 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_cfCtors = (fun (mc0 : t_CanonicalFamily) -> (match mc0 with
-  | { f_CanonicalFamily_cfName = dtb__51; f_CanonicalFamily_cfCtors = dtb__52; f_CanonicalFamily_cfRepr = dtb__53 } -> dtb__52
+  | { f_CanonicalFamily_cfName = dtb__53; f_CanonicalFamily_cfCtors = dtb__54; f_CanonicalFamily_cfRepr = dtb__55 } -> dtb__54
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 701 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 761 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_cfRepr = (fun (mc0 : t_CanonicalFamily) -> (match mc0 with
-  | { f_CanonicalFamily_cfName = dtb__54; f_CanonicalFamily_cfCtors = dtb__55; f_CanonicalFamily_cfRepr = dtb__56 } -> dtb__56
+  | { f_CanonicalFamily_cfName = dtb__56; f_CanonicalFamily_cfCtors = dtb__57; f_CanonicalFamily_cfRepr = dtb__58 } -> dtb__58
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 705 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 765 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_canonicalFamilies = (B_dData_dList.C_List__x58__x58_ ({ f_CanonicalFamily_cfName = v_boolTypeName; f_CanonicalFamily_cfCtors = (B_dData_dList.C_List__x58__x58_ (v_boolTrueCtor, (B_dData_dList.C_List__x58__x58_ (v_boolFalseCtor, B_dData_dList.C_List_Nil)))); f_CanonicalFamily_cfRepr = C_FamilyRepr_FamReprBool }, (B_dData_dList.C_List__x58__x58_ ({ f_CanonicalFamily_cfName = v_natTypeName; f_CanonicalFamily_cfCtors = (B_dData_dList.C_List__x58__x58_ (v_natZeroCtor, (B_dData_dList.C_List__x58__x58_ (v_natSuccCtor, B_dData_dList.C_List_Nil)))); f_CanonicalFamily_cfRepr = C_FamilyRepr_FamReprNat }, (B_dData_dList.C_List__x58__x58_ ({ f_CanonicalFamily_cfName = v_listFamilyName; f_CanonicalFamily_cfCtors = (B_dData_dList.C_List__x58__x58_ (v_listNilCtor, (B_dData_dList.C_List__x58__x58_ (v_listConsCtor, B_dData_dList.C_List_Nil)))); f_CanonicalFamily_cfRepr = C_FamilyRepr_FamReprBoxed }, B_dData_dList.C_List_Nil))))))
 
-# 724 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 784 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dropLastSegment = (fun (name : string) -> (match (Base_dSource.v_splitLastDot (Base_dSource.v_splitOnDot name)) with
-  | { B_dData_dPair.f_Pair_first = dtb__57; B_dData_dPair.f_Pair_second = dtb__58 } -> (Base_dSource.v_joinDots dtb__57)
+  | { B_dData_dPair.f_Pair_first = dtb__59; B_dData_dPair.f_Pair_second = dtb__60 } -> (Base_dSource.v_joinDots dtb__59)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 716 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 776 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_ctorSpellingKey = (fun (name : string) -> (if (if (if (if (if ((B_dData_dString.v_endsWith ".Cons") name) then true else ((B_dData_dString.v_endsWith ".RCons") name)) then true else ((B_dData_dString.v_endsWith ".VCons") name)) then true else ((B_dData_dString.v_endsWith ".::") name)) then true else ((B_dData_dString.v_endsWith ".(::)") name)) then ((v_dropLastSegment name) ^ ".CONS") else name))
 
-# 733 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 793 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_findCanonicalFamilyGo = (fun (mc0 : string) (mc1 : t_CanonicalFamily B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__59, dtb__60) -> (if ((v_cfName dtb__59) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__59)) else ((v_findCanonicalFamilyGo mc0) dtb__60))
+  | B_dData_dList.C_List__x58__x58_ (dtb__61, dtb__62) -> (if ((v_cfName dtb__61) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__61)) else ((v_findCanonicalFamilyGo mc0) dtb__62))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 730 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 790 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_findCanonicalFamily = (fun (name : string) -> ((v_findCanonicalFamilyGo name) v_canonicalFamilies))
 
-# 576 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 636 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_canonicalCtorsFor = (fun (name : string) -> (match (v_findCanonicalFamily name) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__61) -> (B_dData_dMaybe.C_Maybe_Just ((v_cfCtors dtb__61)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (B_dData_dMaybe.C_Maybe_Just ((v_cfCtors dtb__63)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 739 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 799 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_canonicalReprOf = (fun (name : string) -> (match (v_findCanonicalFamily name) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__62) -> (B_dData_dMaybe.C_Maybe_Just ((v_cfRepr dtb__62)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (B_dData_dMaybe.C_Maybe_Just ((v_cfRepr dtb__64)))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 746 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 806 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isUnboxedCanonical = (fun (name : string) -> (let nd_uscrut1 = (v_canonicalReprOf name) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (match dtb__63 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__65) -> (match dtb__65 with
   | C_FamilyRepr_FamReprBoxed -> false
   | _ -> true
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 754 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 814 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isBoolCanonical = (fun (name : string) -> (let nd_uscrut1 = (v_canonicalReprOf name) in (match nd_uscrut1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match dtb__64 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__66) -> (match dtb__66 with
   | C_FamilyRepr_FamReprBool -> true
   | _ -> false
 )
   | _ -> false
 )))
 
-# 761 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 821 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_cmpSpecializedTyNames = (B_dData_dList.C_List__x58__x58_ (v_intTypeName, (B_dData_dList.C_List__x58__x58_ (v_strTypeName, (B_dData_dList.C_List__x58__x58_ (v_floatTypeName, (B_dData_dList.C_List__x58__x58_ (v_boolTypeName, B_dData_dList.C_List_Nil))))))))
 
-# 765 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 825 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_ffiScalarNames = (B_dData_dList.C_List__x58__x58_ (v_intTypeName, (B_dData_dList.C_List__x58__x58_ (v_strTypeName, (B_dData_dList.C_List__x58__x58_ (v_boolTypeName, B_dData_dList.C_List_Nil))))))
 
-# 769 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 829 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isFfiScalarName = (fun (name : string) -> ((B_dData_dList.v_memName name) v_ffiScalarNames))
 
-# 774 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 834 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_interpTypeName = "Base.Trait.Interp.Interp"
 
-# 778 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 838 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_interpMethodName = "Base.Trait.Interp.interp"
 
-# 783 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 843 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromStringTypeName = "Base.Trait.FromString.FromString"
 
-# 787 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 847 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromStringMethodName = "Base.Trait.FromString.fromString"
 
-# 791 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 851 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromIntTypeName = "Base.Trait.FromInt.FromInt"
 
-# 795 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 855 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromIntMethodName = "Base.Trait.FromInt.fromInt"
 
-# 799 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 859 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromFloatTypeName = "Base.Data.Float.FromFloat"
 
-# 803 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 863 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_fromFloatMethodName = "Base.Data.Float.fromFloat"
 
-# 836 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 896 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_baseIntrinsics = (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "+"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpAdd; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "-"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpSub; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "*"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpMul; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "/"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpDiv; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitAnd"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitAnd; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitOr"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitOr; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitXor"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitXor; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitNot"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitNot; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitShl"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitShl; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bitShr"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpBitShr; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "++"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpConcat; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "&&"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpAnd; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "||"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpOr; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strFromInt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrFromInt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strUnpack"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IList (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrUnpack; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strPack"; f_Intrinsic_intrinsicSignature = (C_IType_IFun ((C_IType_IList (C_IType_IInt)), C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrPack; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strLength"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrLength; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strConcatMany"; f_Intrinsic_intrinsicSignature = (C_IType_IFun ((C_IType_IList (C_IType_IStr)), C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrConcatMany; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strSubstTemplate"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IList (C_IType_IStr)), C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrSubstTemplate; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strHash"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrHash; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "effectId"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrDispatchId; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strAt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrAt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strSubstring"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IStr, C_IType_IStr)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrSubstring; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strShow"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrShow; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_primEraseName; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpIdentity; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natAdd"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_INat, (C_IType_IFun (C_IType_INat, C_IType_INat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatAdd; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natSub"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_INat, (C_IType_IFun (C_IType_INat, C_IType_INat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatSub; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natMul"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_INat, (C_IType_IFun (C_IType_INat, C_IType_INat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatMul; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natDiv"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_INat, (C_IType_IFun (C_IType_INat, C_IType_INat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatDiv; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natToInt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_INat, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatToInt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "natFromInt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_INat)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNatFromInt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayLength"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IArray ((C_IType_IVar ("a")))), C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayEmpty"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IArray ((C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayGet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arraySet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IArray ((C_IType_IVar ("a")))))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayMake"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IArray ((C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayFromList"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IList ((C_IType_IVar ("a")))), (C_IType_IArray ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "arrayToList"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IArray ((C_IType_IVar ("a")))), (C_IType_IList ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_effectPerformId"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IPi ("b", (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IVar ("b")))))))))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_effectHandleId"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("u", (C_IType_IPi ("a", (C_IType_IPi ("b", (C_IType_IPi ("ret", (C_IType_IPi ("h", (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("ret")), (C_IType_IFun ((C_IType_IVar ("h")), (C_IType_IFun ((C_IType_IFun ((C_IType_IVar ("u")), (C_IType_IVar ("a")))), (C_IType_IFun ((C_IType_IVar ("u")), (C_IType_IVar ("b")))))))))))))))))))))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_effectSelf"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IPi ("b", (C_IType_IFun ((C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))), (C_IType_IVar ("b")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_cleanupPush"; f_Intrinsic_intrinsicSignature = (C_IType_IFun ((C_IType_IFun (C_IType_IInt, C_IType_IInt)), C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_cleanupPop"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedNewScope"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedFork"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))), C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedYield"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedIsCancelled"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedAwait"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedTaskResult"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedTaskError"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedCancelTask"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedCancelScope"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedScopeWait"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedScopeWaitTimeout"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedScopeError"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_schedScopeCount"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "prim_fail"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IStr, (C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_assertIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_todoIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IStr, (C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_eq_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpEqInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_neq_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNeqInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_eq_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpEqStr; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_neq_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNeqStr; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_lt_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLtInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_le_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLeInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_gt_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGtInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_ge_int"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGeInt; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_lt_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLtValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_le_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLeValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_gt_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGtValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_ge_str"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGeValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_lt_bool"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLtValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_le_bool"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLeValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_gt_bool"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGtValue; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_ge_bool"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IBool, (C_IType_IFun (C_IType_IBool, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGeValue; f_Intrinsic_intrinsicVisible = false }, B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-# 938 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 998 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_floatIntrinsics = (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "strFromFloat"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpStrFromFloat; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "floatFromInt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IFloat)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpFloatFromInt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "intFromFloat"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpIntFromFloat; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "floatAbs"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpFloatAbs; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "floatSqrt"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpFloatSqrt; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_add_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpAddF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_sub_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpSubF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_mul_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpMulF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_div_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IFloat)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpDivF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_eq_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpEqF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_neq_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNeqF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_lt_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLtF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_le_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpLeF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_gt_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGtF; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "bi_ge_float"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IFloat, (C_IType_IFun (C_IType_IFloat, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpGeF; f_Intrinsic_intrinsicVisible = false }, B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))
 
-# 972 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1032 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_effIntrinsics = (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim@toObj"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IGlobal ("Base.Effect.Core.Obj")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim@fromObj"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IGlobal ("Base.Effect.Core.Obj")), (C_IType_IVar ("a")))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_primEffBind1Name; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IPi ("b", (C_IType_IFun1 ((C_IType_IEff ((C_IType_IVar ("a")))), (C_IType_IFun1 ((C_IType_IFun1 ((C_IType_IVar ("a")), (C_IType_IEff ((C_IType_IVar ("b")))))), (C_IType_IEff ((C_IType_IVar ("b")))))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "effTimeUs"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_sleep"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mrefNew"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_ICell ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mrefRead"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_ICell ((C_IType_IVar ("a")))), (C_IType_IEff ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mrefWrite"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_ICell ((C_IType_IVar ("a")))), (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IEff (C_IType_IInt)))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_marrNew"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IMArray ((C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_marrGet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IEff ((C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_marrSet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IEff (C_IType_IInt)))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_marrLen"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMArray ((C_IType_IVar ("a")))), C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_marrFromList"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IList ((C_IType_IVar ("a")))), (C_IType_IMArray ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynNew"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IInt, (C_IType_IMDynArray ((C_IType_IVar ("a")))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynGet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMDynArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IEff ((C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynSet"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMDynArray ((C_IType_IVar ("a")))), (C_IType_IFun (C_IType_IInt, (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IEff (C_IType_IInt)))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynPush"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMDynArray ((C_IType_IVar ("a")))), (C_IType_IFun ((C_IType_IVar ("a")), (C_IType_IEff (C_IType_IInt)))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynLen"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMDynArray ((C_IType_IVar ("a")))), C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_dynClear"; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun ((C_IType_IMDynArray ((C_IType_IVar ("a")))), (C_IType_IEff (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufNew"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IMBuffer)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufAppend"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IMBuffer, (C_IType_IFun (C_IType_IStr, (C_IType_IEff (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufAppendChar"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IMBuffer, (C_IType_IFun (C_IType_IInt, (C_IType_IEff (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufLen"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IMBuffer, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufClear"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IMBuffer, (C_IType_IEff (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_mbufToString"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IMBuffer, C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_print"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@print"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_eprint"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_readLine"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_readBytes"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_getArgs"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost ((C_IType_IList (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryReadFileRange"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IStr)))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@fileExists"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@fileMtime"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@fileSize"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_hostStatus"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryReadFile"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryWriteFile"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryWriteFileAtomic"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryReadDir"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost ((C_IType_IList (C_IType_IStr)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryIsDirectory"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryMakeDir"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryRemoveFile"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryRemoveTree"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryRename"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@trySymlink"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryMakeDirExclusive"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@isTty"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IBool)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryRunIn"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IList (C_IType_IStr)), (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_exit"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_runIn"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IList (C_IType_IStr)), (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "effTimeUs_host"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = true }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@sleep"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@getenv"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@getcwd"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@execPath"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_getArgs_process_host"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost ((C_IType_IList (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_exit_process_host"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@exitOp"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@readLine"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@readBytes"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@getArgs"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost ((C_IType_IList (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetListen"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetPort"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetAccept"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetRecv"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IStr)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetSend"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetClose"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetConnect"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetAcceptWithin"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetRecvWithin"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IStr)))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@host@tryNetSendWithin"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_spawn"; f_Intrinsic_intrinsicSignature = (C_IType_IFun ((C_IType_IList (C_IType_IStr)), (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_wait"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IEffHost (C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_getenv"; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IEffHost (C_IType_IStr)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_getcwd"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = "@vuna@prim_eff_execPath"; f_Intrinsic_intrinsicSignature = (C_IType_IEffHost (C_IType_IStr)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-# 1122 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1182 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_internalIntrinsics = ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_logOnIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IStr, C_IType_IBool)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_logEmitIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IInt)))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsLevelIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSpanIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))), (C_IType_IVar ("a")))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSpanLabIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IPi ("a", (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, (C_IType_IFun ((C_IType_IFun (C_IType_IInt, (C_IType_IVar ("a")))), (C_IType_IVar ("a")))))))))))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsCounterIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsMarkIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSpanBeginIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IStr, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSpanEndIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSampleStartIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IStr, (C_IType_IFun (C_IType_IInt, C_IType_IInt)))); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, (B_dData_dList.C_List__x58__x58_ ({ f_Intrinsic_intrinsicName = v_obsSampleStopIntrinsicName; f_Intrinsic_intrinsicSignature = (C_IType_IFun (C_IType_IInt, C_IType_IInt)); f_Intrinsic_intrinsicOp = C_IntrinsicOp_OpNone; f_Intrinsic_intrinsicVisible = false }, B_dData_dList.C_List_Nil))))))))))))))))))))))) ((B_dData_dList.v_filter (fun (i : t_Intrinsic) -> (B_dData_dBool.v_not (v_intrinsicVisible i)))) v_effIntrinsics))
 
-# 1129 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1189 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_logIntrinsicNames = (B_dData_dList.C_List__x58__x58_ (v_logOnIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_logEmitIntrinsicName, B_dData_dList.C_List_Nil))))
 
-# 1135 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1195 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_obsIntrinsicNames = (B_dData_dList.C_List__x58__x58_ (v_obsLevelIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSpanIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSpanLabIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsCounterIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsMarkIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSpanBeginIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSpanEndIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSampleStartIntrinsicName, (B_dData_dList.C_List__x58__x58_ (v_obsSampleStopIntrinsicName, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 1150 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1210 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_internalIntrinsicNames = ((B_dData_dList.v_map v_intrinsicName) v_internalIntrinsics)
 
-# 1154 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1214 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_allIntrinsics = ((B_dData_dList.v_append v_baseIntrinsics) ((B_dData_dList.v_append v_floatIntrinsics) ((B_dData_dList.v_append v_effIntrinsics) v_internalIntrinsics)))
 
-# 1160 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1220 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_floatIntrinsicNames = (B_dData_dList.C_List__x58__x58_ ("strFromFloat", (B_dData_dList.C_List__x58__x58_ ("floatFromInt", (B_dData_dList.C_List__x58__x58_ ("intFromFloat", (B_dData_dList.C_List__x58__x58_ ("floatAbs", (B_dData_dList.C_List__x58__x58_ ("floatSqrt", (B_dData_dList.C_List__x58__x58_ ("bi_add_float", (B_dData_dList.C_List__x58__x58_ ("bi_sub_float", (B_dData_dList.C_List__x58__x58_ ("bi_mul_float", (B_dData_dList.C_List__x58__x58_ ("bi_div_float", (B_dData_dList.C_List__x58__x58_ ("bi_eq_float", (B_dData_dList.C_List__x58__x58_ ("bi_neq_float", (B_dData_dList.C_List__x58__x58_ ("bi_lt_float", (B_dData_dList.C_List__x58__x58_ ("bi_le_float", (B_dData_dList.C_List__x58__x58_ ("bi_gt_float", (B_dData_dList.C_List__x58__x58_ ("bi_ge_float", B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))
 
-# 1181 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1241 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicTbl = ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (i : t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (v_intrinsicName i); B_dData_dPair.f_Pair_second = i })) v_allIntrinsics)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil))
 
-# 1186 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1246 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_findIntrinsic = (fun (name : string) -> ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) v_intrinsicTbl))
 
-# 1190 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1250 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isIntrinsicName = (fun (name : string) -> (match (v_findIntrinsic name) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__65) -> (v_intrinsicVisible dtb__65)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__67) -> (v_intrinsicVisible dtb__67)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1197 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1257 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_userIntrinsics = ((B_dData_dList.v_filter v_intrinsicVisible) v_allIntrinsics)
 
-# 1201 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1261 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_preludeValueNames = ((B_dData_dList.v_map v_intrinsicName) v_userIntrinsics)
 
-# 1205 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1265 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dispatchIdIntrinsicName = "effectId"
 
-# 1214 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1274 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_dispatchIdChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__66, dtb__67) -> ((v_dispatchIdChars dtb__67) (((mc1 lxor dtb__66) * 16777619) land 4294967295))
+  | B_dData_dList.C_List__x58__x58_ (dtb__68, dtb__69) -> ((v_dispatchIdChars dtb__69) (((mc1 lxor dtb__68) * 16777619) land 4294967295))
   | B_dData_dList.C_List_Nil -> (mc1 land 1073741823)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1211 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1271 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dispatchIdOf = (fun (s : string) -> ((v_dispatchIdChars (B_dData_dList.dtp_unpack s)) 2166136261))

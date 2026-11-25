@@ -34,6 +34,7 @@ B_dEffect_dFs.ml
 B_dEffect_dHost.ml
 B_dEffect_dProcess.ml
 B_dEffect_dStdin.ml
+B_dEffect_dTty.ml
 B_dEffect_dTypes.ml
 B_dInternal_dOperator.ml
 B_dTrait_dApplicative.ml
@@ -90,6 +91,7 @@ Driver_dPerfCache.ml
 Driver_dSplit.ml
 Driver_dSplitGen.ml
 Driver_dTarget.ml
+Driver_dTargetBuild.ml
 Driver_dTargetCache.ml
 Driver_dToolPayload.ml
 Elab_dCanonical.ml
@@ -104,7 +106,6 @@ Elab_dInstName.ml
 Elab_dMatch.ml
 Elab_dMeta.ml
 Elab_dMetaSpans.ml
-Elab_dMut.ml
 Elab_dPrelude.ml
 Elab_dRecords.ml
 Elab_dRepresentation.ml
