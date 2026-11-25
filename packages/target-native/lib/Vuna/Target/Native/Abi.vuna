@@ -254,6 +254,10 @@ nativeLiveThreadsLabel = "rt_live_threads"
 export nativeParkedLabel : String
 nativeParkedLabel = "rt_parked_threads"
 
+-- | 线程状态变化的条件字：每次 live/parked 改变都递增并 futex 唤醒，collector 据此重查。
+export nativeThreadEventLabel : String
+nativeThreadEventLabel = "rt_thread_event"
+
 -- | GC 的停车请求（1 = 请求所有线程停车）。
 export nativeGcRequestedLabel : String
 nativeGcRequestedLabel = "rt_gc_requested"

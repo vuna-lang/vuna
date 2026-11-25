@@ -1,6 +1,7 @@
 # syscall sites（函数名: 该站点的 syscall 号）
 allocFn                          "mmap" "mmap" "mmap" "mmap"
 blockBeginFn                     "futex"
+blockEndFn                       "futex" "futex" "futex" "futex"
 cgroupCpusFn                     "openat" "read" "close"
 cmdRunShFn                       "getcwd" "chdir" "fork" "setpgid" "wait4" "chdir" "setpgid" "execve" "exit" "chdir"
 condvarBroadcastFn               "futex"
@@ -30,7 +31,7 @@ printBoolFn                      "write" "write"
 printIntFn                       "write" "write"
 printStrFn                       "write" "write"
 removeTreeFn                     "openat" "getdents64" "close" "close" "rmdir" "unlinkat" "close"
-safepointFn                      "futex" "futex"
+safepointFn                      "futex" "futex" "futex"
 sigBlockFn                       "rt_sigprocmask"
 sigUnblockFn                     "rt_sigprocmask"
 sigalrmFn                        "getpgid" "kill" "kill" "write" "exit"
@@ -43,7 +44,7 @@ strictFailFn                     "exit"
 threadIdFn                       "gettid"
 threadJoinFn                     "futex" "munmap"
 threadParallelismFn              "sched_getaffinity"
-threadSpawnFn                    "mmap" "mprotect" "futex" "clone" "futex" "futex" "futex" "exit"
+threadSpawnFn                    "mmap" "mprotect" "futex" "clone" "futex" "futex" "futex" "futex" "exit"
 threadYieldFn                    "sched_yield"
 trapArrayOobFn                   "write" "exit"
 trapDivZeroFn                    "write" "exit"
@@ -92,6 +93,7 @@ nativeLiveThreadsLabel 8
 nativeParkedLabel 8
 nativeSegsLabel 8
 nativeThreadCountLabel 8
+nativeThreadEventLabel 8
 nativeThreadTabLabel 8192
 nativeThreadedLabel 8
 readBufLabel 8388608

@@ -1142,13 +1142,26 @@ dtThreadRuntime = """(* --------------------------------------------------------
 (* Threads and synchronization primitives (OCaml 5 domains).           *)
 (* ------------------------------------------------------------------ *)
 
-let dtp_thread_spawn (th : int -> Obj.t) : Obj.t =
-  Obj.repr (Domain.spawn (fun () -> th 0))
+type dtp_thread_handle = {
+  mutable dtp_th_done : bool;
+  mutable dtp_th_value : Obj.t;
+  dtp_th_domain : Obj.t Domain.t;
+}
 
-let dtp_thread_join (t : Obj.t) : Obj.t =
-  let d : Obj.t Domain.t = Obj.obj t in
-  if Domain.get_id d = Domain.self () then failwith \"thread: join self\"
-  else Obj.repr (Domain.join d)
+let dtp_thread_spawn (th : int -> 'a) : Obj.t =
+  let d = Domain.spawn (fun () -> Obj.repr (th 0)) in
+  Obj.repr { dtp_th_done = false; dtp_th_value = Obj.repr (); dtp_th_domain = d }
+
+let dtp_thread_join (t : Obj.t) : 'a =
+  let h : dtp_thread_handle = Obj.obj t in
+  if h.dtp_th_done then Obj.obj h.dtp_th_value
+  else if Domain.get_id h.dtp_th_domain = Domain.self () then failwith \"thread: join self\"
+  else begin
+    let v = Domain.join h.dtp_th_domain in
+    h.dtp_th_value <- v;
+    h.dtp_th_done <- true;
+    Obj.obj v
+  end
 
 let dtp_thread_yield () : int =
   (try Unix.sleepf 0.0 with _ -> ());
