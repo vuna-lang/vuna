@@ -296,10 +296,13 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - **多线程原语**：`clone` + futex 已实现（`thread_*` / `mutex*` / `condvar*` / `atomic*`），
   并行区用 **STW + safepoint** 回收（TCB 在 `%fs`、线程表、`saved_rsp` / park 协议、
   循环头 `rt_safepoint`、futex 等待与阻塞宿主 syscall 的 `block_begin`/`block_end` 标记）。
-  宿主态按线程隔离：状态槽与 cleanup 链头在 TCB，其余固定缓冲在每线程的 mmap scratch 块；
-  进程级的只剩子进程 pid 表（`child_push` / `child_drop` 用 futex 锁串行）。仍有的边界：
-  worker 体内用 `runFsHost` + `runFsError` 显式装 handler 后并行 fs 可用；线程表固定 1024 槽。
-  见 [debt.md](debt.md) D135。
+  宿主态按线程隔离：状态槽与 cleanup 链头在 TCB，其余固定缓冲在每线程的 mmap scratch 块
+  （scratch 是整程序属性，见 [primitives.md](primitives.md) §6.2）。线程表 4096 槽：GC 三个
+  扫描循环按 `rt_thread_hi`（已用最高槽 + 1，单调）收上界，槽里解引用 TCB 前核对 magic；
+  登记失败先 `munmap` 栈与 scratch 再 trap `too many threads`。子进程 pid 表仍是进程级的
+  （64 槽、一把 futex 锁；`sigalrm` 不拿锁读一次计数；槽满时收掉新子进程并报
+  `ProcessTooManyChildren`）。边界：worker 体内用 `runFsHost` + `runFsError` 显式装
+  handler 后并行 fs 可用；**没有 detach**——未 join 的线程不回收（[debt.md](debt.md) D140）。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
   保守扫根，入口自带栈（105 的 9u7）：深递归不再依赖 `ulimit -s`，40 万层非尾递归由 9u7 锁定。

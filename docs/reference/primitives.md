@@ -296,9 +296,12 @@ native `96` 与 ocaml `95` 分别覆盖 Process / Net 的 `Result` runner。
 
 - 线程 = 共享地址空间的内核线程（`clone`，`CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM|SETTLS`）；
   每线程一条虚拟栈（缺省 64 MiB，读 `VUNA_NATIVE_STACK_MB`，下限 1 MiB；低页
-  `PROT_NONE` 护栏），TCB 在栈顶下方、`%fs` 指向它；固定 1024 槽的线程表登记 live TCB。
-  Thread 对象在堆上（state/futex | result | stack base | size | closure | tcb | slot |
-  scratch），`join` 用 futex 等 state，完成后 `munmap` 栈与 scratch；重复 join 返回同一结果。
+  `PROT_NONE` 护栏），TCB 在栈顶下方、`%fs` 指向它；4096 槽的线程表登记 live TCB
+  （槽在 `join` 时用 CAS 清空，串行 spawn/join 可以无限次复用槽）。Thread 对象在堆上
+  （state/futex | result | stack base | size | closure | tcb | slot | scratch），`join`
+  用 futex 等 state，完成后 `munmap` 栈与 scratch；重复 join 返回同一结果。登记失败时先
+  `munmap` 刚分配的栈与 scratch 再 trap `too many threads (limit 4096)`；**没有 detach**：
+  spawn 出来的句柄必须 join，否则槽、栈与 scratch 都不回收（见 [debt.md](debt.md) D140）。
 - 子线程在 `runPure` 里执行任务体；`threadId` 是线程表槽号（主线程 0，与 OCaml 的 domain
   id 同口径），`threadParallelism` 数 `sched_getaffinity` 的位。
 - 分配：有子线程（`rt_thread_count > 0`）时 `alloc` 拿一把 futex 堆锁；单线程路径不加锁。
@@ -307,7 +310,9 @@ native `96` 与 ocaml `95` 分别覆盖 Process / Net 的 `Result` runner。
   `block_end`）以及阻塞的宿主 syscall（read / write / wait4 / nanosleep / getdents64，
   有子线程时才标记）发布 `saved_rsp` 并停车。根集 = 每个 live 线程的 `[saved_rsp, stack_top)`
   保守扫描 + CAF + 每个线程 TCB 的 cleanup 链。回收结束清请求、推进 `rt_gc_epoch` 并唤醒
-  全部停车线程（先读 epoch 再查请求，避免丢失唤醒）。
+  全部停车线程（先读 epoch 再查请求，避免丢失唤醒）。扫描上界取 `rt_thread_hi`（已用最高
+  槽 + 1，单调）而不是表容量：并发通常只有几十，扫满 4096 槽会在 `GC_STRESS` 下变成可测
+  开销；槽里解引用 TCB 前核对 magic，表被写坏时 trap 而不是把任意内存当 TCB 扫。
 - `Mutex` 是 3 态 futex（0 空闲 / 1 锁定 / 2 有等待者）；`Condvar` 是 32-bit 序号 + futex
   （抗虚假唤醒）；`Atomic` 是 8 字节单元，load 普通 mov、store/RMW `xchg`/`lock` 前缀
   （C11 seq_cst 的 x86 映射），`fetchAdd` 用 CAS 循环并保持 63-bit 回绕。
@@ -315,9 +320,12 @@ native `96` 与 ocaml `95` 分别覆盖 Process / Net 的 `Result` runner。
   spawn arena / 8 MiB 读缓冲 / timespec / termios / affinity / 子进程 envp 在每线程的
   mmap scratch 块（约 8.4 MiB 虚拟，`MAP_NORESERVE`）。scratch 是整程序属性：可达代码
   用得到宿主叶子时主线程在 `init_tcb_scratch` 映射、子线程按 `rt_scratch_needed` 在
-  `thread_spawn` 映射；否则一次都不映射。仍进程级的只有子进程 pid 表
-  （`child_push` / `child_drop` 用一把 futex 锁串行，`sigalrm` 遍历它逐组收掉）。
-  见 [debt.md](debt.md) D135。
+  `thread_spawn` 映射；否则一次都不映射。进程级的只有子进程 pid 表：64 槽，
+  `child_push` / `child_drop` 用一把 futex 锁串行，`sigalrm` 不拿锁、读一次计数遍历（push
+  先写槽后写计数、drop 先交换后减计数，见 [native-runtime.md](native-runtime.md) §4）；
+  槽满时调用点立刻 `kill` + `wait4` 收掉刚 fork 的子进程并报 `ProcessTooManyChildren`——
+  超时机制跟踪不到的子进程会让总超时静默失效。`runIn` 的 `chdir` 在子进程里做，父进程的
+  cwd 全程不动。
 
 **OCaml 运行时**（`Vuna_runtime.ml` 的 `dtThreadRuntime`）：
 

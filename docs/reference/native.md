@@ -382,7 +382,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
-| 多线程原语 | 支持 | `thread_spawn` / `thread_join` / `mutex*` / `condvar*` / `atomic*`（`clone` + futex；并行区 STW 回收，宿主态按线程隔离，见 [primitives.md](primitives.md) §6.2 与 [debt.md](debt.md) D135） |
+| 多线程原语 | 支持 | `thread_spawn` / `thread_join` / `mutex*` / `condvar*` / `atomic*`（`clone` + futex；并行区 STW 回收，宿主态按线程隔离，线程表 4096 槽 + 高水位扫描，见 [primitives.md](primitives.md) §6.2 与 [debt.md](debt.md) D140） |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /

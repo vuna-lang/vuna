@@ -644,7 +644,7 @@ spawn/join）。手写 OCaml 对照用 `Domain`，C 对照用 `pthread`；四个
 - **同步计数器是唯一不在同一量级的一档**：native 的 `thread_atomic_counter` 与
   `thread_mutex_counter` 墙钟都是 42x（CPU 55x / 28x）。成本不在同步原语本身，而在
   **分配**：每轮 `atomicFetchAdd` / `withMutex` 都要分配 Eff 帧，native 在有子线程时每次
-  `alloc` 拿 futex 堆锁（[primitives.md](primitives.md) §6.2、[debt.md](debt.md) D135），
+  `alloc` 拿 futex 堆锁（[primitives.md](primitives.md) §6.2），
   4 个线程争用同一把锁把 20 万次操作推到 0.42–0.75 s CPU。C 对照只做 `atomic_fetch_add` /
   `pthread_mutex_lock`，没有分配。
 - **纯计算并行与手写对照同档**：`thread_parallel_sum` 1.19x、`thread_par_map` 0.89x 墙钟；
