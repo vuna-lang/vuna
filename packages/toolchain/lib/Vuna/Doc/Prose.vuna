@@ -10,14 +10,9 @@ import Vuna.Compiler.Base.Common
 -- ---------------------------------------------------------------
 -- 转义
 -- ---------------------------------------------------------------
--- | HTML 转义 `&`、`<`、`>`、`"`、`'`。
+-- | HTML 转义 `&`、`<`、`>`、`"`、`'`（逐字符生成片段，末尾一次拼接）。
 export htmlEscape : String -> String
-htmlEscape s = htmlEscapeChars (strUnpack s) ""
-
--- | 内部：逐字符转义。
-htmlEscapeChars : List Int -> String -> String
-htmlEscapeChars [] acc = acc
-htmlEscapeChars (c :: rest) acc = htmlEscapeChars rest (acc ++ htmlEscapeChar c)
+htmlEscape s = strConcatMany (map htmlEscapeChar (strUnpack s))
 
 -- | 内部：单个字符的转义串；无需转义的字符原样返回。
 htmlEscapeChar : Int -> String
@@ -94,38 +89,39 @@ filterNonEmpty (s :: rest) = if s == "" then filterNonEmpty rest else s :: filte
 -- 行内（fuel 递减，保证终止性可证）
 -- ---------------------------------------------------------------
 -- | 内部：行内渲染（代码、链接、交叉引用）；fuel 取字符数 + 1，保证扫描终止。
+-- 片段逆序累积，出口一次 `strConcatMany`（逐字符 `acc ++ c` 是 O(len²)）。
 renderInline : List (String, String) -> String -> String
-renderInline links s = renderInlineGo (strLength s + 1) links (strUnpack s) ""
+renderInline links s = renderInlineGo (strLength s + 1) links (strUnpack s) []
 
 -- | 内部：`renderInline` 的扫描实现；fuel 耗尽时返回已累积的输出，剩余文本丢弃。
-renderInlineGo : Int -> List (String, String) -> List Int -> String -> String
-renderInlineGo fuel links [] acc = acc
+renderInlineGo : Int -> List (String, String) -> List Int -> List String -> String
+renderInlineGo fuel links [] acc = strConcatMany (reverse acc)
 renderInlineGo fuel links (c :: rest) acc =
   if fuel <= 0 then
-    acc
+    strConcatMany (reverse acc)
   else if c == 96 then
     case takeUntil 96 rest [] of
-      Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#96;"
-      Just (code, rest2) => renderInlineGo (fuel - 1) links rest2 "${acc}<code>${htmlEscape (strPack code)}</code>"
+      Nothing => renderInlineGo (fuel - 1) links rest ("&#96;" :: acc)
+      Just (code, rest2) => renderInlineGo (fuel - 1) links rest2 ("</code>" :: htmlEscape (strPack code) :: "<code>" :: acc)
   else if c == 91 then
     case takeUntil 93 rest [] of
-      Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
+      Nothing => renderInlineGo (fuel - 1) links rest ("&#91;" :: acc)
       Just (label, rest2) =>
         case rest2 of
           40 :: rest3 =>
             case takeUntil 41 rest3 [] of
-              Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
+              Nothing => renderInlineGo (fuel - 1) links rest ("&#91;" :: acc)
               Just (url, rest4) =>
                 let
                   labelText = strPack label
                   urlText = strPack url
-                in if safeUrl urlText then renderInlineGo (fuel - 1) links rest4 "${acc}<a href=\"${htmlEscape urlText}\">${htmlEscape labelText}</a>" else renderInlineGo (fuel - 1) links rest "${acc}&#91;"
+                in if safeUrl urlText then renderInlineGo (fuel - 1) links rest4 ("</a>" :: htmlEscape labelText :: "\">" :: htmlEscape urlText :: "<a href=\"" :: acc) else renderInlineGo (fuel - 1) links rest ("&#91;" :: acc)
           _ =>
             case lookupLink links (strPack label) of
-              Nothing => renderInlineGo (fuel - 1) links rest "${acc}&#91;"
-              Just anchor => renderInlineGo (fuel - 1) links rest2 "${acc}<a href=\"#${htmlEscape anchor}\">${htmlEscape (strPack label)}</a>"
+              Nothing => renderInlineGo (fuel - 1) links rest ("&#91;" :: acc)
+              Just anchor => renderInlineGo (fuel - 1) links rest2 ("</a>" :: htmlEscape (strPack label) :: "\">" :: htmlEscape anchor :: "<a href=\"#" :: acc)
   else
-    renderInlineGo (fuel - 1) links rest (acc ++ htmlEscapeChar c)
+    renderInlineGo (fuel - 1) links rest (htmlEscapeChar c :: acc)
 
 -- | 内部：取到分隔符为止的内容与剩余；找不到分隔符返回 `Nothing`。
 takeUntil : Int -> List Int -> List Int -> Maybe (List Int, List Int)

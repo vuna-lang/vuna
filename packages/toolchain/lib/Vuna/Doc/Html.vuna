@@ -20,17 +20,16 @@ concat2 a b = a ++ b
 -- ---------------------------------------------------------------
 -- | 锚点：小写字母与数字保留，空格和 `-` 变成 `-`，其余字符丢弃。
 slug : String -> String
-slug s = slugChars (strUnpack s) ""
+slug s = strConcatMany (concatMap slugChar (strUnpack s))
 
--- | 内部：`slug` 的逐字符实现。
-slugChars : List Int -> String -> String
-slugChars [] acc = acc
-slugChars (c :: rest) acc =
+-- | 内部：单个字符的锚点片段（丢弃时为空列表）。
+slugChar : Int -> List String
+slugChar c =
   if c >= 65 && c <= 90 then
-    slugChars rest (concat2 acc (strPack [c + 32]))
+    [strPack [c + 32]]
   else if c >= 97 && c <= 122 || c >= 48 && c <= 57 then
-    slugChars rest (concat2 acc (strPack [c]))
-  else if c == 32 || c == 45 then slugChars rest (concat2 acc "-") else slugChars rest acc
+    [strPack [c]]
+  else if c == 32 || c == 45 then ["-"] else []
 
 -- | 内部：模块锚点，由模块全名生成。
 moduleAnchor : DocModule -> String
@@ -198,16 +197,11 @@ entryJson name modName pkg kind sig doc anchor =
 
 -- | 内部：把 `<` 转成 `\u003c`，避免 JSON 里出现 `</script` 提前闭合。
 scriptSafe : String -> String
-scriptSafe s = scriptSafeChars (strUnpack s) ""
+scriptSafe s = strConcatMany (map scriptSafeChar (strUnpack s))
 
--- | 内部：`scriptSafe` 的逐字符实现。
-scriptSafeChars : List Int -> String -> String
-scriptSafeChars [] acc = acc
-scriptSafeChars (c :: rest) acc =
-  if c == 60 then
-    scriptSafeChars rest (concat2 acc "\\u003c")
-  else
-    scriptSafeChars rest (concat2 acc (strPack [c]))
+-- | 内部：`scriptSafe` 的逐字符片段。
+scriptSafeChar : Int -> String
+scriptSafeChar c = if c == 60 then "\\u003c" else strPack [c]
 
 -- ---------------------------------------------------------------
 -- 统计 / 包

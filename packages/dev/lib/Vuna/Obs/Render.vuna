@@ -295,16 +295,11 @@ js =
 
 -- | 内部：把内嵌数据里的 `<` 转成 `\u003c`，避免 JSON 文本提前闭合 `<script>`。
 scriptSafe : String -> String
-scriptSafe s = scriptSafeChars (strUnpack s) ""
+scriptSafe s = strConcatMany (map scriptSafeChar (strUnpack s))
 
--- | 内部：`scriptSafe` 的逐字符循环。
-scriptSafeChars : List Int -> String -> String
-scriptSafeChars [] acc = acc
-scriptSafeChars (c :: rest) acc =
-  if c == 60 then
-    scriptSafeChars rest (acc ++ "\\u003c")
-  else
-    scriptSafeChars rest (acc ++ strPack [c])
+-- | 内部：`scriptSafe` 的逐字符片段。
+scriptSafeChar : Int -> String
+scriptSafeChar c = if c == 60 then "\\u003c" else strPack [c]
 
 -- ---------------------------------------------------------------
 -- golden（`_scratch/`，不提交）
