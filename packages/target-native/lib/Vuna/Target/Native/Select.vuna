@@ -682,6 +682,7 @@ instrWritesReg r (ILeaMem dst _ _) = sameReg r dst
 instrWritesReg r (ILeaScale dst _ _ _) = sameReg r dst
 instrWritesReg r (ITrunc32 x) = sameReg r x
 instrWritesReg r (IMovzx dst _) = sameReg r dst
+instrWritesReg r (IMovFsLoad dst _) = sameReg r dst
 instrWritesReg r (IBinReg _ dst _) = sameReg r dst
 instrWritesReg r (ISetcc _ dst) = sameReg r dst
 instrWritesReg r (ICmov _ dst _) = sameReg r dst

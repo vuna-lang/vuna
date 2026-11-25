@@ -15,12 +15,12 @@ effPrintFn                       "write"
 errFinish                        "write" "exit"
 execPathFn                       "readlink"
 exitWithFn                       "exit"
+futexAcquireFn                   "futex"
+futexReleaseFn                   "futex"
 getcwdFn                         "getcwd"
-heapLockFn                       "futex"
-heapUnlockFn                     "futex"
 initCpusFn                       "sched_getaffinity" "sched_setaffinity"
 initStackFn                      "mmap" "mprotect"
-initTcbFn                        "arch_prctl"
+initTcbFn                        "arch_prctl" "mmap"
 initTimeoutFn                    "rt_sigaction" "setitimer"
 isTtyFn                          "ioctl"
 lstatPathFn                      "newfstatat"
@@ -40,9 +40,9 @@ sleepUsFn                        "nanosleep"
 spawnExecFn                      "fork" "setpgid" "setpgid" "execve" "exit"
 statPathFn                       "newfstatat"
 threadIdFn                       "gettid"
-threadJoinFn                     "futex" "munmap"
+threadJoinFn                     "futex" "munmap" "munmap"
 threadParallelismFn              "sched_getaffinity"
-threadSpawnFn                    "mmap" "mprotect" "futex" "clone" "futex" "futex" "futex" "futex" "exit"
+threadSpawnFn                    "mmap" "mprotect" "mmap" "futex" "clone" "futex" "futex" "futex" "futex" "exit"
 threadYieldFn                    "sched_yield"
 trapArrayOobFn                   "write" "exit"
 trapDivZeroFn                    "write" "exit"
@@ -68,13 +68,10 @@ argcLabel 8
 argvLabel 8
 cgBufLabel 64
 childCountLabel 8
+childLockLabel 8
 childPidsLabel 64
 cleanupHeadLabel 8
-cmdBufLabel 65536
 cpuCountLabel 8
-dirBufLabel 32768
-dirNamesLabel 32256
-envChildLabel 8192
 envpLabel 8
 heapLockLabel 8
 hostErrnoLabel 8
@@ -93,11 +90,7 @@ nativeThreadCountLabel 8
 nativeThreadEventLabel 8
 nativeThreadTabLabel 8192
 nativeThreadedLabel 8
-readBufLabel 8388608
-shArgvLabel 32
 sigalrmSetLabel 8
-spawnArgvLabel 2048
-spawnBufLabel 65536
 stackTopLabel 8
 timeoutArmedLabel 8
 # 内核路径 / env 键
