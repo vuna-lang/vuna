@@ -1,4 +1,4 @@
--- | trait 门面：trait、类型层定义与字面量转换。既扁平重导出（`import Base.Trait` 直接用名字），
+-- | trait 门面：trait、类型层定义与转换（字面量 / 显式）。既扁平重导出（`import Base.Trait` 直接用名字），
 -- 也提供命名空间路径（`import Base.Trait.Monad as Monad`）。
 module Base.Trait where
 
@@ -33,3 +33,5 @@ export module Base.Trait.FromInt
 export module Base.Trait.FromInt as FromInt
 export module Base.Trait.FromString
 export module Base.Trait.FromString as FromString
+export module Base.Trait.Convert
+export module Base.Trait.Convert as Convert

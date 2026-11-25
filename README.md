@@ -175,6 +175,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与核心求值限制 |
+| [docs/reference/conversions.md](docs/reference/conversions.md) | 显式转换 trait（Convert / ConvertMaybe）、base 的 Nat/Fin 实例、进入 Fin 的边界 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Effect.Core.*` handler 用法 |
 | [docs/reference/cli.md](docs/reference/cli.md) | CLI 命令树、flag 词汇、帮助与建议、退出码、产品面与 `vuna dev` 的边界 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |

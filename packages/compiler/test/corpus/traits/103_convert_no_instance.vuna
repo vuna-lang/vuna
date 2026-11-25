@@ -1,0 +1,5 @@
+-- 负例：没有 Convert String Int 实例；转换不会被隐式合成。
+import Base.Trait.Convert as Convert
+
+main : String
+main = strFromInt (Convert.convert "x")

@@ -3,6 +3,7 @@ module Base.Data.Nat where
 
 import Base.Data.Bool
 import Base.Trait.Eq
+import Base.Trait.Convert
 import Base.Data.Int
 import Base.Trait.Monoid
 import Base.Data.Maybe
@@ -79,3 +80,10 @@ instance Semigroup Nat where
 
 instance Monoid Nat where
   mempty = 0
+
+-- 显式转换：`Nat -> Int` 无损；`Int -> Nat` 可失败（负数 `Nothing`），有损 clamp 版仍是 `fromInt`。
+instance Convert Nat Int where
+  convert = toInt
+
+instance ConvertMaybe Int Nat where
+  convertMaybe = fromIntMaybe

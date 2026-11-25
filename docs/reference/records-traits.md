@@ -289,6 +289,9 @@ main = pretty Red ++ "/" ++ show Red
   ```
   签名约束、实例头与实例 ctx 的实参个数必须与 trait 的参数个数一致；实例搜索按完整的
   `Dict_C a1 .. an` 头统一（不是只看第一个参数）。
+  base 实际提供的 `Base.Trait.Convert` 是单方法形状（`Convert` / `ConvertMaybe`，没有
+  `convertBack`），且不提供 `deriving` 或恒等实例；契约、实例与进入 `Fin` 的边界见
+  [conversions.md](conversions.md)。
 - **父类约束**：`trait Functor f => Applicative f where ...`（多个用逗号）。父类字典
   **不嵌入**子类字典值；实例声明时逐个搜索直接父类实例（实例 ctx 或全局实例），缺失报
   `TC_SuperclassNotSatisfied`。泛型 body 使用父类方法时，刚性字典目标走既有提升规则，

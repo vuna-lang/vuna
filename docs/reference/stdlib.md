@@ -34,8 +34,8 @@
 | `Base.Effect.Pure.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
 | `Base.Effect.Cursor` | 有界消费的**持久游标**（`Cursor r a` = 初始状态 + 一步函数 `s -> Eff r (Maybe a, s)`，状态类型对调用方隐藏）：`next` 返回「前进后的游标」，`mapC` / `ofList` / `takeC` / `foldC` 都返回剩余游标；状态是纯数据（没有内部 IORef），只有带 `Int` 上界的消费者，库内无无界递归 |
 | `Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Effect.Core`（[effects.md](effects.md) §8） |
-| `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
-| `Base.Data.Fin` | 长度索引位置：`Fin n` 恰有 n 个值（`FZero` / `FSucc`），`n` 是 Rig0、运行时擦除；`finToNat` / `finWeaken` / `finLast` / `finFromNat`（带界转换，越界 `Nothing`） |
+| `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` / `Convert Nat Int` / `ConvertMaybe Int Nat` 实例 |
+| `Base.Data.Fin` | 长度索引位置：`Fin n` 恰有 n 个值（`FZero` / `FSucc`），`n` 是 Rig0、运行时擦除；`finToNat` / `finWeaken` / `finLast` / `finFromNat` / `finFromInt`（带界转换，越界与负数 `Nothing`）+ `Convert (Fin n) Nat` / `Convert (Fin n) Int` 实例 |
 | `Base.Trait.Num` | 数值算术 trait：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
 | `Base.Data.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` / `get`（`Fin n` 全安全索引）/ `getMaybe`（`Nat` 下标、越界 `Nothing`）/ `tabulate` |
 | `Base.Data.Stream` | 拉式流（`Stream a` 包 `Unit -> StreamStep a`，`SEnd` / `SOne` / `SSkip`）：`uncons` / `empty` / `cons` / `singleton` / `fromList` / `map` / `filter` / `take` / `toList` / `foldl`；无 memo，每次推进真实计算；构造不出无限流（无界余递归不过终止性判据），`filter` 的跳过落成 `SSkip` 由消费方推进 |
@@ -52,6 +52,7 @@
 | `Base.Data.Int` | `Int` 的 `Eq` / `Ord` / `Show` / `Hashable` / `Num` 实例宿主（`Int` 是 primitive 类型；实例跟类型模块走；`Num Int` 的方法体由精化器特化回 `bi_*` 原语） |
 | `Base.Data.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.Trait.FromString` / `Base.Trait.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
+| `Base.Trait.Convert` | 显式转换 trait：`Convert a b`（`convert : a -> b`，全函数无损）与 `ConvertMaybe a b`（`convertMaybe : a -> Maybe b`，可失败）；只有显式调用，无 `deriving` / 隐式插入 / 恒等实例，不随 `Prelude` 导出。base 实例见 [conversions.md](conversions.md) |
 | `Base.Data.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Trait.Eq` / `Base.Trait.Ord` |
 | `Base.Data.Log` | 文本日志库层：`logOn : Int -> String -> Bool`、`logAt : Int -> String -> String -> Int`、`logError` / `logWarn` / `logInfo` / `logDebug` / `logTrace : String -> String -> Int`（`scope, text`）；热路径用内置宏 `log!`（关闭时实参不求值），规范见 [logging.md](logging.md) |
 | `Base.Effect.Core` | 通用运行时效应核心（Layer 1）：开放行 `Row`（`Nil` / `(::)`）、`Named` 命名标签、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
@@ -76,7 +77,7 @@
 | `Base.Effect.Exit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `prim_eff_exit`）；`runExit n` |
 | `Base.Effect.Process` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
 | `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Fin` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Log` / `Obs` / `Obs.Span`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
-| `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString`；也可写路径（`import Base.Trait.Monad as Monad`） |
+| `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString` / `Convert`（含 `ConvertMaybe`）；也可写路径（`import Base.Trait.Monad as Monad`） |
 | `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...TreeMap` / `...TreeSet` / `...Queue` / `...PriorityQueue` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
 | `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` / `IORef` |
@@ -97,7 +98,7 @@ packages/base/lib/
   Base/Data/{Pair,Bool,List,Maybe,Result,String,Unit,Fin,Vec,Nat,Int,Float,Bits,Sort,Log,Obs}.vuna
   Base/Data/Obs/Span.vuna
   Base/Trait/{Eq,Ord,Show,Interp,Hashable,Monoid,Foldable,Traversable,
-              Functor,Applicative,Monad,Record,Field,Num,Neg,FromInt,FromString}.vuna
+              Functor,Applicative,Monad,Record,Field,Num,Neg,FromInt,FromString,Convert}.vuna
   Base/Container/{Map,HashMap,HashSet,TreeMap,TreeSet,Queue,PriorityQueue,Array}.vuna
   Base/Effect/{Core,Types,State,Reader,Error,Exn,Ref,Fs,Console,Clock,
                Env,Args,Stdin,Exit,Net,Process}.vuna
@@ -139,7 +140,8 @@ packages/base/lib/
   level、meta id、哈希、退出码/状态、时间、`-1` 哨兵、`List.take/drop/range` 的计数参数。
 - `String.byteLength` 而非 `String.length`：`Base` / `Prelude` 同时重导出 `Base.Data.List`，
   同名 `length` 会让裸名解析产生歧义（`Base` 门面仍只平铺 `Base.Data.List` 一侧）。
-- `Nat` 可隐式提升为 `Int`（`natToInt`）；反向必须显式 `fromInt`/`fromIntMaybe`。
+- `Nat` 可隐式提升为 `Int`（`natToInt`）；反向必须显式 `fromInt`/`fromIntMaybe`
+  （无损/失败边界也提供 `Convert Nat Int` / `ConvertMaybe Int Nat`，见 [conversions.md](conversions.md)）。
   算术与模式匹配规则见 [primitives.md](primitives.md) / [operators.md](operators.md)。
 
 ## Prelude 自动导入

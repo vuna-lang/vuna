@@ -1,0 +1,21 @@
+-- 显式转换 trait：Convert / ConvertMaybe 由实例搜索驱动，泛型代码按所需保证约束。
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Trait.Convert as Convert
+
+upcast : Convert a b => {a : Type} -> {b : Type} -> a -> b
+upcast x = Convert.convert x
+
+maybeIntToNat : Int -> Maybe.Maybe Nat.Nat
+maybeIntToNat x = Convert.convertMaybe x
+
+showMaybeNat : Maybe.Maybe Nat.Nat -> String
+showMaybeNat m =
+  case m of
+    Maybe.Nothing => "Nothing"
+    Maybe.Just n => strFromInt (Nat.toInt n)
+
+main : String
+main =
+  strFromInt (upcast (Nat.Succ Nat.Zero))
+    ++ "/" ++ showMaybeNat (maybeIntToNat (-1)) ++ "/" ++ showMaybeNat (maybeIntToNat 4)

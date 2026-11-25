@@ -1,0 +1,17 @@
+-- 显式转换：Convert 覆盖无损边，ConvertMaybe 覆盖可失败边；进 Fin 要运行时界（见 36_convert_fin）。
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Trait.Convert as Convert
+
+showMaybeNat : Maybe.Maybe Nat.Nat -> String
+showMaybeNat m =
+  case m of
+    Maybe.Nothing => "Nothing"
+    Maybe.Just n => "Just " ++ strFromInt (Nat.toInt n)
+
+main : String
+main =
+  "n2i="
+    ++ strFromInt (Convert.convert (Nat.Succ (Nat.Succ Nat.Zero)))
+    ++ " i2n="
+    ++ showMaybeNat (Convert.convertMaybe (-1)) ++ " i2n2=" ++ showMaybeNat (Convert.convertMaybe 7)

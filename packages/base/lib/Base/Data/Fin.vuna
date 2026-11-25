@@ -1,9 +1,12 @@
--- | 长度索引位置：`Fin n` 恰好有 n 个值（`0` 到 `n - 1`），是 `Vec n a` 的合法下标；`n` 是 Rig0，运行时擦除。`Fin` 是普通归纳族（`FZero` / `FSucc` 与 `Zero` / `Succ` 同构），不引入新的类型层构造。
+-- | 长度索引位置：`Fin n` 恰好有 n 个值（`0` 到 `n - 1`），是 `Vec n a` 的合法下标；`n` 是 Rig0，运行时擦除。`Fin` 是普通归纳族（`FZero` / `FSucc` 与 `Zero` / `Succ` 同构），不引入新的类型层构造。出向转换 `Fin n -> Nat` / `Fin n -> Int` 有无损的 `Convert` 实例；进入 `Fin` 要运行时界，用 `finFromNat` / `finFromInt`。
 module Base.Data.Fin where
 
 import Base.Data.Nat
 import Base.Data.Maybe
+import Base.Data.Int
+import Base.Trait.Convert
 import Base.Trait.Functor
+import Base.Trait.Ord
 
 -- | 小于 `n` 的下标：`Fin Zero` 没有构造子（空归纳族），`Fin (Succ n)` 由 `FZero` / `FSucc` 逐个生成。
 export data Fin(..) : Nat -> Type where
@@ -32,3 +35,14 @@ export finFromNat : (n : Nat) -> Nat -> Maybe (Fin n)
 finFromNat 0 _ = Nothing
 finFromNat (Succ k) 0 = Just FZero
 finFromNat (Succ k) (Succ j) = fmap (\x => FSucc x) (finFromNat k j)
+
+-- | `finFromNat` 的有符号版：负数与越界都返回 `Nothing`（不 clamp）。
+export finFromInt : (n : Nat) -> Int -> Maybe (Fin n)
+finFromInt n i = if i < 0 then Nothing else finFromNat n (natFromInt i)
+
+-- 出向转换无损，可以做成实例；进入 `Fin` 需要运行时界，只能走 `finFromNat` / `finFromInt`。
+instance Convert (Fin n) Nat where
+  convert = finToNat
+
+instance Convert (Fin n) Int where
+  convert j = natToInt (finToNat j)

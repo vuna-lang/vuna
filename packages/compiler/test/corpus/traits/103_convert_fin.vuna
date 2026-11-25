@@ -1,0 +1,10 @@
+-- 显式转换 trait：Fin 出向实例经泛型约束使用（核心求值器不归约 Fin 构造子，只走 compile+run）。
+import Base.Data.Fin as Fin
+import Base.Data.Nat as Nat
+import Base.Trait.Convert as Convert
+
+upcast : Convert a b => {a : Type} -> {b : Type} -> a -> b
+upcast x = Convert.convert x
+
+main : String
+main = strFromInt (upcast (Fin.finLast 2)) ++ "/" ++ strFromInt (Nat.toInt (upcast (Fin.finLast 3)))

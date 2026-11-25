@@ -71,6 +71,7 @@ modules = [
   "Base.Internal.Operator",
   "Base.Trait",
   "Base.Trait.Applicative",
+  "Base.Trait.Convert",
   "Base.Trait.Eq",
   "Base.Trait.Field",
   "Base.Trait.Foldable",

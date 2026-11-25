@@ -1,0 +1,23 @@
+-- 显式转换：Fin 出向无损；进入 Fin 要运行时界，负数与越界都返回 Nothing。
+import Base.Data.Fin as Fin
+import Base.Data.Maybe as Maybe
+import Base.Data.Nat as Nat
+import Base.Trait.Convert as Convert
+
+showMaybeFin : {n : Nat.Nat} -> Maybe.Maybe (Fin.Fin n) -> String
+showMaybeFin m =
+  case m of
+    Maybe.Nothing => "Nothing"
+    Maybe.Just j => "Just " ++ strFromInt (Nat.toInt (Fin.finToNat j))
+
+main : String
+main =
+  "f2n="
+    ++ strFromInt (Nat.toInt (Convert.convert (Fin.finLast 3)))
+    ++ " f2i="
+    ++ strFromInt (Convert.convert (Fin.finLast 3))
+    ++ " weak="
+    ++ strFromInt (Convert.convert (Fin.finWeaken (Fin.finLast 3)))
+    ++ " fin="
+    ++ showMaybeFin (Fin.finFromInt 5 3)
+    ++ "/" ++ showMaybeFin (Fin.finFromInt 5 (-1)) ++ "/" ++ showMaybeFin (Fin.finFromInt 5 9)

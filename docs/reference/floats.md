@@ -34,6 +34,10 @@ floatFromInt : Int -> Float     -- 见 Base.Data.Float.intToFloat（更可读的
 intFromFloat : Float -> Int     -- 向零截断
 ```
 
+这两条都是有损的全函数（`Int -> Float` 超过 53 位尾数会丢精度，`Float -> Int` 截断小数），
+因此不进入显式转换 trait `Convert`；`Convert` / `ConvertMaybe` 的契约见
+[conversions.md](conversions.md)。
+
 `Base.Data.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
 `intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
 import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`

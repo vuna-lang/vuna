@@ -1,0 +1,9 @@
+-- 负例：进入 Fin 需要运行时界，Convert 没有对应实例；用 finFromInt。
+import Base.Data.Fin as Fin
+import Base.Trait.Convert as Convert
+
+toFin : Int -> Fin.Fin 3
+toFin i = Convert.convert i
+
+main : String
+main = "x"
