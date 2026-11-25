@@ -32,6 +32,9 @@ nB = mkIrBinderTyped 11 "n" IrTyInt
 fB : IrBinder
 fB = mkIrBinderTyped 12 "f" (IrTyFun IrTyInt IrTyInt)
 
+bB : IrBinder
+bB = mkIrBinderTyped 13 "b" IrTyBool
+
 -- loop acc n = if n <= 0 then acc else loop (acc + f acc) (n - 1)
 loopBody : Ir
 loopBody =
@@ -55,7 +58,7 @@ safetyProblems : List String
 safetyProblems =
   filter
     (\s => s /= "")
-    [expectSafe "add const" (IrRtApp "+" (IrVar accB :: IrInt 1 :: [])), expectSafe "mul self" (IrRtApp "*" (IrVar accB :: IrVar accB :: [])), expectSafe "band" (IrRtApp "bitAnd" (IrVar accB :: IrInt 255 :: [])), expectSafe "div const" (IrRtApp "/" (IrVar accB :: IrInt 3 :: [])), expectSafe "cast" (IrCast (Just IrTyInt) (Just IrTyInt) (IrVar accB)), expectUnsafe "div var" (IrRtApp "/" (IrVar accB :: IrVar nB :: [])), expectUnsafe "nested call" (IrRtApp "+" (IrVar accB :: IrApp Nothing (IrVar fB) (IrVar accB) :: [])), expectUnsafe "ctor" (IrCtor "Pair" "Pair" Nothing [IrVar accB, IrVar accB]), expectUnsafe "if" (IrIf (IrVar accB) (IrInt 1) (IrInt 2)), expectUnsafe "proj" (IrProj (IrVar accB) "Point" "x" (Just IrTyInt))]
+    [expectSafe "add const" (IrRtApp "+" (IrVar accB :: IrInt 1 :: [])), expectSafe "mul self" (IrRtApp "*" (IrVar accB :: IrVar accB :: [])), expectSafe "band" (IrRtApp "bitAnd" (IrVar accB :: IrInt 255 :: [])), expectSafe "div const" (IrRtApp "/" (IrVar accB :: IrInt 3 :: [])), expectSafe "cast" (IrCast (Just IrTyInt) (Just IrTyInt) (IrVar accB)), expectSafe "cmp" (IrRtApp "bi_lt_int" [IrVar accB, IrInt 0]), expectSafe "bool if" (IrIf (IrVar bB) (IrInt 1) (IrInt 0)), expectUnsafe "div var" (IrRtApp "/" (IrVar accB :: IrVar nB :: [])), expectUnsafe "nested call" (IrRtApp "+" (IrVar accB :: IrApp Nothing (IrVar fB) (IrVar accB) :: [])), expectUnsafe "ctor" (IrCtor "Pair" "Pair" Nothing [IrVar accB, IrVar accB]), expectUnsafe "if" (IrIf (IrVar accB) (IrInt 1) (IrInt 2)), expectUnsafe "proj" (IrProj (IrVar accB) "Point" "x" (Just IrTyInt))]
 
 expectSafe : String -> Ir -> String
 expectSafe label ir = if dirtySafeArg ir then "" else label ++ ": expected safe"

@@ -251,8 +251,20 @@ dirtySafeArg (IrInt _) = True
 dirtySafeArg (IrCast _ _ inner) = dirtySafeArg inner
 dirtySafeArg (IrTail inner) = dirtySafeArg inner
 dirtySafeArg (IrRtApp "/" [a, IrInt _]) = dirtySafeArg a
-dirtySafeArg (IrRtApp sym args) = scalarChainSym sym && allDirtySafe args
+dirtySafeArg (IrRtApp sym args) = (scalarChainSym sym || isCmpSym sym) && allDirtySafe args
+dirtySafeArg (IrIf c t e) = dirtyCondArg c && dirtySafeArg t && dirtySafeArg e
 dirtySafeArg _ = False
+
+-- | 分支条件必须是规范值：比较 / 布尔变量 / 布尔连接词（条件读高位，不能吃 dirty）。
+dirtyCondArg : Ir -> Bool
+dirtyCondArg (IrBool _) = True
+dirtyCondArg (IrVar b) =
+  case b.irBinderTy of
+    Just IrTyBool => True
+    _ => False
+dirtyCondArg (IrCast _ _ inner) = dirtyCondArg inner
+dirtyCondArg (IrRtApp sym args) = (isCmpSym sym || sym == "&&" || sym == "||") && allDirtySafe args
+dirtyCondArg _ = False
 
 allDirtySafe : List Ir -> Bool
 allDirtySafe [] = True

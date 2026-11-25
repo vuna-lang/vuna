@@ -3210,6 +3210,14 @@ dropLastSelfJump label (i :: rest) =
         Just r => Just (i :: r)
         Nothing => Nothing
 
+-- | 短循环才做 16 字节对齐：指令少的环对起址最敏感（跨取指块），大环的循环体本身
+--   已经跨多个取指块，补 NOP 没有收益，改布局还可能踩到别的边界。
+loopAlignLimit : Int
+loopAlignLimit = 16
+
+alignSmallLoop : List Instr -> List Instr
+alignSmallLoop body = if length body <= loopAlignLimit then [IAlign 4] else []
+
 genLoopBody : Int -> FGen -> Ir -> String -> String -> NRes (List Instr, FGen)
 genLoopBody fuel st inner name loopLabel =
   case loopRotateOf name inner of
@@ -3239,7 +3247,7 @@ genLoopBody fuel st inner name loopLabel =
                 in nbind (genExprAt (fuel - 1) exitSt True rot.lrExit) (
                     \pe =>
                       let
-                        body = append [IJmp lc, IAlign 4, ILabel lb] (append bodyInstrs (append (if st.fgThreaded then [ILabel lc, ICall (nativeRtLabel "safepoint")] else [ILabel lc]) (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))
+                        body = append [IJmp lc] (append (alignSmallLoop bodyInstrs) (append [ILabel lb] (append bodyInstrs (append (if st.fgThreaded then [ILabel lc, ICall (nativeRtLabel "safepoint")] else [ILabel lc]) (append (firstOf cb) (append [IJcc (secondOf cb) lb] (firstOf pe)))))))
                       in NOk (body, { (secondOf pe) | fgRanges = st.fgRanges })
                   )
             )
@@ -3330,7 +3338,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
                       let
                         st1 = secondOf q
                         frame = nativeFrameBytes st1.fgNextSlot
-                        body0 = append (firstOf bp) (append (if threaded then [IAlign 4, ILabel loopLabel, ICall (nativeRtLabel "safepoint")] else [IAlign 4, ILabel loopLabel]) (firstOf q))
+                        body0 = append (firstOf bp) (append (alignSmallLoop (firstOf q)) (append (if threaded then [ILabel loopLabel, ICall (nativeRtLabel "safepoint")] else [ILabel loopLabel]) (firstOf q)))
                         -- 常驻 xmm 的浮点形参在调用前后溢出/重载（槽是权威副本）；要在死槽清零之前。
                         bodySpill = spillReloadFloatRegs st1.fgFloatSlotRegs body0
                         promo = Regs.promoteLoops st1.fgSlotCls (clearDeadSlots st1.fgReenter st1.fgSlotCls (peephole bodySpill))

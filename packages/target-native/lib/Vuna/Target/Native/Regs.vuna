@@ -448,8 +448,9 @@ hoistableAt _ _ _ = False
 isHoistReg : Reg -> Bool
 isHoistReg r = sameReg r R8 || sameReg r R9 || sameReg r R10 || sameReg r R11
 
+-- | 0xFFFF_FFFF 仍留给 `and` 的零扩展折叠（`mov r32, r32`），不搬出循环。
 needsImm64 : Int -> Bool
-needsImm64 k = k > 2147483647 || k < 0 - 2147483648
+needsImm64 k = (k > 2147483647 || k < 0 - 2147483648) && k /= 4294967295
 
 countWrites : Reg -> List Instr -> Int
 countWrites _ [] = 0
