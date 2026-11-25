@@ -1,0 +1,4 @@
+ops=2000
+n=2000
+targets=ocaml,native
+cc_flags=-pthread

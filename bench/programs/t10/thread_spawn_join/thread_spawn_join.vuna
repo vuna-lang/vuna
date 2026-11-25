@@ -1,0 +1,16 @@
+-- 线程创建/回收成本：N 次 spawn（子线程返回 1）+ join。
+import Base.Effect.Core
+import Base.Thread as Thread
+
+go : Int -> Int -> Eff [] Int
+go acc n =
+  if n <= 0 then
+    pure acc
+  else
+    do
+      t <- Thread.spawn (pure 1)
+      x <- Thread.join t
+      go (acc + x) (n - 1)
+
+main : Eff [] Int
+main = go 0 2000

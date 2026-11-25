@@ -1,0 +1,35 @@
+-- 互斥争用成本：4 个线程各在锁保护下自增 50000 次。
+import Base.Effect.Core
+import Base.Effect.Pure.IORef
+import Base.Thread as Thread
+
+incRef : IORef Int -> Eff [] Int
+incRef r =
+  do
+    x <- readRef r
+    _ <- writeRef r (x + 1)
+    pure 0
+
+bump : Mutex -> IORef Int -> Int -> Eff [] Int
+bump m r n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.withMutex m (incRef r)
+      bump m r (n - 1)
+
+main : Eff [] Int
+main =
+  do
+    m <- Thread.newMutex
+    r <- newRef 0
+    a <- Thread.spawn (bump m r 50000)
+    b <- Thread.spawn (bump m r 50000)
+    c <- Thread.spawn (bump m r 50000)
+    d <- Thread.spawn (bump m r 50000)
+    _ <- Thread.join a
+    _ <- Thread.join b
+    _ <- Thread.join c
+    _ <- Thread.join d
+    readRef r

@@ -1,0 +1,25 @@
+-- 并行计算：4 个线程各自累加 0..1499999，join 后求和（测真并行与 spawn 成本）。
+import Base.Effect.Core
+import Base.Thread as Thread
+
+sumRange : Int -> Int -> Int
+sumRange acc n = if n <= 0 then acc else sumRange (acc + n) (n - 1)
+
+body : Eff [] Int
+body =
+  do
+    _ <- pure 0
+    pure (sumRange 0 1500000)
+
+main : Eff [] Int
+main =
+  do
+    a <- Thread.spawn body
+    b <- Thread.spawn body
+    c <- Thread.spawn body
+    d <- Thread.spawn body
+    x <- Thread.join a
+    y <- Thread.join b
+    z <- Thread.join c
+    w <- Thread.join d
+    pure (x + y + z + w)

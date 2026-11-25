@@ -26,6 +26,7 @@ bench/programs/
 | t7 | 文本 | 手写 OCaml / C | `text_scan` `string_ops` `micro_concat` |
 | t8 | 效应机器 | 手写 OCaml | `eff_tick` `eff_deep` `eff_deepseq` `eff_bracket` `eff_nested` `eff_host` `eff_abort` `eff_install` `eff_entry_host` |
 | t9 | 类型类与多态 | 手写 OCaml / 单态对照 | `traits` |
+| t10 | 并发（线程 / 同步原语） | 手写 OCaml `Domain` / C `pthread` | `thread_spawn_join` `thread_mutex_counter` `thread_atomic_counter` `thread_parallel_sum` |
 
 ## 用例类型
 

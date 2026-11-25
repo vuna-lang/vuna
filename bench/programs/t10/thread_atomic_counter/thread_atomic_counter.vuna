@@ -1,0 +1,26 @@
+-- 原子自增吞吐：4 个线程各 200000 次 fetchAdd。
+import Base.Effect.Core
+import Base.Thread as Thread
+
+add : Atomic -> Int -> Eff [] Int
+add cell n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- Thread.atomicFetchAdd cell 1
+      add cell (n - 1)
+
+main : Eff [] Int
+main =
+  do
+    cell <- Thread.newAtomic 0
+    a <- Thread.spawn (add cell 50000)
+    b <- Thread.spawn (add cell 50000)
+    c <- Thread.spawn (add cell 50000)
+    d <- Thread.spawn (add cell 50000)
+    _ <- Thread.join a
+    _ <- Thread.join b
+    _ <- Thread.join c
+    _ <- Thread.join d
+    Thread.atomicLoad cell
