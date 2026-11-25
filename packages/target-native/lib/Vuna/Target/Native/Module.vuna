@@ -153,6 +153,9 @@ record FGen where
   fgAllowDirty : Bool
   -- | 程序使用了线程原语：在函数循环头注入 `rt_safepoint`。
   fgThreaded : Bool
+  -- | 当前函数体里所有 `IrVar` 的 binder id（含嵌套 lambda / case 臂）。
+  --   `Nat` case 用它判断 scrutinee 是否只在这一处被读到。
+  fgReads : List Int
 
 freshSlot : FGen -> (Int, FGen)
 freshSlot st =
@@ -1649,9 +1652,11 @@ genScalarBinInto bud wrapA wrapB st pool a b mk =
     Nothing => Nothing
 
 -- | `IrRtApp` 的标量选择：命中返回以 rax 收尾的指令序列，否则 Nothing（调用方回退）。
-genInlineRt : FGen -> String -> List Ir -> Maybe (List Instr)
+genInlineRt : FGen -> String -> List Ir -> Maybe (List Instr, FGen)
 genInlineRt st sym args =
-  if sym == "/" then
+  if sym == "natAdd" then
+    natAddBranch st args
+  else if sym == "/" then
     case args of
       [a, IrInt d] =>
         case divPlanOf d of
@@ -1661,7 +1666,7 @@ genInlineRt st sym args =
                 let
                   r = firstOf p
                   instrs = firstOf (secondOf p)
-                in Just (if sameReg r Rax then instrs else append instrs [IMov (OpReg Rax) (OpReg r)])
+                in Just (if sameReg r Rax then instrs else append instrs [IMov (OpReg Rax) (OpReg r)], st)
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
@@ -1678,7 +1683,38 @@ genInlineRt st sym args =
               let
                 r = firstOf p
                 instrs = firstOf (secondOf p)
-              in Just (if sameReg r Rax then instrs else append instrs [IMov (OpReg Rax) (OpReg r)])
+              in Just (if sameReg r Rax then instrs else append instrs [IMov (OpReg Rax) (OpReg r)], st)
+
+-- | 饱和加法用分支而不是 `cmov`：饱和是异常路径，分支预测命中时循环携带链只剩一次
+--   `add`；`cmp` / `cmov` 版本把三次操作（add → cmp → cmov）串进累加器的关键路径。
+--   饱和判据与标量计划一致（有符号 `>`）；Nat 值恒为非负 63-bit，两边都按有符号比较。
+natAddBranch : FGen -> List Ir -> Maybe (List Instr, FGen)
+natAddBranch st [a, b] =
+  case genScalarIntoW scalarRetryBudget True st (pickFirst scalarRegs (needsRax b)) a of
+    Nothing => Nothing
+    Just pa =>
+      case genScalarIntoW scalarRetryBudget True st (secondOf (secondOf pa)) b of
+        Nothing => Nothing
+        Just pb =>
+          let
+            rA = firstOf pa
+            rB = firstOf pb
+            lP = freshLabel st
+            l = firstOf lP
+            hot =
+              [
+                IBinReg "add" rA (OpReg rB),
+                IMov (OpReg rB) (OpImm nativeMaxInt),
+                ICmp (OpReg rA) (OpReg rB),
+                IJcc "jle" l,
+                IMov (OpReg rA) (OpImm nativeMaxInt),
+                ILabel l
+              ]
+            tail = if sameReg rA Rax then [] else [IMov (OpReg Rax) (OpReg rA)]
+            instrs =
+              append (firstOf (secondOf pa)) (append (firstOf (secondOf pb)) (append hot tail))
+          in Just (instrs, secondOf lP)
+natAddBranch _ _ = Nothing
 
 -- | 零参常量桩（调试 / 可观测性叶子）的内联值。
 scalarConstOf : String -> Maybe Int
@@ -1712,7 +1748,7 @@ genRtApp fuel st isTail sym args =
                       Just p => NOk p
                       Nothing =>
                         case genInlineRt st sym args of
-                          Just instrs => NOk (instrs, st)
+                          Just p => NOk (firstOf p, secondOf p)
                           Nothing =>
                             case nativeRtTarget sym of
                               Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
@@ -1748,7 +1784,7 @@ genRtValueCallFallback fuel st isTail sym args =
     Just instrs => NOk (instrs, st)
     Nothing =>
       case genInlineRt st sym args of
-        Just instrs => NOk (instrs, st)
+        Just p => NOk (firstOf p, secondOf p)
         Nothing =>
           let
             arity = rtValueArityOf sym
@@ -2532,7 +2568,7 @@ genLamValue fuel st bs body =
       st1 = { st | fgNextLabel = idx + 1 }
       -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
       lamRoom = nativeTailRoomBytes (nativeStackArgCount arity (length closureArgRegs))
-      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] [] [] False st1.fgThreaded
+      stBody = FGen st1.fgDefs st1.fgPool st1.fgFloats [] [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner "" "" [] [] [] [] (filterKnown caps st.fgKnown) st1.fgReenter [] [] [] [] False st1.fgThreaded (binderRefsOf body)
     in nbind (bindCaptures stBody st.fgSlotCls caps 0) (
         \cp =>
           nbind (bindArgsGo rbs 1 (secondOf cp)) (
@@ -2903,9 +2939,9 @@ genRecordAlts fuel st isTail sc alts =
           Nothing => genDefault (fuel - 1) st isTail sc alts
           Just _ => nbind (bindFields st sc 0 (runtimeBinders (irAltBindersOf alt))) (\bp => nbind (genExprAt (fuel - 1) (secondOf bp) isTail (irAltBodyOf alt)) (\q => NOk (append (firstOf bp) (firstOf q), restoreBinderScope (secondOf q) st.fgSlots)))
 
-genNatArm : Int -> FGen -> Bool -> Maybe IrAlt -> String -> Int -> NRes (List Instr, FGen)
-genNatArm _ st _ Nothing _ _ = NOk ([], st)
-genNatArm fuel st isTail (Just alt) mode srcSlot =
+genNatArm : Int -> FGen -> Bool -> Maybe IrAlt -> String -> Int -> Maybe Int -> NRes (List Instr, FGen)
+genNatArm _ st _ Nothing _ _ _ = NOk ([], st)
+genNatArm fuel st isTail (Just alt) mode srcSlot reuseSlot =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -2918,7 +2954,10 @@ genNatArm fuel st isTail (Just alt) mode srcSlot =
           internal "Nat case arm has a binder but no runtime binding"
         else
           let
-            slotP = freshSlot st
+            slotP =
+              case reuseSlot of
+                Just s => (s, st)
+                Nothing => freshSlot st
             slot = firstOf slotP
             st1 = secondOf slotP
             bindInstrs = if mode == "pred" then append (loadSlot srcSlot) [IBin "sub" (OpImm 1)] else loadSlot srcSlot
@@ -2930,55 +2969,95 @@ hasNatBranch (Just _) _ = True
 hasNatBranch Nothing (Just _) = True
 hasNatBranch Nothing Nothing = False
 
+-- | 槽里的值在当前位置已是规范形（跟 `genExpr (IrVar b)` 的归一化条件一致）。
+normalizedSlot : FGen -> Int -> Bool
+normalizedSlot st slot = not (memInt slot st.fgDirtySlots && not st.fgAllowDirty)
+
+-- | scrutinee 是已在标量槽里的变量时直接读那个槽：不再复制到新的 case 槽。
+natScrutSlot : FGen -> Ir -> Maybe Int
+natScrutSlot st (IrVar b) =
+  if not (isScalarCls (binderCls st Nothing b)) then
+    Nothing
+  else
+    case lookupBinder b st.fgSlots of
+      Just slot => if normalizedSlot st slot then Just slot else Nothing
+      Nothing => Nothing
+natScrutSlot _ _ = Nothing
+
+-- | 整个函数只在 scrutinee 位置读到过的变量在 case 各臂之后已经死了：succ 的
+--   前驱可以写回原槽，尾递归的计数器不再多占一个槽。
+natPredSlot : FGen -> Ir -> Maybe Int
+natPredSlot st (IrVar b) =
+  if binderReadCount (binderIdOf b) st.fgReads == 1 then
+    case lookupBinder b st.fgSlots of
+      Just slot => if normalizedSlot st slot then Just slot else Nothing
+      Nothing => Nothing
+  else
+    Nothing
+natPredSlot _ _ = Nothing
+
+binderReadCount : Int -> List Int -> Int
+binderReadCount _ [] = 0
+binderReadCount id (x :: rest) = (if id == x then 1 else 0) + binderReadCount id rest
+
 genNatCase : Int -> FGen -> Bool -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> NRes (List Instr, FGen)
 genNatCase fuel st isTail scrut zero succ catch =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    nbind (genExpr (fuel - 1) st scrut) (
-        \p =>
-          let
-            st1 = secondOf p
-            slotP = freshSlotCls NClsScalar st1
-            slotSc = firstOf slotP
-            st2 = secondOf slotP
-            lzP = freshLabel st2
-            lz = firstOf lzP
-            st3 = secondOf lzP
-            lendP = freshLabel st3
-            lend = firstOf lendP
-            st4 = secondOf lendP
-            zeroAlt =
-              case zero of
-                Just z => Just z
-                Nothing => catch
-            zeroMode =
-              case zero of
-                Just _ => "none"
-                Nothing => "sc"
-            succAlt =
-              case succ of
-                Just s => Just s
-                Nothing => catch
-            succMode =
-              case succ of
-                Just _ => "pred"
-                Nothing => "sc"
-          in if not (hasNatBranch zero catch) then
-            internal "Nat case has no zero/catch branch"
-          else if not (hasNatBranch succ catch) then
-            internal "Nat case has no succ/catch branch"
-          else
-            nbind (genNatArm (fuel - 1) st4 isTail zeroAlt zeroMode slotSc) (
-                \z =>
-                  nbind (genNatArm (fuel - 1) (secondOf z) isTail succAlt succMode slotSc) (
-                      \s =>
-                        let
-                          body = append (firstOf p) (append (storeSlot slotSc) (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend])))))
-                        in NOk (body, secondOf s)
-                    )
+    case natScrutSlot st scrut of
+      Just slotSc => genNatCaseAt (fuel - 1) st isTail [] slotSc (natPredSlot st scrut) zero succ catch
+      Nothing =>
+        nbind (genExpr (fuel - 1) st scrut) (
+            \p =>
+              let
+                slotP = freshSlotCls NClsScalar (secondOf p)
+                slotSc = firstOf slotP
+              in genNatCaseAt (fuel - 1) (secondOf slotP) isTail (append (firstOf p) (storeSlot slotSc)) slotSc Nothing zero succ catch
+          )
+
+genNatCaseAt : Int -> FGen -> Bool -> List Instr -> Int -> Maybe Int -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> NRes (List Instr, FGen)
+genNatCaseAt fuel st isTail pre slotSc reuseSucc zero succ catch =
+  if fuel <= 0 then
+    internal "native codegen fuel exhausted"
+  else
+    let
+      lzP = freshLabel st
+      lz = firstOf lzP
+      st1 = secondOf lzP
+      lendP = freshLabel st1
+      lend = firstOf lendP
+      st2 = secondOf lendP
+      zeroAlt =
+        case zero of
+          Just z => Just z
+          Nothing => catch
+      zeroMode =
+        case zero of
+          Just _ => "none"
+          Nothing => "sc"
+      succAlt =
+        case succ of
+          Just s => Just s
+          Nothing => catch
+      succMode =
+        case succ of
+          Just _ => "pred"
+          Nothing => "sc"
+    in if not (hasNatBranch zero catch) then
+      internal "Nat case has no zero/catch branch"
+    else if not (hasNatBranch succ catch) then
+      internal "Nat case has no succ/catch branch"
+    else
+      nbind (genNatArm (fuel - 1) st2 isTail zeroAlt zeroMode slotSc Nothing) (
+          \z =>
+            nbind (genNatArm (fuel - 1) (secondOf z) isTail succAlt succMode slotSc reuseSucc) (
+                \s =>
+                  let
+                    body = append pre (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend]))))
+                  in NOk (body, secondOf s)
               )
-      )
+        )
 
 -- ---------------------------------------------------------------
 -- 定义
@@ -3215,6 +3294,7 @@ genDefFunc defs pools floats recNames allocs fams nextLabel threaded (IrDef name
         []
         False
         threaded
+        (binderRefsOf body)
   in if arity == 0 then
     nbind (genExpr (nativeFuelOfBody body) st0 body) (
         \p =>

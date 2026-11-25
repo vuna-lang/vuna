@@ -41,6 +41,19 @@ exit: 0
 run: sh -c 'grep -q "jmp vuna_narrow" "$TMPDIR/tcofb-out/Main.s"'
 exit: 0
 
+# 9ae2) Nat 前驱就地更新：`Succ k` 的 k 写回 scrutinee 的槽，尾递归循环没有临时槽
+#       往返；饱和加法走分支，热路径的循环携带链只有一次 `add`。
+run: sh -c 'd="$TMPDIR/natloop"; mkdir -p "$d/app"; printf "[package]\nname = \"natloop\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nloop : Nat -> Nat -> Nat\nloop acc 0 = acc\nloop acc (Succ k) = loop (Nat.plus acc k) k\n\nmain : Int\nmain = Nat.toInt (loop 0 (Nat.fromIntClamp 100000))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/natloop-out" "$d"'
+exit: 0
+run: "$TMPDIR/natloop-out/bin/natloop" 2>&1
+exit: 0
+out-equals: 4999950000
+run: sh -c '! sed -n "/^  \.L0:/,/jmp \.L0/p" "$TMPDIR/natloop-out/Main.s" | grep -q "\[rbp"'
+exit: 0
+run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natloop-out/Main.s"'
+exit: 0
+file-contains: $TMPDIR/natloop-out/Main.s jle .L
+
 # 9af) 尾调用 × 续延 × GC：resume 之后的尾递归循环在 `GC_STRESS` 下输出一致。
 run: sh -c 'd="$TMPDIR/tcoeff"; mkdir -p "$d/app"; printf "[package]\nname = \"tcoeff\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nloop : Nat -> Int -> Int\nloop n acc = case n of\n  Zero => acc\n  Succ k => loop k (acc + strLength (strFromInt k))\n\nwork : Eff [POp] Int\nwork = do\n  x <- perform (P 1)\n  pure (loop (natFromInt 20000) x)\n\nmain : Int\nmain = runPure (handle work { P n k -> k n })\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/tcoeff-out" "$d"'
 exit: 0

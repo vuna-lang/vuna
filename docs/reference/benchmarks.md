@@ -76,7 +76,7 @@ ratio 对手写 OCaml，wasm 用 net；完整的 50 个用例、native / wasm �
 | tco_unrotated | 双支自调用 / `&&` 条件 | 不旋转时回退整帧 `jmp` |
 | tco_arity6 | 6 参尾递归（全走寄存器） | 5 个热标量槽提升 |
 | tco_narrow_wide | 2 参 ↔ 10 参窄调宽 | 尾位置内联折叠成自循环（见 §1.2） |
-| tco_nat | Nat 结构递归尾调用 | `IrNatCase` 的尾位置传播 |
+| tco_nat | Nat 结构递归尾调用 | `IrNatCase` 尾位置传播 + 前驱就地更新；饱和加法分支化 |
 | state_machine | 9 状态 Int 分支链 | 线性比较链 + `_` 兜底臂 |
 | gc_low_live | 低存活集、大累计分配 | OCaml GC 回收；vuna 侧只有 bump 分配 |
 | gc_array_churn | 大对象 churn（Array COW） | `Array.set` COW 与手写 `Array.copy` 对齐 |

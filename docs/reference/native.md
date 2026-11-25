@@ -320,6 +320,18 @@ prologue 保存用到的寄存器（奇数个补 8 字节，保持 `call` 前 16
   编译器自己的区间算术也用 `satAdd` / `satSub` / `satMul` 夹取（它自身也是 63-bit）。
 - 只处理 `IrIf`；`IrNatCase` 的 0 / 后继事实与 `let` 传播等有读数需求时再加。
 
+### 3.11 Nat 前驱就地更新
+
+`IrNatCase` 的 succ 臂原本把 `sc - 1` 绑到一个独立槽。scrutinee 是标量变量时，case
+直接读它自己的槽；若该变量在整个函数里只在这一处被读到（`FGen.fgReads` 的引用计数
+为 1），succ binder 也写回同一个槽。`loop acc (Succ k) = loop (Nat.plus acc k) k`
+因此没有临时槽往返：`n` 本来就在循环携带的寄存器里，前驱变成 `sub r, 1`，回边不需要
+再搬运计数器。
+
+饱和加法（`Nat.plus`）走分支而不是 `cmov`：饱和是异常路径，分支预测命中时循环携带链
+只剩一次 `add`；`cmp` / `cmov` 版本会把 `add → cmp → cmov` 串进累加器的关键路径。
+饱和判据与标量计划一致（有符号 `>`）；`Nat` 值恒为非负 63-bit。
+
 ## 4. IR 支持面
 
 从 `IrEntry.irEntryMain` 沿 `irDefDeps` 收集**可达**定义，只生成可达函数；不可达的
