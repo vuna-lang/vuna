@@ -1,0 +1,27 @@
+-- 并行区的 bracket / finally：push / pop 走线程 TCB 的 cleanup 链头（不是进程级单链表），
+-- 两个线程各跑 N 次；cleanup 用原子累加，join 后必须正好 2N 次。
+-- 共用链头时并发 push / pop 会丢节点或 pop 到对方的节点，次数或链本身都会坏。
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Thread as Thread
+
+loop : Atomic -> Int -> Eff [] Int
+loop cell n =
+  if n <= 0 then
+    pure 0
+  else
+    do
+      _ <- finally (pure 0) (Thread.atomicFetchAdd cell 1)
+      loop cell (n - 1)
+
+main : Eff [ConsoleOp] Int
+main =
+  do
+    cell <- Thread.newAtomic 0
+    t0 <- Thread.spawn (loop cell 300)
+    t1 <- Thread.spawn (loop cell 300)
+    _ <- Thread.join t0
+    _ <- Thread.join t1
+    n <- Thread.atomicLoad cell
+    _ <- consolePrint ("bracket " ++ strFromInt n ++ "\n")
+    pure 0

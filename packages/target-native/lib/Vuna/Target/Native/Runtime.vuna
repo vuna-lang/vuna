@@ -182,10 +182,6 @@ timeoutArmedLabel = "rt_timeout_armed"
 export sigalrmSetLabel : String
 sigalrmSetLabel = "rt_sigalrm_set"
 
--- | `bracket` / `finally` 的 cleanup 登记表（LIFO 链表头；`prim_cleanupPush/Pop` 维护）。
-export cleanupHeadLabel : String
-cleanupHeadLabel = nativeCleanupHeadLabel
-
 -- ---------------------------------------------------------------
 -- 多线程运行时槽
 -- ---------------------------------------------------------------
@@ -234,7 +230,7 @@ tcbBytes = 128
 export nativeBss : List NativeBss
 nativeBss =
   append
-    [NativeBss nativeHeapSegLabel nativeSegHeaderBytes 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapCardsLabel nativeHeapCardTableBytes 8, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostErrnoLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss childLockLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss cleanupHeadLabel 8 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel sigActBytes 8, NativeBss itimerLabel itimerBytes 8, NativeBss cpuCurLabel cpuSetBytes 16, NativeBss cpuNewLabel cpuSetBytes 16, NativeBss cgBufLabel 64 8, NativeBss nativeThreadCountLabel 8 8, NativeBss heapLockLabel 8 8, NativeBss nativeMainTcbLabel tcbBytes 16, NativeBss nativeThreadTabLabel 8192 8, NativeBss nativeLiveThreadsLabel 8 8, NativeBss nativeParkedLabel 8 8, NativeBss nativeThreadEventLabel 8 8, NativeBss nativeGcRequestedLabel 8 8, NativeBss nativeGcEpochLabel 8 8, NativeBss nativeThreadedLabel 8 8]
+    [NativeBss nativeHeapSegLabel nativeSegHeaderBytes 8, NativeBss nativeHeapLabel nativeHeapBytes 16, NativeBss nativeHeapEndLabel 0 0, NativeBss nativeHeapCardsLabel nativeHeapCardTableBytes 8, NativeBss nativeHeapPtrLabel 8 8, NativeBss nativeArenaEndLabel 8 8, NativeBss nativeSegsLabel 8 8, NativeBss nativeCurSegLabel 8 8, NativeBss nativeFreeTableLabel nativeFreeTableBytes 8, NativeBss nativeHugeFreeLabel 8 8, NativeBss stackTopLabel 8 8, NativeBss argcLabel 8 8, NativeBss argvLabel 8 8, NativeBss envpLabel 8 8, NativeBss hostErrnoLabel 8 8, NativeBss childPidsLabel 64 8, NativeBss childCountLabel 8 8, NativeBss childLockLabel 8 8, NativeBss timeoutArmedLabel 8 8, NativeBss sigalrmSetLabel 8 8, NativeBss memLimitLabel 8 8, NativeBss cpuCountLabel 8 8, NativeBss sigActLabel sigActBytes 8, NativeBss itimerLabel itimerBytes 8, NativeBss cpuCurLabel cpuSetBytes 16, NativeBss cpuNewLabel cpuSetBytes 16, NativeBss cgBufLabel 64 8, NativeBss nativeThreadCountLabel 8 8, NativeBss heapLockLabel 8 8, NativeBss nativeMainTcbLabel tcbBytes 16, NativeBss nativeThreadTabLabel 8192 8, NativeBss nativeLiveThreadsLabel 8 8, NativeBss nativeParkedLabel 8 8, NativeBss nativeThreadEventLabel 8 8, NativeBss nativeGcRequestedLabel 8 8, NativeBss nativeGcEpochLabel 8 8, NativeBss nativeThreadedLabel 8 8]
     nativeGcBss
 
 -- ---------------------------------------------------------------
@@ -1073,7 +1069,7 @@ cleanupPushFn =
   rtFunc
     "cleanup_push"
     8
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 16), ICall (nativeRtLabel "alloc"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpRip cleanupHeadLabel), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpRip cleanupHeadLabel) (OpReg Rax), IMov (OpReg Rax) (OpImm 0)]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 16), ICall (nativeRtLabel "alloc"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rax 0) (OpReg Rcx), IMovFsLoad Rcx nativeTcbCleanupOff, IMov (OpMem Rax 8) (OpReg Rcx), IMovFsStore nativeTcbCleanupOff Rax, IMov (OpReg Rax) (OpImm 0)]
 
 -- | `prim_cleanupPop _`：弹出栈顶（空栈无操作），返回 0。
 cleanupPopFn : NativeFunc
@@ -1081,7 +1077,7 @@ cleanupPopFn =
   rtFunc
     "cleanup_pop"
     0
-    [IMov (OpReg Rax) (OpRip cleanupHeadLabel), ITest Rax Rax, IJcc "jz" ".Lrt_cpop_done", IMov (OpReg Rax) (OpMem Rax 8), IMov (OpRip cleanupHeadLabel) (OpReg Rax), ILabel ".Lrt_cpop_done", IMov (OpReg Rax) (OpImm 0)]
+    [IMovFsLoad Rax nativeTcbCleanupOff, ITest Rax Rax, IJcc "jz" ".Lrt_cpop_done", IMov (OpReg Rax) (OpMem Rax 8), IMovFsStore nativeTcbCleanupOff Rax, ILabel ".Lrt_cpop_done", IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
 -- 宿主层：文件系统（syscalls + errno → 状态码）

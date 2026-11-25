@@ -70,7 +70,6 @@ cgBufLabel 64
 childCountLabel 8
 childLockLabel 8
 childPidsLabel 64
-cleanupHeadLabel 8
 cpuCountLabel 8
 envpLabel 8
 heapLockLabel 8
