@@ -628,85 +628,169 @@ let v_buildManifest = (fun (path : string) (entries : Frontend_dToml.t_TomlEntry
 let v_parseManifest = (fun (path : string) (contents : string) -> ((Base_dCommon.v_bind ((Frontend_dToml.v_parseTomlAt path) contents)) (fun (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((v_buildManifest path) entries))))
 
 # 36 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAlias = (fun (p : t_Dependency) -> (p).f_Dependency_depAlias)
+let v_depAlias = (fun (p : t_Dependency) -> (match p with
+  | { f_Dependency_depAlias = dtb__191; f_Dependency_depSource = dtb__192; f_Dependency_depHash = dtb__193; f_Dependency_depIdentity = dtb__194 } -> dtb__191
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 37 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depSource = (fun (p : t_Dependency) -> (p).f_Dependency_depSource)
+let v_depSource = (fun (p : t_Dependency) -> (match p with
+  | { f_Dependency_depAlias = dtb__195; f_Dependency_depSource = dtb__196; f_Dependency_depHash = dtb__197; f_Dependency_depIdentity = dtb__198 } -> dtb__196
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 38 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depHash = (fun (p : t_Dependency) -> (p).f_Dependency_depHash)
+let v_depHash = (fun (p : t_Dependency) -> (match p with
+  | { f_Dependency_depAlias = dtb__199; f_Dependency_depSource = dtb__200; f_Dependency_depHash = dtb__201; f_Dependency_depIdentity = dtb__202 } -> dtb__201
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 39 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depIdentity = (fun (p : t_Dependency) -> (p).f_Dependency_depIdentity)
+let v_depIdentity = (fun (p : t_Dependency) -> (match p with
+  | { f_Dependency_depAlias = dtb__203; f_Dependency_depSource = dtb__204; f_Dependency_depHash = dtb__205; f_Dependency_depIdentity = dtb__206 } -> dtb__206
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 54 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_layerName = (fun (p : t_Layer) -> (p).f_Layer_layerName)
+let v_layerName = (fun (p : t_Layer) -> (match p with
+  | { f_Layer_layerName = dtb__207; f_Layer_layerUses = dtb__208; f_Layer_layerLine = dtb__209 } -> dtb__207
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 55 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_layerUses = (fun (p : t_Layer) -> (p).f_Layer_layerUses)
+let v_layerUses = (fun (p : t_Layer) -> (match p with
+  | { f_Layer_layerName = dtb__210; f_Layer_layerUses = dtb__211; f_Layer_layerLine = dtb__212 } -> dtb__211
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 56 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_layerLine = (fun (p : t_Layer) -> (p).f_Layer_layerLine)
+let v_layerLine = (fun (p : t_Layer) -> (match p with
+  | { f_Layer_layerName = dtb__213; f_Layer_layerUses = dtb__214; f_Layer_layerLine = dtb__215 } -> dtb__215
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 59 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestName = (fun (p : t_Manifest) -> (p).f_Manifest_manifestName)
+let v_manifestName = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__216; f_Manifest_manifestMembers = dtb__217; f_Manifest_manifestIsWorkspace = dtb__218; f_Manifest_manifestExports = dtb__219; f_Manifest_manifestDependencies = dtb__220; f_Manifest_manifestPath = dtb__221; f_Manifest_manifestDiagFormat = dtb__222; f_Manifest_manifestDiagWarnings = dtb__223; f_Manifest_manifestDiagMaxErrors = dtb__224; f_Manifest_manifestDiagLang = dtb__225; f_Manifest_manifestDiagDenyWarnings = dtb__226; f_Manifest_manifestRegistryIndex = dtb__227; f_Manifest_manifestLayers = dtb__228 } -> dtb__216
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 60 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestMembers = (fun (p : t_Manifest) -> (p).f_Manifest_manifestMembers)
+let v_manifestMembers = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__229; f_Manifest_manifestMembers = dtb__230; f_Manifest_manifestIsWorkspace = dtb__231; f_Manifest_manifestExports = dtb__232; f_Manifest_manifestDependencies = dtb__233; f_Manifest_manifestPath = dtb__234; f_Manifest_manifestDiagFormat = dtb__235; f_Manifest_manifestDiagWarnings = dtb__236; f_Manifest_manifestDiagMaxErrors = dtb__237; f_Manifest_manifestDiagLang = dtb__238; f_Manifest_manifestDiagDenyWarnings = dtb__239; f_Manifest_manifestRegistryIndex = dtb__240; f_Manifest_manifestLayers = dtb__241 } -> dtb__230
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 62 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestIsWorkspace = (fun (p : t_Manifest) -> (p).f_Manifest_manifestIsWorkspace)
+let v_manifestIsWorkspace = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__242; f_Manifest_manifestMembers = dtb__243; f_Manifest_manifestIsWorkspace = dtb__244; f_Manifest_manifestExports = dtb__245; f_Manifest_manifestDependencies = dtb__246; f_Manifest_manifestPath = dtb__247; f_Manifest_manifestDiagFormat = dtb__248; f_Manifest_manifestDiagWarnings = dtb__249; f_Manifest_manifestDiagMaxErrors = dtb__250; f_Manifest_manifestDiagLang = dtb__251; f_Manifest_manifestDiagDenyWarnings = dtb__252; f_Manifest_manifestRegistryIndex = dtb__253; f_Manifest_manifestLayers = dtb__254 } -> dtb__244
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 63 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestExports = (fun (p : t_Manifest) -> (p).f_Manifest_manifestExports)
+let v_manifestExports = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__255; f_Manifest_manifestMembers = dtb__256; f_Manifest_manifestIsWorkspace = dtb__257; f_Manifest_manifestExports = dtb__258; f_Manifest_manifestDependencies = dtb__259; f_Manifest_manifestPath = dtb__260; f_Manifest_manifestDiagFormat = dtb__261; f_Manifest_manifestDiagWarnings = dtb__262; f_Manifest_manifestDiagMaxErrors = dtb__263; f_Manifest_manifestDiagLang = dtb__264; f_Manifest_manifestDiagDenyWarnings = dtb__265; f_Manifest_manifestRegistryIndex = dtb__266; f_Manifest_manifestLayers = dtb__267 } -> dtb__258
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 64 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDependencies = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDependencies)
+let v_manifestDependencies = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__268; f_Manifest_manifestMembers = dtb__269; f_Manifest_manifestIsWorkspace = dtb__270; f_Manifest_manifestExports = dtb__271; f_Manifest_manifestDependencies = dtb__272; f_Manifest_manifestPath = dtb__273; f_Manifest_manifestDiagFormat = dtb__274; f_Manifest_manifestDiagWarnings = dtb__275; f_Manifest_manifestDiagMaxErrors = dtb__276; f_Manifest_manifestDiagLang = dtb__277; f_Manifest_manifestDiagDenyWarnings = dtb__278; f_Manifest_manifestRegistryIndex = dtb__279; f_Manifest_manifestLayers = dtb__280 } -> dtb__272
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 65 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestPath = (fun (p : t_Manifest) -> (p).f_Manifest_manifestPath)
+let v_manifestPath = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__281; f_Manifest_manifestMembers = dtb__282; f_Manifest_manifestIsWorkspace = dtb__283; f_Manifest_manifestExports = dtb__284; f_Manifest_manifestDependencies = dtb__285; f_Manifest_manifestPath = dtb__286; f_Manifest_manifestDiagFormat = dtb__287; f_Manifest_manifestDiagWarnings = dtb__288; f_Manifest_manifestDiagMaxErrors = dtb__289; f_Manifest_manifestDiagLang = dtb__290; f_Manifest_manifestDiagDenyWarnings = dtb__291; f_Manifest_manifestRegistryIndex = dtb__292; f_Manifest_manifestLayers = dtb__293 } -> dtb__286
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 67 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDiagFormat = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagFormat)
+let v_manifestDiagFormat = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__294; f_Manifest_manifestMembers = dtb__295; f_Manifest_manifestIsWorkspace = dtb__296; f_Manifest_manifestExports = dtb__297; f_Manifest_manifestDependencies = dtb__298; f_Manifest_manifestPath = dtb__299; f_Manifest_manifestDiagFormat = dtb__300; f_Manifest_manifestDiagWarnings = dtb__301; f_Manifest_manifestDiagMaxErrors = dtb__302; f_Manifest_manifestDiagLang = dtb__303; f_Manifest_manifestDiagDenyWarnings = dtb__304; f_Manifest_manifestRegistryIndex = dtb__305; f_Manifest_manifestLayers = dtb__306 } -> dtb__300
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 68 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDiagWarnings = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagWarnings)
+let v_manifestDiagWarnings = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__307; f_Manifest_manifestMembers = dtb__308; f_Manifest_manifestIsWorkspace = dtb__309; f_Manifest_manifestExports = dtb__310; f_Manifest_manifestDependencies = dtb__311; f_Manifest_manifestPath = dtb__312; f_Manifest_manifestDiagFormat = dtb__313; f_Manifest_manifestDiagWarnings = dtb__314; f_Manifest_manifestDiagMaxErrors = dtb__315; f_Manifest_manifestDiagLang = dtb__316; f_Manifest_manifestDiagDenyWarnings = dtb__317; f_Manifest_manifestRegistryIndex = dtb__318; f_Manifest_manifestLayers = dtb__319 } -> dtb__314
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 69 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDiagMaxErrors = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagMaxErrors)
+let v_manifestDiagMaxErrors = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__320; f_Manifest_manifestMembers = dtb__321; f_Manifest_manifestIsWorkspace = dtb__322; f_Manifest_manifestExports = dtb__323; f_Manifest_manifestDependencies = dtb__324; f_Manifest_manifestPath = dtb__325; f_Manifest_manifestDiagFormat = dtb__326; f_Manifest_manifestDiagWarnings = dtb__327; f_Manifest_manifestDiagMaxErrors = dtb__328; f_Manifest_manifestDiagLang = dtb__329; f_Manifest_manifestDiagDenyWarnings = dtb__330; f_Manifest_manifestRegistryIndex = dtb__331; f_Manifest_manifestLayers = dtb__332 } -> dtb__328
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 70 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDiagLang = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagLang)
+let v_manifestDiagLang = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__333; f_Manifest_manifestMembers = dtb__334; f_Manifest_manifestIsWorkspace = dtb__335; f_Manifest_manifestExports = dtb__336; f_Manifest_manifestDependencies = dtb__337; f_Manifest_manifestPath = dtb__338; f_Manifest_manifestDiagFormat = dtb__339; f_Manifest_manifestDiagWarnings = dtb__340; f_Manifest_manifestDiagMaxErrors = dtb__341; f_Manifest_manifestDiagLang = dtb__342; f_Manifest_manifestDiagDenyWarnings = dtb__343; f_Manifest_manifestRegistryIndex = dtb__344; f_Manifest_manifestLayers = dtb__345 } -> dtb__342
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 71 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestDiagDenyWarnings = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagDenyWarnings)
+let v_manifestDiagDenyWarnings = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__346; f_Manifest_manifestMembers = dtb__347; f_Manifest_manifestIsWorkspace = dtb__348; f_Manifest_manifestExports = dtb__349; f_Manifest_manifestDependencies = dtb__350; f_Manifest_manifestPath = dtb__351; f_Manifest_manifestDiagFormat = dtb__352; f_Manifest_manifestDiagWarnings = dtb__353; f_Manifest_manifestDiagMaxErrors = dtb__354; f_Manifest_manifestDiagLang = dtb__355; f_Manifest_manifestDiagDenyWarnings = dtb__356; f_Manifest_manifestRegistryIndex = dtb__357; f_Manifest_manifestLayers = dtb__358 } -> dtb__356
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 73 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestRegistryIndex = (fun (p : t_Manifest) -> (p).f_Manifest_manifestRegistryIndex)
+let v_manifestRegistryIndex = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__359; f_Manifest_manifestMembers = dtb__360; f_Manifest_manifestIsWorkspace = dtb__361; f_Manifest_manifestExports = dtb__362; f_Manifest_manifestDependencies = dtb__363; f_Manifest_manifestPath = dtb__364; f_Manifest_manifestDiagFormat = dtb__365; f_Manifest_manifestDiagWarnings = dtb__366; f_Manifest_manifestDiagMaxErrors = dtb__367; f_Manifest_manifestDiagLang = dtb__368; f_Manifest_manifestDiagDenyWarnings = dtb__369; f_Manifest_manifestRegistryIndex = dtb__370; f_Manifest_manifestLayers = dtb__371 } -> dtb__370
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 75 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_manifestLayers = (fun (p : t_Manifest) -> (p).f_Manifest_manifestLayers)
+let v_manifestLayers = (fun (p : t_Manifest) -> (match p with
+  | { f_Manifest_manifestName = dtb__372; f_Manifest_manifestMembers = dtb__373; f_Manifest_manifestIsWorkspace = dtb__374; f_Manifest_manifestExports = dtb__375; f_Manifest_manifestDependencies = dtb__376; f_Manifest_manifestPath = dtb__377; f_Manifest_manifestDiagFormat = dtb__378; f_Manifest_manifestDiagWarnings = dtb__379; f_Manifest_manifestDiagMaxErrors = dtb__380; f_Manifest_manifestDiagLang = dtb__381; f_Manifest_manifestDiagDenyWarnings = dtb__382; f_Manifest_manifestRegistryIndex = dtb__383; f_Manifest_manifestLayers = dtb__384 } -> dtb__384
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 79 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccAlias = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccAlias)
+let v_depAccAlias = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__385; f_DepAcc_depAccPath = dtb__386; f_DepAcc_depAccGit = dtb__387; f_DepAcc_depAccRev = dtb__388; f_DepAcc_depAccUrl = dtb__389; f_DepAcc_depAccHash = dtb__390; f_DepAcc_depAccIdentity = dtb__391; f_DepAcc_depAccTableLine = dtb__392 } -> dtb__385
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 80 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccPath = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccPath)
+let v_depAccPath = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__393; f_DepAcc_depAccPath = dtb__394; f_DepAcc_depAccGit = dtb__395; f_DepAcc_depAccRev = dtb__396; f_DepAcc_depAccUrl = dtb__397; f_DepAcc_depAccHash = dtb__398; f_DepAcc_depAccIdentity = dtb__399; f_DepAcc_depAccTableLine = dtb__400 } -> dtb__394
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 81 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccGit = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccGit)
+let v_depAccGit = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__401; f_DepAcc_depAccPath = dtb__402; f_DepAcc_depAccGit = dtb__403; f_DepAcc_depAccRev = dtb__404; f_DepAcc_depAccUrl = dtb__405; f_DepAcc_depAccHash = dtb__406; f_DepAcc_depAccIdentity = dtb__407; f_DepAcc_depAccTableLine = dtb__408 } -> dtb__403
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 82 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccRev = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccRev)
+let v_depAccRev = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__409; f_DepAcc_depAccPath = dtb__410; f_DepAcc_depAccGit = dtb__411; f_DepAcc_depAccRev = dtb__412; f_DepAcc_depAccUrl = dtb__413; f_DepAcc_depAccHash = dtb__414; f_DepAcc_depAccIdentity = dtb__415; f_DepAcc_depAccTableLine = dtb__416 } -> dtb__412
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 83 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccUrl = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccUrl)
+let v_depAccUrl = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__417; f_DepAcc_depAccPath = dtb__418; f_DepAcc_depAccGit = dtb__419; f_DepAcc_depAccRev = dtb__420; f_DepAcc_depAccUrl = dtb__421; f_DepAcc_depAccHash = dtb__422; f_DepAcc_depAccIdentity = dtb__423; f_DepAcc_depAccTableLine = dtb__424 } -> dtb__421
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 84 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccHash = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccHash)
+let v_depAccHash = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__425; f_DepAcc_depAccPath = dtb__426; f_DepAcc_depAccGit = dtb__427; f_DepAcc_depAccRev = dtb__428; f_DepAcc_depAccUrl = dtb__429; f_DepAcc_depAccHash = dtb__430; f_DepAcc_depAccIdentity = dtb__431; f_DepAcc_depAccTableLine = dtb__432 } -> dtb__430
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 85 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccIdentity = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccIdentity)
+let v_depAccIdentity = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__433; f_DepAcc_depAccPath = dtb__434; f_DepAcc_depAccGit = dtb__435; f_DepAcc_depAccRev = dtb__436; f_DepAcc_depAccUrl = dtb__437; f_DepAcc_depAccHash = dtb__438; f_DepAcc_depAccIdentity = dtb__439; f_DepAcc_depAccTableLine = dtb__440 } -> dtb__439
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 86 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_depAccTableLine = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccTableLine)
+let v_depAccTableLine = (fun (p : t_DepAcc) -> (match p with
+  | { f_DepAcc_depAccAlias = dtb__441; f_DepAcc_depAccPath = dtb__442; f_DepAcc_depAccGit = dtb__443; f_DepAcc_depAccRev = dtb__444; f_DepAcc_depAccUrl = dtb__445; f_DepAcc_depAccHash = dtb__446; f_DepAcc_depAccIdentity = dtb__447; f_DepAcc_depAccTableLine = dtb__448 } -> dtb__448
+  | _ -> failwith "DT: impossible branch"
+))

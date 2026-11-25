@@ -1108,28 +1108,55 @@ and v_showSigAppText = (fun (mc0 : string) (mc1 : (t_Term, t_Rig) B_dData_dPair.
 ))
 
 # 161 "Vuna/Compiler/Core/Term.vuna"
-let v_binderName = (fun (p : t_Binder) -> (p).f_Binder_binderName)
+let v_binderName = (fun (p : t_Binder) -> (match p with
+  | { f_Binder_binderName = dtb__823; f_Binder_binderRig = dtb__824; f_Binder_binderSpan = dtb__825 } -> dtb__823
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 162 "Vuna/Compiler/Core/Term.vuna"
-let v_binderRig = (fun (p : t_Binder) -> (p).f_Binder_binderRig)
+let v_binderRig = (fun (p : t_Binder) -> (match p with
+  | { f_Binder_binderName = dtb__826; f_Binder_binderRig = dtb__827; f_Binder_binderSpan = dtb__828 } -> dtb__827
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 163 "Vuna/Compiler/Core/Term.vuna"
-let v_binderSpan = (fun (p : t_Binder) -> (p).f_Binder_binderSpan)
+let v_binderSpan = (fun (p : t_Binder) -> (match p with
+  | { f_Binder_binderName = dtb__829; f_Binder_binderRig = dtb__830; f_Binder_binderSpan = dtb__831 } -> dtb__831
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 204 "Vuna/Compiler/Core/Term.vuna"
-let v_closureEnv = (fun (p : t_Closure) -> (p).f_Closure_closureEnv)
+let v_closureEnv = (fun (p : t_Closure) -> (match p with
+  | { f_Closure_closureEnv = dtb__832; f_Closure_closureBody = dtb__833 } -> dtb__832
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 205 "Vuna/Compiler/Core/Term.vuna"
-let v_closureBody = (fun (p : t_Closure) -> (p).f_Closure_closureBody)
+let v_closureBody = (fun (p : t_Closure) -> (match p with
+  | { f_Closure_closureEnv = dtb__834; f_Closure_closureBody = dtb__835 } -> dtb__835
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 234 "Vuna/Compiler/Core/Term.vuna"
-let v_vCaseAltName = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltName)
+let v_vCaseAltName = (fun (p : t_VCaseAlt) -> (match p with
+  | { f_VCaseAlt_vCaseAltName = dtb__836; f_VCaseAlt_vCaseAltBinders = dtb__837; f_VCaseAlt_vCaseAltClosure = dtb__838 } -> dtb__836
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 235 "Vuna/Compiler/Core/Term.vuna"
-let v_vCaseAltBinders = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltBinders)
+let v_vCaseAltBinders = (fun (p : t_VCaseAlt) -> (match p with
+  | { f_VCaseAlt_vCaseAltName = dtb__839; f_VCaseAlt_vCaseAltBinders = dtb__840; f_VCaseAlt_vCaseAltClosure = dtb__841 } -> dtb__840
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 236 "Vuna/Compiler/Core/Term.vuna"
-let v_vCaseAltClosure = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltClosure)
+let v_vCaseAltClosure = (fun (p : t_VCaseAlt) -> (match p with
+  | { f_VCaseAlt_vCaseAltName = dtb__842; f_VCaseAlt_vCaseAltBinders = dtb__843; f_VCaseAlt_vCaseAltClosure = dtb__844 } -> dtb__844
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 385 "Vuna/Compiler/Core/Term.vuna"
-let v_solsTbl = (fun (p : t_Sols) -> (p).f_Sols_solsTbl)
+let v_solsTbl = (fun (p : t_Sols) -> (match p with
+  | { f_Sols_solsTbl = dtb__845; f_Sols_solsList = dtb__846; f_Sols_solsDepth = dtb__847 } -> dtb__845
+  | _ -> failwith "DT: impossible branch"
+))

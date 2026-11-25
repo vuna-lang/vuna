@@ -474,16 +474,31 @@ let v_renderJsonList = (fun (lang : string) (ds : Base_dDiag.t_Diagnostic B_dDat
 let v_renderJsonListWithSources = (fun (lang : string) (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (sources : t_SourceRef B_dData_dList.t_List) -> (String.concat "" ["{\"version\":1,\"tool\":\"vuna\",\"sources\":["; ((B_dData_dString.v_join ",") ((B_dData_dList.v_map v_jsonSource) sources)); "],\"diagnostics\":["; ((B_dData_dString.v_join ",") ((B_dData_dList.v_map (v_jsonDiag lang)) ds)); "]}"]))
 
 # 432 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_srcFile = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcFile)
+let v_srcFile = (fun (p : t_SourceRef) -> (match p with
+  | { f_SourceRef_srcFile = dtb__76; f_SourceRef_srcDigest = dtb__77; f_SourceRef_srcPackage = dtb__78; f_SourceRef_srcModule = dtb__79; f_SourceRef_srcRelPath = dtb__80 } -> dtb__76
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 433 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_srcDigest = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcDigest)
+let v_srcDigest = (fun (p : t_SourceRef) -> (match p with
+  | { f_SourceRef_srcFile = dtb__81; f_SourceRef_srcDigest = dtb__82; f_SourceRef_srcPackage = dtb__83; f_SourceRef_srcModule = dtb__84; f_SourceRef_srcRelPath = dtb__85 } -> dtb__82
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 434 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_srcPackage = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcPackage)
+let v_srcPackage = (fun (p : t_SourceRef) -> (match p with
+  | { f_SourceRef_srcFile = dtb__86; f_SourceRef_srcDigest = dtb__87; f_SourceRef_srcPackage = dtb__88; f_SourceRef_srcModule = dtb__89; f_SourceRef_srcRelPath = dtb__90 } -> dtb__88
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 435 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_srcModule = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcModule)
+let v_srcModule = (fun (p : t_SourceRef) -> (match p with
+  | { f_SourceRef_srcFile = dtb__91; f_SourceRef_srcDigest = dtb__92; f_SourceRef_srcPackage = dtb__93; f_SourceRef_srcModule = dtb__94; f_SourceRef_srcRelPath = dtb__95 } -> dtb__94
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 436 "Vuna/Compiler/Base/Diag/Format.vuna"
-let v_srcRelPath = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcRelPath)
+let v_srcRelPath = (fun (p : t_SourceRef) -> (match p with
+  | { f_SourceRef_srcFile = dtb__96; f_SourceRef_srcDigest = dtb__97; f_SourceRef_srcPackage = dtb__98; f_SourceRef_srcModule = dtb__99; f_SourceRef_srcRelPath = dtb__100 } -> dtb__100
+  | _ -> failwith "DT: impossible branch"
+))

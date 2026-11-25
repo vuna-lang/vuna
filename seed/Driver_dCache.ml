@@ -427,4 +427,7 @@ let v_decCachedProgramComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decC
 )))
 
 # 34 "Vuna/Compiler/Driver/Cache.vuna"
-let v_cachedOpaque = (fun (p : t_CachedProgram) -> (p).f_CachedProgram_cachedOpaque)
+let v_cachedOpaque = (fun (p : t_CachedProgram) -> (match p with
+  | { f_CachedProgram_cachedDatas = dtb__258; f_CachedProgram_cachedDefs = dtb__259; f_CachedProgram_cachedGlobals = dtb__260; f_CachedProgram_cachedInsts = dtb__261; f_CachedProgram_cachedClasses = dtb__262; f_CachedProgram_cachedOpaque = dtb__263 } -> dtb__263
+  | _ -> failwith "DT: impossible branch"
+))

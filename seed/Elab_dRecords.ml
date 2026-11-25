@@ -290,34 +290,67 @@ let v_prepareDeclsWith = (fun (auxDecls : Frontend_dRast.t_Decl B_dData_dList.t_
 let v_prepareDecls = (fun (decls0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((v_prepareDeclsWith B_dData_dList.C_List_Nil) decls0))
 
 # 22 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordFieldName = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldName)
+let v_recordFieldName = (fun (p : t_RecordFieldMeta) -> (match p with
+  | { f_RecordFieldMeta_recordFieldName = dtb__179; f_RecordFieldMeta_recordFieldType = dtb__180; f_RecordFieldMeta_recordFieldIndex = dtb__181 } -> dtb__179
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 23 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordFieldType = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldType)
+let v_recordFieldType = (fun (p : t_RecordFieldMeta) -> (match p with
+  | { f_RecordFieldMeta_recordFieldName = dtb__182; f_RecordFieldMeta_recordFieldType = dtb__183; f_RecordFieldMeta_recordFieldIndex = dtb__184 } -> dtb__183
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 24 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordFieldIndex = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldIndex)
+let v_recordFieldIndex = (fun (p : t_RecordFieldMeta) -> (match p with
+  | { f_RecordFieldMeta_recordFieldName = dtb__185; f_RecordFieldMeta_recordFieldType = dtb__186; f_RecordFieldMeta_recordFieldIndex = dtb__187 } -> dtb__187
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 29 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaName = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaName)
+let v_recordMetaName = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__188; f_RecordMeta_recordMetaParams = dtb__189; f_RecordMeta_recordMetaFields = dtb__190; f_RecordMeta_recordMetaDerivings = dtb__191; f_RecordMeta_recordMetaDerivingVia = dtb__192; f_RecordMeta_recordMetaRepr = dtb__193; f_RecordMeta_recordMetaCtor = dtb__194; f_RecordMeta_recordMetaLinear = dtb__195 } -> dtb__188
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 30 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaParams = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaParams)
+let v_recordMetaParams = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__196; f_RecordMeta_recordMetaParams = dtb__197; f_RecordMeta_recordMetaFields = dtb__198; f_RecordMeta_recordMetaDerivings = dtb__199; f_RecordMeta_recordMetaDerivingVia = dtb__200; f_RecordMeta_recordMetaRepr = dtb__201; f_RecordMeta_recordMetaCtor = dtb__202; f_RecordMeta_recordMetaLinear = dtb__203 } -> dtb__197
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaFields = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaFields)
+let v_recordMetaFields = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__204; f_RecordMeta_recordMetaParams = dtb__205; f_RecordMeta_recordMetaFields = dtb__206; f_RecordMeta_recordMetaDerivings = dtb__207; f_RecordMeta_recordMetaDerivingVia = dtb__208; f_RecordMeta_recordMetaRepr = dtb__209; f_RecordMeta_recordMetaCtor = dtb__210; f_RecordMeta_recordMetaLinear = dtb__211 } -> dtb__206
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 32 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaDerivings = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaDerivings)
+let v_recordMetaDerivings = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__212; f_RecordMeta_recordMetaParams = dtb__213; f_RecordMeta_recordMetaFields = dtb__214; f_RecordMeta_recordMetaDerivings = dtb__215; f_RecordMeta_recordMetaDerivingVia = dtb__216; f_RecordMeta_recordMetaRepr = dtb__217; f_RecordMeta_recordMetaCtor = dtb__218; f_RecordMeta_recordMetaLinear = dtb__219 } -> dtb__215
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 33 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaDerivingVia = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaDerivingVia)
+let v_recordMetaDerivingVia = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__220; f_RecordMeta_recordMetaParams = dtb__221; f_RecordMeta_recordMetaFields = dtb__222; f_RecordMeta_recordMetaDerivings = dtb__223; f_RecordMeta_recordMetaDerivingVia = dtb__224; f_RecordMeta_recordMetaRepr = dtb__225; f_RecordMeta_recordMetaCtor = dtb__226; f_RecordMeta_recordMetaLinear = dtb__227 } -> dtb__224
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 35 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaRepr = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaRepr)
+let v_recordMetaRepr = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__228; f_RecordMeta_recordMetaParams = dtb__229; f_RecordMeta_recordMetaFields = dtb__230; f_RecordMeta_recordMetaDerivings = dtb__231; f_RecordMeta_recordMetaDerivingVia = dtb__232; f_RecordMeta_recordMetaRepr = dtb__233; f_RecordMeta_recordMetaCtor = dtb__234; f_RecordMeta_recordMetaLinear = dtb__235 } -> dtb__233
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaCtor = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaCtor)
+let v_recordMetaCtor = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__236; f_RecordMeta_recordMetaParams = dtb__237; f_RecordMeta_recordMetaFields = dtb__238; f_RecordMeta_recordMetaDerivings = dtb__239; f_RecordMeta_recordMetaDerivingVia = dtb__240; f_RecordMeta_recordMetaRepr = dtb__241; f_RecordMeta_recordMetaCtor = dtb__242; f_RecordMeta_recordMetaLinear = dtb__243 } -> dtb__242
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 37 "Vuna/Compiler/Elab/Records.vuna"
-let v_recordMetaLinear = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaLinear)
+let v_recordMetaLinear = (fun (p : t_RecordMeta) -> (match p with
+  | { f_RecordMeta_recordMetaName = dtb__244; f_RecordMeta_recordMetaParams = dtb__245; f_RecordMeta_recordMetaFields = dtb__246; f_RecordMeta_recordMetaDerivings = dtb__247; f_RecordMeta_recordMetaDerivingVia = dtb__248; f_RecordMeta_recordMetaRepr = dtb__249; f_RecordMeta_recordMetaCtor = dtb__250; f_RecordMeta_recordMetaLinear = dtb__251 } -> dtb__251
+  | _ -> failwith "DT: impossible branch"
+))

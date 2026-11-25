@@ -486,10 +486,19 @@ let v_checkTerminationDeclsWith = (fun (own : string B_dData_dList.t_List) (decl
 let v_checkTerminationDecls = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((v_checkTerminationDeclsWith (v_dfunNames decls)) decls))
 
 # 463 "Vuna/Compiler/Elab/Termination.vuna"
-let v_fcRank = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcRank)
+let v_fcRank = (fun (p : t_FailCandidate) -> (match p with
+  | { f_FailCandidate_fcRank = dtb__256; f_FailCandidate_fcPos = dtb__257; f_FailCandidate_fcEdges = dtb__258 } -> dtb__256
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 464 "Vuna/Compiler/Elab/Termination.vuna"
-let v_fcPos = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcPos)
+let v_fcPos = (fun (p : t_FailCandidate) -> (match p with
+  | { f_FailCandidate_fcRank = dtb__259; f_FailCandidate_fcPos = dtb__260; f_FailCandidate_fcEdges = dtb__261 } -> dtb__260
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 465 "Vuna/Compiler/Elab/Termination.vuna"
-let v_fcEdges = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcEdges)
+let v_fcEdges = (fun (p : t_FailCandidate) -> (match p with
+  | { f_FailCandidate_fcRank = dtb__262; f_FailCandidate_fcPos = dtb__263; f_FailCandidate_fcEdges = dtb__264 } -> dtb__264
+  | _ -> failwith "DT: impossible branch"
+))

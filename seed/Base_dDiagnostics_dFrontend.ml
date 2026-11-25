@@ -161,19 +161,37 @@ let v_psErr0At = (fun (sp : Base_dSource.t_Span) (e : t_PsDiag) -> (((v_psErrAt 
 let v_psErr1At = (fun (sp : Base_dSource.t_Span) (e : t_PsDiag) (a0 : string) -> (((v_psErrAt sp) e) (B_dData_dVec.C_Vec_VCons (a0, B_dData_dVec.C_Vec_Nil))))
 
 # 221 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_lexEntryCode = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryCode)
+let v_lexEntryCode = (fun (p : t_LexEntry) -> (match p with
+  | { f_LexEntry_lexEntryCode = dtb__23; f_LexEntry_lexEntryTemplate = dtb__24; f_LexEntry_lexEntryDesc = dtb__25 } -> dtb__23
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 222 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_lexEntryTemplate = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryTemplate)
+let v_lexEntryTemplate = (fun (p : t_LexEntry) -> (match p with
+  | { f_LexEntry_lexEntryCode = dtb__26; f_LexEntry_lexEntryTemplate = dtb__27; f_LexEntry_lexEntryDesc = dtb__28 } -> dtb__27
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 223 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_lexEntryDesc = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryDesc)
+let v_lexEntryDesc = (fun (p : t_LexEntry) -> (match p with
+  | { f_LexEntry_lexEntryCode = dtb__29; f_LexEntry_lexEntryTemplate = dtb__30; f_LexEntry_lexEntryDesc = dtb__31 } -> dtb__31
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 226 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_psEntryCode = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryCode)
+let v_psEntryCode = (fun (p : t_PsEntry) -> (match p with
+  | { f_PsEntry_psEntryCode = dtb__32; f_PsEntry_psEntryTemplate = dtb__33; f_PsEntry_psEntryDesc = dtb__34 } -> dtb__32
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 227 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_psEntryTemplate = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryTemplate)
+let v_psEntryTemplate = (fun (p : t_PsEntry) -> (match p with
+  | { f_PsEntry_psEntryCode = dtb__35; f_PsEntry_psEntryTemplate = dtb__36; f_PsEntry_psEntryDesc = dtb__37 } -> dtb__36
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 228 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_psEntryDesc = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryDesc)
+let v_psEntryDesc = (fun (p : t_PsEntry) -> (match p with
+  | { f_PsEntry_psEntryCode = dtb__38; f_PsEntry_psEntryTemplate = dtb__39; f_PsEntry_psEntryDesc = dtb__40 } -> dtb__40
+  | _ -> failwith "DT: impossible branch"
+))

@@ -62,10 +62,19 @@ let v_cgErr0At = (fun (sp : Base_dSource.t_Span) (e : t_CgErr) -> (Base_dDiag.C_
 let v_cgErrDefAt = (fun (span : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (e : t_CgErr) (args : string B_dData_dVec.t_Vec) -> (Base_dDiag.C_Check_ErrC ((((Base_dDiag.v_withContext span) name) ((v_cgMsg e) args)))))
 
 # 61 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_cgEntryCode = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryCode)
+let v_cgEntryCode = (fun (p : t_CgEntry) -> (match p with
+  | { f_CgEntry_cgEntryCode = dtb__14; f_CgEntry_cgEntryTemplate = dtb__15; f_CgEntry_cgEntryDesc = dtb__16 } -> dtb__14
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 62 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_cgEntryTemplate = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryTemplate)
+let v_cgEntryTemplate = (fun (p : t_CgEntry) -> (match p with
+  | { f_CgEntry_cgEntryCode = dtb__17; f_CgEntry_cgEntryTemplate = dtb__18; f_CgEntry_cgEntryDesc = dtb__19 } -> dtb__18
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 63 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_cgEntryDesc = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryDesc)
+let v_cgEntryDesc = (fun (p : t_CgEntry) -> (match p with
+  | { f_CgEntry_cgEntryCode = dtb__20; f_CgEntry_cgEntryTemplate = dtb__21; f_CgEntry_cgEntryDesc = dtb__22 } -> dtb__22
+  | _ -> failwith "DT: impossible branch"
+))

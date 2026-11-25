@@ -139,7 +139,13 @@ let v_decListHead = (fun (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dDat
 ))))
 
 # 43 "Vuna/Compiler/Base/Bytes.vuna"
-let v_curS = (fun (p : t_Cur) -> (p).f_Cur_curS)
+let v_curS = (fun (p : t_Cur) -> (match p with
+  | { f_Cur_curS = dtb__20; f_Cur_curI = dtb__21 } -> dtb__20
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 44 "Vuna/Compiler/Base/Bytes.vuna"
-let v_curI = (fun (p : t_Cur) -> (p).f_Cur_curI)
+let v_curI = (fun (p : t_Cur) -> (match p with
+  | { f_Cur_curS = dtb__22; f_Cur_curI = dtb__23 } -> dtb__23
+  | _ -> failwith "DT: impossible branch"
+))

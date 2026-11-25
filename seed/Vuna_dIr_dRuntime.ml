@@ -148,7 +148,13 @@ let v_irSymbolsOfEntry = (fun (mc0 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_
 let v_irSymbolsOfUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_irSymbolsOfDef) ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups))) (v_irSymbolsOfEntry (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry)))
 
 # 35 "Vuna/Ir/Runtime.vuna"
-let v_irRtSymName = (fun (p : t_IrRtSym) -> (p).f_IrRtSym_irRtSymName)
+let v_irRtSymName = (fun (p : t_IrRtSym) -> (match p with
+  | { f_IrRtSym_irRtSymName = dtb__71; f_IrRtSym_irRtSymBridgesList = dtb__72 } -> dtb__71
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Ir/Runtime.vuna"
-let v_irRtSymBridgesList = (fun (p : t_IrRtSym) -> (p).f_IrRtSym_irRtSymBridgesList)
+let v_irRtSymBridgesList = (fun (p : t_IrRtSym) -> (match p with
+  | { f_IrRtSym_irRtSymName = dtb__73; f_IrRtSym_irRtSymBridgesList = dtb__74 } -> dtb__74
+  | _ -> failwith "DT: impossible branch"
+))

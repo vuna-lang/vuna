@@ -336,31 +336,61 @@ let v_generateDtSplitProgramWith = (fun (lookup : (string) -> Driver_dSplit.t_Sp
 let v_generateDtSplitProgram = (fun (modules : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (prog : Elab_dTypes.t_DtProgram) (printResult : bool) (roots : string B_dData_dList.t_List) (contextDir : string) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((((((((v_generateDtSplitProgramWith v_noUnitLookup) v_noUnitStore) modules) entryDecls) prog) printResult) roots) contextDir) extraDefLocs))
 
 # 189 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcEnv = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcEnv)
+let v_sgcEnv = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__116; f_SplitGenCtx_sgcAllDefs = dtb__117; f_SplitGenCtx_sgcDefOwnerT = dtb__118; f_SplitGenCtx_sgcDataOwnerT = dtb__119; f_SplitGenCtx_sgcDefUnitT = dtb__120; f_SplitGenCtx_sgcDataUnitT = dtb__121; f_SplitGenCtx_sgcOrdered = dtb__122; f_SplitGenCtx_sgcDefBuckets = dtb__123; f_SplitGenCtx_sgcDataBuckets = dtb__124; f_SplitGenCtx_sgcNormPath = dtb__125 } -> dtb__116
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 190 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcAllDefs = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcAllDefs)
+let v_sgcAllDefs = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__126; f_SplitGenCtx_sgcAllDefs = dtb__127; f_SplitGenCtx_sgcDefOwnerT = dtb__128; f_SplitGenCtx_sgcDataOwnerT = dtb__129; f_SplitGenCtx_sgcDefUnitT = dtb__130; f_SplitGenCtx_sgcDataUnitT = dtb__131; f_SplitGenCtx_sgcOrdered = dtb__132; f_SplitGenCtx_sgcDefBuckets = dtb__133; f_SplitGenCtx_sgcDataBuckets = dtb__134; f_SplitGenCtx_sgcNormPath = dtb__135 } -> dtb__127
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 191 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDefOwnerT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefOwnerT)
+let v_sgcDefOwnerT = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__136; f_SplitGenCtx_sgcAllDefs = dtb__137; f_SplitGenCtx_sgcDefOwnerT = dtb__138; f_SplitGenCtx_sgcDataOwnerT = dtb__139; f_SplitGenCtx_sgcDefUnitT = dtb__140; f_SplitGenCtx_sgcDataUnitT = dtb__141; f_SplitGenCtx_sgcOrdered = dtb__142; f_SplitGenCtx_sgcDefBuckets = dtb__143; f_SplitGenCtx_sgcDataBuckets = dtb__144; f_SplitGenCtx_sgcNormPath = dtb__145 } -> dtb__138
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 192 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDataOwnerT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataOwnerT)
+let v_sgcDataOwnerT = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__146; f_SplitGenCtx_sgcAllDefs = dtb__147; f_SplitGenCtx_sgcDefOwnerT = dtb__148; f_SplitGenCtx_sgcDataOwnerT = dtb__149; f_SplitGenCtx_sgcDefUnitT = dtb__150; f_SplitGenCtx_sgcDataUnitT = dtb__151; f_SplitGenCtx_sgcOrdered = dtb__152; f_SplitGenCtx_sgcDefBuckets = dtb__153; f_SplitGenCtx_sgcDataBuckets = dtb__154; f_SplitGenCtx_sgcNormPath = dtb__155 } -> dtb__149
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 193 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDefUnitT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefUnitT)
+let v_sgcDefUnitT = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__156; f_SplitGenCtx_sgcAllDefs = dtb__157; f_SplitGenCtx_sgcDefOwnerT = dtb__158; f_SplitGenCtx_sgcDataOwnerT = dtb__159; f_SplitGenCtx_sgcDefUnitT = dtb__160; f_SplitGenCtx_sgcDataUnitT = dtb__161; f_SplitGenCtx_sgcOrdered = dtb__162; f_SplitGenCtx_sgcDefBuckets = dtb__163; f_SplitGenCtx_sgcDataBuckets = dtb__164; f_SplitGenCtx_sgcNormPath = dtb__165 } -> dtb__160
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 194 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDataUnitT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataUnitT)
+let v_sgcDataUnitT = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__166; f_SplitGenCtx_sgcAllDefs = dtb__167; f_SplitGenCtx_sgcDefOwnerT = dtb__168; f_SplitGenCtx_sgcDataOwnerT = dtb__169; f_SplitGenCtx_sgcDefUnitT = dtb__170; f_SplitGenCtx_sgcDataUnitT = dtb__171; f_SplitGenCtx_sgcOrdered = dtb__172; f_SplitGenCtx_sgcDefBuckets = dtb__173; f_SplitGenCtx_sgcDataBuckets = dtb__174; f_SplitGenCtx_sgcNormPath = dtb__175 } -> dtb__171
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 195 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcOrdered = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcOrdered)
+let v_sgcOrdered = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__176; f_SplitGenCtx_sgcAllDefs = dtb__177; f_SplitGenCtx_sgcDefOwnerT = dtb__178; f_SplitGenCtx_sgcDataOwnerT = dtb__179; f_SplitGenCtx_sgcDefUnitT = dtb__180; f_SplitGenCtx_sgcDataUnitT = dtb__181; f_SplitGenCtx_sgcOrdered = dtb__182; f_SplitGenCtx_sgcDefBuckets = dtb__183; f_SplitGenCtx_sgcDataBuckets = dtb__184; f_SplitGenCtx_sgcNormPath = dtb__185 } -> dtb__182
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 197 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDefBuckets = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefBuckets)
+let v_sgcDefBuckets = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__186; f_SplitGenCtx_sgcAllDefs = dtb__187; f_SplitGenCtx_sgcDefOwnerT = dtb__188; f_SplitGenCtx_sgcDataOwnerT = dtb__189; f_SplitGenCtx_sgcDefUnitT = dtb__190; f_SplitGenCtx_sgcDataUnitT = dtb__191; f_SplitGenCtx_sgcOrdered = dtb__192; f_SplitGenCtx_sgcDefBuckets = dtb__193; f_SplitGenCtx_sgcDataBuckets = dtb__194; f_SplitGenCtx_sgcNormPath = dtb__195 } -> dtb__193
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 198 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcDataBuckets = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataBuckets)
+let v_sgcDataBuckets = (fun (p : t_SplitGenCtx) -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__196; f_SplitGenCtx_sgcAllDefs = dtb__197; f_SplitGenCtx_sgcDefOwnerT = dtb__198; f_SplitGenCtx_sgcDataOwnerT = dtb__199; f_SplitGenCtx_sgcDefUnitT = dtb__200; f_SplitGenCtx_sgcDataUnitT = dtb__201; f_SplitGenCtx_sgcOrdered = dtb__202; f_SplitGenCtx_sgcDefBuckets = dtb__203; f_SplitGenCtx_sgcDataBuckets = dtb__204; f_SplitGenCtx_sgcNormPath = dtb__205 } -> dtb__204
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 200 "Vuna/Compiler/Driver/SplitGen.vuna"
-let v_sgcNormPath = (fun p -> (p).f_SplitGenCtx_sgcNormPath)
+let v_sgcNormPath = (fun p -> (match p with
+  | { f_SplitGenCtx_sgcEnv = dtb__206; f_SplitGenCtx_sgcAllDefs = dtb__207; f_SplitGenCtx_sgcDefOwnerT = dtb__208; f_SplitGenCtx_sgcDataOwnerT = dtb__209; f_SplitGenCtx_sgcDefUnitT = dtb__210; f_SplitGenCtx_sgcDataUnitT = dtb__211; f_SplitGenCtx_sgcOrdered = dtb__212; f_SplitGenCtx_sgcDefBuckets = dtb__213; f_SplitGenCtx_sgcDataBuckets = dtb__214; f_SplitGenCtx_sgcNormPath = dtb__215 } -> dtb__215
+  | _ -> failwith "DT: impossible branch"
+))

@@ -44,10 +44,19 @@ let v_targetEffectWarn = (fun (target : string) (tag : string) -> (((((Base_dDia
 let v_warnAll = (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode C_WarnErr_WarnBranchAfterCatchAll); f_WarnEntry_warnEntryTemplate = (v_warnTemplate C_WarnErr_WarnBranchAfterCatchAll); f_WarnEntry_warnEntryDesc = "\229\133\156\229\186\149\229\136\134\230\148\175\228\185\139\229\144\142\231\154\132\229\136\134\230\148\175\228\184\141\229\143\175\232\190\190" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_WarnRedundantCtorBranch (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_WarnRedundantCtorBranch (""))); f_WarnEntry_warnEntryDesc = "\229\134\151\228\189\153\230\158\132\233\128\160\229\173\144\229\136\134\230\148\175" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_WarnRedundantLiteralBranch (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_WarnRedundantLiteralBranch (""))); f_WarnEntry_warnEntryDesc = "\229\134\151\228\189\153\229\173\151\233\157\162\233\135\143\229\136\134\230\148\175" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_UnusedBinder (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_UnusedBinder (""))); f_WarnEntry_warnEntryDesc = "\230\156\170\228\189\191\231\148\168\231\154\132 binder" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_UnusedDefinition (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_UnusedDefinition (""))); f_WarnEntry_warnEntryDesc = "\230\156\170\228\189\191\231\148\168\231\154\132\229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_UnusedImport (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_UnusedImport (""))); f_WarnEntry_warnEntryDesc = "\230\156\170\228\189\191\231\148\168\231\154\132\229\175\188\229\133\165" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_ShadowedBinder (""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_ShadowedBinder (""))); f_WarnEntry_warnEntryDesc = "\233\129\174\232\148\189\229\164\150\229\177\130\229\144\140\229\144\141 binder" }, (B_dData_dList.C_List__x58__x58_ ({ f_WarnEntry_warnEntryCode = (v_warnCode (C_WarnErr_TargetEffectUnavailable ("", ""))); f_WarnEntry_warnEntryTemplate = (v_warnTemplate (C_WarnErr_TargetEffectUnavailable ("", ""))); f_WarnEntry_warnEntryDesc = "\231\155\174\230\160\135\228\184\141\229\174\158\231\142\176\229\133\165\229\143\163\232\161\140\229\163\176\230\152\142\231\154\132\229\134\133\229\187\186\230\149\136\229\186\148" }, B_dData_dList.C_List_Nil))))))))))))))))
 
 # 81 "Vuna/Compiler/Base/Diagnostics/Warning.vuna"
-let v_warnEntryCode = (fun (p : t_WarnEntry) -> (p).f_WarnEntry_warnEntryCode)
+let v_warnEntryCode = (fun (p : t_WarnEntry) -> (match p with
+  | { f_WarnEntry_warnEntryCode = dtb__16; f_WarnEntry_warnEntryTemplate = dtb__17; f_WarnEntry_warnEntryDesc = dtb__18 } -> dtb__16
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 82 "Vuna/Compiler/Base/Diagnostics/Warning.vuna"
-let v_warnEntryTemplate = (fun (p : t_WarnEntry) -> (p).f_WarnEntry_warnEntryTemplate)
+let v_warnEntryTemplate = (fun (p : t_WarnEntry) -> (match p with
+  | { f_WarnEntry_warnEntryCode = dtb__19; f_WarnEntry_warnEntryTemplate = dtb__20; f_WarnEntry_warnEntryDesc = dtb__21 } -> dtb__20
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 83 "Vuna/Compiler/Base/Diagnostics/Warning.vuna"
-let v_warnEntryDesc = (fun (p : t_WarnEntry) -> (p).f_WarnEntry_warnEntryDesc)
+let v_warnEntryDesc = (fun (p : t_WarnEntry) -> (match p with
+  | { f_WarnEntry_warnEntryCode = dtb__22; f_WarnEntry_warnEntryTemplate = dtb__23; f_WarnEntry_warnEntryDesc = dtb__24 } -> dtb__24
+  | _ -> failwith "DT: impossible branch"
+))

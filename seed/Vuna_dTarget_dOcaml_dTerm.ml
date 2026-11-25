@@ -925,13 +925,25 @@ let v_genEntryHook = (fun (st : t_GenSt) (entry : Vuna_dIr_dModel.t_IrEntry) (pr
 ))))
 
 # 2071 "Vuna/Target/Ocaml/Term.vuna"
-let v_gsShared = (fun (p : t_GenSt) -> (p).f_GenSt_gsShared)
+let v_gsShared = (fun (p : t_GenSt) -> (match p with
+  | { f_GenSt_gsShared = dtb__401; f_GenSt_gsQual = dtb__402; f_GenSt_gsDeps = dtb__403; f_GenSt_gsNormPath = dtb__404 } -> dtb__401
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2072 "Vuna/Target/Ocaml/Term.vuna"
-let v_gsQual = (fun (p : t_GenSt) -> (p).f_GenSt_gsQual)
+let v_gsQual = (fun (p : t_GenSt) -> (match p with
+  | { f_GenSt_gsShared = dtb__405; f_GenSt_gsQual = dtb__406; f_GenSt_gsDeps = dtb__407; f_GenSt_gsNormPath = dtb__408 } -> dtb__406
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2073 "Vuna/Target/Ocaml/Term.vuna"
-let v_gsDeps = (fun (p : t_GenSt) -> (p).f_GenSt_gsDeps)
+let v_gsDeps = (fun (p : t_GenSt) -> (match p with
+  | { f_GenSt_gsShared = dtb__409; f_GenSt_gsQual = dtb__410; f_GenSt_gsDeps = dtb__411; f_GenSt_gsNormPath = dtb__412 } -> dtb__411
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2074 "Vuna/Target/Ocaml/Term.vuna"
-let v_gsNormPath = (fun p -> (p).f_GenSt_gsNormPath)
+let v_gsNormPath = (fun p -> (match p with
+  | { f_GenSt_gsShared = dtb__413; f_GenSt_gsQual = dtb__414; f_GenSt_gsDeps = dtb__415; f_GenSt_gsNormPath = dtb__416 } -> dtb__416
+  | _ -> failwith "DT: impossible branch"
+))

@@ -379,13 +379,25 @@ let v_lexComments = (fun (source : string) -> (let nd_uscrut1 = (v_lexSourceWith
 )))
 
 # 42 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_ptokTok = (fun (p : t_PTok) -> (p).f_PTok_ptokTok)
+let v_ptokTok = (fun (p : t_PTok) -> (match p with
+  | { f_PTok_ptokTok = dtb__107; f_PTok_ptokPos = dtb__108 } -> dtb__107
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 43 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_ptokPos = (fun (p : t_PTok) -> (p).f_PTok_ptokPos)
+let v_ptokPos = (fun (p : t_PTok) -> (match p with
+  | { f_PTok_ptokTok = dtb__109; f_PTok_ptokPos = dtb__110 } -> dtb__110
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 225 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_commentKind = (fun (p : t_Comment) -> (p).f_Comment_commentKind)
+let v_commentKind = (fun (p : t_Comment) -> (match p with
+  | { f_Comment_commentKind = dtb__111; f_Comment_commentText = dtb__112; f_Comment_commentSpan = dtb__113 } -> dtb__111
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 226 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_commentText = (fun (p : t_Comment) -> (p).f_Comment_commentText)
+let v_commentText = (fun (p : t_Comment) -> (match p with
+  | { f_Comment_commentKind = dtb__114; f_Comment_commentText = dtb__115; f_Comment_commentSpan = dtb__116 } -> dtb__115
+  | _ -> failwith "DT: impossible branch"
+))

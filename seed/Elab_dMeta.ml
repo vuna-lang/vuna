@@ -1222,10 +1222,19 @@ let rec v_findCatchAllBody = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t
 ))
 
 # 672 "Vuna/Compiler/Elab/Meta.vuna"
-let v_dataHeadName = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadName)
+let v_dataHeadName = (fun (p : t_DataHead) -> (match p with
+  | { f_DataHead_dataHeadName = dtb__672; f_DataHead_dataHeadKind = dtb__673; f_DataHead_dataHeadArity = dtb__674 } -> dtb__672
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 673 "Vuna/Compiler/Elab/Meta.vuna"
-let v_dataHeadKind = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadKind)
+let v_dataHeadKind = (fun (p : t_DataHead) -> (match p with
+  | { f_DataHead_dataHeadName = dtb__675; f_DataHead_dataHeadKind = dtb__676; f_DataHead_dataHeadArity = dtb__677 } -> dtb__676
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 674 "Vuna/Compiler/Elab/Meta.vuna"
-let v_dataHeadArity = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadArity)
+let v_dataHeadArity = (fun (p : t_DataHead) -> (match p with
+  | { f_DataHead_dataHeadName = dtb__678; f_DataHead_dataHeadKind = dtb__679; f_DataHead_dataHeadArity = dtb__680 } -> dtb__680
+  | _ -> failwith "DT: impossible branch"
+))

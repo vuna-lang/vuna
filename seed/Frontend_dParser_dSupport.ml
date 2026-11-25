@@ -419,37 +419,73 @@ let v_badCaseIndent = (fun (st : t_PState) (altCol : int) -> (if (v_isEof st) th
 )))
 
 # 30 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sourceOf = (fun (p : t_PState) -> (p).f_PState_sourceOf)
+let v_sourceOf = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__138; f_PState_sourceOf = dtb__139; f_PState_toksOf = dtb__140; f_PState_lastPos = dtb__141; f_PState_toksLeft = dtb__142; f_PState_pmodeOf = dtb__143; f_PState_tokIndex = dtb__144; f_PState_pendEvents = dtb__145; f_PState_nextNodeId = dtb__146; f_PState_openNodeId = dtb__147; f_PState_subStream = dtb__148; f_PState_backtickShapes = dtb__149; f_PState_sectionShapes = dtb__150; f_PState_interpMultis = dtb__151; f_PState_templateHoles = dtb__152 } -> dtb__139
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_toksOf = (fun (p : t_PState) -> (p).f_PState_toksOf)
+let v_toksOf = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__153; f_PState_sourceOf = dtb__154; f_PState_toksOf = dtb__155; f_PState_lastPos = dtb__156; f_PState_toksLeft = dtb__157; f_PState_pmodeOf = dtb__158; f_PState_tokIndex = dtb__159; f_PState_pendEvents = dtb__160; f_PState_nextNodeId = dtb__161; f_PState_openNodeId = dtb__162; f_PState_subStream = dtb__163; f_PState_backtickShapes = dtb__164; f_PState_sectionShapes = dtb__165; f_PState_interpMultis = dtb__166; f_PState_templateHoles = dtb__167 } -> dtb__155
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 33 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_toksLeft = (fun (p : t_PState) -> (p).f_PState_toksLeft)
+let v_toksLeft = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__168; f_PState_sourceOf = dtb__169; f_PState_toksOf = dtb__170; f_PState_lastPos = dtb__171; f_PState_toksLeft = dtb__172; f_PState_pmodeOf = dtb__173; f_PState_tokIndex = dtb__174; f_PState_pendEvents = dtb__175; f_PState_nextNodeId = dtb__176; f_PState_openNodeId = dtb__177; f_PState_subStream = dtb__178; f_PState_backtickShapes = dtb__179; f_PState_sectionShapes = dtb__180; f_PState_interpMultis = dtb__181; f_PState_templateHoles = dtb__182 } -> dtb__172
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 35 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokIndex = (fun (p : t_PState) -> (p).f_PState_tokIndex)
+let v_tokIndex = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__183; f_PState_sourceOf = dtb__184; f_PState_toksOf = dtb__185; f_PState_lastPos = dtb__186; f_PState_toksLeft = dtb__187; f_PState_pmodeOf = dtb__188; f_PState_tokIndex = dtb__189; f_PState_pendEvents = dtb__190; f_PState_nextNodeId = dtb__191; f_PState_openNodeId = dtb__192; f_PState_subStream = dtb__193; f_PState_backtickShapes = dtb__194; f_PState_sectionShapes = dtb__195; f_PState_interpMultis = dtb__196; f_PState_templateHoles = dtb__197 } -> dtb__189
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_pendEvents = (fun (p : t_PState) -> (p).f_PState_pendEvents)
+let v_pendEvents = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__198; f_PState_sourceOf = dtb__199; f_PState_toksOf = dtb__200; f_PState_lastPos = dtb__201; f_PState_toksLeft = dtb__202; f_PState_pmodeOf = dtb__203; f_PState_tokIndex = dtb__204; f_PState_pendEvents = dtb__205; f_PState_nextNodeId = dtb__206; f_PState_openNodeId = dtb__207; f_PState_subStream = dtb__208; f_PState_backtickShapes = dtb__209; f_PState_sectionShapes = dtb__210; f_PState_interpMultis = dtb__211; f_PState_templateHoles = dtb__212 } -> dtb__205
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 39 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_nextNodeId = (fun (p : t_PState) -> (p).f_PState_nextNodeId)
+let v_nextNodeId = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__213; f_PState_sourceOf = dtb__214; f_PState_toksOf = dtb__215; f_PState_lastPos = dtb__216; f_PState_toksLeft = dtb__217; f_PState_pmodeOf = dtb__218; f_PState_tokIndex = dtb__219; f_PState_pendEvents = dtb__220; f_PState_nextNodeId = dtb__221; f_PState_openNodeId = dtb__222; f_PState_subStream = dtb__223; f_PState_backtickShapes = dtb__224; f_PState_sectionShapes = dtb__225; f_PState_interpMultis = dtb__226; f_PState_templateHoles = dtb__227 } -> dtb__221
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 42 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_openNodeId = (fun (p : t_PState) -> (p).f_PState_openNodeId)
+let v_openNodeId = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__228; f_PState_sourceOf = dtb__229; f_PState_toksOf = dtb__230; f_PState_lastPos = dtb__231; f_PState_toksLeft = dtb__232; f_PState_pmodeOf = dtb__233; f_PState_tokIndex = dtb__234; f_PState_pendEvents = dtb__235; f_PState_nextNodeId = dtb__236; f_PState_openNodeId = dtb__237; f_PState_subStream = dtb__238; f_PState_backtickShapes = dtb__239; f_PState_sectionShapes = dtb__240; f_PState_interpMultis = dtb__241; f_PState_templateHoles = dtb__242 } -> dtb__237
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 47 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_subStream = (fun (p : t_PState) -> (p).f_PState_subStream)
+let v_subStream = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__243; f_PState_sourceOf = dtb__244; f_PState_toksOf = dtb__245; f_PState_lastPos = dtb__246; f_PState_toksLeft = dtb__247; f_PState_pmodeOf = dtb__248; f_PState_tokIndex = dtb__249; f_PState_pendEvents = dtb__250; f_PState_nextNodeId = dtb__251; f_PState_openNodeId = dtb__252; f_PState_subStream = dtb__253; f_PState_backtickShapes = dtb__254; f_PState_sectionShapes = dtb__255; f_PState_interpMultis = dtb__256; f_PState_templateHoles = dtb__257 } -> dtb__253
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 50 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_backtickShapes = (fun (p : t_PState) -> (p).f_PState_backtickShapes)
+let v_backtickShapes = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__258; f_PState_sourceOf = dtb__259; f_PState_toksOf = dtb__260; f_PState_lastPos = dtb__261; f_PState_toksLeft = dtb__262; f_PState_pmodeOf = dtb__263; f_PState_tokIndex = dtb__264; f_PState_pendEvents = dtb__265; f_PState_nextNodeId = dtb__266; f_PState_openNodeId = dtb__267; f_PState_subStream = dtb__268; f_PState_backtickShapes = dtb__269; f_PState_sectionShapes = dtb__270; f_PState_interpMultis = dtb__271; f_PState_templateHoles = dtb__272 } -> dtb__269
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 52 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sectionShapes = (fun (p : t_PState) -> (p).f_PState_sectionShapes)
+let v_sectionShapes = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__273; f_PState_sourceOf = dtb__274; f_PState_toksOf = dtb__275; f_PState_lastPos = dtb__276; f_PState_toksLeft = dtb__277; f_PState_pmodeOf = dtb__278; f_PState_tokIndex = dtb__279; f_PState_pendEvents = dtb__280; f_PState_nextNodeId = dtb__281; f_PState_openNodeId = dtb__282; f_PState_subStream = dtb__283; f_PState_backtickShapes = dtb__284; f_PState_sectionShapes = dtb__285; f_PState_interpMultis = dtb__286; f_PState_templateHoles = dtb__287 } -> dtb__285
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 54 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_interpMultis = (fun (p : t_PState) -> (p).f_PState_interpMultis)
+let v_interpMultis = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__288; f_PState_sourceOf = dtb__289; f_PState_toksOf = dtb__290; f_PState_lastPos = dtb__291; f_PState_toksLeft = dtb__292; f_PState_pmodeOf = dtb__293; f_PState_tokIndex = dtb__294; f_PState_pendEvents = dtb__295; f_PState_nextNodeId = dtb__296; f_PState_openNodeId = dtb__297; f_PState_subStream = dtb__298; f_PState_backtickShapes = dtb__299; f_PState_sectionShapes = dtb__300; f_PState_interpMultis = dtb__301; f_PState_templateHoles = dtb__302 } -> dtb__301
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 59 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_templateHoles = (fun (p : t_PState) -> (p).f_PState_templateHoles)
+let v_templateHoles = (fun (p : t_PState) -> (match p with
+  | { f_PState_fileOf = dtb__303; f_PState_sourceOf = dtb__304; f_PState_toksOf = dtb__305; f_PState_lastPos = dtb__306; f_PState_toksLeft = dtb__307; f_PState_pmodeOf = dtb__308; f_PState_tokIndex = dtb__309; f_PState_pendEvents = dtb__310; f_PState_nextNodeId = dtb__311; f_PState_openNodeId = dtb__312; f_PState_subStream = dtb__313; f_PState_backtickShapes = dtb__314; f_PState_sectionShapes = dtb__315; f_PState_interpMultis = dtb__316; f_PState_templateHoles = dtb__317 } -> dtb__317
+  | _ -> failwith "DT: impossible branch"
+))

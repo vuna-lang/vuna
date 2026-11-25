@@ -90,10 +90,19 @@ let v_toList = (fun mc0 -> (match mc0 with
 let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_Queue_x36_46_x36_Queue_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun q -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) (v_toList q)))))))
 
 # 20 "Base/Container/Queue.vuna"
-let v_queueFront = (fun p -> (p).f_Queue_queueFront)
+let v_queueFront = (fun p -> (match p with
+  | { f_Queue_queueFront = dtb__32; f_Queue_queueBack = dtb__33; f_Queue_queueCount = dtb__34 } -> dtb__32
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 22 "Base/Container/Queue.vuna"
-let v_queueBack = (fun p -> (p).f_Queue_queueBack)
+let v_queueBack = (fun p -> (match p with
+  | { f_Queue_queueFront = dtb__35; f_Queue_queueBack = dtb__36; f_Queue_queueCount = dtb__37 } -> dtb__36
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 24 "Base/Container/Queue.vuna"
-let v_queueCount = (fun p -> (p).f_Queue_queueCount)
+let v_queueCount = (fun p -> (match p with
+  | { f_Queue_queueFront = dtb__38; f_Queue_queueBack = dtb__39; f_Queue_queueCount = dtb__40 } -> dtb__40
+  | _ -> failwith "DT: impossible branch"
+))

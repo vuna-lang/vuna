@@ -493,22 +493,43 @@ let v_contextForFile = (fun (nFs : string) (nEnv : string) (path : string) -> ((
 let v_contextForDir = (fun (nFs : string) (nEnv : string) (dir : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_absolutePath nEnv) dir)) (fun absolute -> (((v_contextAt nFs) nEnv) absolute))))
 
 # 36 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootExports = (fun (p : t_Root) -> (p).f_Root_rootExports)
+let v_rootExports = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__155; f_Root_rootName = dtb__156; f_Root_rootExports = dtb__157; f_Root_rootLayerRules = dtb__158 } -> dtb__157
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 37 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootLayerRules = (fun (p : t_Root) -> (p).f_Root_rootLayerRules)
+let v_rootLayerRules = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__159; f_Root_rootName = dtb__160; f_Root_rootExports = dtb__161; f_Root_rootLayerRules = dtb__162 } -> dtb__162
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 41 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageManifest = (fun (p : t_Package) -> (p).f_Package_packageManifest)
+let v_packageManifest = (fun (p : t_Package) -> (match p with
+  | { f_Package_packageManifest = dtb__163; f_Package_packageDependencies = dtb__164; f_Package_packageDir = dtb__165 } -> dtb__163
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 58 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextPackage = (fun (p : t_PackageContext) -> (p).f_PackageContext_contextPackage)
+let v_contextPackage = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__166; f_PackageContext_contextPackage = dtb__167; f_PackageContext_contextRoots = dtb__168; f_PackageContext_contextPackageName = dtb__169; f_PackageContext_contextRelease = dtb__170 } -> dtb__167
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 469 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceDir = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceDir)
+let v_workspaceDir = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__171; f_Workspace_workspaceRoot = dtb__172; f_Workspace_workspaceMembers = dtb__173 } -> dtb__171
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 470 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceRoot = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceRoot)
+let v_workspaceRoot = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__174; f_Workspace_workspaceRoot = dtb__175; f_Workspace_workspaceMembers = dtb__176 } -> dtb__175
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 471 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceMembers = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceMembers)
+let v_workspaceMembers = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__177; f_Workspace_workspaceRoot = dtb__178; f_Workspace_workspaceMembers = dtb__179 } -> dtb__179
+  | _ -> failwith "DT: impossible branch"
+))

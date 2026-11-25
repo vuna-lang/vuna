@@ -50,10 +50,19 @@ let v_ldErr4 = (fun (e : t_LdDiag) (a0 : string) (a1 : string) (a2 : string) (a3
 let v_ldErr2 = (fun (e : t_LdDiag) (a0 : string) (a1 : string) -> ((v_ldErr e) (B_dData_dVec.C_Vec_VCons (a0, (B_dData_dVec.C_Vec_VCons (a1, B_dData_dVec.C_Vec_Nil))))))
 
 # 48 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
-let v_ldEntryCode = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryCode)
+let v_ldEntryCode = (fun (p : t_LdEntry) -> (match p with
+  | { f_LdEntry_ldEntryCode = dtb__26; f_LdEntry_ldEntryTemplate = dtb__27; f_LdEntry_ldEntryDesc = dtb__28 } -> dtb__26
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 49 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
-let v_ldEntryTemplate = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryTemplate)
+let v_ldEntryTemplate = (fun (p : t_LdEntry) -> (match p with
+  | { f_LdEntry_ldEntryCode = dtb__29; f_LdEntry_ldEntryTemplate = dtb__30; f_LdEntry_ldEntryDesc = dtb__31 } -> dtb__30
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 50 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
-let v_ldEntryDesc = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryDesc)
+let v_ldEntryDesc = (fun (p : t_LdEntry) -> (match p with
+  | { f_LdEntry_ldEntryCode = dtb__32; f_LdEntry_ldEntryTemplate = dtb__33; f_LdEntry_ldEntryDesc = dtb__34 } -> dtb__34
+  | _ -> failwith "DT: impossible branch"
+))

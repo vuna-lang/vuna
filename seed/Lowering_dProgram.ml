@@ -1168,34 +1168,67 @@ let v_lowerProgramOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) 
 let v_lowerProgramCheckedOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_lowerProgramOf datas) defs) globals)) (fun (program : Vuna_dIr_dModel.t_IrProgram) -> ((Base_dCommon.v_bind (Vuna_dIr_dValidate.v_validateProgram program)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (program)))))))
 
 # 51 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lwNext = (fun (p : t_LwSt) -> (p).f_LwSt_lwNext)
+let v_lwNext = (fun (p : t_LwSt) -> (match p with
+  | { f_LwSt_lwNext = dtb__452; f_LwSt_lwBinder = dtb__453 } -> dtb__452
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 53 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lwBinder = (fun (p : t_LwSt) -> (p).f_LwSt_lwBinder)
+let v_lwBinder = (fun (p : t_LwSt) -> (match p with
+  | { f_LwSt_lwNext = dtb__454; f_LwSt_lwBinder = dtb__455 } -> dtb__455
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 224 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamParamName = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamName)
+let v_lamParamName = (fun (p : t_LamParam) -> (match p with
+  | { f_LamParam_lamParamName = dtb__456; f_LamParam_lamParamRig = dtb__457; f_LamParam_lamParamTy = dtb__458 } -> dtb__456
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 225 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamParamRig = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamRig)
+let v_lamParamRig = (fun (p : t_LamParam) -> (match p with
+  | { f_LamParam_lamParamName = dtb__459; f_LamParam_lamParamRig = dtb__460; f_LamParam_lamParamTy = dtb__461 } -> dtb__460
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 226 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamParamTy = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamTy)
+let v_lamParamTy = (fun (p : t_LamParam) -> (match p with
+  | { f_LamParam_lamParamName = dtb__462; f_LamParam_lamParamRig = dtb__463; f_LamParam_lamParamTy = dtb__464 } -> dtb__464
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 229 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamChainBinders = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainBinders)
+let v_lamChainBinders = (fun (p : t_LamChainIn) -> (match p with
+  | { f_LamChainIn_lamChainBinders = dtb__465; f_LamChainIn_lamChainBody = dtb__466; f_LamChainIn_lamChainResultTy = dtb__467 } -> dtb__465
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 230 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamChainBody = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainBody)
+let v_lamChainBody = (fun (p : t_LamChainIn) -> (match p with
+  | { f_LamChainIn_lamChainBinders = dtb__468; f_LamChainIn_lamChainBody = dtb__469; f_LamChainIn_lamChainResultTy = dtb__470 } -> dtb__469
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 231 "Vuna/Compiler/Lowering/Program.vuna"
-let v_lamChainResultTy = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainResultTy)
+let v_lamChainResultTy = (fun (p : t_LamChainIn) -> (match p with
+  | { f_LamChainIn_lamChainBinders = dtb__471; f_LamChainIn_lamChainBody = dtb__472; f_LamChainIn_lamChainResultTy = dtb__473 } -> dtb__473
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 687 "Vuna/Compiler/Lowering/Program.vuna"
-let v_aeEnv = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aeEnv)
+let v_aeEnv = (fun (p : t_AltEnvIn) -> (match p with
+  | { f_AltEnvIn_aeEnv = dtb__474; f_AltEnvIn_aePats = dtb__475; f_AltEnvIn_aeSt = dtb__476 } -> dtb__474
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 688 "Vuna/Compiler/Lowering/Program.vuna"
-let v_aePats = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aePats)
+let v_aePats = (fun (p : t_AltEnvIn) -> (match p with
+  | { f_AltEnvIn_aeEnv = dtb__477; f_AltEnvIn_aePats = dtb__478; f_AltEnvIn_aeSt = dtb__479 } -> dtb__478
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 689 "Vuna/Compiler/Lowering/Program.vuna"
-let v_aeSt = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aeSt)
+let v_aeSt = (fun (p : t_AltEnvIn) -> (match p with
+  | { f_AltEnvIn_aeEnv = dtb__480; f_AltEnvIn_aePats = dtb__481; f_AltEnvIn_aeSt = dtb__482 } -> dtb__482
+  | _ -> failwith "DT: impossible branch"
+))

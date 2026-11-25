@@ -501,31 +501,61 @@ let v_ofDeclsWith = (fun (at : Frontend_dRefs.t_Annot) (decls : Frontend_dAst.t_
 let v_ofDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((v_ofDeclsWith (Frontend_dRefs.v_annotateDecls decls)) decls))
 
 # 30 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_traitMethodType = (fun (p : t_TraitMethod) -> (p).f_TraitMethod_traitMethodType)
+let v_traitMethodType = (fun (p : t_TraitMethod) -> (match p with
+  | { f_TraitMethod_traitMethodName = dtb__544; f_TraitMethod_traitMethodType = dtb__545; f_TraitMethod_traitMethodSpan = dtb__546 } -> dtb__545
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 35 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_traitParamName = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamName)
+let v_traitParamName = (fun (p : t_TraitParam) -> (match p with
+  | { f_TraitParam_traitParamName = dtb__547; f_TraitParam_traitParamKind = dtb__548 } -> dtb__547
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_traitParamKind = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamKind)
+let v_traitParamKind = (fun (p : t_TraitParam) -> (match p with
+  | { f_TraitParam_traitParamName = dtb__549; f_TraitParam_traitParamKind = dtb__550 } -> dtb__550
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 124 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileModDecl = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileModDecl)
+let v_sourceFileModDecl = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__551; f_SourceFile_sourceFileImports = dtb__552; f_SourceFile_sourceFileFixities = dtb__553; f_SourceFile_sourceFileDecls = dtb__554; f_SourceFile_sourceFileExports = dtb__555; f_SourceFile_sourceFileReexports = dtb__556; f_SourceFile_sourceFileOpacity = dtb__557 } -> dtb__551
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 125 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileImports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileImports)
+let v_sourceFileImports = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__558; f_SourceFile_sourceFileImports = dtb__559; f_SourceFile_sourceFileFixities = dtb__560; f_SourceFile_sourceFileDecls = dtb__561; f_SourceFile_sourceFileExports = dtb__562; f_SourceFile_sourceFileReexports = dtb__563; f_SourceFile_sourceFileOpacity = dtb__564 } -> dtb__559
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 126 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileFixities = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileFixities)
+let v_sourceFileFixities = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__565; f_SourceFile_sourceFileImports = dtb__566; f_SourceFile_sourceFileFixities = dtb__567; f_SourceFile_sourceFileDecls = dtb__568; f_SourceFile_sourceFileExports = dtb__569; f_SourceFile_sourceFileReexports = dtb__570; f_SourceFile_sourceFileOpacity = dtb__571 } -> dtb__567
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 127 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileDecls = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileDecls)
+let v_sourceFileDecls = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__572; f_SourceFile_sourceFileImports = dtb__573; f_SourceFile_sourceFileFixities = dtb__574; f_SourceFile_sourceFileDecls = dtb__575; f_SourceFile_sourceFileExports = dtb__576; f_SourceFile_sourceFileReexports = dtb__577; f_SourceFile_sourceFileOpacity = dtb__578 } -> dtb__575
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 129 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileExports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileExports)
+let v_sourceFileExports = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__579; f_SourceFile_sourceFileImports = dtb__580; f_SourceFile_sourceFileFixities = dtb__581; f_SourceFile_sourceFileDecls = dtb__582; f_SourceFile_sourceFileExports = dtb__583; f_SourceFile_sourceFileReexports = dtb__584; f_SourceFile_sourceFileOpacity = dtb__585 } -> dtb__583
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 130 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileReexports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileReexports)
+let v_sourceFileReexports = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__586; f_SourceFile_sourceFileImports = dtb__587; f_SourceFile_sourceFileFixities = dtb__588; f_SourceFile_sourceFileDecls = dtb__589; f_SourceFile_sourceFileExports = dtb__590; f_SourceFile_sourceFileReexports = dtb__591; f_SourceFile_sourceFileOpacity = dtb__592 } -> dtb__591
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 131 "Vuna/Compiler/Frontend/Rast.vuna"
-let v_sourceFileOpacity = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileOpacity)
+let v_sourceFileOpacity = (fun (p : t_SourceFile) -> (match p with
+  | { f_SourceFile_sourceFileModDecl = dtb__593; f_SourceFile_sourceFileImports = dtb__594; f_SourceFile_sourceFileFixities = dtb__595; f_SourceFile_sourceFileDecls = dtb__596; f_SourceFile_sourceFileExports = dtb__597; f_SourceFile_sourceFileReexports = dtb__598; f_SourceFile_sourceFileOpacity = dtb__599 } -> dtb__599
+  | _ -> failwith "DT: impossible branch"
+))

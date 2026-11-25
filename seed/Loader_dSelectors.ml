@@ -141,15 +141,34 @@ let v_selectorSigType = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) 
 # 214 "Vuna/Compiler/Loader/Selectors.vuna"
 let v_selectorSigDecl = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) -> (Frontend_dAst.C_Decl_DSig ((f).Frontend_dAst.f_Field_fieldName, B_dData_dList.C_List_Nil, ((v_selectorSigType r) f), (f).Frontend_dAst.f_Field_fieldRef)))
 
-# 233 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_selectorFunDecl = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) -> (Frontend_dAst.C_Decl_DFun ((f).Frontend_dAst.f_Field_fieldName, (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ("p", (f).Frontend_dAst.f_Field_fieldRef)), B_dData_dList.C_List_Nil)), (Frontend_dAst.C_Expr_EField ((Frontend_dAst.C_Expr_EVar ("p", (f).Frontend_dAst.f_Field_fieldRef)), (f).Frontend_dAst.f_Field_fieldName, (f).Frontend_dAst.f_Field_fieldRef)), (f).Frontend_dAst.f_Field_fieldRef)))
+# 250 "Vuna/Compiler/Loader/Selectors.vuna"
+let v_selectorArgName = (fun (i : int) -> ("s" ^ (bi_strFromInt i)))
+
+# 246 "Vuna/Compiler/Loader/Selectors.vuna"
+let rec v_selectorArgPatsRev = (fun (n : int) (ref : Frontend_dAst.t_NodeRef) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ((v_selectorArgName (n - 1)), ref)), ((v_selectorArgPatsRev (n - 1)) ref)))))
+
+# 243 "Vuna/Compiler/Loader/Selectors.vuna"
+let v_selectorArgPats = (fun (n : int) (ref : Frontend_dAst.t_NodeRef) -> (B_dData_dList.v_reverse ((v_selectorArgPatsRev n) ref)))
+
+# 256 "Vuna/Compiler/Loader/Selectors.vuna"
+let rec v_fieldIndexOfGo = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Field B_dData_dList.t_List) (mc2 : int) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__84, dtb__85) -> (if ((dtb__84).Frontend_dAst.f_Field_fieldName = mc0) then mc2 else (((v_fieldIndexOfGo mc0) dtb__85) (mc2 + 1)))
+  | B_dData_dList.C_List_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 253 "Vuna/Compiler/Loader/Selectors.vuna"
+let v_fieldIndexOf = (fun (name : string) (fields : Frontend_dAst.t_Field B_dData_dList.t_List) -> (((v_fieldIndexOfGo name) fields) 0))
+
+# 234 "Vuna/Compiler/Loader/Selectors.vuna"
+let v_selectorFunDecl = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) -> (Frontend_dAst.C_Decl_DFun ((f).Frontend_dAst.f_Field_fieldName, (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ("p", (f).Frontend_dAst.f_Field_fieldRef)), B_dData_dList.C_List_Nil)), (Frontend_dAst.C_Expr_ECase ((Frontend_dAst.C_Expr_EVar ("p", (f).Frontend_dAst.f_Field_fieldRef)), (B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_Alt_altPat = (Frontend_dAst.C_Pat_PCon ((r).f_SelectorRecord_srName, ((v_selectorArgPats (B_dData_dList.v_length (r).f_SelectorRecord_srFields)) (f).Frontend_dAst.f_Field_fieldRef), (f).Frontend_dAst.f_Field_fieldRef)); Frontend_dAst.f_Alt_altBody = (Frontend_dAst.C_Expr_EVar ((v_selectorArgName ((v_fieldIndexOf (f).Frontend_dAst.f_Field_fieldName) (r).f_SelectorRecord_srFields)), (f).Frontend_dAst.f_Field_fieldRef)); Frontend_dAst.f_Alt_altRef = (f).Frontend_dAst.f_Field_fieldRef }, B_dData_dList.C_List_Nil)), (f).Frontend_dAst.f_Field_fieldRef)), (f).Frontend_dAst.f_Field_fieldRef)))
 
 # 179 "Vuna/Compiler/Loader/Selectors.vuna"
 let v_checkOneField = (fun (all : t_SelectorRecord B_dData_dList.t_List) (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) (topNames : string B_dData_dList.t_List) -> (let fieldName = (f).Frontend_dAst.f_Field_fieldName in (let owners = ((v_fieldOwnerCount all) fieldName) in (let claims = ((v_fieldClaimCount all) fieldName) in (if (claims > 1) then (if v_selectorsStrict then ((((Base_dDiagnostics_dRn.v_rnAt2 (Frontend_dAst.v_nodeRefSpan (r).f_SelectorRecord_srRef)) (Base_dDiagnostics_dRn.C_RnErr_SelectorConflict (fieldName, ((v_ownersText all) fieldName)))) fieldName) ((v_ownersText all) fieldName)) else (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (if (if (owners > 1) then (claims = 0) else false) then (if v_selectorsStrict then ((((Base_dDiagnostics_dRn.v_rnAt2 (Frontend_dAst.v_nodeRefSpan (r).f_SelectorRecord_srRef)) (Base_dDiagnostics_dRn.C_RnErr_SelectorShared (fieldName, ((v_ownersText all) fieldName)))) fieldName) ((v_ownersText all) fieldName)) else (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (if (B_dData_dBool.v_not ((((v_fieldNameSelected all) topNames) r) fieldName)) then (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) else (if ((B_dData_dList.v_memName fieldName) topNames) then (if v_selectorsStrict then ((((Base_dDiagnostics_dRn.v_rnAt2 (Frontend_dAst.v_nodeRefSpan (r).f_SelectorRecord_srRef)) (Base_dDiagnostics_dRn.C_RnErr_SelectorNameTaken (fieldName, (r).f_SelectorRecord_srName))) fieldName) (r).f_SelectorRecord_srName) else (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (((v_selectorSigDecl r) f), (B_dData_dList.C_List__x58__x58_ (((v_selectorFunDecl r) f), B_dData_dList.C_List_Nil))))))))))))))
 
 # 172 "Vuna/Compiler/Loader/Selectors.vuna"
 let rec v_checkFieldClaims = (fun (mc0 : t_SelectorRecord B_dData_dList.t_List) (mc1 : t_SelectorRecord) (mc2 : Frontend_dAst.t_Field B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) -> (match mc2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__84, dtb__85) -> ((Base_dCommon.v_bind ((((v_checkOneField mc0) mc1) dtb__84) mc3)) (fun (ds : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_checkFieldClaims mc0) mc1) dtb__85) mc3)) (fun (more : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ds) more)))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> ((Base_dCommon.v_bind ((((v_checkOneField mc0) mc1) dtb__86) mc3)) (fun (ds : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_checkFieldClaims mc0) mc1) dtb__87) mc3)) (fun (more : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ds) more)))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -159,7 +178,7 @@ let v_checkRecordClaims = (fun (all : t_SelectorRecord B_dData_dList.t_List) (r 
 
 # 158 "Vuna/Compiler/Loader/Selectors.vuna"
 let rec v_checkClaimsGo = (fun (mc0 : t_SelectorRecord B_dData_dList.t_List) (mc1 : t_SelectorRecord B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> ((Base_dCommon.v_bind (((v_checkRecordClaims mc0) dtb__86) mc2)) (fun (ds : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_checkClaimsGo mc0) dtb__87) mc2)) (fun (more : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ds) more)))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__88, dtb__89) -> ((Base_dCommon.v_bind (((v_checkRecordClaims mc0) dtb__88) mc2)) (fun (ds : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_checkClaimsGo mc0) dtb__89) mc2)) (fun (more : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ds) more)))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -171,19 +190,37 @@ let v_checkClaims = (fun (recs : t_SelectorRecord B_dData_dList.t_List) (topName
 let v_selectorDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (v_checkDataSelectors decls)) (fun (_u : int) -> ((v_checkClaims (v_selectorRecords decls)) (v_topLevelNames decls)))))
 
 # 14 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srName = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srName)
+let v_srName = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__90; f_SelectorRecord_srParams = dtb__91; f_SelectorRecord_srFields = dtb__92; f_SelectorRecord_srClaim = dtb__93; f_SelectorRecord_srLinear = dtb__94; f_SelectorRecord_srRef = dtb__95 } -> dtb__90
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 15 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srParams = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srParams)
+let v_srParams = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__96; f_SelectorRecord_srParams = dtb__97; f_SelectorRecord_srFields = dtb__98; f_SelectorRecord_srClaim = dtb__99; f_SelectorRecord_srLinear = dtb__100; f_SelectorRecord_srRef = dtb__101 } -> dtb__97
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 16 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srFields = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srFields)
+let v_srFields = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__102; f_SelectorRecord_srParams = dtb__103; f_SelectorRecord_srFields = dtb__104; f_SelectorRecord_srClaim = dtb__105; f_SelectorRecord_srLinear = dtb__106; f_SelectorRecord_srRef = dtb__107 } -> dtb__104
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 17 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srClaim = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srClaim)
+let v_srClaim = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__108; f_SelectorRecord_srParams = dtb__109; f_SelectorRecord_srFields = dtb__110; f_SelectorRecord_srClaim = dtb__111; f_SelectorRecord_srLinear = dtb__112; f_SelectorRecord_srRef = dtb__113 } -> dtb__111
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 18 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srLinear = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srLinear)
+let v_srLinear = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__114; f_SelectorRecord_srParams = dtb__115; f_SelectorRecord_srFields = dtb__116; f_SelectorRecord_srClaim = dtb__117; f_SelectorRecord_srLinear = dtb__118; f_SelectorRecord_srRef = dtb__119 } -> dtb__118
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 19 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_srRef = (fun (p : t_SelectorRecord) -> (p).f_SelectorRecord_srRef)
+let v_srRef = (fun (p : t_SelectorRecord) -> (match p with
+  | { f_SelectorRecord_srName = dtb__120; f_SelectorRecord_srParams = dtb__121; f_SelectorRecord_srFields = dtb__122; f_SelectorRecord_srClaim = dtb__123; f_SelectorRecord_srLinear = dtb__124; f_SelectorRecord_srRef = dtb__125 } -> dtb__125
+  | _ -> failwith "DT: impossible branch"
+))

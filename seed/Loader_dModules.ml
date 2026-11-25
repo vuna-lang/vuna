@@ -631,88 +631,175 @@ let rec v_anyCtorTarget = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3
 ))
 
 # 28 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleImportsOf = (fun (p : t_Module) -> (p).f_Module_moduleImportsOf)
+let v_moduleImportsOf = (fun (p : t_Module) -> (match p with
+  | { f_Module_moduleNameOf = dtb__276; f_Module_modulePackageOf = dtb__277; f_Module_moduleImportsOf = dtb__278; f_Module_moduleImplicitImportsOf = dtb__279; f_Module_moduleDeclsOf = dtb__280; f_Module_moduleExportsOf = dtb__281; f_Module_moduleFixitiesOf = dtb__282; f_Module_moduleReexportsOf = dtb__283; f_Module_moduleOpaqueOf = dtb__284; f_Module_moduleExportIndexOf = dtb__285; f_Module_moduleFixFactsOf = dtb__286 } -> dtb__278
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 29 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleImplicitImportsOf = (fun (p : t_Module) -> (p).f_Module_moduleImplicitImportsOf)
+let v_moduleImplicitImportsOf = (fun (p : t_Module) -> (match p with
+  | { f_Module_moduleNameOf = dtb__287; f_Module_modulePackageOf = dtb__288; f_Module_moduleImportsOf = dtb__289; f_Module_moduleImplicitImportsOf = dtb__290; f_Module_moduleDeclsOf = dtb__291; f_Module_moduleExportsOf = dtb__292; f_Module_moduleFixitiesOf = dtb__293; f_Module_moduleReexportsOf = dtb__294; f_Module_moduleOpaqueOf = dtb__295; f_Module_moduleExportIndexOf = dtb__296; f_Module_moduleFixFactsOf = dtb__297 } -> dtb__290
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleExportsOf = (fun (p : t_Module) -> (p).f_Module_moduleExportsOf)
+let v_moduleExportsOf = (fun (p : t_Module) -> (match p with
+  | { f_Module_moduleNameOf = dtb__298; f_Module_modulePackageOf = dtb__299; f_Module_moduleImportsOf = dtb__300; f_Module_moduleImplicitImportsOf = dtb__301; f_Module_moduleDeclsOf = dtb__302; f_Module_moduleExportsOf = dtb__303; f_Module_moduleFixitiesOf = dtb__304; f_Module_moduleReexportsOf = dtb__305; f_Module_moduleOpaqueOf = dtb__306; f_Module_moduleExportIndexOf = dtb__307; f_Module_moduleFixFactsOf = dtb__308 } -> dtb__303
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 41 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleExportIndexOf = (fun (p : t_Module) -> (p).f_Module_moduleExportIndexOf)
+let v_moduleExportIndexOf = (fun (p : t_Module) -> (match p with
+  | { f_Module_moduleNameOf = dtb__309; f_Module_modulePackageOf = dtb__310; f_Module_moduleImportsOf = dtb__311; f_Module_moduleImplicitImportsOf = dtb__312; f_Module_moduleDeclsOf = dtb__313; f_Module_moduleExportsOf = dtb__314; f_Module_moduleFixitiesOf = dtb__315; f_Module_moduleReexportsOf = dtb__316; f_Module_moduleOpaqueOf = dtb__317; f_Module_moduleExportIndexOf = dtb__318; f_Module_moduleFixFactsOf = dtb__319 } -> dtb__318
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 44 "Vuna/Compiler/Loader/Modules.vuna"
-let v_moduleFixFactsOf = (fun (p : t_Module) -> (p).f_Module_moduleFixFactsOf)
+let v_moduleFixFactsOf = (fun (p : t_Module) -> (match p with
+  | { f_Module_moduleNameOf = dtb__320; f_Module_modulePackageOf = dtb__321; f_Module_moduleImportsOf = dtb__322; f_Module_moduleImplicitImportsOf = dtb__323; f_Module_moduleDeclsOf = dtb__324; f_Module_moduleExportsOf = dtb__325; f_Module_moduleFixitiesOf = dtb__326; f_Module_moduleReexportsOf = dtb__327; f_Module_moduleOpaqueOf = dtb__328; f_Module_moduleExportIndexOf = dtb__329; f_Module_moduleFixFactsOf = dtb__330 } -> dtb__330
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 50 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryDecls = (fun (p : t_Project) -> (p).f_Project_projectEntryDecls)
+let v_projectEntryDecls = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__331; f_Project_projectEntryImports = dtb__332; f_Project_projectImplicitImports = dtb__333; f_Project_projectModules = dtb__334; f_Project_projectEntryPkg = dtb__335; f_Project_projectEntryFixities = dtb__336; f_Project_projectEntryName = dtb__337; f_Project_projectEntryFacts = dtb__338 } -> dtb__331
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 51 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryImports = (fun (p : t_Project) -> (p).f_Project_projectEntryImports)
+let v_projectEntryImports = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__339; f_Project_projectEntryImports = dtb__340; f_Project_projectImplicitImports = dtb__341; f_Project_projectModules = dtb__342; f_Project_projectEntryPkg = dtb__343; f_Project_projectEntryFixities = dtb__344; f_Project_projectEntryName = dtb__345; f_Project_projectEntryFacts = dtb__346 } -> dtb__340
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 52 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectImplicitImports = (fun (p : t_Project) -> (p).f_Project_projectImplicitImports)
+let v_projectImplicitImports = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__347; f_Project_projectEntryImports = dtb__348; f_Project_projectImplicitImports = dtb__349; f_Project_projectModules = dtb__350; f_Project_projectEntryPkg = dtb__351; f_Project_projectEntryFixities = dtb__352; f_Project_projectEntryName = dtb__353; f_Project_projectEntryFacts = dtb__354 } -> dtb__349
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 53 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectModules = (fun (p : t_Project) -> (p).f_Project_projectModules)
+let v_projectModules = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__355; f_Project_projectEntryImports = dtb__356; f_Project_projectImplicitImports = dtb__357; f_Project_projectModules = dtb__358; f_Project_projectEntryPkg = dtb__359; f_Project_projectEntryFixities = dtb__360; f_Project_projectEntryName = dtb__361; f_Project_projectEntryFacts = dtb__362 } -> dtb__358
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 54 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryPkg = (fun (p : t_Project) -> (p).f_Project_projectEntryPkg)
+let v_projectEntryPkg = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__363; f_Project_projectEntryImports = dtb__364; f_Project_projectImplicitImports = dtb__365; f_Project_projectModules = dtb__366; f_Project_projectEntryPkg = dtb__367; f_Project_projectEntryFixities = dtb__368; f_Project_projectEntryName = dtb__369; f_Project_projectEntryFacts = dtb__370 } -> dtb__367
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 55 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryFixities = (fun (p : t_Project) -> (p).f_Project_projectEntryFixities)
+let v_projectEntryFixities = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__371; f_Project_projectEntryImports = dtb__372; f_Project_projectImplicitImports = dtb__373; f_Project_projectModules = dtb__374; f_Project_projectEntryPkg = dtb__375; f_Project_projectEntryFixities = dtb__376; f_Project_projectEntryName = dtb__377; f_Project_projectEntryFacts = dtb__378 } -> dtb__376
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 58 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryName = (fun (p : t_Project) -> (p).f_Project_projectEntryName)
+let v_projectEntryName = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__379; f_Project_projectEntryImports = dtb__380; f_Project_projectImplicitImports = dtb__381; f_Project_projectModules = dtb__382; f_Project_projectEntryPkg = dtb__383; f_Project_projectEntryFixities = dtb__384; f_Project_projectEntryName = dtb__385; f_Project_projectEntryFacts = dtb__386 } -> dtb__385
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 60 "Vuna/Compiler/Loader/Modules.vuna"
-let v_projectEntryFacts = (fun (p : t_Project) -> (p).f_Project_projectEntryFacts)
+let v_projectEntryFacts = (fun (p : t_Project) -> (match p with
+  | { f_Project_projectEntryDecls = dtb__387; f_Project_projectEntryImports = dtb__388; f_Project_projectImplicitImports = dtb__389; f_Project_projectModules = dtb__390; f_Project_projectEntryPkg = dtb__391; f_Project_projectEntryFixities = dtb__392; f_Project_projectEntryName = dtb__393; f_Project_projectEntryFacts = dtb__394 } -> dtb__394
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 93 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsValues = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsValues)
+let v_nsValues = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__395; f_Namespaces_nsCtors = dtb__396; f_Namespaces_nsTypes = dtb__397; f_Namespaces_nsValueSet = dtb__398; f_Namespaces_nsCtorSet = dtb__399; f_Namespaces_nsTypeSet = dtb__400; f_Namespaces_nsCtorCands = dtb__401; f_Namespaces_nsModuleTbl = dtb__402; f_Namespaces_nsRelease = dtb__403 } -> dtb__395
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 94 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsCtors = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsCtors)
+let v_nsCtors = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__404; f_Namespaces_nsCtors = dtb__405; f_Namespaces_nsTypes = dtb__406; f_Namespaces_nsValueSet = dtb__407; f_Namespaces_nsCtorSet = dtb__408; f_Namespaces_nsTypeSet = dtb__409; f_Namespaces_nsCtorCands = dtb__410; f_Namespaces_nsModuleTbl = dtb__411; f_Namespaces_nsRelease = dtb__412 } -> dtb__405
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 95 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsTypes = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsTypes)
+let v_nsTypes = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__413; f_Namespaces_nsCtors = dtb__414; f_Namespaces_nsTypes = dtb__415; f_Namespaces_nsValueSet = dtb__416; f_Namespaces_nsCtorSet = dtb__417; f_Namespaces_nsTypeSet = dtb__418; f_Namespaces_nsCtorCands = dtb__419; f_Namespaces_nsModuleTbl = dtb__420; f_Namespaces_nsRelease = dtb__421 } -> dtb__415
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 98 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsValueSet = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsValueSet)
+let v_nsValueSet = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__422; f_Namespaces_nsCtors = dtb__423; f_Namespaces_nsTypes = dtb__424; f_Namespaces_nsValueSet = dtb__425; f_Namespaces_nsCtorSet = dtb__426; f_Namespaces_nsTypeSet = dtb__427; f_Namespaces_nsCtorCands = dtb__428; f_Namespaces_nsModuleTbl = dtb__429; f_Namespaces_nsRelease = dtb__430 } -> dtb__425
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 99 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsCtorSet = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsCtorSet)
+let v_nsCtorSet = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__431; f_Namespaces_nsCtors = dtb__432; f_Namespaces_nsTypes = dtb__433; f_Namespaces_nsValueSet = dtb__434; f_Namespaces_nsCtorSet = dtb__435; f_Namespaces_nsTypeSet = dtb__436; f_Namespaces_nsCtorCands = dtb__437; f_Namespaces_nsModuleTbl = dtb__438; f_Namespaces_nsRelease = dtb__439 } -> dtb__435
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 100 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsTypeSet = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsTypeSet)
+let v_nsTypeSet = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__440; f_Namespaces_nsCtors = dtb__441; f_Namespaces_nsTypes = dtb__442; f_Namespaces_nsValueSet = dtb__443; f_Namespaces_nsCtorSet = dtb__444; f_Namespaces_nsTypeSet = dtb__445; f_Namespaces_nsCtorCands = dtb__446; f_Namespaces_nsModuleTbl = dtb__447; f_Namespaces_nsRelease = dtb__448 } -> dtb__445
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 103 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsCtorCands = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsCtorCands)
+let v_nsCtorCands = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__449; f_Namespaces_nsCtors = dtb__450; f_Namespaces_nsTypes = dtb__451; f_Namespaces_nsValueSet = dtb__452; f_Namespaces_nsCtorSet = dtb__453; f_Namespaces_nsTypeSet = dtb__454; f_Namespaces_nsCtorCands = dtb__455; f_Namespaces_nsModuleTbl = dtb__456; f_Namespaces_nsRelease = dtb__457 } -> dtb__455
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 105 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsModuleTbl = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsModuleTbl)
+let v_nsModuleTbl = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__458; f_Namespaces_nsCtors = dtb__459; f_Namespaces_nsTypes = dtb__460; f_Namespaces_nsValueSet = dtb__461; f_Namespaces_nsCtorSet = dtb__462; f_Namespaces_nsTypeSet = dtb__463; f_Namespaces_nsCtorCands = dtb__464; f_Namespaces_nsModuleTbl = dtb__465; f_Namespaces_nsRelease = dtb__466 } -> dtb__465
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 107 "Vuna/Compiler/Loader/Modules.vuna"
-let v_nsRelease = (fun (p : t_Namespaces) -> (p).f_Namespaces_nsRelease)
+let v_nsRelease = (fun (p : t_Namespaces) -> (match p with
+  | { f_Namespaces_nsValues = dtb__467; f_Namespaces_nsCtors = dtb__468; f_Namespaces_nsTypes = dtb__469; f_Namespaces_nsValueSet = dtb__470; f_Namespaces_nsCtorSet = dtb__471; f_Namespaces_nsTypeSet = dtb__472; f_Namespaces_nsCtorCands = dtb__473; f_Namespaces_nsModuleTbl = dtb__474; f_Namespaces_nsRelease = dtb__475 } -> dtb__475
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 115 "Vuna/Compiler/Loader/Modules.vuna"
-let v_kind = (fun (p : t_ExportEntry) -> (p).f_ExportEntry_kind)
+let v_kind = (fun (p : t_ExportEntry) -> (match p with
+  | { f_ExportEntry_kind = dtb__476; f_ExportEntry_public = dtb__477; f_ExportEntry_target = dtb__478; f_ExportEntry_parent = dtb__479 } -> dtb__476
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 116 "Vuna/Compiler/Loader/Modules.vuna"
-let v_public = (fun (p : t_ExportEntry) -> (p).f_ExportEntry_public)
+let v_public = (fun (p : t_ExportEntry) -> (match p with
+  | { f_ExportEntry_kind = dtb__480; f_ExportEntry_public = dtb__481; f_ExportEntry_target = dtb__482; f_ExportEntry_parent = dtb__483 } -> dtb__481
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 117 "Vuna/Compiler/Loader/Modules.vuna"
-let v_target = (fun (p : t_ExportEntry) -> (p).f_ExportEntry_target)
+let v_target = (fun (p : t_ExportEntry) -> (match p with
+  | { f_ExportEntry_kind = dtb__484; f_ExportEntry_public = dtb__485; f_ExportEntry_target = dtb__486; f_ExportEntry_parent = dtb__487 } -> dtb__486
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 118 "Vuna/Compiler/Loader/Modules.vuna"
-let v_parent = (fun (p : t_ExportEntry) -> (p).f_ExportEntry_parent)
+let v_parent = (fun (p : t_ExportEntry) -> (match p with
+  | { f_ExportEntry_kind = dtb__488; f_ExportEntry_public = dtb__489; f_ExportEntry_target = dtb__490; f_ExportEntry_parent = dtb__491 } -> dtb__491
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 122 "Vuna/Compiler/Loader/Modules.vuna"
-let v_refKind = (fun (p : t_ExportRef) -> (p).f_ExportRef_refKind)
+let v_refKind = (fun (p : t_ExportRef) -> (match p with
+  | { f_ExportRef_refKind = dtb__492; f_ExportRef_refTarget = dtb__493; f_ExportRef_refParent = dtb__494 } -> dtb__492
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 123 "Vuna/Compiler/Loader/Modules.vuna"
-let v_refTarget = (fun (p : t_ExportRef) -> (p).f_ExportRef_refTarget)
+let v_refTarget = (fun (p : t_ExportRef) -> (match p with
+  | { f_ExportRef_refKind = dtb__495; f_ExportRef_refTarget = dtb__496; f_ExportRef_refParent = dtb__497 } -> dtb__496
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 124 "Vuna/Compiler/Loader/Modules.vuna"
-let v_refParent = (fun (p : t_ExportRef) -> (p).f_ExportRef_refParent)
+let v_refParent = (fun (p : t_ExportRef) -> (match p with
+  | { f_ExportRef_refKind = dtb__498; f_ExportRef_refTarget = dtb__499; f_ExportRef_refParent = dtb__500 } -> dtb__500
+  | _ -> failwith "DT: impossible branch"
+))

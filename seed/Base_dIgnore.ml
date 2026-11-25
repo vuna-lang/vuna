@@ -116,25 +116,49 @@ let rec v_lastMatch = (fun (mc0 : t_IgnoreRule B_dData_dList.t_List) (mc1 : stri
 let v_isIgnored = (fun (ctx : t_IgnoreContext) (rel : string) (isDir : bool) -> ((((v_lastMatch (ctx).f_IgnoreContext_ignoreRules) ((v_ignorePathOf ctx) rel)) isDir) false))
 
 # 28 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreBase = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreBase)
+let v_ignoreBase = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__20; f_IgnoreRule_ignoreNegate = dtb__21; f_IgnoreRule_ignoreDirOnly = dtb__22; f_IgnoreRule_ignoreAnchored = dtb__23; f_IgnoreRule_ignoreSegs = dtb__24 } -> dtb__20
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 30 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreNegate = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreNegate)
+let v_ignoreNegate = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__25; f_IgnoreRule_ignoreNegate = dtb__26; f_IgnoreRule_ignoreDirOnly = dtb__27; f_IgnoreRule_ignoreAnchored = dtb__28; f_IgnoreRule_ignoreSegs = dtb__29 } -> dtb__26
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 32 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreDirOnly = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreDirOnly)
+let v_ignoreDirOnly = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__30; f_IgnoreRule_ignoreNegate = dtb__31; f_IgnoreRule_ignoreDirOnly = dtb__32; f_IgnoreRule_ignoreAnchored = dtb__33; f_IgnoreRule_ignoreSegs = dtb__34 } -> dtb__32
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 34 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreAnchored = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreAnchored)
+let v_ignoreAnchored = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__35; f_IgnoreRule_ignoreNegate = dtb__36; f_IgnoreRule_ignoreDirOnly = dtb__37; f_IgnoreRule_ignoreAnchored = dtb__38; f_IgnoreRule_ignoreSegs = dtb__39 } -> dtb__38
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreSegs = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreSegs)
+let v_ignoreSegs = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__40; f_IgnoreRule_ignoreNegate = dtb__41; f_IgnoreRule_ignoreDirOnly = dtb__42; f_IgnoreRule_ignoreAnchored = dtb__43; f_IgnoreRule_ignoreSegs = dtb__44 } -> dtb__44
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 41 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreRoot = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignoreRoot)
+let v_ignoreRoot = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__45; f_IgnoreContext_ignorePrefix = dtb__46; f_IgnoreContext_ignoreRules = dtb__47 } -> dtb__45
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 43 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignorePrefix = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignorePrefix)
+let v_ignorePrefix = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__48; f_IgnoreContext_ignorePrefix = dtb__49; f_IgnoreContext_ignoreRules = dtb__50 } -> dtb__49
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 45 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreRules = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignoreRules)
+let v_ignoreRules = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__51; f_IgnoreContext_ignorePrefix = dtb__52; f_IgnoreContext_ignoreRules = dtb__53 } -> dtb__53
+  | _ -> failwith "DT: impossible branch"
+))

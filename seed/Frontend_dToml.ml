@@ -996,22 +996,43 @@ let rec v_sectionsUnderGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_To
 let v_sectionsUnder = (fun (prefix : string B_dData_dList.t_List) (entries : t_TomlEntry B_dData_dList.t_List) -> (((v_sectionsUnderGo prefix) entries) B_dData_dList.C_List_Nil))
 
 # 51 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_tomlEntrySection = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntrySection)
+let v_tomlEntrySection = (fun (p : t_TomlEntry) -> (match p with
+  | { f_TomlEntry_tomlEntrySection = dtb__399; f_TomlEntry_tomlEntryKey = dtb__400; f_TomlEntry_tomlEntryValue = dtb__401; f_TomlEntry_tomlEntryLine = dtb__402 } -> dtb__399
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 52 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_tomlEntryKey = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryKey)
+let v_tomlEntryKey = (fun (p : t_TomlEntry) -> (match p with
+  | { f_TomlEntry_tomlEntrySection = dtb__403; f_TomlEntry_tomlEntryKey = dtb__404; f_TomlEntry_tomlEntryValue = dtb__405; f_TomlEntry_tomlEntryLine = dtb__406 } -> dtb__404
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 53 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_tomlEntryValue = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryValue)
+let v_tomlEntryValue = (fun (p : t_TomlEntry) -> (match p with
+  | { f_TomlEntry_tomlEntrySection = dtb__407; f_TomlEntry_tomlEntryKey = dtb__408; f_TomlEntry_tomlEntryValue = dtb__409; f_TomlEntry_tomlEntryLine = dtb__410 } -> dtb__409
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 54 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_tomlEntryLine = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryLine)
+let v_tomlEntryLine = (fun (p : t_TomlEntry) -> (match p with
+  | { f_TomlEntry_tomlEntrySection = dtb__411; f_TomlEntry_tomlEntryKey = dtb__412; f_TomlEntry_tomlEntryValue = dtb__413; f_TomlEntry_tomlEntryLine = dtb__414 } -> dtb__414
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 58 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_cursorChars = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorChars)
+let v_cursorChars = (fun (p : t_TomlCursor) -> (match p with
+  | { f_TomlCursor_cursorChars = dtb__415; f_TomlCursor_cursorLine = dtb__416; f_TomlCursor_cursorCol = dtb__417 } -> dtb__415
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 59 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_cursorLine = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorLine)
+let v_cursorLine = (fun (p : t_TomlCursor) -> (match p with
+  | { f_TomlCursor_cursorChars = dtb__418; f_TomlCursor_cursorLine = dtb__419; f_TomlCursor_cursorCol = dtb__420 } -> dtb__419
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 60 "Vuna/Compiler/Frontend/Toml.vuna"
-let v_cursorCol = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorCol)
+let v_cursorCol = (fun (p : t_TomlCursor) -> (match p with
+  | { f_TomlCursor_cursorChars = dtb__421; f_TomlCursor_cursorLine = dtb__422; f_TomlCursor_cursorCol = dtb__423 } -> dtb__423
+  | _ -> failwith "DT: impossible branch"
+))

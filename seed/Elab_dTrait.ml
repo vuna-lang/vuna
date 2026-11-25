@@ -1481,22 +1481,43 @@ let v_bindIndexBinder = (fun (a1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_P
 let v_bindOnePattern = (fun (a1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (a2 : Elab_dTypes.t_Ctx) (a3 : Elab_dTypes.t_Ec) (a4 : Core_dTerm.t_Rig) (a5 : string) (a6 : Frontend_dRast.t_Pat B_dData_dList.t_List) (a7 : Frontend_dRast.t_Expr) (a8 : Core_dTerm.t_Value) (a9 : Core_dTerm.t_Closure) (a10 : Base_dSource.t_Span) (a11 : Base_dSource.t_Span) -> ((((((((((((v_bindOnePatternFuel 512) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11))
 
 # 1142 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dictGoalGroupRep = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupRep)
+let v_dictGoalGroupRep = (fun (p : t_DictGoalGroup) -> (match p with
+  | { f_DictGoalGroup_dictGoalGroupRep = dtb__645; f_DictGoalGroup_dictGoalGroupDom = dtb__646; f_DictGoalGroup_dictGoalGroupExtras = dtb__647 } -> dtb__645
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1143 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dictGoalGroupDom = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupDom)
+let v_dictGoalGroupDom = (fun (p : t_DictGoalGroup) -> (match p with
+  | { f_DictGoalGroup_dictGoalGroupRep = dtb__648; f_DictGoalGroup_dictGoalGroupDom = dtb__649; f_DictGoalGroup_dictGoalGroupExtras = dtb__650 } -> dtb__649
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1144 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dictGoalGroupExtras = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupExtras)
+let v_dictGoalGroupExtras = (fun (p : t_DictGoalGroup) -> (match p with
+  | { f_DictGoalGroup_dictGoalGroupRep = dtb__651; f_DictGoalGroup_dictGoalGroupDom = dtb__652; f_DictGoalGroup_dictGoalGroupExtras = dtb__653 } -> dtb__653
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1219 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dpName = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpName)
+let v_dpName = (fun (p : t_DictPlan) -> (match p with
+  | { f_DictPlan_dpName = dtb__654; f_DictPlan_dpLevel = dtb__655; f_DictPlan_dpDom = dtb__656; f_DictPlan_dpMetas = dtb__657 } -> dtb__654
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1221 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dpLevel = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpLevel)
+let v_dpLevel = (fun (p : t_DictPlan) -> (match p with
+  | { f_DictPlan_dpName = dtb__658; f_DictPlan_dpLevel = dtb__659; f_DictPlan_dpDom = dtb__660; f_DictPlan_dpMetas = dtb__661 } -> dtb__659
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1223 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dpDom = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpDom)
+let v_dpDom = (fun (p : t_DictPlan) -> (match p with
+  | { f_DictPlan_dpName = dtb__662; f_DictPlan_dpLevel = dtb__663; f_DictPlan_dpDom = dtb__664; f_DictPlan_dpMetas = dtb__665 } -> dtb__664
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1225 "Vuna/Compiler/Elab/Trait.vuna"
-let v_dpMetas = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpMetas)
+let v_dpMetas = (fun (p : t_DictPlan) -> (match p with
+  | { f_DictPlan_dpName = dtb__666; f_DictPlan_dpLevel = dtb__667; f_DictPlan_dpDom = dtb__668; f_DictPlan_dpMetas = dtb__669 } -> dtb__669
+  | _ -> failwith "DT: impossible branch"
+))

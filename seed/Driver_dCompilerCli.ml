@@ -862,52 +862,103 @@ let v_runCompilerCliFor = (fun (nFs : string) (nConsole : string) (nClock : stri
 let v_runCompilerCli = (fun (nFs : string) (nConsole : string) (nClock : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (nTty : string) (args : string B_dData_dList.t_List) -> ((((((((((v_runCompilerCliFor nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) nTty) "vuna") args))
 
 # 73 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optDiagFormat = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDiagFormat)
+let v_optDiagFormat = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__175; f_CliOpts_optDiagLang = dtb__176; f_CliOpts_optLangExplicit = dtb__177; f_CliOpts_optDenyWarnings = dtb__178; f_CliOpts_optShowWarnings = dtb__179; f_CliOpts_optFormatExplicit = dtb__180; f_CliOpts_optWarningsExplicit = dtb__181; f_CliOpts_optDenyExplicit = dtb__182; f_CliOpts_optMaxErrors = dtb__183; f_CliOpts_optContinueOnError = dtb__184; f_CliOpts_optSarifItems = dtb__185; f_CliOpts_optRelease = dtb__186; f_CliOpts_optShowCascade = dtb__187; f_CliOpts_optWithSources = dtb__188; f_CliOpts_optFailFast = dtb__189; f_CliOpts_optTarget = dtb__190; f_CliOpts_optWasmOpt = dtb__191 } -> dtb__175
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 74 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optDiagLang = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDiagLang)
+let v_optDiagLang = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__192; f_CliOpts_optDiagLang = dtb__193; f_CliOpts_optLangExplicit = dtb__194; f_CliOpts_optDenyWarnings = dtb__195; f_CliOpts_optShowWarnings = dtb__196; f_CliOpts_optFormatExplicit = dtb__197; f_CliOpts_optWarningsExplicit = dtb__198; f_CliOpts_optDenyExplicit = dtb__199; f_CliOpts_optMaxErrors = dtb__200; f_CliOpts_optContinueOnError = dtb__201; f_CliOpts_optSarifItems = dtb__202; f_CliOpts_optRelease = dtb__203; f_CliOpts_optShowCascade = dtb__204; f_CliOpts_optWithSources = dtb__205; f_CliOpts_optFailFast = dtb__206; f_CliOpts_optTarget = dtb__207; f_CliOpts_optWasmOpt = dtb__208 } -> dtb__193
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 75 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optLangExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optLangExplicit)
+let v_optLangExplicit = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__209; f_CliOpts_optDiagLang = dtb__210; f_CliOpts_optLangExplicit = dtb__211; f_CliOpts_optDenyWarnings = dtb__212; f_CliOpts_optShowWarnings = dtb__213; f_CliOpts_optFormatExplicit = dtb__214; f_CliOpts_optWarningsExplicit = dtb__215; f_CliOpts_optDenyExplicit = dtb__216; f_CliOpts_optMaxErrors = dtb__217; f_CliOpts_optContinueOnError = dtb__218; f_CliOpts_optSarifItems = dtb__219; f_CliOpts_optRelease = dtb__220; f_CliOpts_optShowCascade = dtb__221; f_CliOpts_optWithSources = dtb__222; f_CliOpts_optFailFast = dtb__223; f_CliOpts_optTarget = dtb__224; f_CliOpts_optWasmOpt = dtb__225 } -> dtb__211
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 76 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optDenyWarnings = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDenyWarnings)
+let v_optDenyWarnings = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__226; f_CliOpts_optDiagLang = dtb__227; f_CliOpts_optLangExplicit = dtb__228; f_CliOpts_optDenyWarnings = dtb__229; f_CliOpts_optShowWarnings = dtb__230; f_CliOpts_optFormatExplicit = dtb__231; f_CliOpts_optWarningsExplicit = dtb__232; f_CliOpts_optDenyExplicit = dtb__233; f_CliOpts_optMaxErrors = dtb__234; f_CliOpts_optContinueOnError = dtb__235; f_CliOpts_optSarifItems = dtb__236; f_CliOpts_optRelease = dtb__237; f_CliOpts_optShowCascade = dtb__238; f_CliOpts_optWithSources = dtb__239; f_CliOpts_optFailFast = dtb__240; f_CliOpts_optTarget = dtb__241; f_CliOpts_optWasmOpt = dtb__242 } -> dtb__229
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 77 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optShowWarnings = (fun (p : t_CliOpts) -> (p).f_CliOpts_optShowWarnings)
+let v_optShowWarnings = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__243; f_CliOpts_optDiagLang = dtb__244; f_CliOpts_optLangExplicit = dtb__245; f_CliOpts_optDenyWarnings = dtb__246; f_CliOpts_optShowWarnings = dtb__247; f_CliOpts_optFormatExplicit = dtb__248; f_CliOpts_optWarningsExplicit = dtb__249; f_CliOpts_optDenyExplicit = dtb__250; f_CliOpts_optMaxErrors = dtb__251; f_CliOpts_optContinueOnError = dtb__252; f_CliOpts_optSarifItems = dtb__253; f_CliOpts_optRelease = dtb__254; f_CliOpts_optShowCascade = dtb__255; f_CliOpts_optWithSources = dtb__256; f_CliOpts_optFailFast = dtb__257; f_CliOpts_optTarget = dtb__258; f_CliOpts_optWasmOpt = dtb__259 } -> dtb__247
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 78 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optFormatExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optFormatExplicit)
+let v_optFormatExplicit = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__260; f_CliOpts_optDiagLang = dtb__261; f_CliOpts_optLangExplicit = dtb__262; f_CliOpts_optDenyWarnings = dtb__263; f_CliOpts_optShowWarnings = dtb__264; f_CliOpts_optFormatExplicit = dtb__265; f_CliOpts_optWarningsExplicit = dtb__266; f_CliOpts_optDenyExplicit = dtb__267; f_CliOpts_optMaxErrors = dtb__268; f_CliOpts_optContinueOnError = dtb__269; f_CliOpts_optSarifItems = dtb__270; f_CliOpts_optRelease = dtb__271; f_CliOpts_optShowCascade = dtb__272; f_CliOpts_optWithSources = dtb__273; f_CliOpts_optFailFast = dtb__274; f_CliOpts_optTarget = dtb__275; f_CliOpts_optWasmOpt = dtb__276 } -> dtb__265
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 79 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optWarningsExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWarningsExplicit)
+let v_optWarningsExplicit = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__277; f_CliOpts_optDiagLang = dtb__278; f_CliOpts_optLangExplicit = dtb__279; f_CliOpts_optDenyWarnings = dtb__280; f_CliOpts_optShowWarnings = dtb__281; f_CliOpts_optFormatExplicit = dtb__282; f_CliOpts_optWarningsExplicit = dtb__283; f_CliOpts_optDenyExplicit = dtb__284; f_CliOpts_optMaxErrors = dtb__285; f_CliOpts_optContinueOnError = dtb__286; f_CliOpts_optSarifItems = dtb__287; f_CliOpts_optRelease = dtb__288; f_CliOpts_optShowCascade = dtb__289; f_CliOpts_optWithSources = dtb__290; f_CliOpts_optFailFast = dtb__291; f_CliOpts_optTarget = dtb__292; f_CliOpts_optWasmOpt = dtb__293 } -> dtb__283
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 80 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optDenyExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDenyExplicit)
+let v_optDenyExplicit = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__294; f_CliOpts_optDiagLang = dtb__295; f_CliOpts_optLangExplicit = dtb__296; f_CliOpts_optDenyWarnings = dtb__297; f_CliOpts_optShowWarnings = dtb__298; f_CliOpts_optFormatExplicit = dtb__299; f_CliOpts_optWarningsExplicit = dtb__300; f_CliOpts_optDenyExplicit = dtb__301; f_CliOpts_optMaxErrors = dtb__302; f_CliOpts_optContinueOnError = dtb__303; f_CliOpts_optSarifItems = dtb__304; f_CliOpts_optRelease = dtb__305; f_CliOpts_optShowCascade = dtb__306; f_CliOpts_optWithSources = dtb__307; f_CliOpts_optFailFast = dtb__308; f_CliOpts_optTarget = dtb__309; f_CliOpts_optWasmOpt = dtb__310 } -> dtb__301
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 81 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optMaxErrors = (fun (p : t_CliOpts) -> (p).f_CliOpts_optMaxErrors)
+let v_optMaxErrors = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__311; f_CliOpts_optDiagLang = dtb__312; f_CliOpts_optLangExplicit = dtb__313; f_CliOpts_optDenyWarnings = dtb__314; f_CliOpts_optShowWarnings = dtb__315; f_CliOpts_optFormatExplicit = dtb__316; f_CliOpts_optWarningsExplicit = dtb__317; f_CliOpts_optDenyExplicit = dtb__318; f_CliOpts_optMaxErrors = dtb__319; f_CliOpts_optContinueOnError = dtb__320; f_CliOpts_optSarifItems = dtb__321; f_CliOpts_optRelease = dtb__322; f_CliOpts_optShowCascade = dtb__323; f_CliOpts_optWithSources = dtb__324; f_CliOpts_optFailFast = dtb__325; f_CliOpts_optTarget = dtb__326; f_CliOpts_optWasmOpt = dtb__327 } -> dtb__319
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 82 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optContinueOnError = (fun (p : t_CliOpts) -> (p).f_CliOpts_optContinueOnError)
+let v_optContinueOnError = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__328; f_CliOpts_optDiagLang = dtb__329; f_CliOpts_optLangExplicit = dtb__330; f_CliOpts_optDenyWarnings = dtb__331; f_CliOpts_optShowWarnings = dtb__332; f_CliOpts_optFormatExplicit = dtb__333; f_CliOpts_optWarningsExplicit = dtb__334; f_CliOpts_optDenyExplicit = dtb__335; f_CliOpts_optMaxErrors = dtb__336; f_CliOpts_optContinueOnError = dtb__337; f_CliOpts_optSarifItems = dtb__338; f_CliOpts_optRelease = dtb__339; f_CliOpts_optShowCascade = dtb__340; f_CliOpts_optWithSources = dtb__341; f_CliOpts_optFailFast = dtb__342; f_CliOpts_optTarget = dtb__343; f_CliOpts_optWasmOpt = dtb__344 } -> dtb__337
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 83 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optSarifItems = (fun (p : t_CliOpts) -> (p).f_CliOpts_optSarifItems)
+let v_optSarifItems = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__345; f_CliOpts_optDiagLang = dtb__346; f_CliOpts_optLangExplicit = dtb__347; f_CliOpts_optDenyWarnings = dtb__348; f_CliOpts_optShowWarnings = dtb__349; f_CliOpts_optFormatExplicit = dtb__350; f_CliOpts_optWarningsExplicit = dtb__351; f_CliOpts_optDenyExplicit = dtb__352; f_CliOpts_optMaxErrors = dtb__353; f_CliOpts_optContinueOnError = dtb__354; f_CliOpts_optSarifItems = dtb__355; f_CliOpts_optRelease = dtb__356; f_CliOpts_optShowCascade = dtb__357; f_CliOpts_optWithSources = dtb__358; f_CliOpts_optFailFast = dtb__359; f_CliOpts_optTarget = dtb__360; f_CliOpts_optWasmOpt = dtb__361 } -> dtb__355
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 84 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optRelease = (fun (p : t_CliOpts) -> (p).f_CliOpts_optRelease)
+let v_optRelease = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__362; f_CliOpts_optDiagLang = dtb__363; f_CliOpts_optLangExplicit = dtb__364; f_CliOpts_optDenyWarnings = dtb__365; f_CliOpts_optShowWarnings = dtb__366; f_CliOpts_optFormatExplicit = dtb__367; f_CliOpts_optWarningsExplicit = dtb__368; f_CliOpts_optDenyExplicit = dtb__369; f_CliOpts_optMaxErrors = dtb__370; f_CliOpts_optContinueOnError = dtb__371; f_CliOpts_optSarifItems = dtb__372; f_CliOpts_optRelease = dtb__373; f_CliOpts_optShowCascade = dtb__374; f_CliOpts_optWithSources = dtb__375; f_CliOpts_optFailFast = dtb__376; f_CliOpts_optTarget = dtb__377; f_CliOpts_optWasmOpt = dtb__378 } -> dtb__373
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 85 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optShowCascade = (fun (p : t_CliOpts) -> (p).f_CliOpts_optShowCascade)
+let v_optShowCascade = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__379; f_CliOpts_optDiagLang = dtb__380; f_CliOpts_optLangExplicit = dtb__381; f_CliOpts_optDenyWarnings = dtb__382; f_CliOpts_optShowWarnings = dtb__383; f_CliOpts_optFormatExplicit = dtb__384; f_CliOpts_optWarningsExplicit = dtb__385; f_CliOpts_optDenyExplicit = dtb__386; f_CliOpts_optMaxErrors = dtb__387; f_CliOpts_optContinueOnError = dtb__388; f_CliOpts_optSarifItems = dtb__389; f_CliOpts_optRelease = dtb__390; f_CliOpts_optShowCascade = dtb__391; f_CliOpts_optWithSources = dtb__392; f_CliOpts_optFailFast = dtb__393; f_CliOpts_optTarget = dtb__394; f_CliOpts_optWasmOpt = dtb__395 } -> dtb__391
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 86 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optWithSources = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWithSources)
+let v_optWithSources = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__396; f_CliOpts_optDiagLang = dtb__397; f_CliOpts_optLangExplicit = dtb__398; f_CliOpts_optDenyWarnings = dtb__399; f_CliOpts_optShowWarnings = dtb__400; f_CliOpts_optFormatExplicit = dtb__401; f_CliOpts_optWarningsExplicit = dtb__402; f_CliOpts_optDenyExplicit = dtb__403; f_CliOpts_optMaxErrors = dtb__404; f_CliOpts_optContinueOnError = dtb__405; f_CliOpts_optSarifItems = dtb__406; f_CliOpts_optRelease = dtb__407; f_CliOpts_optShowCascade = dtb__408; f_CliOpts_optWithSources = dtb__409; f_CliOpts_optFailFast = dtb__410; f_CliOpts_optTarget = dtb__411; f_CliOpts_optWasmOpt = dtb__412 } -> dtb__409
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 87 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optFailFast = (fun (p : t_CliOpts) -> (p).f_CliOpts_optFailFast)
+let v_optFailFast = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__413; f_CliOpts_optDiagLang = dtb__414; f_CliOpts_optLangExplicit = dtb__415; f_CliOpts_optDenyWarnings = dtb__416; f_CliOpts_optShowWarnings = dtb__417; f_CliOpts_optFormatExplicit = dtb__418; f_CliOpts_optWarningsExplicit = dtb__419; f_CliOpts_optDenyExplicit = dtb__420; f_CliOpts_optMaxErrors = dtb__421; f_CliOpts_optContinueOnError = dtb__422; f_CliOpts_optSarifItems = dtb__423; f_CliOpts_optRelease = dtb__424; f_CliOpts_optShowCascade = dtb__425; f_CliOpts_optWithSources = dtb__426; f_CliOpts_optFailFast = dtb__427; f_CliOpts_optTarget = dtb__428; f_CliOpts_optWasmOpt = dtb__429 } -> dtb__427
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 88 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optTarget = (fun (p : t_CliOpts) -> (p).f_CliOpts_optTarget)
+let v_optTarget = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__430; f_CliOpts_optDiagLang = dtb__431; f_CliOpts_optLangExplicit = dtb__432; f_CliOpts_optDenyWarnings = dtb__433; f_CliOpts_optShowWarnings = dtb__434; f_CliOpts_optFormatExplicit = dtb__435; f_CliOpts_optWarningsExplicit = dtb__436; f_CliOpts_optDenyExplicit = dtb__437; f_CliOpts_optMaxErrors = dtb__438; f_CliOpts_optContinueOnError = dtb__439; f_CliOpts_optSarifItems = dtb__440; f_CliOpts_optRelease = dtb__441; f_CliOpts_optShowCascade = dtb__442; f_CliOpts_optWithSources = dtb__443; f_CliOpts_optFailFast = dtb__444; f_CliOpts_optTarget = dtb__445; f_CliOpts_optWasmOpt = dtb__446 } -> dtb__445
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 89 "Vuna/Compiler/Driver/CompilerCli.vuna"
-let v_optWasmOpt = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWasmOpt)
+let v_optWasmOpt = (fun (p : t_CliOpts) -> (match p with
+  | { f_CliOpts_optDiagFormat = dtb__447; f_CliOpts_optDiagLang = dtb__448; f_CliOpts_optLangExplicit = dtb__449; f_CliOpts_optDenyWarnings = dtb__450; f_CliOpts_optShowWarnings = dtb__451; f_CliOpts_optFormatExplicit = dtb__452; f_CliOpts_optWarningsExplicit = dtb__453; f_CliOpts_optDenyExplicit = dtb__454; f_CliOpts_optMaxErrors = dtb__455; f_CliOpts_optContinueOnError = dtb__456; f_CliOpts_optSarifItems = dtb__457; f_CliOpts_optRelease = dtb__458; f_CliOpts_optShowCascade = dtb__459; f_CliOpts_optWithSources = dtb__460; f_CliOpts_optFailFast = dtb__461; f_CliOpts_optTarget = dtb__462; f_CliOpts_optWasmOpt = dtb__463 } -> dtb__463
+  | _ -> failwith "DT: impossible branch"
+))

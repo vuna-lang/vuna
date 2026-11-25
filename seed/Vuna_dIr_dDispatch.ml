@@ -147,7 +147,13 @@ let v_dispatchEntryM = (fun (mc0 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Ma
 let v_dispatchIdsUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> { Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls = (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls; Vuna_dIr_dModel.f_IrUnit_irUnitGroups = ((B_dData_dList.v_map v_dispatchGroup) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups); Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily = (u).Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily; Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs = (u).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs; Vuna_dIr_dModel.f_IrUnit_irUnitEntry = (v_dispatchEntryM (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry) })
 
 # 38 "Vuna/Ir/Dispatch.vuna"
-let v_saTy = (fun (p : t_SpineArg) -> (p).f_SpineArg_saTy)
+let v_saTy = (fun (p : t_SpineArg) -> (match p with
+  | { f_SpineArg_saTy = dtb__95; f_SpineArg_saValue = dtb__96 } -> dtb__95
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 39 "Vuna/Ir/Dispatch.vuna"
-let v_saValue = (fun (p : t_SpineArg) -> (p).f_SpineArg_saValue)
+let v_saValue = (fun (p : t_SpineArg) -> (match p with
+  | { f_SpineArg_saTy = dtb__97; f_SpineArg_saValue = dtb__98 } -> dtb__98
+  | _ -> failwith "DT: impossible branch"
+))

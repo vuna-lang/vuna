@@ -1297,13 +1297,25 @@ let rec v_resolveRowGoalsCtxGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData
 let v_resolveRowGoalsCtx = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) -> ((((((v_resolveRowGoalsCtxGo globals) ctx) sp) (Elab_dTypes.v_ecPendingList ec)) ec) B_dData_dList.C_List_Nil))
 
 # 52 "Vuna/Compiler/Elab/Dict.vuna"
-let v_instMatchTerm = (fun (p : t_InstMatch) -> (p).f_InstMatch_instMatchTerm)
+let v_instMatchTerm = (fun (p : t_InstMatch) -> (match p with
+  | { f_InstMatch_instMatchInst = dtb__479; f_InstMatch_instMatchTerm = dtb__480 } -> dtb__480
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1087 "Vuna/Compiler/Elab/Dict.vuna"
-let v_boShort = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boShort)
+let v_boShort = (fun (p : t_BuiltinOp) -> (match p with
+  | { f_BuiltinOp_boShort = dtb__481; f_BuiltinOp_boOp = dtb__482; f_BuiltinOp_boRuntime = dtb__483 } -> dtb__481
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1088 "Vuna/Compiler/Elab/Dict.vuna"
-let v_boOp = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boOp)
+let v_boOp = (fun (p : t_BuiltinOp) -> (match p with
+  | { f_BuiltinOp_boShort = dtb__484; f_BuiltinOp_boOp = dtb__485; f_BuiltinOp_boRuntime = dtb__486 } -> dtb__485
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1089 "Vuna/Compiler/Elab/Dict.vuna"
-let v_boRuntime = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boRuntime)
+let v_boRuntime = (fun (p : t_BuiltinOp) -> (match p with
+  | { f_BuiltinOp_boShort = dtb__487; f_BuiltinOp_boOp = dtb__488; f_BuiltinOp_boRuntime = dtb__489 } -> dtb__489
+  | _ -> failwith "DT: impossible branch"
+))

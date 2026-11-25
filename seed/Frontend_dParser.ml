@@ -1635,73 +1635,145 @@ let v_parseSourceRecoveringTokens = (fun (file : string) (source : string) (mode
 let v_parseSourceRecovering = (fun (file : string) (source : string) -> ((Base_dCommon.v_bind (Frontend_dLexer.v_lexSource source)) (fun (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> ((((v_parseSourceRecoveringTokens file) source) Frontend_dParser_dSupport.C_ParseMode_PmStrict) toks))))
 
 # 34 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedFile = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedFile)
+let v_parsedFile = (fun (p : t_ParsedSource) -> (match p with
+  | { f_ParsedSource_parsedFile = dtb__589; f_ParsedSource_parsedComments = dtb__590; f_ParsedSource_parsedRawToks = dtb__591; f_ParsedSource_parsedCst = dtb__592 } -> dtb__589
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 36 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedComments = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedComments)
+let v_parsedComments = (fun (p : t_ParsedSource) -> (match p with
+  | { f_ParsedSource_parsedFile = dtb__593; f_ParsedSource_parsedComments = dtb__594; f_ParsedSource_parsedRawToks = dtb__595; f_ParsedSource_parsedCst = dtb__596 } -> dtb__594
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 38 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedRawToks = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedRawToks)
+let v_parsedRawToks = (fun (p : t_ParsedSource) -> (match p with
+  | { f_ParsedSource_parsedFile = dtb__597; f_ParsedSource_parsedComments = dtb__598; f_ParsedSource_parsedRawToks = dtb__599; f_ParsedSource_parsedCst = dtb__600 } -> dtb__599
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 44 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedCst = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedCst)
+let v_parsedCst = (fun (p : t_ParsedSource) -> (match p with
+  | { f_ParsedSource_parsedFile = dtb__601; f_ParsedSource_parsedComments = dtb__602; f_ParsedSource_parsedRawToks = dtb__603; f_ParsedSource_parsedCst = dtb__604 } -> dtb__604
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 49 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_pcSource = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcSource)
+let v_pcSource = (fun (p : t_ParsedCore) -> (match p with
+  | { f_ParsedCore_pcSource = dtb__605; f_ParsedCore_pcComments = dtb__606; f_ParsedCore_pcToks = dtb__607; f_ParsedCore_pcFin = dtb__608 } -> dtb__605
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 50 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_pcComments = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcComments)
+let v_pcComments = (fun (p : t_ParsedCore) -> (match p with
+  | { f_ParsedCore_pcSource = dtb__609; f_ParsedCore_pcComments = dtb__610; f_ParsedCore_pcToks = dtb__611; f_ParsedCore_pcFin = dtb__612 } -> dtb__610
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 51 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_pcToks = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcToks)
+let v_pcToks = (fun (p : t_ParsedCore) -> (match p with
+  | { f_ParsedCore_pcSource = dtb__613; f_ParsedCore_pcComments = dtb__614; f_ParsedCore_pcToks = dtb__615; f_ParsedCore_pcFin = dtb__616 } -> dtb__615
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 52 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_pcFin = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcFin)
+let v_pcFin = (fun (p : t_ParsedCore) -> (match p with
+  | { f_ParsedCore_pcSource = dtb__617; f_ParsedCore_pcComments = dtb__618; f_ParsedCore_pcToks = dtb__619; f_ParsedCore_pcFin = dtb__620 } -> dtb__620
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 112 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declAccFixities = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccFixities)
+let v_declAccFixities = (fun (p : t_DeclAcc) -> (match p with
+  | { f_DeclAcc_declAccFixities = dtb__621; f_DeclAcc_declAccDecls = dtb__622; f_DeclAcc_declAccExports = dtb__623; f_DeclAcc_declAccOpacity = dtb__624 } -> dtb__621
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 113 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declAccDecls = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccDecls)
+let v_declAccDecls = (fun (p : t_DeclAcc) -> (match p with
+  | { f_DeclAcc_declAccFixities = dtb__625; f_DeclAcc_declAccDecls = dtb__626; f_DeclAcc_declAccExports = dtb__627; f_DeclAcc_declAccOpacity = dtb__628 } -> dtb__626
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 114 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declAccExports = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccExports)
+let v_declAccExports = (fun (p : t_DeclAcc) -> (match p with
+  | { f_DeclAcc_declAccFixities = dtb__629; f_DeclAcc_declAccDecls = dtb__630; f_DeclAcc_declAccExports = dtb__631; f_DeclAcc_declAccOpacity = dtb__632 } -> dtb__631
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 115 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declAccOpacity = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccOpacity)
+let v_declAccOpacity = (fun (p : t_DeclAcc) -> (match p with
+  | { f_DeclAcc_declAccFixities = dtb__633; f_DeclAcc_declAccDecls = dtb__634; f_DeclAcc_declAccExports = dtb__635; f_DeclAcc_declAccOpacity = dtb__636 } -> dtb__636
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 121 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedFixity = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedFixity)
+let v_parsedFixity = (fun (p : t_ParsedDecl) -> (match p with
+  | { f_ParsedDecl_parsedFixity = dtb__637; f_ParsedDecl_parsedDecl = dtb__638; f_ParsedDecl_parsedExport = dtb__639; f_ParsedDecl_parsedOpacity = dtb__640 } -> dtb__637
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 122 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedDecl = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedDecl)
+let v_parsedDecl = (fun (p : t_ParsedDecl) -> (match p with
+  | { f_ParsedDecl_parsedFixity = dtb__641; f_ParsedDecl_parsedDecl = dtb__642; f_ParsedDecl_parsedExport = dtb__643; f_ParsedDecl_parsedOpacity = dtb__644 } -> dtb__642
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 123 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedExport = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedExport)
+let v_parsedExport = (fun (p : t_ParsedDecl) -> (match p with
+  | { f_ParsedDecl_parsedFixity = dtb__645; f_ParsedDecl_parsedDecl = dtb__646; f_ParsedDecl_parsedExport = dtb__647; f_ParsedDecl_parsedOpacity = dtb__648 } -> dtb__647
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 124 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_parsedOpacity = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedOpacity)
+let v_parsedOpacity = (fun (p : t_ParsedDecl) -> (match p with
+  | { f_ParsedDecl_parsedFixity = dtb__649; f_ParsedDecl_parsedDecl = dtb__650; f_ParsedDecl_parsedExport = dtb__651; f_ParsedDecl_parsedOpacity = dtb__652 } -> dtb__652
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 131 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declStartId = (fun (p : t_DeclStart) -> (p).f_DeclStart_declStartId)
+let v_declStartId = (fun (p : t_DeclStart) -> (match p with
+  | { f_DeclStart_declStartId = dtb__653; f_DeclStart_declStartPos = dtb__654 } -> dtb__653
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 132 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_declStartPos = (fun (p : t_DeclStart) -> (p).f_DeclStart_declStartPos)
+let v_declStartPos = (fun (p : t_DeclStart) -> (match p with
+  | { f_DeclStart_declStartId = dtb__655; f_DeclStart_declStartPos = dtb__656 } -> dtb__656
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 363 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_dbOpen = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbOpen)
+let v_dbOpen = (fun (p : t_DeclBlock) -> (match p with
+  | { f_DeclBlock_dbOpen = dtb__657; f_DeclBlock_dbClauses = dtb__658; f_DeclBlock_dbFirst = dtb__659 } -> dtb__657
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 364 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_dbClauses = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbClauses)
+let v_dbClauses = (fun (p : t_DeclBlock) -> (match p with
+  | { f_DeclBlock_dbOpen = dtb__660; f_DeclBlock_dbClauses = dtb__661; f_DeclBlock_dbFirst = dtb__662 } -> dtb__661
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 365 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_dbFirst = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbFirst)
+let v_dbFirst = (fun (p : t_DeclBlock) -> (match p with
+  | { f_DeclBlock_dbOpen = dtb__663; f_DeclBlock_dbClauses = dtb__664; f_DeclBlock_dbFirst = dtb__665 } -> dtb__665
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 883 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_traitHeadName = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadName)
+let v_traitHeadName = (fun (p : t_TraitHead) -> (match p with
+  | { f_TraitHead_traitHeadName = dtb__666; f_TraitHead_traitHeadParams = dtb__667; f_TraitHead_traitHeadSupers = dtb__668 } -> dtb__666
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 884 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_traitHeadParams = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadParams)
+let v_traitHeadParams = (fun (p : t_TraitHead) -> (match p with
+  | { f_TraitHead_traitHeadName = dtb__669; f_TraitHead_traitHeadParams = dtb__670; f_TraitHead_traitHeadSupers = dtb__671 } -> dtb__670
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 885 "Vuna/Compiler/Frontend/Parser.vuna"
-let v_traitHeadSupers = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadSupers)
+let v_traitHeadSupers = (fun (p : t_TraitHead) -> (match p with
+  | { f_TraitHead_traitHeadName = dtb__672; f_TraitHead_traitHeadParams = dtb__673; f_TraitHead_traitHeadSupers = dtb__674 } -> dtb__674
+  | _ -> failwith "DT: impossible branch"
+))

@@ -395,19 +395,37 @@ let rec v_erasureFuelForAlts = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_
 let v_checkAltErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> ((((v_checkAltErasureFuel (v_erasureFuelFor (v_erasureFuelForAlts a3))) a1) a2) a3))
 
 # 268 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_useFlagsFloat = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsFloat)
+let v_useFlagsFloat = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__258; f_UseFlags_useFlagsTrace = dtb__259; f_UseFlags_useFlagsObs = dtb__260 } -> dtb__258
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 269 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_useFlagsTrace = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsTrace)
+let v_useFlagsTrace = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__261; f_UseFlags_useFlagsTrace = dtb__262; f_UseFlags_useFlagsObs = dtb__263 } -> dtb__262
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 270 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_useFlagsObs = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsObs)
+let v_useFlagsObs = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__264; f_UseFlags_useFlagsTrace = dtb__265; f_UseFlags_useFlagsObs = dtb__266 } -> dtb__266
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 284 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_termUseDeps = (fun (p : t_TermUse) -> (p).f_TermUse_termUseDeps)
+let v_termUseDeps = (fun (p : t_TermUse) -> (match p with
+  | { f_TermUse_termUseDeps = dtb__267; f_TermUse_termUseFlags = dtb__268; f_TermUse_termUseFloatLit = dtb__269 } -> dtb__267
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 285 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_termUseFlags = (fun (p : t_TermUse) -> (p).f_TermUse_termUseFlags)
+let v_termUseFlags = (fun (p : t_TermUse) -> (match p with
+  | { f_TermUse_termUseDeps = dtb__270; f_TermUse_termUseFlags = dtb__271; f_TermUse_termUseFloatLit = dtb__272 } -> dtb__271
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 286 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_termUseFloatLit = (fun (p : t_TermUse) -> (p).f_TermUse_termUseFloatLit)
+let v_termUseFloatLit = (fun (p : t_TermUse) -> (match p with
+  | { f_TermUse_termUseDeps = dtb__273; f_TermUse_termUseFlags = dtb__274; f_TermUse_termUseFloatLit = dtb__275 } -> dtb__275
+  | _ -> failwith "DT: impossible branch"
+))

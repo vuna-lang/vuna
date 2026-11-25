@@ -791,139 +791,277 @@ let v_ecPutDefTbl = (fun (mc0 : t_Ec) (mc1 : (string, Core_dTerm.t_Term) B_dCont
 ))
 
 # 69 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtCtorSpan = (fun (p : t_DtCtor) -> (p).f_DtCtor_dtCtorSpan)
+let v_dtCtorSpan = (fun (p : t_DtCtor) -> (match p with
+  | { f_DtCtor_dtCtorName = dtb__1295; f_DtCtor_dtCtorFamily = dtb__1296; f_DtCtor_dtCtorTelescope = dtb__1297; f_DtCtor_dtCtorType = dtb__1298; f_DtCtor_dtCtorSpan = dtb__1299 } -> dtb__1299
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 88 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtFieldName = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldName)
+let v_dtFieldName = (fun (p : t_DtFieldMeta) -> (match p with
+  | { f_DtFieldMeta_dtFieldName = dtb__1300; f_DtFieldMeta_dtFieldIndex = dtb__1301; f_DtFieldMeta_dtFieldType = dtb__1302 } -> dtb__1300
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 89 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtFieldIndex = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldIndex)
+let v_dtFieldIndex = (fun (p : t_DtFieldMeta) -> (match p with
+  | { f_DtFieldMeta_dtFieldName = dtb__1303; f_DtFieldMeta_dtFieldIndex = dtb__1304; f_DtFieldMeta_dtFieldType = dtb__1305 } -> dtb__1304
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 90 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtFieldType = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldType)
+let v_dtFieldType = (fun (p : t_DtFieldMeta) -> (match p with
+  | { f_DtFieldMeta_dtFieldName = dtb__1306; f_DtFieldMeta_dtFieldIndex = dtb__1307; f_DtFieldMeta_dtFieldType = dtb__1308 } -> dtb__1308
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 95 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtDataParams = (fun (p : t_DtData) -> (p).f_DtData_dtDataParams)
+let v_dtDataParams = (fun (p : t_DtData) -> (match p with
+  | { f_DtData_dtDataName = dtb__1309; f_DtData_dtDataParams = dtb__1310; f_DtData_dtDataCtors = dtb__1311; f_DtData_dtDataKind = dtb__1312; f_DtData_dtDataViaClasses = dtb__1313; f_DtData_dtDataLinear = dtb__1314; f_DtData_dtDataRepr = dtb__1315; f_DtData_dtDataFields = dtb__1316; f_DtData_dtDataIsRecord = dtb__1317 } -> dtb__1310
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 141 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtGoalMeta = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalMeta)
+let v_dtGoalMeta = (fun (p : t_DtGoal) -> (match p with
+  | { f_DtGoal_dtGoalMeta = dtb__1318; f_DtGoal_dtGoalSpan = dtb__1319; f_DtGoal_dtGoalType = dtb__1320; f_DtGoal_dtGoalCtx = dtb__1321; f_DtGoal_dtGoalName = dtb__1322 } -> dtb__1318
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 142 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtGoalSpan = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalSpan)
+let v_dtGoalSpan = (fun (p : t_DtGoal) -> (match p with
+  | { f_DtGoal_dtGoalMeta = dtb__1323; f_DtGoal_dtGoalSpan = dtb__1324; f_DtGoal_dtGoalType = dtb__1325; f_DtGoal_dtGoalCtx = dtb__1326; f_DtGoal_dtGoalName = dtb__1327 } -> dtb__1324
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 143 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtGoalType = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalType)
+let v_dtGoalType = (fun (p : t_DtGoal) -> (match p with
+  | { f_DtGoal_dtGoalMeta = dtb__1328; f_DtGoal_dtGoalSpan = dtb__1329; f_DtGoal_dtGoalType = dtb__1330; f_DtGoal_dtGoalCtx = dtb__1331; f_DtGoal_dtGoalName = dtb__1332 } -> dtb__1330
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 144 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtGoalCtx = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalCtx)
+let v_dtGoalCtx = (fun (p : t_DtGoal) -> (match p with
+  | { f_DtGoal_dtGoalMeta = dtb__1333; f_DtGoal_dtGoalSpan = dtb__1334; f_DtGoal_dtGoalType = dtb__1335; f_DtGoal_dtGoalCtx = dtb__1336; f_DtGoal_dtGoalName = dtb__1337 } -> dtb__1336
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 145 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtGoalName = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalName)
+let v_dtGoalName = (fun (p : t_DtGoal) -> (match p with
+  | { f_DtGoal_dtGoalMeta = dtb__1338; f_DtGoal_dtGoalSpan = dtb__1339; f_DtGoal_dtGoalType = dtb__1340; f_DtGoal_dtGoalCtx = dtb__1341; f_DtGoal_dtGoalName = dtb__1342 } -> dtb__1342
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 150 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtClassParams = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassParams)
+let v_dtClassParams = (fun (p : t_DtClass) -> (match p with
+  | { f_DtClass_dtClassName = dtb__1343; f_DtClass_dtClassParams = dtb__1344; f_DtClass_dtClassSupers = dtb__1345; f_DtClass_dtClassMethods = dtb__1346; f_DtClass_dtClassFieldTys = dtb__1347; f_DtClass_dtClassMethodSpans = dtb__1348 } -> dtb__1344
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 152 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtClassSupers = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassSupers)
+let v_dtClassSupers = (fun (p : t_DtClass) -> (match p with
+  | { f_DtClass_dtClassName = dtb__1349; f_DtClass_dtClassParams = dtb__1350; f_DtClass_dtClassSupers = dtb__1351; f_DtClass_dtClassMethods = dtb__1352; f_DtClass_dtClassFieldTys = dtb__1353; f_DtClass_dtClassMethodSpans = dtb__1354 } -> dtb__1351
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 153 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtClassMethods = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassMethods)
+let v_dtClassMethods = (fun (p : t_DtClass) -> (match p with
+  | { f_DtClass_dtClassName = dtb__1355; f_DtClass_dtClassParams = dtb__1356; f_DtClass_dtClassSupers = dtb__1357; f_DtClass_dtClassMethods = dtb__1358; f_DtClass_dtClassFieldTys = dtb__1359; f_DtClass_dtClassMethodSpans = dtb__1360 } -> dtb__1358
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 154 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtClassFieldTys = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassFieldTys)
+let v_dtClassFieldTys = (fun (p : t_DtClass) -> (match p with
+  | { f_DtClass_dtClassName = dtb__1361; f_DtClass_dtClassParams = dtb__1362; f_DtClass_dtClassSupers = dtb__1363; f_DtClass_dtClassMethods = dtb__1364; f_DtClass_dtClassFieldTys = dtb__1365; f_DtClass_dtClassMethodSpans = dtb__1366 } -> dtb__1365
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 156 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtClassMethodSpans = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassMethodSpans)
+let v_dtClassMethodSpans = (fun (p : t_DtClass) -> (match p with
+  | { f_DtClass_dtClassName = dtb__1367; f_DtClass_dtClassParams = dtb__1368; f_DtClass_dtClassSupers = dtb__1369; f_DtClass_dtClassMethods = dtb__1370; f_DtClass_dtClassFieldTys = dtb__1371; f_DtClass_dtClassMethodSpans = dtb__1372 } -> dtb__1372
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 172 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtInstTele = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstTele)
+let v_dtInstTele = (fun (p : t_DtInst) -> (match p with
+  | { f_DtInst_dtInstName = dtb__1373; f_DtInst_dtInstSym = dtb__1374; f_DtInst_dtInstKey = dtb__1375; f_DtInst_dtInstTele = dtb__1376; f_DtInst_dtInstCtx = dtb__1377; f_DtInst_dtInstHead = dtb__1378; f_DtInst_dtInstSpan = dtb__1379 } -> dtb__1376
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 173 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtInstCtx = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstCtx)
+let v_dtInstCtx = (fun (p : t_DtInst) -> (match p with
+  | { f_DtInst_dtInstName = dtb__1380; f_DtInst_dtInstSym = dtb__1381; f_DtInst_dtInstKey = dtb__1382; f_DtInst_dtInstTele = dtb__1383; f_DtInst_dtInstCtx = dtb__1384; f_DtInst_dtInstHead = dtb__1385; f_DtInst_dtInstSpan = dtb__1386 } -> dtb__1384
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 174 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtInstHead = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstHead)
+let v_dtInstHead = (fun (p : t_DtInst) -> (match p with
+  | { f_DtInst_dtInstName = dtb__1387; f_DtInst_dtInstSym = dtb__1388; f_DtInst_dtInstKey = dtb__1389; f_DtInst_dtInstTele = dtb__1390; f_DtInst_dtInstCtx = dtb__1391; f_DtInst_dtInstHead = dtb__1392; f_DtInst_dtInstSpan = dtb__1393 } -> dtb__1392
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 175 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtInstSpan = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstSpan)
+let v_dtInstSpan = (fun (p : t_DtInst) -> (match p with
+  | { f_DtInst_dtInstName = dtb__1394; f_DtInst_dtInstSym = dtb__1395; f_DtInst_dtInstKey = dtb__1396; f_DtInst_dtInstTele = dtb__1397; f_DtInst_dtInstCtx = dtb__1398; f_DtInst_dtInstHead = dtb__1399; f_DtInst_dtInstSpan = dtb__1400 } -> dtb__1400
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 206 "Vuna/Compiler/Elab/Types.vuna"
-let v_instsList = (fun (p : t_InstStore) -> (p).f_InstStore_instsList)
+let v_instsList = (fun (p : t_InstStore) -> (match p with
+  | { f_InstStore_instsList = dtb__1401; f_InstStore_instsByFamily = dtb__1402 } -> dtb__1401
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 207 "Vuna/Compiler/Elab/Types.vuna"
-let v_instsByFamily = (fun (p : t_InstStore) -> (p).f_InstStore_instsByFamily)
+let v_instsByFamily = (fun (p : t_InstStore) -> (match p with
+  | { f_InstStore_instsList = dtb__1403; f_InstStore_instsByFamily = dtb__1404 } -> dtb__1404
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 261 "Vuna/Compiler/Elab/Types.vuna"
-let v_conId = (fun (p : t_Constraint) -> (p).f_Constraint_conId)
+let v_conId = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1405; f_Constraint_conKind = dtb__1406; f_Constraint_conMeta = dtb__1407; f_Constraint_conDom = dtb__1408; f_Constraint_conSpan = dtb__1409; f_Constraint_conDepth = dtb__1410 } -> dtb__1405
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 262 "Vuna/Compiler/Elab/Types.vuna"
-let v_conKind = (fun (p : t_Constraint) -> (p).f_Constraint_conKind)
+let v_conKind = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1411; f_Constraint_conKind = dtb__1412; f_Constraint_conMeta = dtb__1413; f_Constraint_conDom = dtb__1414; f_Constraint_conSpan = dtb__1415; f_Constraint_conDepth = dtb__1416 } -> dtb__1412
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 263 "Vuna/Compiler/Elab/Types.vuna"
-let v_conMeta = (fun (p : t_Constraint) -> (p).f_Constraint_conMeta)
+let v_conMeta = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1417; f_Constraint_conKind = dtb__1418; f_Constraint_conMeta = dtb__1419; f_Constraint_conDom = dtb__1420; f_Constraint_conSpan = dtb__1421; f_Constraint_conDepth = dtb__1422 } -> dtb__1419
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 264 "Vuna/Compiler/Elab/Types.vuna"
-let v_conDom = (fun (p : t_Constraint) -> (p).f_Constraint_conDom)
+let v_conDom = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1423; f_Constraint_conKind = dtb__1424; f_Constraint_conMeta = dtb__1425; f_Constraint_conDom = dtb__1426; f_Constraint_conSpan = dtb__1427; f_Constraint_conDepth = dtb__1428 } -> dtb__1426
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 265 "Vuna/Compiler/Elab/Types.vuna"
-let v_conSpan = (fun (p : t_Constraint) -> (p).f_Constraint_conSpan)
+let v_conSpan = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1429; f_Constraint_conKind = dtb__1430; f_Constraint_conMeta = dtb__1431; f_Constraint_conDom = dtb__1432; f_Constraint_conSpan = dtb__1433; f_Constraint_conDepth = dtb__1434 } -> dtb__1433
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 266 "Vuna/Compiler/Elab/Types.vuna"
-let v_conDepth = (fun (p : t_Constraint) -> (p).f_Constraint_conDepth)
+let v_conDepth = (fun (p : t_Constraint) -> (match p with
+  | { f_Constraint_conId = dtb__1435; f_Constraint_conKind = dtb__1436; f_Constraint_conMeta = dtb__1437; f_Constraint_conDom = dtb__1438; f_Constraint_conSpan = dtb__1439; f_Constraint_conDepth = dtb__1440 } -> dtb__1440
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 271 "Vuna/Compiler/Elab/Types.vuna"
-let v_csPending = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPending)
+let v_csPending = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1441; f_ConstraintStore_csNextId = dtb__1442; f_ConstraintStore_csTried = dtb__1443; f_ConstraintStore_csSolsCount = dtb__1444; f_ConstraintStore_csPassNext = dtb__1445; f_ConstraintStore_csPassSols = dtb__1446; f_ConstraintStore_csCtorIndexComplete = dtb__1447 } -> dtb__1441
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 272 "Vuna/Compiler/Elab/Types.vuna"
-let v_csNextId = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csNextId)
+let v_csNextId = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1448; f_ConstraintStore_csNextId = dtb__1449; f_ConstraintStore_csTried = dtb__1450; f_ConstraintStore_csSolsCount = dtb__1451; f_ConstraintStore_csPassNext = dtb__1452; f_ConstraintStore_csPassSols = dtb__1453; f_ConstraintStore_csCtorIndexComplete = dtb__1454 } -> dtb__1449
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 276 "Vuna/Compiler/Elab/Types.vuna"
-let v_csTried = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csTried)
+let v_csTried = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1455; f_ConstraintStore_csNextId = dtb__1456; f_ConstraintStore_csTried = dtb__1457; f_ConstraintStore_csSolsCount = dtb__1458; f_ConstraintStore_csPassNext = dtb__1459; f_ConstraintStore_csPassSols = dtb__1460; f_ConstraintStore_csCtorIndexComplete = dtb__1461 } -> dtb__1457
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 278 "Vuna/Compiler/Elab/Types.vuna"
-let v_csSolsCount = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csSolsCount)
+let v_csSolsCount = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1462; f_ConstraintStore_csNextId = dtb__1463; f_ConstraintStore_csTried = dtb__1464; f_ConstraintStore_csSolsCount = dtb__1465; f_ConstraintStore_csPassNext = dtb__1466; f_ConstraintStore_csPassSols = dtb__1467; f_ConstraintStore_csCtorIndexComplete = dtb__1468 } -> dtb__1465
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 280 "Vuna/Compiler/Elab/Types.vuna"
-let v_csPassNext = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPassNext)
+let v_csPassNext = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1469; f_ConstraintStore_csNextId = dtb__1470; f_ConstraintStore_csTried = dtb__1471; f_ConstraintStore_csSolsCount = dtb__1472; f_ConstraintStore_csPassNext = dtb__1473; f_ConstraintStore_csPassSols = dtb__1474; f_ConstraintStore_csCtorIndexComplete = dtb__1475 } -> dtb__1473
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 281 "Vuna/Compiler/Elab/Types.vuna"
-let v_csPassSols = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPassSols)
+let v_csPassSols = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1476; f_ConstraintStore_csNextId = dtb__1477; f_ConstraintStore_csTried = dtb__1478; f_ConstraintStore_csSolsCount = dtb__1479; f_ConstraintStore_csPassNext = dtb__1480; f_ConstraintStore_csPassSols = dtb__1481; f_ConstraintStore_csCtorIndexComplete = dtb__1482 } -> dtb__1481
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 284 "Vuna/Compiler/Elab/Types.vuna"
-let v_csCtorIndexComplete = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csCtorIndexComplete)
+let v_csCtorIndexComplete = (fun (p : t_ConstraintStore) -> (match p with
+  | { f_ConstraintStore_csPending = dtb__1483; f_ConstraintStore_csNextId = dtb__1484; f_ConstraintStore_csTried = dtb__1485; f_ConstraintStore_csSolsCount = dtb__1486; f_ConstraintStore_csPassNext = dtb__1487; f_ConstraintStore_csPassSols = dtb__1488; f_ConstraintStore_csCtorIndexComplete = dtb__1489 } -> dtb__1489
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 297 "Vuna/Compiler/Elab/Types.vuna"
-let v_ecDefsRev = (fun (p : t_Ec) -> (p).f_Ec_ecDefsRev)
+let v_ecDefsRev = (fun (p : t_Ec) -> (match p with
+  | { f_Ec_ecNext = dtb__1490; f_Ec_ecSols = dtb__1491; f_Ec_ecDefsRev = dtb__1492; f_Ec_ecDatas = dtb__1493; f_Ec_ecDepthOfMeta = dtb__1494; f_Ec_ecGoals = dtb__1495; f_Ec_ecInsts = dtb__1496; f_Ec_ecClasses = dtb__1497; f_Ec_ecConstraints = dtb__1498; f_Ec_ecDefTbl = dtb__1499; f_Ec_ecGlobalsTbl = dtb__1500; f_Ec_ecSolTbl = dtb__1501; f_Ec_ecDepthTbl = dtb__1502; f_Ec_ecGlobalsComplete = dtb__1503; f_Ec_ecClausesTbl = dtb__1504; f_Ec_ecCtorTbl = dtb__1505; f_Ec_ecHasLinear = dtb__1506; f_Ec_ecMetaSpans = dtb__1507; f_Ec_ecUseSpans = dtb__1508; f_Ec_ecWarnings = dtb__1509; f_Ec_ecCounters = dtb__1510; f_Ec_ecErrors = dtb__1511 } -> dtb__1492
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 299 "Vuna/Compiler/Elab/Types.vuna"
-let v_ecDepthOfMeta = (fun (p : t_Ec) -> (p).f_Ec_ecDepthOfMeta)
+let v_ecDepthOfMeta = (fun (p : t_Ec) -> (match p with
+  | { f_Ec_ecNext = dtb__1512; f_Ec_ecSols = dtb__1513; f_Ec_ecDefsRev = dtb__1514; f_Ec_ecDatas = dtb__1515; f_Ec_ecDepthOfMeta = dtb__1516; f_Ec_ecGoals = dtb__1517; f_Ec_ecInsts = dtb__1518; f_Ec_ecClasses = dtb__1519; f_Ec_ecConstraints = dtb__1520; f_Ec_ecDefTbl = dtb__1521; f_Ec_ecGlobalsTbl = dtb__1522; f_Ec_ecSolTbl = dtb__1523; f_Ec_ecDepthTbl = dtb__1524; f_Ec_ecGlobalsComplete = dtb__1525; f_Ec_ecClausesTbl = dtb__1526; f_Ec_ecCtorTbl = dtb__1527; f_Ec_ecHasLinear = dtb__1528; f_Ec_ecMetaSpans = dtb__1529; f_Ec_ecUseSpans = dtb__1530; f_Ec_ecWarnings = dtb__1531; f_Ec_ecCounters = dtb__1532; f_Ec_ecErrors = dtb__1533 } -> dtb__1516
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 310 "Vuna/Compiler/Elab/Types.vuna"
-let v_ecGlobalsComplete = (fun (p : t_Ec) -> (p).f_Ec_ecGlobalsComplete)
+let v_ecGlobalsComplete = (fun (p : t_Ec) -> (match p with
+  | { f_Ec_ecNext = dtb__1534; f_Ec_ecSols = dtb__1535; f_Ec_ecDefsRev = dtb__1536; f_Ec_ecDatas = dtb__1537; f_Ec_ecDepthOfMeta = dtb__1538; f_Ec_ecGoals = dtb__1539; f_Ec_ecInsts = dtb__1540; f_Ec_ecClasses = dtb__1541; f_Ec_ecConstraints = dtb__1542; f_Ec_ecDefTbl = dtb__1543; f_Ec_ecGlobalsTbl = dtb__1544; f_Ec_ecSolTbl = dtb__1545; f_Ec_ecDepthTbl = dtb__1546; f_Ec_ecGlobalsComplete = dtb__1547; f_Ec_ecClausesTbl = dtb__1548; f_Ec_ecCtorTbl = dtb__1549; f_Ec_ecHasLinear = dtb__1550; f_Ec_ecMetaSpans = dtb__1551; f_Ec_ecUseSpans = dtb__1552; f_Ec_ecWarnings = dtb__1553; f_Ec_ecCounters = dtb__1554; f_Ec_ecErrors = dtb__1555 } -> dtb__1547
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 311 "Vuna/Compiler/Elab/Types.vuna"
-let v_ecClausesTbl = (fun (p : t_Ec) -> (p).f_Ec_ecClausesTbl)
+let v_ecClausesTbl = (fun (p : t_Ec) -> (match p with
+  | { f_Ec_ecNext = dtb__1556; f_Ec_ecSols = dtb__1557; f_Ec_ecDefsRev = dtb__1558; f_Ec_ecDatas = dtb__1559; f_Ec_ecDepthOfMeta = dtb__1560; f_Ec_ecGoals = dtb__1561; f_Ec_ecInsts = dtb__1562; f_Ec_ecClasses = dtb__1563; f_Ec_ecConstraints = dtb__1564; f_Ec_ecDefTbl = dtb__1565; f_Ec_ecGlobalsTbl = dtb__1566; f_Ec_ecSolTbl = dtb__1567; f_Ec_ecDepthTbl = dtb__1568; f_Ec_ecGlobalsComplete = dtb__1569; f_Ec_ecClausesTbl = dtb__1570; f_Ec_ecCtorTbl = dtb__1571; f_Ec_ecHasLinear = dtb__1572; f_Ec_ecMetaSpans = dtb__1573; f_Ec_ecUseSpans = dtb__1574; f_Ec_ecWarnings = dtb__1575; f_Ec_ecCounters = dtb__1576; f_Ec_ecErrors = dtb__1577 } -> dtb__1570
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 312 "Vuna/Compiler/Elab/Types.vuna"
-let v_ecCtorTbl = (fun (p : t_Ec) -> (p).f_Ec_ecCtorTbl)
+let v_ecCtorTbl = (fun (p : t_Ec) -> (match p with
+  | { f_Ec_ecNext = dtb__1578; f_Ec_ecSols = dtb__1579; f_Ec_ecDefsRev = dtb__1580; f_Ec_ecDatas = dtb__1581; f_Ec_ecDepthOfMeta = dtb__1582; f_Ec_ecGoals = dtb__1583; f_Ec_ecInsts = dtb__1584; f_Ec_ecClasses = dtb__1585; f_Ec_ecConstraints = dtb__1586; f_Ec_ecDefTbl = dtb__1587; f_Ec_ecGlobalsTbl = dtb__1588; f_Ec_ecSolTbl = dtb__1589; f_Ec_ecDepthTbl = dtb__1590; f_Ec_ecGlobalsComplete = dtb__1591; f_Ec_ecClausesTbl = dtb__1592; f_Ec_ecCtorTbl = dtb__1593; f_Ec_ecHasLinear = dtb__1594; f_Ec_ecMetaSpans = dtb__1595; f_Ec_ecUseSpans = dtb__1596; f_Ec_ecWarnings = dtb__1597; f_Ec_ecCounters = dtb__1598; f_Ec_ecErrors = dtb__1599 } -> dtb__1593
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1117 "Vuna/Compiler/Elab/Types.vuna"
-let v_ctxItems = (fun (p : t_Ctx) -> (p).f_Ctx_ctxItems)
+let v_ctxItems = (fun (p : t_Ctx) -> (match p with
+  | { f_Ctx_ctxItems = dtb__1600; f_Ctx_ctxEnvF = dtb__1601; f_Ctx_ctxRefVals = dtb__1602; f_Ctx_ctxDepthF = dtb__1603; f_Ctx_ctxEnvRF = dtb__1604 } -> dtb__1600
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1118 "Vuna/Compiler/Elab/Types.vuna"
-let v_ctxEnvF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxEnvF)
+let v_ctxEnvF = (fun (p : t_Ctx) -> (match p with
+  | { f_Ctx_ctxItems = dtb__1605; f_Ctx_ctxEnvF = dtb__1606; f_Ctx_ctxRefVals = dtb__1607; f_Ctx_ctxDepthF = dtb__1608; f_Ctx_ctxEnvRF = dtb__1609 } -> dtb__1606
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1119 "Vuna/Compiler/Elab/Types.vuna"
-let v_ctxRefVals = (fun (p : t_Ctx) -> (p).f_Ctx_ctxRefVals)
+let v_ctxRefVals = (fun (p : t_Ctx) -> (match p with
+  | { f_Ctx_ctxItems = dtb__1610; f_Ctx_ctxEnvF = dtb__1611; f_Ctx_ctxRefVals = dtb__1612; f_Ctx_ctxDepthF = dtb__1613; f_Ctx_ctxEnvRF = dtb__1614 } -> dtb__1612
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1122 "Vuna/Compiler/Elab/Types.vuna"
-let v_ctxDepthF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxDepthF)
+let v_ctxDepthF = (fun (p : t_Ctx) -> (match p with
+  | { f_Ctx_ctxItems = dtb__1615; f_Ctx_ctxEnvF = dtb__1616; f_Ctx_ctxRefVals = dtb__1617; f_Ctx_ctxDepthF = dtb__1618; f_Ctx_ctxEnvRF = dtb__1619 } -> dtb__1618
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1124 "Vuna/Compiler/Elab/Types.vuna"
-let v_ctxEnvRF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxEnvRF)
+let v_ctxEnvRF = (fun (p : t_Ctx) -> (match p with
+  | { f_Ctx_ctxItems = dtb__1620; f_Ctx_ctxEnvF = dtb__1621; f_Ctx_ctxRefVals = dtb__1622; f_Ctx_ctxDepthF = dtb__1623; f_Ctx_ctxEnvRF = dtb__1624 } -> dtb__1624
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1267 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtProgNext = (fun (p : t_DtProgram) -> (p).f_DtProgram_dtProgNext)
+let v_dtProgNext = (fun (p : t_DtProgram) -> (match p with
+  | { f_DtProgram_dtProgDatas = dtb__1625; f_DtProgram_dtProgDefs = dtb__1626; f_DtProgram_dtProgGoals = dtb__1627; f_DtProgram_dtProgSols = dtb__1628; f_DtProgram_dtProgGlobals = dtb__1629; f_DtProgram_dtProgInsts = dtb__1630; f_DtProgram_dtProgClasses = dtb__1631; f_DtProgram_dtProgNext = dtb__1632; f_DtProgram_dtProgDepths = dtb__1633; f_DtProgram_dtProgWarnings = dtb__1634 } -> dtb__1632
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1268 "Vuna/Compiler/Elab/Types.vuna"
-let v_dtProgDepths = (fun (p : t_DtProgram) -> (p).f_DtProgram_dtProgDepths)
+let v_dtProgDepths = (fun (p : t_DtProgram) -> (match p with
+  | { f_DtProgram_dtProgDatas = dtb__1635; f_DtProgram_dtProgDefs = dtb__1636; f_DtProgram_dtProgGoals = dtb__1637; f_DtProgram_dtProgSols = dtb__1638; f_DtProgram_dtProgGlobals = dtb__1639; f_DtProgram_dtProgInsts = dtb__1640; f_DtProgram_dtProgClasses = dtb__1641; f_DtProgram_dtProgNext = dtb__1642; f_DtProgram_dtProgDepths = dtb__1643; f_DtProgram_dtProgWarnings = dtb__1644 } -> dtb__1643
+  | _ -> failwith "DT: impossible branch"
+))

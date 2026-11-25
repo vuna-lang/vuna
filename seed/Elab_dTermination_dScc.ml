@@ -1034,28 +1034,55 @@ let v_edgeModeOf = (fun (mc0 : (((string, string) B_dData_dPair.t_Pair, int) B_d
 let v_tryFuelThread = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> (let sites = (((((v_siteCollect comp) ctors) projs) defTbl) facts) in (let edges = (((v_fuelEdgesOf comp) defTbl) sites) in (let strictCount = (B_dData_dList.v_length (Elab_dTermination_dMeasure.v_filterModes ((B_dData_dList.v_map v_edgeModeOf) edges))) in (if (if (if (strictCount > 0) then (((v_fuelAcceptable comp) defTbl) edges) else false) then (B_dData_dBool.v_not ((Elab_dTermination_dMeasure.v_hasWeakCycle comp) edges)) else false) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (msg)))))))
 
 # 13 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteCaller = (fun (p : t_Site) -> (p).f_Site_siteCaller)
+let v_siteCaller = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__499; f_Site_siteCallee = dtb__500; f_Site_siteArgs = dtb__501; f_Site_siteSizes = dtb__502; f_Site_siteRegion = dtb__503; f_Site_siteBlind = dtb__504 } -> dtb__499
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 14 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteCallee = (fun (p : t_Site) -> (p).f_Site_siteCallee)
+let v_siteCallee = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__505; f_Site_siteCallee = dtb__506; f_Site_siteArgs = dtb__507; f_Site_siteSizes = dtb__508; f_Site_siteRegion = dtb__509; f_Site_siteBlind = dtb__510 } -> dtb__506
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 15 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteArgs = (fun (p : t_Site) -> (p).f_Site_siteArgs)
+let v_siteArgs = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__511; f_Site_siteCallee = dtb__512; f_Site_siteArgs = dtb__513; f_Site_siteSizes = dtb__514; f_Site_siteRegion = dtb__515; f_Site_siteBlind = dtb__516 } -> dtb__513
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 16 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteSizes = (fun (p : t_Site) -> (p).f_Site_siteSizes)
+let v_siteSizes = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__517; f_Site_siteCallee = dtb__518; f_Site_siteArgs = dtb__519; f_Site_siteSizes = dtb__520; f_Site_siteRegion = dtb__521; f_Site_siteBlind = dtb__522 } -> dtb__520
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 17 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteRegion = (fun (p : t_Site) -> (p).f_Site_siteRegion)
+let v_siteRegion = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__523; f_Site_siteCallee = dtb__524; f_Site_siteArgs = dtb__525; f_Site_siteSizes = dtb__526; f_Site_siteRegion = dtb__527; f_Site_siteBlind = dtb__528 } -> dtb__527
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 19 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_siteBlind = (fun (p : t_Site) -> (p).f_Site_siteBlind)
+let v_siteBlind = (fun (p : t_Site) -> (match p with
+  | { f_Site_siteCaller = dtb__529; f_Site_siteCallee = dtb__530; f_Site_siteArgs = dtb__531; f_Site_siteSizes = dtb__532; f_Site_siteRegion = dtb__533; f_Site_siteBlind = dtb__534 } -> dtb__534
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 27 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_edgeFrom = (fun (p : t_ScEdge) -> (p).f_ScEdge_edgeFrom)
+let v_edgeFrom = (fun (p : t_ScEdge) -> (match p with
+  | { f_ScEdge_edgeFrom = dtb__535; f_ScEdge_edgeTo = dtb__536; f_ScEdge_scStrictEdge = dtb__537 } -> dtb__535
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 28 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_edgeTo = (fun (p : t_ScEdge) -> (p).f_ScEdge_edgeTo)
+let v_edgeTo = (fun (p : t_ScEdge) -> (match p with
+  | { f_ScEdge_edgeFrom = dtb__538; f_ScEdge_edgeTo = dtb__539; f_ScEdge_scStrictEdge = dtb__540 } -> dtb__539
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 29 "Vuna/Compiler/Elab/Termination/Scc.vuna"
-let v_scStrictEdge = (fun (p : t_ScEdge) -> (p).f_ScEdge_scStrictEdge)
+let v_scStrictEdge = (fun (p : t_ScEdge) -> (match p with
+  | { f_ScEdge_edgeFrom = dtb__541; f_ScEdge_edgeTo = dtb__542; f_ScEdge_scStrictEdge = dtb__543 } -> dtb__543
+  | _ -> failwith "DT: impossible branch"
+))

@@ -363,19 +363,37 @@ let v_reorderDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (
 let v_reorderProgram = (fun (t : t_FixityTable) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderDecl t) v))) decls))
 
 # 30 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_fixityDecls = (fun (p : t_FixityTable) -> (p).f_FixityTable_fixityDecls)
+let v_fixityDecls = (fun (p : t_FixityTable) -> (match p with
+  | { f_FixityTable_renameMode = dtb__217; f_FixityTable_fixityDecls = dtb__218; f_FixityTable_fixFacts = dtb__219 } -> dtb__218
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_fixFacts = (fun (p : t_FixityTable) -> (p).f_FixityTable_fixFacts)
+let v_fixFacts = (fun (p : t_FixityTable) -> (match p with
+  | { f_FixityTable_renameMode = dtb__220; f_FixityTable_fixityDecls = dtb__221; f_FixityTable_fixFacts = dtb__222 } -> dtb__222
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 103 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_chainOp = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainOp)
+let v_chainOp = (fun (p : t_ChainOp) -> (match p with
+  | { f_ChainOp_chainOp = dtb__223; f_ChainOp_chainIsBacktick = dtb__224; f_ChainOp_chainRhs = dtb__225; f_ChainOp_chainRef = dtb__226 } -> dtb__223
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 104 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_chainIsBacktick = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainIsBacktick)
+let v_chainIsBacktick = (fun (p : t_ChainOp) -> (match p with
+  | { f_ChainOp_chainOp = dtb__227; f_ChainOp_chainIsBacktick = dtb__228; f_ChainOp_chainRhs = dtb__229; f_ChainOp_chainRef = dtb__230 } -> dtb__228
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 105 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_chainRhs = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainRhs)
+let v_chainRhs = (fun (p : t_ChainOp) -> (match p with
+  | { f_ChainOp_chainOp = dtb__231; f_ChainOp_chainIsBacktick = dtb__232; f_ChainOp_chainRhs = dtb__233; f_ChainOp_chainRef = dtb__234 } -> dtb__233
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 106 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_chainRef = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainRef)
+let v_chainRef = (fun (p : t_ChainOp) -> (match p with
+  | { f_ChainOp_chainOp = dtb__235; f_ChainOp_chainIsBacktick = dtb__236; f_ChainOp_chainRhs = dtb__237; f_ChainOp_chainRef = dtb__238 } -> dtb__238
+  | _ -> failwith "DT: impossible branch"
+))

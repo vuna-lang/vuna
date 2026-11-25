@@ -558,31 +558,61 @@ let rec v_dispatchIdChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int) ->
 let v_dispatchIdOf = (fun (s : string) -> ((v_dispatchIdChars (B_dData_dList.dtp_unpack s)) 2166136261))
 
 # 184 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_beTag = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beTag)
+let v_beTag = (fun (p : t_BuiltinEffect) -> (match p with
+  | { f_BuiltinEffect_beTag = dtb__70; f_BuiltinEffect_beImpl = dtb__71; f_BuiltinEffect_beHost = dtb__72; f_BuiltinEffect_beErrorImpl = dtb__73; f_BuiltinEffect_beErrorHost = dtb__74 } -> dtb__70
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 186 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_beImpl = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beImpl)
+let v_beImpl = (fun (p : t_BuiltinEffect) -> (match p with
+  | { f_BuiltinEffect_beTag = dtb__75; f_BuiltinEffect_beImpl = dtb__76; f_BuiltinEffect_beHost = dtb__77; f_BuiltinEffect_beErrorImpl = dtb__78; f_BuiltinEffect_beErrorHost = dtb__79 } -> dtb__76
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 188 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_beHost = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beHost)
+let v_beHost = (fun (p : t_BuiltinEffect) -> (match p with
+  | { f_BuiltinEffect_beTag = dtb__80; f_BuiltinEffect_beImpl = dtb__81; f_BuiltinEffect_beHost = dtb__82; f_BuiltinEffect_beErrorImpl = dtb__83; f_BuiltinEffect_beErrorHost = dtb__84 } -> dtb__82
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 190 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_beErrorImpl = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beErrorImpl)
+let v_beErrorImpl = (fun (p : t_BuiltinEffect) -> (match p with
+  | { f_BuiltinEffect_beTag = dtb__85; f_BuiltinEffect_beImpl = dtb__86; f_BuiltinEffect_beHost = dtb__87; f_BuiltinEffect_beErrorImpl = dtb__88; f_BuiltinEffect_beErrorHost = dtb__89 } -> dtb__88
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 192 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_beErrorHost = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beErrorHost)
+let v_beErrorHost = (fun (p : t_BuiltinEffect) -> (match p with
+  | { f_BuiltinEffect_beTag = dtb__90; f_BuiltinEffect_beImpl = dtb__91; f_BuiltinEffect_beHost = dtb__92; f_BuiltinEffect_beErrorImpl = dtb__93; f_BuiltinEffect_beErrorHost = dtb__94 } -> dtb__94
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 343 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_hsTag = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsTag)
+let v_hsTag = (fun (p : t_HostSupport) -> (match p with
+  | { f_HostSupport_hsTag = dtb__95; f_HostSupport_hsOcaml = dtb__96; f_HostSupport_hsNative = dtb__97; f_HostSupport_hsWasm = dtb__98 } -> dtb__95
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 344 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_hsOcaml = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsOcaml)
+let v_hsOcaml = (fun (p : t_HostSupport) -> (match p with
+  | { f_HostSupport_hsTag = dtb__99; f_HostSupport_hsOcaml = dtb__100; f_HostSupport_hsNative = dtb__101; f_HostSupport_hsWasm = dtb__102 } -> dtb__100
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 345 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_hsNative = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsNative)
+let v_hsNative = (fun (p : t_HostSupport) -> (match p with
+  | { f_HostSupport_hsTag = dtb__103; f_HostSupport_hsOcaml = dtb__104; f_HostSupport_hsNative = dtb__105; f_HostSupport_hsWasm = dtb__106 } -> dtb__105
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 346 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_hsWasm = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsWasm)
+let v_hsWasm = (fun (p : t_HostSupport) -> (match p with
+  | { f_HostSupport_hsTag = dtb__107; f_HostSupport_hsOcaml = dtb__108; f_HostSupport_hsNative = dtb__109; f_HostSupport_hsWasm = dtb__110 } -> dtb__110
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 687 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_intrinsicOp = (fun (p : t_Intrinsic) -> (p).f_Intrinsic_intrinsicOp)
+let v_intrinsicOp = (fun (p : t_Intrinsic) -> (match p with
+  | { f_Intrinsic_intrinsicName = dtb__111; f_Intrinsic_intrinsicSignature = dtb__112; f_Intrinsic_intrinsicOp = dtb__113; f_Intrinsic_intrinsicVisible = dtb__114 } -> dtb__113
+  | _ -> failwith "DT: impossible branch"
+))

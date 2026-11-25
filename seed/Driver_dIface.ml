@@ -560,94 +560,187 @@ let v_decModuleIfaceComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decMod
 )))
 
 # 62 "Vuna/Compiler/Driver/Iface.vuna"
-let v_siPath = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siPath)
+let v_siPath = (fun (p : t_SourceInfo) -> (match p with
+  | { f_SourceInfo_siPath = dtb__105; f_SourceInfo_siHash = dtb__106; f_SourceInfo_siMtime = dtb__107; f_SourceInfo_siSize = dtb__108 } -> dtb__105
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 63 "Vuna/Compiler/Driver/Iface.vuna"
-let v_siHash = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siHash)
+let v_siHash = (fun (p : t_SourceInfo) -> (match p with
+  | { f_SourceInfo_siPath = dtb__109; f_SourceInfo_siHash = dtb__110; f_SourceInfo_siMtime = dtb__111; f_SourceInfo_siSize = dtb__112 } -> dtb__110
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 64 "Vuna/Compiler/Driver/Iface.vuna"
-let v_siMtime = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siMtime)
+let v_siMtime = (fun (p : t_SourceInfo) -> (match p with
+  | { f_SourceInfo_siPath = dtb__113; f_SourceInfo_siHash = dtb__114; f_SourceInfo_siMtime = dtb__115; f_SourceInfo_siSize = dtb__116 } -> dtb__115
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 65 "Vuna/Compiler/Driver/Iface.vuna"
-let v_siSize = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siSize)
+let v_siSize = (fun (p : t_SourceInfo) -> (match p with
+  | { f_SourceInfo_siPath = dtb__117; f_SourceInfo_siHash = dtb__118; f_SourceInfo_siMtime = dtb__119; f_SourceInfo_siSize = dtb__120 } -> dtb__120
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 68 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miName = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miName)
+let v_miName = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__121; f_ModuleIface_miPackage = dtb__122; f_ModuleIface_miSource = dtb__123; f_ModuleIface_miIfaceHash = dtb__124; f_ModuleIface_miImplHash = dtb__125; f_ModuleIface_miDepHashes = dtb__126; f_ModuleIface_miImports = dtb__127; f_ModuleIface_miImplicitImports = dtb__128; f_ModuleIface_miExports = dtb__129; f_ModuleIface_miFixities = dtb__130; f_ModuleIface_miDecls = dtb__131; f_ModuleIface_miRecords = dtb__132; f_ModuleIface_miPrepared = dtb__133; f_ModuleIface_miCached = dtb__134; f_ModuleIface_miDefLocs = dtb__135 } -> dtb__121
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 69 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miPackage = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miPackage)
+let v_miPackage = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__136; f_ModuleIface_miPackage = dtb__137; f_ModuleIface_miSource = dtb__138; f_ModuleIface_miIfaceHash = dtb__139; f_ModuleIface_miImplHash = dtb__140; f_ModuleIface_miDepHashes = dtb__141; f_ModuleIface_miImports = dtb__142; f_ModuleIface_miImplicitImports = dtb__143; f_ModuleIface_miExports = dtb__144; f_ModuleIface_miFixities = dtb__145; f_ModuleIface_miDecls = dtb__146; f_ModuleIface_miRecords = dtb__147; f_ModuleIface_miPrepared = dtb__148; f_ModuleIface_miCached = dtb__149; f_ModuleIface_miDefLocs = dtb__150 } -> dtb__137
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 70 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miSource = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miSource)
+let v_miSource = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__151; f_ModuleIface_miPackage = dtb__152; f_ModuleIface_miSource = dtb__153; f_ModuleIface_miIfaceHash = dtb__154; f_ModuleIface_miImplHash = dtb__155; f_ModuleIface_miDepHashes = dtb__156; f_ModuleIface_miImports = dtb__157; f_ModuleIface_miImplicitImports = dtb__158; f_ModuleIface_miExports = dtb__159; f_ModuleIface_miFixities = dtb__160; f_ModuleIface_miDecls = dtb__161; f_ModuleIface_miRecords = dtb__162; f_ModuleIface_miPrepared = dtb__163; f_ModuleIface_miCached = dtb__164; f_ModuleIface_miDefLocs = dtb__165 } -> dtb__153
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 71 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miIfaceHash = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miIfaceHash)
+let v_miIfaceHash = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__166; f_ModuleIface_miPackage = dtb__167; f_ModuleIface_miSource = dtb__168; f_ModuleIface_miIfaceHash = dtb__169; f_ModuleIface_miImplHash = dtb__170; f_ModuleIface_miDepHashes = dtb__171; f_ModuleIface_miImports = dtb__172; f_ModuleIface_miImplicitImports = dtb__173; f_ModuleIface_miExports = dtb__174; f_ModuleIface_miFixities = dtb__175; f_ModuleIface_miDecls = dtb__176; f_ModuleIface_miRecords = dtb__177; f_ModuleIface_miPrepared = dtb__178; f_ModuleIface_miCached = dtb__179; f_ModuleIface_miDefLocs = dtb__180 } -> dtb__169
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 73 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miImplHash = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImplHash)
+let v_miImplHash = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__181; f_ModuleIface_miPackage = dtb__182; f_ModuleIface_miSource = dtb__183; f_ModuleIface_miIfaceHash = dtb__184; f_ModuleIface_miImplHash = dtb__185; f_ModuleIface_miDepHashes = dtb__186; f_ModuleIface_miImports = dtb__187; f_ModuleIface_miImplicitImports = dtb__188; f_ModuleIface_miExports = dtb__189; f_ModuleIface_miFixities = dtb__190; f_ModuleIface_miDecls = dtb__191; f_ModuleIface_miRecords = dtb__192; f_ModuleIface_miPrepared = dtb__193; f_ModuleIface_miCached = dtb__194; f_ModuleIface_miDefLocs = dtb__195 } -> dtb__185
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 77 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miDepHashes = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDepHashes)
+let v_miDepHashes = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__196; f_ModuleIface_miPackage = dtb__197; f_ModuleIface_miSource = dtb__198; f_ModuleIface_miIfaceHash = dtb__199; f_ModuleIface_miImplHash = dtb__200; f_ModuleIface_miDepHashes = dtb__201; f_ModuleIface_miImports = dtb__202; f_ModuleIface_miImplicitImports = dtb__203; f_ModuleIface_miExports = dtb__204; f_ModuleIface_miFixities = dtb__205; f_ModuleIface_miDecls = dtb__206; f_ModuleIface_miRecords = dtb__207; f_ModuleIface_miPrepared = dtb__208; f_ModuleIface_miCached = dtb__209; f_ModuleIface_miDefLocs = dtb__210 } -> dtb__201
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 78 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miImports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImports)
+let v_miImports = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__211; f_ModuleIface_miPackage = dtb__212; f_ModuleIface_miSource = dtb__213; f_ModuleIface_miIfaceHash = dtb__214; f_ModuleIface_miImplHash = dtb__215; f_ModuleIface_miDepHashes = dtb__216; f_ModuleIface_miImports = dtb__217; f_ModuleIface_miImplicitImports = dtb__218; f_ModuleIface_miExports = dtb__219; f_ModuleIface_miFixities = dtb__220; f_ModuleIface_miDecls = dtb__221; f_ModuleIface_miRecords = dtb__222; f_ModuleIface_miPrepared = dtb__223; f_ModuleIface_miCached = dtb__224; f_ModuleIface_miDefLocs = dtb__225 } -> dtb__217
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 79 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miImplicitImports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImplicitImports)
+let v_miImplicitImports = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__226; f_ModuleIface_miPackage = dtb__227; f_ModuleIface_miSource = dtb__228; f_ModuleIface_miIfaceHash = dtb__229; f_ModuleIface_miImplHash = dtb__230; f_ModuleIface_miDepHashes = dtb__231; f_ModuleIface_miImports = dtb__232; f_ModuleIface_miImplicitImports = dtb__233; f_ModuleIface_miExports = dtb__234; f_ModuleIface_miFixities = dtb__235; f_ModuleIface_miDecls = dtb__236; f_ModuleIface_miRecords = dtb__237; f_ModuleIface_miPrepared = dtb__238; f_ModuleIface_miCached = dtb__239; f_ModuleIface_miDefLocs = dtb__240 } -> dtb__233
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 80 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miExports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miExports)
+let v_miExports = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__241; f_ModuleIface_miPackage = dtb__242; f_ModuleIface_miSource = dtb__243; f_ModuleIface_miIfaceHash = dtb__244; f_ModuleIface_miImplHash = dtb__245; f_ModuleIface_miDepHashes = dtb__246; f_ModuleIface_miImports = dtb__247; f_ModuleIface_miImplicitImports = dtb__248; f_ModuleIface_miExports = dtb__249; f_ModuleIface_miFixities = dtb__250; f_ModuleIface_miDecls = dtb__251; f_ModuleIface_miRecords = dtb__252; f_ModuleIface_miPrepared = dtb__253; f_ModuleIface_miCached = dtb__254; f_ModuleIface_miDefLocs = dtb__255 } -> dtb__249
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 81 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miFixities = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miFixities)
+let v_miFixities = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__256; f_ModuleIface_miPackage = dtb__257; f_ModuleIface_miSource = dtb__258; f_ModuleIface_miIfaceHash = dtb__259; f_ModuleIface_miImplHash = dtb__260; f_ModuleIface_miDepHashes = dtb__261; f_ModuleIface_miImports = dtb__262; f_ModuleIface_miImplicitImports = dtb__263; f_ModuleIface_miExports = dtb__264; f_ModuleIface_miFixities = dtb__265; f_ModuleIface_miDecls = dtb__266; f_ModuleIface_miRecords = dtb__267; f_ModuleIface_miPrepared = dtb__268; f_ModuleIface_miCached = dtb__269; f_ModuleIface_miDefLocs = dtb__270 } -> dtb__265
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 82 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miDecls = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDecls)
+let v_miDecls = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__271; f_ModuleIface_miPackage = dtb__272; f_ModuleIface_miSource = dtb__273; f_ModuleIface_miIfaceHash = dtb__274; f_ModuleIface_miImplHash = dtb__275; f_ModuleIface_miDepHashes = dtb__276; f_ModuleIface_miImports = dtb__277; f_ModuleIface_miImplicitImports = dtb__278; f_ModuleIface_miExports = dtb__279; f_ModuleIface_miFixities = dtb__280; f_ModuleIface_miDecls = dtb__281; f_ModuleIface_miRecords = dtb__282; f_ModuleIface_miPrepared = dtb__283; f_ModuleIface_miCached = dtb__284; f_ModuleIface_miDefLocs = dtb__285 } -> dtb__281
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 85 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miRecords = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miRecords)
+let v_miRecords = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__286; f_ModuleIface_miPackage = dtb__287; f_ModuleIface_miSource = dtb__288; f_ModuleIface_miIfaceHash = dtb__289; f_ModuleIface_miImplHash = dtb__290; f_ModuleIface_miDepHashes = dtb__291; f_ModuleIface_miImports = dtb__292; f_ModuleIface_miImplicitImports = dtb__293; f_ModuleIface_miExports = dtb__294; f_ModuleIface_miFixities = dtb__295; f_ModuleIface_miDecls = dtb__296; f_ModuleIface_miRecords = dtb__297; f_ModuleIface_miPrepared = dtb__298; f_ModuleIface_miCached = dtb__299; f_ModuleIface_miDefLocs = dtb__300 } -> dtb__297
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 91 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miPrepared = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miPrepared)
+let v_miPrepared = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__301; f_ModuleIface_miPackage = dtb__302; f_ModuleIface_miSource = dtb__303; f_ModuleIface_miIfaceHash = dtb__304; f_ModuleIface_miImplHash = dtb__305; f_ModuleIface_miDepHashes = dtb__306; f_ModuleIface_miImports = dtb__307; f_ModuleIface_miImplicitImports = dtb__308; f_ModuleIface_miExports = dtb__309; f_ModuleIface_miFixities = dtb__310; f_ModuleIface_miDecls = dtb__311; f_ModuleIface_miRecords = dtb__312; f_ModuleIface_miPrepared = dtb__313; f_ModuleIface_miCached = dtb__314; f_ModuleIface_miDefLocs = dtb__315 } -> dtb__313
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 92 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miCached = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miCached)
+let v_miCached = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__316; f_ModuleIface_miPackage = dtb__317; f_ModuleIface_miSource = dtb__318; f_ModuleIface_miIfaceHash = dtb__319; f_ModuleIface_miImplHash = dtb__320; f_ModuleIface_miDepHashes = dtb__321; f_ModuleIface_miImports = dtb__322; f_ModuleIface_miImplicitImports = dtb__323; f_ModuleIface_miExports = dtb__324; f_ModuleIface_miFixities = dtb__325; f_ModuleIface_miDecls = dtb__326; f_ModuleIface_miRecords = dtb__327; f_ModuleIface_miPrepared = dtb__328; f_ModuleIface_miCached = dtb__329; f_ModuleIface_miDefLocs = dtb__330 } -> dtb__329
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 98 "Vuna/Compiler/Driver/Iface.vuna"
-let v_miDefLocs = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDefLocs)
+let v_miDefLocs = (fun (p : t_ModuleIface) -> (match p with
+  | { f_ModuleIface_miName = dtb__331; f_ModuleIface_miPackage = dtb__332; f_ModuleIface_miSource = dtb__333; f_ModuleIface_miIfaceHash = dtb__334; f_ModuleIface_miImplHash = dtb__335; f_ModuleIface_miDepHashes = dtb__336; f_ModuleIface_miImports = dtb__337; f_ModuleIface_miImplicitImports = dtb__338; f_ModuleIface_miExports = dtb__339; f_ModuleIface_miFixities = dtb__340; f_ModuleIface_miDecls = dtb__341; f_ModuleIface_miRecords = dtb__342; f_ModuleIface_miPrepared = dtb__343; f_ModuleIface_miCached = dtb__344; f_ModuleIface_miDefLocs = dtb__345 } -> dtb__345
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 268 "Vuna/Compiler/Driver/Iface.vuna"
-let v_csNext = (fun (p : t_CanonState) -> (p).f_CanonState_csNext)
+let v_csNext = (fun (p : t_CanonState) -> (match p with
+  | { f_CanonState_csNext = dtb__346; f_CanonState_csMap = dtb__347 } -> dtb__346
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 269 "Vuna/Compiler/Driver/Iface.vuna"
-let v_csMap = (fun (p : t_CanonState) -> (p).f_CanonState_csMap)
+let v_csMap = (fun (p : t_CanonState) -> (match p with
+  | { f_CanonState_csNext = dtb__348; f_CanonState_csMap = dtb__349 } -> dtb__349
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 479 "Vuna/Compiler/Driver/Iface.vuna"
-let v_oiDef = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiDef)
+let v_oiDef = (fun (p : t_OwnerIndex) -> (match p with
+  | { f_OwnerIndex_oiDef = dtb__350; f_OwnerIndex_oiData = dtb__351; f_OwnerIndex_oiCtor = dtb__352; f_OwnerIndex_oiKnown = dtb__353 } -> dtb__350
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 480 "Vuna/Compiler/Driver/Iface.vuna"
-let v_oiData = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiData)
+let v_oiData = (fun (p : t_OwnerIndex) -> (match p with
+  | { f_OwnerIndex_oiDef = dtb__354; f_OwnerIndex_oiData = dtb__355; f_OwnerIndex_oiCtor = dtb__356; f_OwnerIndex_oiKnown = dtb__357 } -> dtb__355
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 481 "Vuna/Compiler/Driver/Iface.vuna"
-let v_oiCtor = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiCtor)
+let v_oiCtor = (fun (p : t_OwnerIndex) -> (match p with
+  | { f_OwnerIndex_oiDef = dtb__358; f_OwnerIndex_oiData = dtb__359; f_OwnerIndex_oiCtor = dtb__360; f_OwnerIndex_oiKnown = dtb__361 } -> dtb__360
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 482 "Vuna/Compiler/Driver/Iface.vuna"
-let v_oiKnown = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiKnown)
+let v_oiKnown = (fun (p : t_OwnerIndex) -> (match p with
+  | { f_OwnerIndex_oiDef = dtb__362; f_OwnerIndex_oiData = dtb__363; f_OwnerIndex_oiCtor = dtb__364; f_OwnerIndex_oiKnown = dtb__365 } -> dtb__365
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 550 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppSols = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppSols)
+let v_ppSols = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__366; f_ProgParts_ppDatas = dtb__367; f_ProgParts_ppDefs = dtb__368; f_ProgParts_ppGlobals = dtb__369; f_ProgParts_ppInsts = dtb__370; f_ProgParts_ppClasses = dtb__371 } -> dtb__366
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 551 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppDatas = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppDatas)
+let v_ppDatas = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__372; f_ProgParts_ppDatas = dtb__373; f_ProgParts_ppDefs = dtb__374; f_ProgParts_ppGlobals = dtb__375; f_ProgParts_ppInsts = dtb__376; f_ProgParts_ppClasses = dtb__377 } -> dtb__373
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 552 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppDefs = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppDefs)
+let v_ppDefs = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__378; f_ProgParts_ppDatas = dtb__379; f_ProgParts_ppDefs = dtb__380; f_ProgParts_ppGlobals = dtb__381; f_ProgParts_ppInsts = dtb__382; f_ProgParts_ppClasses = dtb__383 } -> dtb__380
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 553 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppGlobals = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppGlobals)
+let v_ppGlobals = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__384; f_ProgParts_ppDatas = dtb__385; f_ProgParts_ppDefs = dtb__386; f_ProgParts_ppGlobals = dtb__387; f_ProgParts_ppInsts = dtb__388; f_ProgParts_ppClasses = dtb__389 } -> dtb__387
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 554 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppInsts = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppInsts)
+let v_ppInsts = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__390; f_ProgParts_ppDatas = dtb__391; f_ProgParts_ppDefs = dtb__392; f_ProgParts_ppGlobals = dtb__393; f_ProgParts_ppInsts = dtb__394; f_ProgParts_ppClasses = dtb__395 } -> dtb__394
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 555 "Vuna/Compiler/Driver/Iface.vuna"
-let v_ppClasses = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppClasses)
+let v_ppClasses = (fun (p : t_ProgParts) -> (match p with
+  | { f_ProgParts_ppSols = dtb__396; f_ProgParts_ppDatas = dtb__397; f_ProgParts_ppDefs = dtb__398; f_ProgParts_ppGlobals = dtb__399; f_ProgParts_ppInsts = dtb__400; f_ProgParts_ppClasses = dtb__401 } -> dtb__401
+  | _ -> failwith "DT: impossible branch"
+))

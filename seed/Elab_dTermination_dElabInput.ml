@@ -427,49 +427,97 @@ let rec v_projectionTable = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List
 let v_elabTermInput = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (classes : Elab_dTypes.t_DtClass B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let projs = (v_projectionTable defs) in (let dicts = ((v_dictSymbolsOf classes) defs) in (let shapes = ((B_dData_dList.v_mapMaybe v_defShape) defs) in (let fields = (v_recordFieldTable datas) in (let groups = ((B_dData_dList.v_concatMap (((((v_groupsOfDef projs) dicts) shapes) classes) fields)) defs) in { B_dData_dPair.f_Pair_first = ((B_dData_dList.v_map v_grNameOf) groups); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_map v_groupToDecl) groups) }))))))
 
 # 47 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_peName = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peName)
+let v_peName = (fun (p : t_ProjEntry) -> (match p with
+  | { f_ProjEntry_peName = dtb__162; f_ProjEntry_peCtor = dtb__163; f_ProjEntry_peField = dtb__164 } -> dtb__162
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 48 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_peCtor = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peCtor)
+let v_peCtor = (fun (p : t_ProjEntry) -> (match p with
+  | { f_ProjEntry_peName = dtb__165; f_ProjEntry_peCtor = dtb__166; f_ProjEntry_peField = dtb__167 } -> dtb__166
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 49 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_peField = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peField)
+let v_peField = (fun (p : t_ProjEntry) -> (match p with
+  | { f_ProjEntry_peName = dtb__168; f_ProjEntry_peCtor = dtb__169; f_ProjEntry_peField = dtb__170 } -> dtb__170
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 55 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_dsName = (fun (p : t_DefShape) -> (p).f_DefShape_dsName)
+let v_dsName = (fun (p : t_DefShape) -> (match p with
+  | { f_DefShape_dsName = dtb__171; f_DefShape_dsPrefix = dtb__172; f_DefShape_dsArity = dtb__173 } -> dtb__171
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 57 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_dsPrefix = (fun (p : t_DefShape) -> (p).f_DefShape_dsPrefix)
+let v_dsPrefix = (fun (p : t_DefShape) -> (match p with
+  | { f_DefShape_dsName = dtb__174; f_DefShape_dsPrefix = dtb__175; f_DefShape_dsArity = dtb__176 } -> dtb__175
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 59 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_dsArity = (fun (p : t_DefShape) -> (p).f_DefShape_dsArity)
+let v_dsArity = (fun (p : t_DefShape) -> (match p with
+  | { f_DefShape_dsName = dtb__177; f_DefShape_dsPrefix = dtb__178; f_DefShape_dsArity = dtb__179 } -> dtb__179
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 63 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccProjs = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccProjs)
+let v_ccProjs = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__180; f_ConvCtx_ccDicts = dtb__181; f_ConvCtx_ccShapes = dtb__182; f_ConvCtx_ccClasses = dtb__183; f_ConvCtx_ccFields = dtb__184; f_ConvCtx_ccSpan = dtb__185 } -> dtb__180
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 65 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccDicts = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccDicts)
+let v_ccDicts = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__186; f_ConvCtx_ccDicts = dtb__187; f_ConvCtx_ccShapes = dtb__188; f_ConvCtx_ccClasses = dtb__189; f_ConvCtx_ccFields = dtb__190; f_ConvCtx_ccSpan = dtb__191 } -> dtb__187
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 66 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccShapes = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccShapes)
+let v_ccShapes = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__192; f_ConvCtx_ccDicts = dtb__193; f_ConvCtx_ccShapes = dtb__194; f_ConvCtx_ccClasses = dtb__195; f_ConvCtx_ccFields = dtb__196; f_ConvCtx_ccSpan = dtb__197 } -> dtb__194
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 67 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccClasses = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccClasses)
+let v_ccClasses = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__198; f_ConvCtx_ccDicts = dtb__199; f_ConvCtx_ccShapes = dtb__200; f_ConvCtx_ccClasses = dtb__201; f_ConvCtx_ccFields = dtb__202; f_ConvCtx_ccSpan = dtb__203 } -> dtb__201
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 70 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccFields = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccFields)
+let v_ccFields = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__204; f_ConvCtx_ccDicts = dtb__205; f_ConvCtx_ccShapes = dtb__206; f_ConvCtx_ccClasses = dtb__207; f_ConvCtx_ccFields = dtb__208; f_ConvCtx_ccSpan = dtb__209 } -> dtb__208
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 73 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_ccSpan = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccSpan)
+let v_ccSpan = (fun (p : t_ConvCtx) -> (match p with
+  | { f_ConvCtx_ccProjs = dtb__210; f_ConvCtx_ccDicts = dtb__211; f_ConvCtx_ccShapes = dtb__212; f_ConvCtx_ccClasses = dtb__213; f_ConvCtx_ccFields = dtb__214; f_ConvCtx_ccSpan = dtb__215 } -> dtb__215
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 80 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_grName = (fun (p : t_Group) -> (p).f_Group_grName)
+let v_grName = (fun (p : t_Group) -> (match p with
+  | { f_Group_grName = dtb__216; f_Group_grParams = dtb__217; f_Group_grBody = dtb__218; f_Group_grSpan = dtb__219 } -> dtb__216
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 81 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_grParams = (fun (p : t_Group) -> (p).f_Group_grParams)
+let v_grParams = (fun (p : t_Group) -> (match p with
+  | { f_Group_grName = dtb__220; f_Group_grParams = dtb__221; f_Group_grBody = dtb__222; f_Group_grSpan = dtb__223 } -> dtb__221
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 82 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_grBody = (fun (p : t_Group) -> (p).f_Group_grBody)
+let v_grBody = (fun (p : t_Group) -> (match p with
+  | { f_Group_grName = dtb__224; f_Group_grParams = dtb__225; f_Group_grBody = dtb__226; f_Group_grSpan = dtb__227 } -> dtb__226
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 83 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
-let v_grSpan = (fun (p : t_Group) -> (p).f_Group_grSpan)
+let v_grSpan = (fun (p : t_Group) -> (match p with
+  | { f_Group_grName = dtb__228; f_Group_grParams = dtb__229; f_Group_grBody = dtb__230; f_Group_grSpan = dtb__231 } -> dtb__231
+  | _ -> failwith "DT: impossible branch"
+))

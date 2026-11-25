@@ -46,4 +46,7 @@ let rec v_traverse = (fun mc0 mc1 -> (match mc1 with
 ))
 
 # 32 "Vuna/Compiler/Base/Common.vuna"
-let v_effCheckRun = (fun p -> (p).f_EffCheck_effCheckRun)
+let v_effCheckRun = (fun p -> (match p with
+  | { f_EffCheck_effCheckRun = dtb__12 } -> dtb__12
+  | _ -> failwith "DT: impossible branch"
+))

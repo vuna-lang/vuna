@@ -1597,31 +1597,61 @@ let rec v_filterModes = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
 ))
 
 # 152 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_fwdCallee = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdCallee)
+let v_fwdCallee = (fun (p : t_Forwarder) -> (match p with
+  | { f_Forwarder_fwdCallee = dtb__700; f_Forwarder_fwdCbParam = dtb__701; f_Forwarder_fwdArgParams = dtb__702 } -> dtb__700
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 153 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_fwdCbParam = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdCbParam)
+let v_fwdCbParam = (fun (p : t_Forwarder) -> (match p with
+  | { f_Forwarder_fwdCallee = dtb__703; f_Forwarder_fwdCbParam = dtb__704; f_Forwarder_fwdArgParams = dtb__705 } -> dtb__704
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 154 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_fwdArgParams = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdArgParams)
+let v_fwdArgParams = (fun (p : t_Forwarder) -> (match p with
+  | { f_Forwarder_fwdCallee = dtb__706; f_Forwarder_fwdCbParam = dtb__707; f_Forwarder_fwdArgParams = dtb__708 } -> dtb__708
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1287 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofLambdaArity = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofLambdaArity)
+let v_hofLambdaArity = (fun (p : t_HofSpec) -> (match p with
+  | { f_HofSpec_hofLambdaArity = dtb__709; f_HofSpec_hofElemParam = dtb__710; f_HofSpec_hofListArg = dtb__711 } -> dtb__709
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1288 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofElemParam = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofElemParam)
+let v_hofElemParam = (fun (p : t_HofSpec) -> (match p with
+  | { f_HofSpec_hofLambdaArity = dtb__712; f_HofSpec_hofElemParam = dtb__713; f_HofSpec_hofListArg = dtb__714 } -> dtb__713
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1289 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofListArg = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofListArg)
+let v_hofListArg = (fun (p : t_HofSpec) -> (match p with
+  | { f_HofSpec_hofLambdaArity = dtb__715; f_HofSpec_hofElemParam = dtb__716; f_HofSpec_hofListArg = dtb__717 } -> dtb__717
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1292 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofElemBinder = (fun (p : t_HofCall) -> (p).f_HofCall_hofElemBinder)
+let v_hofElemBinder = (fun (p : t_HofCall) -> (match p with
+  | { f_HofCall_hofElemBinder = dtb__718; f_HofCall_hofListExpr = dtb__719; f_HofCall_hofSideArgs = dtb__720; f_HofCall_hofBody = dtb__721 } -> dtb__718
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1293 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofListExpr = (fun (p : t_HofCall) -> (p).f_HofCall_hofListExpr)
+let v_hofListExpr = (fun (p : t_HofCall) -> (match p with
+  | { f_HofCall_hofElemBinder = dtb__722; f_HofCall_hofListExpr = dtb__723; f_HofCall_hofSideArgs = dtb__724; f_HofCall_hofBody = dtb__725 } -> dtb__723
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1294 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofSideArgs = (fun (p : t_HofCall) -> (p).f_HofCall_hofSideArgs)
+let v_hofSideArgs = (fun (p : t_HofCall) -> (match p with
+  | { f_HofCall_hofElemBinder = dtb__726; f_HofCall_hofListExpr = dtb__727; f_HofCall_hofSideArgs = dtb__728; f_HofCall_hofBody = dtb__729 } -> dtb__728
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1295 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_hofBody = (fun (p : t_HofCall) -> (p).f_HofCall_hofBody)
+let v_hofBody = (fun (p : t_HofCall) -> (match p with
+  | { f_HofCall_hofElemBinder = dtb__730; f_HofCall_hofListExpr = dtb__731; f_HofCall_hofSideArgs = dtb__732; f_HofCall_hofBody = dtb__733 } -> dtb__733
+  | _ -> failwith "DT: impossible branch"
+))

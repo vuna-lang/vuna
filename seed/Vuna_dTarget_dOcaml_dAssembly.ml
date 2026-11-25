@@ -77,10 +77,19 @@ let v_genUnitPartsWith = (fun (norm : (string) -> string) (qc : Vuna_dTarget_dOc
 let v_genUnitParts = (fun (qc : Vuna_dTarget_dOcaml_dDecl.t_QualCtx) (shared : Vuna_dIr_dModel.t_IrShared) (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((((v_genUnitPartsWith (fun (p : string) -> p)) qc) shared) unitIr))
 
 # 30 "Vuna/Target/Ocaml/Assembly.vuna"
-let v_unitPartsFragments = (fun (p : t_UnitParts) -> (p).f_UnitParts_unitPartsFragments)
+let v_unitPartsFragments = (fun (p : t_UnitParts) -> (match p with
+  | { f_UnitParts_unitPartsFragments = dtb__20; f_UnitParts_unitPartsBodies = dtb__21; f_UnitParts_unitPartsState = dtb__22; f_UnitParts_unitPartsDeps = dtb__23 } -> dtb__20
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Target/Ocaml/Assembly.vuna"
-let v_unitPartsBodies = (fun (p : t_UnitParts) -> (p).f_UnitParts_unitPartsBodies)
+let v_unitPartsBodies = (fun (p : t_UnitParts) -> (match p with
+  | { f_UnitParts_unitPartsFragments = dtb__24; f_UnitParts_unitPartsBodies = dtb__25; f_UnitParts_unitPartsState = dtb__26; f_UnitParts_unitPartsDeps = dtb__27 } -> dtb__25
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 32 "Vuna/Target/Ocaml/Assembly.vuna"
-let v_unitPartsState = (fun (p : t_UnitParts) -> (p).f_UnitParts_unitPartsState)
+let v_unitPartsState = (fun (p : t_UnitParts) -> (match p with
+  | { f_UnitParts_unitPartsFragments = dtb__28; f_UnitParts_unitPartsBodies = dtb__29; f_UnitParts_unitPartsState = dtb__30; f_UnitParts_unitPartsDeps = dtb__31 } -> dtb__30
+  | _ -> failwith "DT: impossible branch"
+))

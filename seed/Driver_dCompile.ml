@@ -1277,76 +1277,151 @@ let v_buildSplit = (fun (nFs : string) (nConsole : string) (nClock : string) (nE
 ))))
 
 # 827 "Vuna/Compiler/Driver/Compile.vuna"
-let v_peName = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peName)
+let v_peName = (fun (p : t_PkgEntry) -> (match p with
+  | { f_PkgEntry_peName = dtb__237; f_PkgEntry_peDir = dtb__238; f_PkgEntry_peKey = dtb__239; f_PkgEntry_peEnv = dtb__240 } -> dtb__237
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 828 "Vuna/Compiler/Driver/Compile.vuna"
-let v_peDir = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peDir)
+let v_peDir = (fun (p : t_PkgEntry) -> (match p with
+  | { f_PkgEntry_peName = dtb__241; f_PkgEntry_peDir = dtb__242; f_PkgEntry_peKey = dtb__243; f_PkgEntry_peEnv = dtb__244 } -> dtb__242
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 829 "Vuna/Compiler/Driver/Compile.vuna"
-let v_peKey = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peKey)
+let v_peKey = (fun (p : t_PkgEntry) -> (match p with
+  | { f_PkgEntry_peName = dtb__245; f_PkgEntry_peDir = dtb__246; f_PkgEntry_peKey = dtb__247; f_PkgEntry_peEnv = dtb__248 } -> dtb__247
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 830 "Vuna/Compiler/Driver/Compile.vuna"
-let v_peEnv = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peEnv)
+let v_peEnv = (fun (p : t_PkgEntry) -> (match p with
+  | { f_PkgEntry_peName = dtb__249; f_PkgEntry_peDir = dtb__250; f_PkgEntry_peKey = dtb__251; f_PkgEntry_peEnv = dtb__252 } -> dtb__252
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 834 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmPkgKey = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPkgKey)
+let v_cmPkgKey = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__253; f_ClosureMod_cmPkgKey = dtb__254; f_ClosureMod_cmPkgEnv = dtb__255; f_ClosureMod_cmName = dtb__256; f_ClosureMod_cmPath = dtb__257; f_ClosureMod_cmSrc = dtb__258; f_ClosureMod_cmImports = dtb__259; f_ClosureMod_cmAddr = dtb__260 } -> dtb__254
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 835 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmPkgEnv = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPkgEnv)
+let v_cmPkgEnv = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__261; f_ClosureMod_cmPkgKey = dtb__262; f_ClosureMod_cmPkgEnv = dtb__263; f_ClosureMod_cmName = dtb__264; f_ClosureMod_cmPath = dtb__265; f_ClosureMod_cmSrc = dtb__266; f_ClosureMod_cmImports = dtb__267; f_ClosureMod_cmAddr = dtb__268 } -> dtb__263
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 836 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmName = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmName)
+let v_cmName = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__269; f_ClosureMod_cmPkgKey = dtb__270; f_ClosureMod_cmPkgEnv = dtb__271; f_ClosureMod_cmName = dtb__272; f_ClosureMod_cmPath = dtb__273; f_ClosureMod_cmSrc = dtb__274; f_ClosureMod_cmImports = dtb__275; f_ClosureMod_cmAddr = dtb__276 } -> dtb__272
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 837 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmPath = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPath)
+let v_cmPath = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__277; f_ClosureMod_cmPkgKey = dtb__278; f_ClosureMod_cmPkgEnv = dtb__279; f_ClosureMod_cmName = dtb__280; f_ClosureMod_cmPath = dtb__281; f_ClosureMod_cmSrc = dtb__282; f_ClosureMod_cmImports = dtb__283; f_ClosureMod_cmAddr = dtb__284 } -> dtb__281
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 838 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmSrc = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmSrc)
+let v_cmSrc = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__285; f_ClosureMod_cmPkgKey = dtb__286; f_ClosureMod_cmPkgEnv = dtb__287; f_ClosureMod_cmName = dtb__288; f_ClosureMod_cmPath = dtb__289; f_ClosureMod_cmSrc = dtb__290; f_ClosureMod_cmImports = dtb__291; f_ClosureMod_cmAddr = dtb__292 } -> dtb__290
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 839 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmImports = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmImports)
+let v_cmImports = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__293; f_ClosureMod_cmPkgKey = dtb__294; f_ClosureMod_cmPkgEnv = dtb__295; f_ClosureMod_cmName = dtb__296; f_ClosureMod_cmPath = dtb__297; f_ClosureMod_cmSrc = dtb__298; f_ClosureMod_cmImports = dtb__299; f_ClosureMod_cmAddr = dtb__300 } -> dtb__299
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 840 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmAddr = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmAddr)
+let v_cmAddr = (fun (p : t_ClosureMod) -> (match p with
+  | { f_ClosureMod_cmPkg = dtb__301; f_ClosureMod_cmPkgKey = dtb__302; f_ClosureMod_cmPkgEnv = dtb__303; f_ClosureMod_cmName = dtb__304; f_ClosureMod_cmPath = dtb__305; f_ClosureMod_cmSrc = dtb__306; f_ClosureMod_cmImports = dtb__307; f_ClosureMod_cmAddr = dtb__308 } -> dtb__308
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1413 "Vuna/Compiler/Driver/Compile.vuna"
-let v_tcDepIfaces = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcDepIfaces)
+let v_tcDepIfaces = (fun (p : t_ToolContext) -> (match p with
+  | { f_ToolContext_tcDepIfaces = dtb__309; f_ToolContext_tcDepHashes = dtb__310; f_ToolContext_tcNeeded = dtb__311; f_ToolContext_tcOwnNames = dtb__312; f_ToolContext_tcStats = dtb__313 } -> dtb__309
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1414 "Vuna/Compiler/Driver/Compile.vuna"
-let v_tcDepHashes = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcDepHashes)
+let v_tcDepHashes = (fun (p : t_ToolContext) -> (match p with
+  | { f_ToolContext_tcDepIfaces = dtb__314; f_ToolContext_tcDepHashes = dtb__315; f_ToolContext_tcNeeded = dtb__316; f_ToolContext_tcOwnNames = dtb__317; f_ToolContext_tcStats = dtb__318 } -> dtb__315
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1415 "Vuna/Compiler/Driver/Compile.vuna"
-let v_tcNeeded = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcNeeded)
+let v_tcNeeded = (fun (p : t_ToolContext) -> (match p with
+  | { f_ToolContext_tcDepIfaces = dtb__319; f_ToolContext_tcDepHashes = dtb__320; f_ToolContext_tcNeeded = dtb__321; f_ToolContext_tcOwnNames = dtb__322; f_ToolContext_tcStats = dtb__323 } -> dtb__321
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1418 "Vuna/Compiler/Driver/Compile.vuna"
-let v_tcOwnNames = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcOwnNames)
+let v_tcOwnNames = (fun (p : t_ToolContext) -> (match p with
+  | { f_ToolContext_tcDepIfaces = dtb__324; f_ToolContext_tcDepHashes = dtb__325; f_ToolContext_tcNeeded = dtb__326; f_ToolContext_tcOwnNames = dtb__327; f_ToolContext_tcStats = dtb__328 } -> dtb__327
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1419 "Vuna/Compiler/Driver/Compile.vuna"
-let v_tcStats = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcStats)
+let v_tcStats = (fun (p : t_ToolContext) -> (match p with
+  | { f_ToolContext_tcDepIfaces = dtb__329; f_ToolContext_tcDepHashes = dtb__330; f_ToolContext_tcNeeded = dtb__331; f_ToolContext_tcOwnNames = dtb__332; f_ToolContext_tcStats = dtb__333 } -> dtb__333
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1740 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmKind = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmKind)
+let v_cmKind = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__334; f_CheckMods_cmKind = dtb__335; f_CheckMods_cmManifest = dtb__336; f_CheckMods_cmSources = dtb__337; f_CheckMods_cmDeps = dtb__338; f_CheckMods_cmVer = dtb__339; f_CheckMods_cmFlags = dtb__340 } -> dtb__335
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1741 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmManifest = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmManifest)
+let v_cmManifest = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__341; f_CheckMods_cmKind = dtb__342; f_CheckMods_cmManifest = dtb__343; f_CheckMods_cmSources = dtb__344; f_CheckMods_cmDeps = dtb__345; f_CheckMods_cmVer = dtb__346; f_CheckMods_cmFlags = dtb__347 } -> dtb__343
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1742 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmSources = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmSources)
+let v_cmSources = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__348; f_CheckMods_cmKind = dtb__349; f_CheckMods_cmManifest = dtb__350; f_CheckMods_cmSources = dtb__351; f_CheckMods_cmDeps = dtb__352; f_CheckMods_cmVer = dtb__353; f_CheckMods_cmFlags = dtb__354 } -> dtb__351
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1743 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmDeps = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmDeps)
+let v_cmDeps = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__355; f_CheckMods_cmKind = dtb__356; f_CheckMods_cmManifest = dtb__357; f_CheckMods_cmSources = dtb__358; f_CheckMods_cmDeps = dtb__359; f_CheckMods_cmVer = dtb__360; f_CheckMods_cmFlags = dtb__361 } -> dtb__359
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1744 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmVer = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmVer)
+let v_cmVer = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__362; f_CheckMods_cmKind = dtb__363; f_CheckMods_cmManifest = dtb__364; f_CheckMods_cmSources = dtb__365; f_CheckMods_cmDeps = dtb__366; f_CheckMods_cmVer = dtb__367; f_CheckMods_cmFlags = dtb__368 } -> dtb__367
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1746 "Vuna/Compiler/Driver/Compile.vuna"
-let v_cmFlags = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmFlags)
+let v_cmFlags = (fun (p : t_CheckMods) -> (match p with
+  | { f_CheckMods_cmPkg = dtb__369; f_CheckMods_cmKind = dtb__370; f_CheckMods_cmManifest = dtb__371; f_CheckMods_cmSources = dtb__372; f_CheckMods_cmDeps = dtb__373; f_CheckMods_cmVer = dtb__374; f_CheckMods_cmFlags = dtb__375 } -> dtb__375
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2499 "Vuna/Compiler/Driver/Compile.vuna"
-let v_siClosure = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siClosure)
+let v_siClosure = (fun (p : t_SplitInputs) -> (match p with
+  | { f_SplitInputs_siClosure = dtb__376; f_SplitInputs_siDepIfaces = dtb__377; f_SplitInputs_siMods = dtb__378 } -> dtb__376
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2500 "Vuna/Compiler/Driver/Compile.vuna"
-let v_siDepIfaces = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siDepIfaces)
+let v_siDepIfaces = (fun (p : t_SplitInputs) -> (match p with
+  | { f_SplitInputs_siClosure = dtb__379; f_SplitInputs_siDepIfaces = dtb__380; f_SplitInputs_siMods = dtb__381 } -> dtb__380
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 2501 "Vuna/Compiler/Driver/Compile.vuna"
-let v_siMods = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siMods)
+let v_siMods = (fun (p : t_SplitInputs) -> (match p with
+  | { f_SplitInputs_siClosure = dtb__382; f_SplitInputs_siDepIfaces = dtb__383; f_SplitInputs_siMods = dtb__384 } -> dtb__384
+  | _ -> failwith "DT: impossible branch"
+))

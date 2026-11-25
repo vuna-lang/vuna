@@ -1348,73 +1348,145 @@ let v_dtCheckLibraryPackageWithIfacesParts = (fun (nFs : string) (nEnv : string)
 )))))
 
 # 65 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedProgram = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedProgram)
+let v_checkedProgram = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__452; f_CheckedPackage_checkedModules = dtb__453; f_CheckedPackage_checkedEntryDecls = dtb__454; f_CheckedPackage_checkedInherited = dtb__455; f_CheckedPackage_checkedWarnings = dtb__456 } -> dtb__452
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 66 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedModules = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedModules)
+let v_checkedModules = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__457; f_CheckedPackage_checkedModules = dtb__458; f_CheckedPackage_checkedEntryDecls = dtb__459; f_CheckedPackage_checkedInherited = dtb__460; f_CheckedPackage_checkedWarnings = dtb__461 } -> dtb__458
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 67 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedEntryDecls = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedEntryDecls)
+let v_checkedEntryDecls = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__462; f_CheckedPackage_checkedModules = dtb__463; f_CheckedPackage_checkedEntryDecls = dtb__464; f_CheckedPackage_checkedInherited = dtb__465; f_CheckedPackage_checkedWarnings = dtb__466 } -> dtb__464
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 70 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedInherited = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedInherited)
+let v_checkedInherited = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__467; f_CheckedPackage_checkedModules = dtb__468; f_CheckedPackage_checkedEntryDecls = dtb__469; f_CheckedPackage_checkedInherited = dtb__470; f_CheckedPackage_checkedWarnings = dtb__471 } -> dtb__470
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 72 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedWarnings = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedWarnings)
+let v_checkedWarnings = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__472; f_CheckedPackage_checkedModules = dtb__473; f_CheckedPackage_checkedEntryDecls = dtb__474; f_CheckedPackage_checkedInherited = dtb__475; f_CheckedPackage_checkedWarnings = dtb__476 } -> dtb__476
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 578 "Vuna/Compiler/Driver/Dt.vuna"
-let v_genMetaId = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaId)
+let v_genMetaId = (fun (p : t_GenMeta) -> (match p with
+  | { f_GenMeta_genMetaId = dtb__477; f_GenMeta_genMetaName = dtb__478; f_GenMeta_genMetaKind = dtb__479 } -> dtb__477
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 579 "Vuna/Compiler/Driver/Dt.vuna"
-let v_genMetaName = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaName)
+let v_genMetaName = (fun (p : t_GenMeta) -> (match p with
+  | { f_GenMeta_genMetaId = dtb__480; f_GenMeta_genMetaName = dtb__481; f_GenMeta_genMetaKind = dtb__482 } -> dtb__481
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 580 "Vuna/Compiler/Driver/Dt.vuna"
-let v_genMetaKind = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaKind)
+let v_genMetaKind = (fun (p : t_GenMeta) -> (match p with
+  | { f_GenMeta_genMetaId = dtb__483; f_GenMeta_genMetaName = dtb__484; f_GenMeta_genMetaKind = dtb__485 } -> dtb__485
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 882 "Vuna/Compiler/Driver/Dt.vuna"
-let v_miKind = (fun (p : t_MainInfo) -> (p).f_MainInfo_miKind)
+let v_miKind = (fun (p : t_MainInfo) -> (match p with
+  | { f_MainInfo_miKind = dtb__486; f_MainInfo_miHostTags = dtb__487 } -> dtb__486
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 883 "Vuna/Compiler/Driver/Dt.vuna"
-let v_miHostTags = (fun (p : t_MainInfo) -> (p).f_MainInfo_miHostTags)
+let v_miHostTags = (fun (p : t_MainInfo) -> (match p with
+  | { f_MainInfo_miKind = dtb__488; f_MainInfo_miHostTags = dtb__489 } -> dtb__489
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1311 "Vuna/Compiler/Driver/Dt.vuna"
-let v_auxCacheKey = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheKey)
+let v_auxCacheKey = (fun (p : t_AuxCache) -> (match p with
+  | { f_AuxCache_auxCacheKey = dtb__490; f_AuxCache_auxCacheDecls = dtb__491; f_AuxCache_auxCacheStart = dtb__492; f_AuxCache_auxCacheDepCps = dtb__493; f_AuxCache_auxCacheCleanCps = dtb__494 } -> dtb__490
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1312 "Vuna/Compiler/Driver/Dt.vuna"
-let v_auxCacheDecls = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheDecls)
+let v_auxCacheDecls = (fun (p : t_AuxCache) -> (match p with
+  | { f_AuxCache_auxCacheKey = dtb__495; f_AuxCache_auxCacheDecls = dtb__496; f_AuxCache_auxCacheStart = dtb__497; f_AuxCache_auxCacheDepCps = dtb__498; f_AuxCache_auxCacheCleanCps = dtb__499 } -> dtb__496
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1313 "Vuna/Compiler/Driver/Dt.vuna"
-let v_auxCacheStart = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheStart)
+let v_auxCacheStart = (fun (p : t_AuxCache) -> (match p with
+  | { f_AuxCache_auxCacheKey = dtb__500; f_AuxCache_auxCacheDecls = dtb__501; f_AuxCache_auxCacheStart = dtb__502; f_AuxCache_auxCacheDepCps = dtb__503; f_AuxCache_auxCacheCleanCps = dtb__504 } -> dtb__502
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1314 "Vuna/Compiler/Driver/Dt.vuna"
-let v_auxCacheDepCps = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheDepCps)
+let v_auxCacheDepCps = (fun (p : t_AuxCache) -> (match p with
+  | { f_AuxCache_auxCacheKey = dtb__505; f_AuxCache_auxCacheDecls = dtb__506; f_AuxCache_auxCacheStart = dtb__507; f_AuxCache_auxCacheDepCps = dtb__508; f_AuxCache_auxCacheCleanCps = dtb__509 } -> dtb__508
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1315 "Vuna/Compiler/Driver/Dt.vuna"
-let v_auxCacheCleanCps = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheCleanCps)
+let v_auxCacheCleanCps = (fun (p : t_AuxCache) -> (match p with
+  | { f_AuxCache_auxCacheKey = dtb__510; f_AuxCache_auxCacheDecls = dtb__511; f_AuxCache_auxCacheStart = dtb__512; f_AuxCache_auxCacheDepCps = dtb__513; f_AuxCache_auxCacheCleanCps = dtb__514 } -> dtb__514
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1348 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsStartEc = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsStartEc)
+let v_dsStartEc = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__515; f_DtIncrSetup_dsStartGlobals = dtb__516; f_DtIncrSetup_dsTermAux = dtb__517; f_DtIncrSetup_dsPrepared = dtb__518; f_DtIncrSetup_dsDecls = dtb__519; f_DtIncrSetup_dsWarns = dtb__520; f_DtIncrSetup_dsDepCps = dtb__521; f_DtIncrSetup_dsCleanCps = dtb__522; f_DtIncrSetup_dsNext = dtb__523 } -> dtb__515
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1349 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsStartGlobals = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsStartGlobals)
+let v_dsStartGlobals = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__524; f_DtIncrSetup_dsStartGlobals = dtb__525; f_DtIncrSetup_dsTermAux = dtb__526; f_DtIncrSetup_dsPrepared = dtb__527; f_DtIncrSetup_dsDecls = dtb__528; f_DtIncrSetup_dsWarns = dtb__529; f_DtIncrSetup_dsDepCps = dtb__530; f_DtIncrSetup_dsCleanCps = dtb__531; f_DtIncrSetup_dsNext = dtb__532 } -> dtb__525
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1350 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsTermAux = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsTermAux)
+let v_dsTermAux = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__533; f_DtIncrSetup_dsStartGlobals = dtb__534; f_DtIncrSetup_dsTermAux = dtb__535; f_DtIncrSetup_dsPrepared = dtb__536; f_DtIncrSetup_dsDecls = dtb__537; f_DtIncrSetup_dsWarns = dtb__538; f_DtIncrSetup_dsDepCps = dtb__539; f_DtIncrSetup_dsCleanCps = dtb__540; f_DtIncrSetup_dsNext = dtb__541 } -> dtb__535
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1351 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsPrepared = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsPrepared)
+let v_dsPrepared = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__542; f_DtIncrSetup_dsStartGlobals = dtb__543; f_DtIncrSetup_dsTermAux = dtb__544; f_DtIncrSetup_dsPrepared = dtb__545; f_DtIncrSetup_dsDecls = dtb__546; f_DtIncrSetup_dsWarns = dtb__547; f_DtIncrSetup_dsDepCps = dtb__548; f_DtIncrSetup_dsCleanCps = dtb__549; f_DtIncrSetup_dsNext = dtb__550 } -> dtb__545
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1352 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsDecls = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsDecls)
+let v_dsDecls = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__551; f_DtIncrSetup_dsStartGlobals = dtb__552; f_DtIncrSetup_dsTermAux = dtb__553; f_DtIncrSetup_dsPrepared = dtb__554; f_DtIncrSetup_dsDecls = dtb__555; f_DtIncrSetup_dsWarns = dtb__556; f_DtIncrSetup_dsDepCps = dtb__557; f_DtIncrSetup_dsCleanCps = dtb__558; f_DtIncrSetup_dsNext = dtb__559 } -> dtb__555
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1353 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsWarns = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsWarns)
+let v_dsWarns = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__560; f_DtIncrSetup_dsStartGlobals = dtb__561; f_DtIncrSetup_dsTermAux = dtb__562; f_DtIncrSetup_dsPrepared = dtb__563; f_DtIncrSetup_dsDecls = dtb__564; f_DtIncrSetup_dsWarns = dtb__565; f_DtIncrSetup_dsDepCps = dtb__566; f_DtIncrSetup_dsCleanCps = dtb__567; f_DtIncrSetup_dsNext = dtb__568 } -> dtb__565
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1354 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsDepCps = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsDepCps)
+let v_dsDepCps = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__569; f_DtIncrSetup_dsStartGlobals = dtb__570; f_DtIncrSetup_dsTermAux = dtb__571; f_DtIncrSetup_dsPrepared = dtb__572; f_DtIncrSetup_dsDecls = dtb__573; f_DtIncrSetup_dsWarns = dtb__574; f_DtIncrSetup_dsDepCps = dtb__575; f_DtIncrSetup_dsCleanCps = dtb__576; f_DtIncrSetup_dsNext = dtb__577 } -> dtb__575
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1355 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsCleanCps = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsCleanCps)
+let v_dsCleanCps = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__578; f_DtIncrSetup_dsStartGlobals = dtb__579; f_DtIncrSetup_dsTermAux = dtb__580; f_DtIncrSetup_dsPrepared = dtb__581; f_DtIncrSetup_dsDecls = dtb__582; f_DtIncrSetup_dsWarns = dtb__583; f_DtIncrSetup_dsDepCps = dtb__584; f_DtIncrSetup_dsCleanCps = dtb__585; f_DtIncrSetup_dsNext = dtb__586 } -> dtb__585
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1356 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dsNext = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsNext)
+let v_dsNext = (fun (p : t_DtIncrSetup) -> (match p with
+  | { f_DtIncrSetup_dsStartEc = dtb__587; f_DtIncrSetup_dsStartGlobals = dtb__588; f_DtIncrSetup_dsTermAux = dtb__589; f_DtIncrSetup_dsPrepared = dtb__590; f_DtIncrSetup_dsDecls = dtb__591; f_DtIncrSetup_dsWarns = dtb__592; f_DtIncrSetup_dsDepCps = dtb__593; f_DtIncrSetup_dsCleanCps = dtb__594; f_DtIncrSetup_dsNext = dtb__595 } -> dtb__595
+  | _ -> failwith "DT: impossible branch"
+))

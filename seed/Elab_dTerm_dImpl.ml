@@ -3358,85 +3358,169 @@ let v_checkTypeAtKind = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPai
 ))
 
 # 971 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planData = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planData)
+let v_planData = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1629; f_FieldAccessPlan_planCtor = dtb__1630; f_FieldAccessPlan_planIdxs = dtb__1631; f_FieldAccessPlan_planRecord = dtb__1632; f_FieldAccessPlan_planField = dtb__1633; f_FieldAccessPlan_planFieldCount = dtb__1634; f_FieldAccessPlan_planType = dtb__1635 } -> dtb__1629
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 972 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planCtor = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planCtor)
+let v_planCtor = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1636; f_FieldAccessPlan_planCtor = dtb__1637; f_FieldAccessPlan_planIdxs = dtb__1638; f_FieldAccessPlan_planRecord = dtb__1639; f_FieldAccessPlan_planField = dtb__1640; f_FieldAccessPlan_planFieldCount = dtb__1641; f_FieldAccessPlan_planType = dtb__1642 } -> dtb__1637
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 973 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planIdxs = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planIdxs)
+let v_planIdxs = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1643; f_FieldAccessPlan_planCtor = dtb__1644; f_FieldAccessPlan_planIdxs = dtb__1645; f_FieldAccessPlan_planRecord = dtb__1646; f_FieldAccessPlan_planField = dtb__1647; f_FieldAccessPlan_planFieldCount = dtb__1648; f_FieldAccessPlan_planType = dtb__1649 } -> dtb__1645
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 974 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planRecord = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planRecord)
+let v_planRecord = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1650; f_FieldAccessPlan_planCtor = dtb__1651; f_FieldAccessPlan_planIdxs = dtb__1652; f_FieldAccessPlan_planRecord = dtb__1653; f_FieldAccessPlan_planField = dtb__1654; f_FieldAccessPlan_planFieldCount = dtb__1655; f_FieldAccessPlan_planType = dtb__1656 } -> dtb__1653
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 975 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planField = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planField)
+let v_planField = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1657; f_FieldAccessPlan_planCtor = dtb__1658; f_FieldAccessPlan_planIdxs = dtb__1659; f_FieldAccessPlan_planRecord = dtb__1660; f_FieldAccessPlan_planField = dtb__1661; f_FieldAccessPlan_planFieldCount = dtb__1662; f_FieldAccessPlan_planType = dtb__1663 } -> dtb__1661
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 976 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planFieldCount = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planFieldCount)
+let v_planFieldCount = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1664; f_FieldAccessPlan_planCtor = dtb__1665; f_FieldAccessPlan_planIdxs = dtb__1666; f_FieldAccessPlan_planRecord = dtb__1667; f_FieldAccessPlan_planField = dtb__1668; f_FieldAccessPlan_planFieldCount = dtb__1669; f_FieldAccessPlan_planType = dtb__1670 } -> dtb__1669
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 977 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planType = (fun (p : t_FieldAccessPlan) -> (p).f_FieldAccessPlan_planType)
+let v_planType = (fun (p : t_FieldAccessPlan) -> (match p with
+  | { f_FieldAccessPlan_planData = dtb__1671; f_FieldAccessPlan_planCtor = dtb__1672; f_FieldAccessPlan_planIdxs = dtb__1673; f_FieldAccessPlan_planRecord = dtb__1674; f_FieldAccessPlan_planField = dtb__1675; f_FieldAccessPlan_planFieldCount = dtb__1676; f_FieldAccessPlan_planType = dtb__1677 } -> dtb__1677
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 981 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upData = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upData)
+let v_upData = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1678; f_UpdateAccessPlan_upCtor = dtb__1679; f_UpdateAccessPlan_upIdxs = dtb__1680; f_UpdateAccessPlan_upRecord = dtb__1681; f_UpdateAccessPlan_upFieldCount = dtb__1682; f_UpdateAccessPlan_upFieldIndices = dtb__1683; f_UpdateAccessPlan_upBodyArgs = dtb__1684 } -> dtb__1678
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 982 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upCtor = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upCtor)
+let v_upCtor = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1685; f_UpdateAccessPlan_upCtor = dtb__1686; f_UpdateAccessPlan_upIdxs = dtb__1687; f_UpdateAccessPlan_upRecord = dtb__1688; f_UpdateAccessPlan_upFieldCount = dtb__1689; f_UpdateAccessPlan_upFieldIndices = dtb__1690; f_UpdateAccessPlan_upBodyArgs = dtb__1691 } -> dtb__1686
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 983 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upIdxs = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upIdxs)
+let v_upIdxs = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1692; f_UpdateAccessPlan_upCtor = dtb__1693; f_UpdateAccessPlan_upIdxs = dtb__1694; f_UpdateAccessPlan_upRecord = dtb__1695; f_UpdateAccessPlan_upFieldCount = dtb__1696; f_UpdateAccessPlan_upFieldIndices = dtb__1697; f_UpdateAccessPlan_upBodyArgs = dtb__1698 } -> dtb__1694
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 984 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upRecord = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upRecord)
+let v_upRecord = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1699; f_UpdateAccessPlan_upCtor = dtb__1700; f_UpdateAccessPlan_upIdxs = dtb__1701; f_UpdateAccessPlan_upRecord = dtb__1702; f_UpdateAccessPlan_upFieldCount = dtb__1703; f_UpdateAccessPlan_upFieldIndices = dtb__1704; f_UpdateAccessPlan_upBodyArgs = dtb__1705 } -> dtb__1702
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 985 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upFieldCount = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upFieldCount)
+let v_upFieldCount = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1706; f_UpdateAccessPlan_upCtor = dtb__1707; f_UpdateAccessPlan_upIdxs = dtb__1708; f_UpdateAccessPlan_upRecord = dtb__1709; f_UpdateAccessPlan_upFieldCount = dtb__1710; f_UpdateAccessPlan_upFieldIndices = dtb__1711; f_UpdateAccessPlan_upBodyArgs = dtb__1712 } -> dtb__1710
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 986 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upFieldIndices = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upFieldIndices)
+let v_upFieldIndices = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1713; f_UpdateAccessPlan_upCtor = dtb__1714; f_UpdateAccessPlan_upIdxs = dtb__1715; f_UpdateAccessPlan_upRecord = dtb__1716; f_UpdateAccessPlan_upFieldCount = dtb__1717; f_UpdateAccessPlan_upFieldIndices = dtb__1718; f_UpdateAccessPlan_upBodyArgs = dtb__1719 } -> dtb__1718
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 987 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_upBodyArgs = (fun (p : t_UpdateAccessPlan) -> (p).f_UpdateAccessPlan_upBodyArgs)
+let v_upBodyArgs = (fun (p : t_UpdateAccessPlan) -> (match p with
+  | { f_UpdateAccessPlan_upData = dtb__1720; f_UpdateAccessPlan_upCtor = dtb__1721; f_UpdateAccessPlan_upIdxs = dtb__1722; f_UpdateAccessPlan_upRecord = dtb__1723; f_UpdateAccessPlan_upFieldCount = dtb__1724; f_UpdateAccessPlan_upFieldIndices = dtb__1725; f_UpdateAccessPlan_upBodyArgs = dtb__1726 } -> dtb__1726
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3559 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_doChainCanonical = (fun (p : t_DoChain) -> (p).f_DoChain_doChainCanonical)
+let v_doChainCanonical = (fun (p : t_DoChain) -> (match p with
+  | { f_DoChain_doChainCanonical = dtb__1727; f_DoChain_doChainSteps = dtb__1728; f_DoChain_doChainLast = dtb__1729; f_DoChain_doChainSpan = dtb__1730 } -> dtb__1727
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3560 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_doChainSteps = (fun (p : t_DoChain) -> (p).f_DoChain_doChainSteps)
+let v_doChainSteps = (fun (p : t_DoChain) -> (match p with
+  | { f_DoChain_doChainCanonical = dtb__1731; f_DoChain_doChainSteps = dtb__1732; f_DoChain_doChainLast = dtb__1733; f_DoChain_doChainSpan = dtb__1734 } -> dtb__1732
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3561 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_doChainLast = (fun (p : t_DoChain) -> (p).f_DoChain_doChainLast)
+let v_doChainLast = (fun (p : t_DoChain) -> (match p with
+  | { f_DoChain_doChainCanonical = dtb__1735; f_DoChain_doChainSteps = dtb__1736; f_DoChain_doChainLast = dtb__1737; f_DoChain_doChainSpan = dtb__1738 } -> dtb__1737
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3562 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_doChainSpan = (fun (p : t_DoChain) -> (p).f_DoChain_doChainSpan)
+let v_doChainSpan = (fun (p : t_DoChain) -> (match p with
+  | { f_DoChain_doChainCanonical = dtb__1739; f_DoChain_doChainSteps = dtb__1740; f_DoChain_doChainLast = dtb__1741; f_DoChain_doChainSpan = dtb__1742 } -> dtb__1742
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3702 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planBind = (fun (p : t_DoPlan) -> (p).f_DoPlan_planBind)
+let v_planBind = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1743; f_DoPlan_planHead = dtb__1744; f_DoPlan_planMTerm = dtb__1745; f_DoPlan_planMVal = dtb__1746; f_DoPlan_planAVal = dtb__1747; f_DoPlan_planDictTerm = dtb__1748; f_DoPlan_planRigE = dtb__1749; f_DoPlan_planRigL = dtb__1750; f_DoPlan_planInnerRig = dtb__1751; f_DoPlan_planEc = dtb__1752 } -> dtb__1743
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3703 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planHead = (fun (p : t_DoPlan) -> (p).f_DoPlan_planHead)
+let v_planHead = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1753; f_DoPlan_planHead = dtb__1754; f_DoPlan_planMTerm = dtb__1755; f_DoPlan_planMVal = dtb__1756; f_DoPlan_planAVal = dtb__1757; f_DoPlan_planDictTerm = dtb__1758; f_DoPlan_planRigE = dtb__1759; f_DoPlan_planRigL = dtb__1760; f_DoPlan_planInnerRig = dtb__1761; f_DoPlan_planEc = dtb__1762 } -> dtb__1754
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3704 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planMTerm = (fun (p : t_DoPlan) -> (p).f_DoPlan_planMTerm)
+let v_planMTerm = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1763; f_DoPlan_planHead = dtb__1764; f_DoPlan_planMTerm = dtb__1765; f_DoPlan_planMVal = dtb__1766; f_DoPlan_planAVal = dtb__1767; f_DoPlan_planDictTerm = dtb__1768; f_DoPlan_planRigE = dtb__1769; f_DoPlan_planRigL = dtb__1770; f_DoPlan_planInnerRig = dtb__1771; f_DoPlan_planEc = dtb__1772 } -> dtb__1765
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3705 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planMVal = (fun (p : t_DoPlan) -> (p).f_DoPlan_planMVal)
+let v_planMVal = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1773; f_DoPlan_planHead = dtb__1774; f_DoPlan_planMTerm = dtb__1775; f_DoPlan_planMVal = dtb__1776; f_DoPlan_planAVal = dtb__1777; f_DoPlan_planDictTerm = dtb__1778; f_DoPlan_planRigE = dtb__1779; f_DoPlan_planRigL = dtb__1780; f_DoPlan_planInnerRig = dtb__1781; f_DoPlan_planEc = dtb__1782 } -> dtb__1776
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3706 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planAVal = (fun (p : t_DoPlan) -> (p).f_DoPlan_planAVal)
+let v_planAVal = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1783; f_DoPlan_planHead = dtb__1784; f_DoPlan_planMTerm = dtb__1785; f_DoPlan_planMVal = dtb__1786; f_DoPlan_planAVal = dtb__1787; f_DoPlan_planDictTerm = dtb__1788; f_DoPlan_planRigE = dtb__1789; f_DoPlan_planRigL = dtb__1790; f_DoPlan_planInnerRig = dtb__1791; f_DoPlan_planEc = dtb__1792 } -> dtb__1787
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3707 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planDictTerm = (fun (p : t_DoPlan) -> (p).f_DoPlan_planDictTerm)
+let v_planDictTerm = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1793; f_DoPlan_planHead = dtb__1794; f_DoPlan_planMTerm = dtb__1795; f_DoPlan_planMVal = dtb__1796; f_DoPlan_planAVal = dtb__1797; f_DoPlan_planDictTerm = dtb__1798; f_DoPlan_planRigE = dtb__1799; f_DoPlan_planRigL = dtb__1800; f_DoPlan_planInnerRig = dtb__1801; f_DoPlan_planEc = dtb__1802 } -> dtb__1798
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3708 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planRigE = (fun (p : t_DoPlan) -> (p).f_DoPlan_planRigE)
+let v_planRigE = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1803; f_DoPlan_planHead = dtb__1804; f_DoPlan_planMTerm = dtb__1805; f_DoPlan_planMVal = dtb__1806; f_DoPlan_planAVal = dtb__1807; f_DoPlan_planDictTerm = dtb__1808; f_DoPlan_planRigE = dtb__1809; f_DoPlan_planRigL = dtb__1810; f_DoPlan_planInnerRig = dtb__1811; f_DoPlan_planEc = dtb__1812 } -> dtb__1809
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3709 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planRigL = (fun (p : t_DoPlan) -> (p).f_DoPlan_planRigL)
+let v_planRigL = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1813; f_DoPlan_planHead = dtb__1814; f_DoPlan_planMTerm = dtb__1815; f_DoPlan_planMVal = dtb__1816; f_DoPlan_planAVal = dtb__1817; f_DoPlan_planDictTerm = dtb__1818; f_DoPlan_planRigE = dtb__1819; f_DoPlan_planRigL = dtb__1820; f_DoPlan_planInnerRig = dtb__1821; f_DoPlan_planEc = dtb__1822 } -> dtb__1820
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3710 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planInnerRig = (fun (p : t_DoPlan) -> (p).f_DoPlan_planInnerRig)
+let v_planInnerRig = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1823; f_DoPlan_planHead = dtb__1824; f_DoPlan_planMTerm = dtb__1825; f_DoPlan_planMVal = dtb__1826; f_DoPlan_planAVal = dtb__1827; f_DoPlan_planDictTerm = dtb__1828; f_DoPlan_planRigE = dtb__1829; f_DoPlan_planRigL = dtb__1830; f_DoPlan_planInnerRig = dtb__1831; f_DoPlan_planEc = dtb__1832 } -> dtb__1831
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 3711 "Vuna/Compiler/Elab/Term/Impl.vuna"
-let v_planEc = (fun (p : t_DoPlan) -> (p).f_DoPlan_planEc)
+let v_planEc = (fun (p : t_DoPlan) -> (match p with
+  | { f_DoPlan_planBind = dtb__1833; f_DoPlan_planHead = dtb__1834; f_DoPlan_planMTerm = dtb__1835; f_DoPlan_planMVal = dtb__1836; f_DoPlan_planAVal = dtb__1837; f_DoPlan_planDictTerm = dtb__1838; f_DoPlan_planRigE = dtb__1839; f_DoPlan_planRigL = dtb__1840; f_DoPlan_planInnerRig = dtb__1841; f_DoPlan_planEc = dtb__1842 } -> dtb__1842
+  | _ -> failwith "DT: impossible branch"
+))

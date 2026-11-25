@@ -630,133 +630,265 @@ let rec v_parenWalk = (fun (mc0 : (int, int) B_dData_dPair.t_Pair B_dData_dList.
 let v_parenEntriesOf = (fun (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) -> ((((((v_parenWalk B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) 0) B_dData_dMaybe.C_Maybe_Nothing) toks) events))
 
 # 60 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_triviaKind = (fun (p : t_Trivia) -> (p).f_Trivia_triviaKind)
+let v_triviaKind = (fun (p : t_Trivia) -> (match p with
+  | { f_Trivia_triviaKind = dtb__199; f_Trivia_triviaText = dtb__200; f_Trivia_triviaSpan = dtb__201 } -> dtb__199
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 62 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_triviaText = (fun (p : t_Trivia) -> (p).f_Trivia_triviaText)
+let v_triviaText = (fun (p : t_Trivia) -> (match p with
+  | { f_Trivia_triviaKind = dtb__202; f_Trivia_triviaText = dtb__203; f_Trivia_triviaSpan = dtb__204 } -> dtb__203
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 64 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_triviaSpan = (fun (p : t_Trivia) -> (p).f_Trivia_triviaSpan)
+let v_triviaSpan = (fun (p : t_Trivia) -> (match p with
+  | { f_Trivia_triviaKind = dtb__205; f_Trivia_triviaText = dtb__206; f_Trivia_triviaSpan = dtb__207 } -> dtb__207
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 69 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstTag = (fun (p : t_CstToken) -> (p).f_CstToken_cstTag)
+let v_cstTag = (fun (p : t_CstToken) -> (match p with
+  | { f_CstToken_cstTag = dtb__208; f_CstToken_cstText = dtb__209; f_CstToken_cstSpan = dtb__210; f_CstToken_cstLeading = dtb__211 } -> dtb__208
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 71 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstText = (fun (p : t_CstToken) -> (p).f_CstToken_cstText)
+let v_cstText = (fun (p : t_CstToken) -> (match p with
+  | { f_CstToken_cstTag = dtb__212; f_CstToken_cstText = dtb__213; f_CstToken_cstSpan = dtb__214; f_CstToken_cstLeading = dtb__215 } -> dtb__213
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 73 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstSpan = (fun (p : t_CstToken) -> (p).f_CstToken_cstSpan)
+let v_cstSpan = (fun (p : t_CstToken) -> (match p with
+  | { f_CstToken_cstTag = dtb__216; f_CstToken_cstText = dtb__217; f_CstToken_cstSpan = dtb__218; f_CstToken_cstLeading = dtb__219 } -> dtb__218
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 75 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstLeading = (fun (p : t_CstToken) -> (p).f_CstToken_cstLeading)
+let v_cstLeading = (fun (p : t_CstToken) -> (match p with
+  | { f_CstToken_cstTag = dtb__220; f_CstToken_cstText = dtb__221; f_CstToken_cstSpan = dtb__222; f_CstToken_cstLeading = dtb__223 } -> dtb__223
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 83 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lcOff = (fun (p : t_LineCur) -> (p).f_LineCur_lcOff)
+let v_lcOff = (fun (p : t_LineCur) -> (match p with
+  | { f_LineCur_lcOff = dtb__224; f_LineCur_lcLine = dtb__225; f_LineCur_lcCol = dtb__226; f_LineCur_lcOffset = dtb__227 } -> dtb__224
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 84 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lcLine = (fun (p : t_LineCur) -> (p).f_LineCur_lcLine)
+let v_lcLine = (fun (p : t_LineCur) -> (match p with
+  | { f_LineCur_lcOff = dtb__228; f_LineCur_lcLine = dtb__229; f_LineCur_lcCol = dtb__230; f_LineCur_lcOffset = dtb__231 } -> dtb__229
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 85 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lcCol = (fun (p : t_LineCur) -> (p).f_LineCur_lcCol)
+let v_lcCol = (fun (p : t_LineCur) -> (match p with
+  | { f_LineCur_lcOff = dtb__232; f_LineCur_lcLine = dtb__233; f_LineCur_lcCol = dtb__234; f_LineCur_lcOffset = dtb__235 } -> dtb__234
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 86 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_lcOffset = (fun (p : t_LineCur) -> (p).f_LineCur_lcOffset)
+let v_lcOffset = (fun (p : t_LineCur) -> (match p with
+  | { f_LineCur_lcOff = dtb__236; f_LineCur_lcLine = dtb__237; f_LineCur_lcCol = dtb__238; f_LineCur_lcOffset = dtb__239 } -> dtb__239
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 181 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_tcommKind = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommKind)
+let v_tcommKind = (fun (p : t_TrivComment) -> (match p with
+  | { f_TrivComment_tcommKind = dtb__240; f_TrivComment_tcommSpan = dtb__241; f_TrivComment_tcommStart = dtb__242; f_TrivComment_tcommEnd = dtb__243 } -> dtb__240
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 182 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_tcommSpan = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommSpan)
+let v_tcommSpan = (fun (p : t_TrivComment) -> (match p with
+  | { f_TrivComment_tcommKind = dtb__244; f_TrivComment_tcommSpan = dtb__245; f_TrivComment_tcommStart = dtb__246; f_TrivComment_tcommEnd = dtb__247 } -> dtb__245
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 183 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_tcommStart = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommStart)
+let v_tcommStart = (fun (p : t_TrivComment) -> (match p with
+  | { f_TrivComment_tcommKind = dtb__248; f_TrivComment_tcommSpan = dtb__249; f_TrivComment_tcommStart = dtb__250; f_TrivComment_tcommEnd = dtb__251 } -> dtb__250
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 184 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_tcommEnd = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommEnd)
+let v_tcommEnd = (fun (p : t_TrivComment) -> (match p with
+  | { f_TrivComment_tcommKind = dtb__252; f_TrivComment_tcommSpan = dtb__253; f_TrivComment_tcommStart = dtb__254; f_TrivComment_tcommEnd = dtb__255 } -> dtb__255
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 388 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstParenDepth = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstParenDepth)
+let v_cstParenDepth = (fun (p : t_CstSurface) -> (match p with
+  | { f_CstSurface_cstParenDepth = dtb__256; f_CstSurface_cstBacktick = dtb__257; f_CstSurface_cstSection = dtb__258; f_CstSurface_cstInterpMulti = dtb__259; f_CstSurface_cstHoleTrees = dtb__260 } -> dtb__256
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 390 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstBacktick = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstBacktick)
+let v_cstBacktick = (fun (p : t_CstSurface) -> (match p with
+  | { f_CstSurface_cstParenDepth = dtb__261; f_CstSurface_cstBacktick = dtb__262; f_CstSurface_cstSection = dtb__263; f_CstSurface_cstInterpMulti = dtb__264; f_CstSurface_cstHoleTrees = dtb__265 } -> dtb__262
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 392 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstSection = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstSection)
+let v_cstSection = (fun (p : t_CstSurface) -> (match p with
+  | { f_CstSurface_cstParenDepth = dtb__266; f_CstSurface_cstBacktick = dtb__267; f_CstSurface_cstSection = dtb__268; f_CstSurface_cstInterpMulti = dtb__269; f_CstSurface_cstHoleTrees = dtb__270 } -> dtb__268
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 394 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstInterpMulti = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstInterpMulti)
+let v_cstInterpMulti = (fun (p : t_CstSurface) -> (match p with
+  | { f_CstSurface_cstParenDepth = dtb__271; f_CstSurface_cstBacktick = dtb__272; f_CstSurface_cstSection = dtb__273; f_CstSurface_cstInterpMulti = dtb__274; f_CstSurface_cstHoleTrees = dtb__275 } -> dtb__274
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 400 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_cstHoleTrees = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstHoleTrees)
+let v_cstHoleTrees = (fun (p : t_CstSurface) -> (match p with
+  | { f_CstSurface_cstParenDepth = dtb__276; f_CstSurface_cstBacktick = dtb__277; f_CstSurface_cstSection = dtb__278; f_CstSurface_cstInterpMulti = dtb__279; f_CstSurface_cstHoleTrees = dtb__280 } -> dtb__280
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 486 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_nfKind = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfKind)
+let v_nfKind = (fun (p : t_NestFrame) -> (match p with
+  | { f_NestFrame_nfKind = dtb__281; f_NestFrame_nfId = dtb__282; f_NestFrame_nfStart = dtb__283; f_NestFrame_nfKids = dtb__284 } -> dtb__281
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 487 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_nfId = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfId)
+let v_nfId = (fun (p : t_NestFrame) -> (match p with
+  | { f_NestFrame_nfKind = dtb__285; f_NestFrame_nfId = dtb__286; f_NestFrame_nfStart = dtb__287; f_NestFrame_nfKids = dtb__288 } -> dtb__286
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 488 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_nfStart = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfStart)
+let v_nfStart = (fun (p : t_NestFrame) -> (match p with
+  | { f_NestFrame_nfKind = dtb__289; f_NestFrame_nfId = dtb__290; f_NestFrame_nfStart = dtb__291; f_NestFrame_nfKids = dtb__292 } -> dtb__291
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 489 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_nfKids = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfKids)
+let v_nfKids = (fun (p : t_NestFrame) -> (match p with
+  | { f_NestFrame_nfKind = dtb__293; f_NestFrame_nfId = dtb__294; f_NestFrame_nfStart = dtb__295; f_NestFrame_nfKids = dtb__296 } -> dtb__296
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 669 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_ffParens = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffParens)
+let v_ffParens = (fun (p : t_FixityFacts) -> (match p with
+  | { f_FixityFacts_ffParens = dtb__297; f_FixityFacts_ffBackticks = dtb__298; f_FixityFacts_ffSections = dtb__299 } -> dtb__297
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 670 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_ffBackticks = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffBackticks)
+let v_ffBackticks = (fun (p : t_FixityFacts) -> (match p with
+  | { f_FixityFacts_ffParens = dtb__300; f_FixityFacts_ffBackticks = dtb__301; f_FixityFacts_ffSections = dtb__302 } -> dtb__301
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 671 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_ffSections = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffSections)
+let v_ffSections = (fun (p : t_FixityFacts) -> (match p with
+  | { f_FixityFacts_ffParens = dtb__303; f_FixityFacts_ffBackticks = dtb__304; f_FixityFacts_ffSections = dtb__305 } -> dtb__305
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 721 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_feParens = (fun (p : t_FactEntries) -> (p).f_FactEntries_feParens)
+let v_feParens = (fun (p : t_FactEntries) -> (match p with
+  | { f_FactEntries_feParens = dtb__306; f_FactEntries_feBackticks = dtb__307; f_FactEntries_feSections = dtb__308 } -> dtb__306
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 722 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_feBackticks = (fun (p : t_FactEntries) -> (p).f_FactEntries_feBackticks)
+let v_feBackticks = (fun (p : t_FactEntries) -> (match p with
+  | { f_FactEntries_feParens = dtb__309; f_FactEntries_feBackticks = dtb__310; f_FactEntries_feSections = dtb__311 } -> dtb__310
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 723 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_feSections = (fun (p : t_FactEntries) -> (p).f_FactEntries_feSections)
+let v_feSections = (fun (p : t_FactEntries) -> (match p with
+  | { f_FactEntries_feParens = dtb__312; f_FactEntries_feBackticks = dtb__313; f_FactEntries_feSections = dtb__314 } -> dtb__314
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 786 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_ciById = (fun (p : t_CstIndex) -> (p).f_CstIndex_ciById)
+let v_ciById = (fun (p : t_CstIndex) -> (match p with
+  | { f_CstIndex_ciById = dtb__315; f_CstIndex_ciBySpan = dtb__316 } -> dtb__315
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 787 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_ciBySpan = (fun (p : t_CstIndex) -> (p).f_CstIndex_ciBySpan)
+let v_ciBySpan = (fun (p : t_CstIndex) -> (match p with
+  | { f_CstIndex_ciById = dtb__317; f_CstIndex_ciBySpan = dtb__318 } -> dtb__318
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 790 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_iaById = (fun (p : t_IndexAcc) -> (p).f_IndexAcc_iaById)
+let v_iaById = (fun (p : t_IndexAcc) -> (match p with
+  | { f_IndexAcc_iaById = dtb__319; f_IndexAcc_iaBySpan = dtb__320 } -> dtb__319
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 791 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_iaBySpan = (fun (p : t_IndexAcc) -> (p).f_IndexAcc_iaBySpan)
+let v_iaBySpan = (fun (p : t_IndexAcc) -> (match p with
+  | { f_IndexAcc_iaById = dtb__321; f_IndexAcc_iaBySpan = dtb__322 } -> dtb__322
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 924 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKind = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKind)
+let v_pfKind = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__323; f_ParenFrame_pfId = dtb__324; f_ParenFrame_pfOpen = dtb__325; f_ParenFrame_pfFirst = dtb__326; f_ParenFrame_pfPrev = dtb__327; f_ParenFrame_pfKids = dtb__328; f_ParenFrame_pfKidKind = dtb__329; f_ParenFrame_pfKidOpen = dtb__330; f_ParenFrame_pfKidEnd = dtb__331; f_ParenFrame_pfKidStructDepth = dtb__332 } -> dtb__323
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 925 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfId = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfId)
+let v_pfId = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__333; f_ParenFrame_pfId = dtb__334; f_ParenFrame_pfOpen = dtb__335; f_ParenFrame_pfFirst = dtb__336; f_ParenFrame_pfPrev = dtb__337; f_ParenFrame_pfKids = dtb__338; f_ParenFrame_pfKidKind = dtb__339; f_ParenFrame_pfKidOpen = dtb__340; f_ParenFrame_pfKidEnd = dtb__341; f_ParenFrame_pfKidStructDepth = dtb__342 } -> dtb__334
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 926 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfOpen = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfOpen)
+let v_pfOpen = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__343; f_ParenFrame_pfId = dtb__344; f_ParenFrame_pfOpen = dtb__345; f_ParenFrame_pfFirst = dtb__346; f_ParenFrame_pfPrev = dtb__347; f_ParenFrame_pfKids = dtb__348; f_ParenFrame_pfKidKind = dtb__349; f_ParenFrame_pfKidOpen = dtb__350; f_ParenFrame_pfKidEnd = dtb__351; f_ParenFrame_pfKidStructDepth = dtb__352 } -> dtb__345
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 927 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfFirst = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfFirst)
+let v_pfFirst = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__353; f_ParenFrame_pfId = dtb__354; f_ParenFrame_pfOpen = dtb__355; f_ParenFrame_pfFirst = dtb__356; f_ParenFrame_pfPrev = dtb__357; f_ParenFrame_pfKids = dtb__358; f_ParenFrame_pfKidKind = dtb__359; f_ParenFrame_pfKidOpen = dtb__360; f_ParenFrame_pfKidEnd = dtb__361; f_ParenFrame_pfKidStructDepth = dtb__362 } -> dtb__356
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 928 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfPrev = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfPrev)
+let v_pfPrev = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__363; f_ParenFrame_pfId = dtb__364; f_ParenFrame_pfOpen = dtb__365; f_ParenFrame_pfFirst = dtb__366; f_ParenFrame_pfPrev = dtb__367; f_ParenFrame_pfKids = dtb__368; f_ParenFrame_pfKidKind = dtb__369; f_ParenFrame_pfKidOpen = dtb__370; f_ParenFrame_pfKidEnd = dtb__371; f_ParenFrame_pfKidStructDepth = dtb__372 } -> dtb__367
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 929 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKids = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKids)
+let v_pfKids = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__373; f_ParenFrame_pfId = dtb__374; f_ParenFrame_pfOpen = dtb__375; f_ParenFrame_pfFirst = dtb__376; f_ParenFrame_pfPrev = dtb__377; f_ParenFrame_pfKids = dtb__378; f_ParenFrame_pfKidKind = dtb__379; f_ParenFrame_pfKidOpen = dtb__380; f_ParenFrame_pfKidEnd = dtb__381; f_ParenFrame_pfKidStructDepth = dtb__382 } -> dtb__378
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 930 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKidKind = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidKind)
+let v_pfKidKind = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__383; f_ParenFrame_pfId = dtb__384; f_ParenFrame_pfOpen = dtb__385; f_ParenFrame_pfFirst = dtb__386; f_ParenFrame_pfPrev = dtb__387; f_ParenFrame_pfKids = dtb__388; f_ParenFrame_pfKidKind = dtb__389; f_ParenFrame_pfKidOpen = dtb__390; f_ParenFrame_pfKidEnd = dtb__391; f_ParenFrame_pfKidStructDepth = dtb__392 } -> dtb__389
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 931 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKidOpen = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidOpen)
+let v_pfKidOpen = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__393; f_ParenFrame_pfId = dtb__394; f_ParenFrame_pfOpen = dtb__395; f_ParenFrame_pfFirst = dtb__396; f_ParenFrame_pfPrev = dtb__397; f_ParenFrame_pfKids = dtb__398; f_ParenFrame_pfKidKind = dtb__399; f_ParenFrame_pfKidOpen = dtb__400; f_ParenFrame_pfKidEnd = dtb__401; f_ParenFrame_pfKidStructDepth = dtb__402 } -> dtb__400
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 932 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKidEnd = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidEnd)
+let v_pfKidEnd = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__403; f_ParenFrame_pfId = dtb__404; f_ParenFrame_pfOpen = dtb__405; f_ParenFrame_pfFirst = dtb__406; f_ParenFrame_pfPrev = dtb__407; f_ParenFrame_pfKids = dtb__408; f_ParenFrame_pfKidKind = dtb__409; f_ParenFrame_pfKidOpen = dtb__410; f_ParenFrame_pfKidEnd = dtb__411; f_ParenFrame_pfKidStructDepth = dtb__412 } -> dtb__411
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 933 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_pfKidStructDepth = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidStructDepth)
+let v_pfKidStructDepth = (fun (p : t_ParenFrame) -> (match p with
+  | { f_ParenFrame_pfKind = dtb__413; f_ParenFrame_pfId = dtb__414; f_ParenFrame_pfOpen = dtb__415; f_ParenFrame_pfFirst = dtb__416; f_ParenFrame_pfPrev = dtb__417; f_ParenFrame_pfKids = dtb__418; f_ParenFrame_pfKidKind = dtb__419; f_ParenFrame_pfKidOpen = dtb__420; f_ParenFrame_pfKidEnd = dtb__421; f_ParenFrame_pfKidStructDepth = dtb__422 } -> dtb__422
+  | _ -> failwith "DT: impossible branch"
+))

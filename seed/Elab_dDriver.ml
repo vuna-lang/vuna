@@ -1218,49 +1218,97 @@ let v_goalsOfProgram = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List)
 let v_elabProgram = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (v_elabProgramFull decls)) (fun (prog : Elab_dTypes.t_DtProgram) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtProgDatas prog); B_dData_dPair.f_Pair_second = (Elab_dTypes.v_dtProgDefs prog) })))))
 
 # 242 "Vuna/Compiler/Elab/Driver.vuna"
-let v_declDictName = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictName)
+let v_declDictName = (fun (p : t_DeclDictBinder) -> (match p with
+  | { f_DeclDictBinder_declDictName = dtb__528; f_DeclDictBinder_declDictLevel = dtb__529; f_DeclDictBinder_declDictDom = dtb__530 } -> dtb__528
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 243 "Vuna/Compiler/Elab/Driver.vuna"
-let v_declDictLevel = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictLevel)
+let v_declDictLevel = (fun (p : t_DeclDictBinder) -> (match p with
+  | { f_DeclDictBinder_declDictName = dtb__531; f_DeclDictBinder_declDictLevel = dtb__532; f_DeclDictBinder_declDictDom = dtb__533 } -> dtb__532
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 244 "Vuna/Compiler/Elab/Driver.vuna"
-let v_declDictDom = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictDom)
+let v_declDictDom = (fun (p : t_DeclDictBinder) -> (match p with
+  | { f_DeclDictBinder_declDictName = dtb__534; f_DeclDictBinder_declDictLevel = dtb__535; f_DeclDictBinder_declDictDom = dtb__536 } -> dtb__536
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 274 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dictSubstMeta = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstMeta)
+let v_dictSubstMeta = (fun (p : t_DictSubst) -> (match p with
+  | { f_DictSubst_dictSubstMeta = dtb__537; f_DictSubst_dictSubstName = dtb__538; f_DictSubst_dictSubstQ = dtb__539 } -> dtb__537
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 275 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dictSubstName = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstName)
+let v_dictSubstName = (fun (p : t_DictSubst) -> (match p with
+  | { f_DictSubst_dictSubstMeta = dtb__540; f_DictSubst_dictSubstName = dtb__541; f_DictSubst_dictSubstQ = dtb__542 } -> dtb__541
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 276 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dictSubstQ = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstQ)
+let v_dictSubstQ = (fun (p : t_DictSubst) -> (match p with
+  | { f_DictSubst_dictSubstMeta = dtb__543; f_DictSubst_dictSubstName = dtb__544; f_DictSubst_dictSubstQ = dtb__545 } -> dtb__545
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 991 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreDatas = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreDatas)
+let v_coreDatas = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__546; f_ElabCore_coreEc = dtb__547; f_ElabCore_coreDefs = dtb__548; f_ElabCore_coreInstDefs = dtb__549; f_ElabCore_coreGlobals = dtb__550; f_ElabCore_coreProjSpans = dtb__551 } -> dtb__546
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 992 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreEc = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreEc)
+let v_coreEc = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__552; f_ElabCore_coreEc = dtb__553; f_ElabCore_coreDefs = dtb__554; f_ElabCore_coreInstDefs = dtb__555; f_ElabCore_coreGlobals = dtb__556; f_ElabCore_coreProjSpans = dtb__557 } -> dtb__553
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 993 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreDefs = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreDefs)
+let v_coreDefs = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__558; f_ElabCore_coreEc = dtb__559; f_ElabCore_coreDefs = dtb__560; f_ElabCore_coreInstDefs = dtb__561; f_ElabCore_coreGlobals = dtb__562; f_ElabCore_coreProjSpans = dtb__563 } -> dtb__560
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 994 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreInstDefs = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreInstDefs)
+let v_coreInstDefs = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__564; f_ElabCore_coreEc = dtb__565; f_ElabCore_coreDefs = dtb__566; f_ElabCore_coreInstDefs = dtb__567; f_ElabCore_coreGlobals = dtb__568; f_ElabCore_coreProjSpans = dtb__569 } -> dtb__567
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 995 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreGlobals = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreGlobals)
+let v_coreGlobals = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__570; f_ElabCore_coreEc = dtb__571; f_ElabCore_coreDefs = dtb__572; f_ElabCore_coreInstDefs = dtb__573; f_ElabCore_coreGlobals = dtb__574; f_ElabCore_coreProjSpans = dtb__575 } -> dtb__574
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 996 "Vuna/Compiler/Elab/Driver.vuna"
-let v_coreProjSpans = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreProjSpans)
+let v_coreProjSpans = (fun (p : t_ElabCore) -> (match p with
+  | { f_ElabCore_coreDatas = dtb__576; f_ElabCore_coreEc = dtb__577; f_ElabCore_coreDefs = dtb__578; f_ElabCore_coreInstDefs = dtb__579; f_ElabCore_coreGlobals = dtb__580; f_ElabCore_coreProjSpans = dtb__581 } -> dtb__581
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1497 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dtGoalInfoSpan = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoSpan)
+let v_dtGoalInfoSpan = (fun (p : t_DtGoalInfo) -> (match p with
+  | { f_DtGoalInfo_dtGoalInfoSpan = dtb__582; f_DtGoalInfo_dtGoalInfoGoal = dtb__583; f_DtGoalInfo_dtGoalInfoCtx = dtb__584; f_DtGoalInfo_dtGoalInfoName = dtb__585 } -> dtb__582
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1498 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dtGoalInfoGoal = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoGoal)
+let v_dtGoalInfoGoal = (fun (p : t_DtGoalInfo) -> (match p with
+  | { f_DtGoalInfo_dtGoalInfoSpan = dtb__586; f_DtGoalInfo_dtGoalInfoGoal = dtb__587; f_DtGoalInfo_dtGoalInfoCtx = dtb__588; f_DtGoalInfo_dtGoalInfoName = dtb__589 } -> dtb__587
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1499 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dtGoalInfoCtx = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoCtx)
+let v_dtGoalInfoCtx = (fun (p : t_DtGoalInfo) -> (match p with
+  | { f_DtGoalInfo_dtGoalInfoSpan = dtb__590; f_DtGoalInfo_dtGoalInfoGoal = dtb__591; f_DtGoalInfo_dtGoalInfoCtx = dtb__592; f_DtGoalInfo_dtGoalInfoName = dtb__593 } -> dtb__592
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 1500 "Vuna/Compiler/Elab/Driver.vuna"
-let v_dtGoalInfoName = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoName)
+let v_dtGoalInfoName = (fun (p : t_DtGoalInfo) -> (match p with
+  | { f_DtGoalInfo_dtGoalInfoSpan = dtb__594; f_DtGoalInfo_dtGoalInfoGoal = dtb__595; f_DtGoalInfo_dtGoalInfoCtx = dtb__596; f_DtGoalInfo_dtGoalInfoName = dtb__597 } -> dtb__597
+  | _ -> failwith "DT: impossible branch"
+))

@@ -395,49 +395,97 @@ let v_mkLwEnvFromErased = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_Lis
 let v_mkLwEnv = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> ((Base_dCommon.v_bind (v_eraseDefs defs)) (fun (defs2 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((((((v_mkLwEnvFromErased datas) defs2) defs) globals) unit))))))
 
 # 33 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwShared = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwShared)
+let v_lwShared = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__133; f_LwEnv_lwDatas = dtb__134; f_LwEnv_lwDataTbl = dtb__135; f_LwEnv_lwTyParams = dtb__136; f_LwEnv_lwUnboxedInfo = dtb__137; f_LwEnv_lwRecordFields = dtb__138; f_LwEnv_lwCtors = dtb__139; f_LwEnv_lwOpaques = dtb__140; f_LwEnv_lwUnboxed = dtb__141; f_LwEnv_lwHasListFamily = dtb__142; f_LwEnv_lwDefs = dtb__143; f_LwEnv_lwOrigDefs = dtb__144; f_LwEnv_lwDefTbl = dtb__145; f_LwEnv_lwGlobals = dtb__146; f_LwEnv_lwFacts = dtb__147; f_LwEnv_lwUnit = dtb__148 } -> dtb__133
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 35 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwDatas = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDatas)
+let v_lwDatas = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__149; f_LwEnv_lwDatas = dtb__150; f_LwEnv_lwDataTbl = dtb__151; f_LwEnv_lwTyParams = dtb__152; f_LwEnv_lwUnboxedInfo = dtb__153; f_LwEnv_lwRecordFields = dtb__154; f_LwEnv_lwCtors = dtb__155; f_LwEnv_lwOpaques = dtb__156; f_LwEnv_lwUnboxed = dtb__157; f_LwEnv_lwHasListFamily = dtb__158; f_LwEnv_lwDefs = dtb__159; f_LwEnv_lwOrigDefs = dtb__160; f_LwEnv_lwDefTbl = dtb__161; f_LwEnv_lwGlobals = dtb__162; f_LwEnv_lwFacts = dtb__163; f_LwEnv_lwUnit = dtb__164 } -> dtb__150
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 38 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwDataTbl = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDataTbl)
+let v_lwDataTbl = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__165; f_LwEnv_lwDatas = dtb__166; f_LwEnv_lwDataTbl = dtb__167; f_LwEnv_lwTyParams = dtb__168; f_LwEnv_lwUnboxedInfo = dtb__169; f_LwEnv_lwRecordFields = dtb__170; f_LwEnv_lwCtors = dtb__171; f_LwEnv_lwOpaques = dtb__172; f_LwEnv_lwUnboxed = dtb__173; f_LwEnv_lwHasListFamily = dtb__174; f_LwEnv_lwDefs = dtb__175; f_LwEnv_lwOrigDefs = dtb__176; f_LwEnv_lwDefTbl = dtb__177; f_LwEnv_lwGlobals = dtb__178; f_LwEnv_lwFacts = dtb__179; f_LwEnv_lwUnit = dtb__180 } -> dtb__167
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 40 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwTyParams = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwTyParams)
+let v_lwTyParams = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__181; f_LwEnv_lwDatas = dtb__182; f_LwEnv_lwDataTbl = dtb__183; f_LwEnv_lwTyParams = dtb__184; f_LwEnv_lwUnboxedInfo = dtb__185; f_LwEnv_lwRecordFields = dtb__186; f_LwEnv_lwCtors = dtb__187; f_LwEnv_lwOpaques = dtb__188; f_LwEnv_lwUnboxed = dtb__189; f_LwEnv_lwHasListFamily = dtb__190; f_LwEnv_lwDefs = dtb__191; f_LwEnv_lwOrigDefs = dtb__192; f_LwEnv_lwDefTbl = dtb__193; f_LwEnv_lwGlobals = dtb__194; f_LwEnv_lwFacts = dtb__195; f_LwEnv_lwUnit = dtb__196 } -> dtb__184
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 42 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwUnboxedInfo = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnboxedInfo)
+let v_lwUnboxedInfo = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__197; f_LwEnv_lwDatas = dtb__198; f_LwEnv_lwDataTbl = dtb__199; f_LwEnv_lwTyParams = dtb__200; f_LwEnv_lwUnboxedInfo = dtb__201; f_LwEnv_lwRecordFields = dtb__202; f_LwEnv_lwCtors = dtb__203; f_LwEnv_lwOpaques = dtb__204; f_LwEnv_lwUnboxed = dtb__205; f_LwEnv_lwHasListFamily = dtb__206; f_LwEnv_lwDefs = dtb__207; f_LwEnv_lwOrigDefs = dtb__208; f_LwEnv_lwDefTbl = dtb__209; f_LwEnv_lwGlobals = dtb__210; f_LwEnv_lwFacts = dtb__211; f_LwEnv_lwUnit = dtb__212 } -> dtb__201
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 44 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwRecordFields = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwRecordFields)
+let v_lwRecordFields = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__213; f_LwEnv_lwDatas = dtb__214; f_LwEnv_lwDataTbl = dtb__215; f_LwEnv_lwTyParams = dtb__216; f_LwEnv_lwUnboxedInfo = dtb__217; f_LwEnv_lwRecordFields = dtb__218; f_LwEnv_lwCtors = dtb__219; f_LwEnv_lwOpaques = dtb__220; f_LwEnv_lwUnboxed = dtb__221; f_LwEnv_lwHasListFamily = dtb__222; f_LwEnv_lwDefs = dtb__223; f_LwEnv_lwOrigDefs = dtb__224; f_LwEnv_lwDefTbl = dtb__225; f_LwEnv_lwGlobals = dtb__226; f_LwEnv_lwFacts = dtb__227; f_LwEnv_lwUnit = dtb__228 } -> dtb__218
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 46 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwCtors = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwCtors)
+let v_lwCtors = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__229; f_LwEnv_lwDatas = dtb__230; f_LwEnv_lwDataTbl = dtb__231; f_LwEnv_lwTyParams = dtb__232; f_LwEnv_lwUnboxedInfo = dtb__233; f_LwEnv_lwRecordFields = dtb__234; f_LwEnv_lwCtors = dtb__235; f_LwEnv_lwOpaques = dtb__236; f_LwEnv_lwUnboxed = dtb__237; f_LwEnv_lwHasListFamily = dtb__238; f_LwEnv_lwDefs = dtb__239; f_LwEnv_lwOrigDefs = dtb__240; f_LwEnv_lwDefTbl = dtb__241; f_LwEnv_lwGlobals = dtb__242; f_LwEnv_lwFacts = dtb__243; f_LwEnv_lwUnit = dtb__244 } -> dtb__235
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 48 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwOpaques = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwOpaques)
+let v_lwOpaques = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__245; f_LwEnv_lwDatas = dtb__246; f_LwEnv_lwDataTbl = dtb__247; f_LwEnv_lwTyParams = dtb__248; f_LwEnv_lwUnboxedInfo = dtb__249; f_LwEnv_lwRecordFields = dtb__250; f_LwEnv_lwCtors = dtb__251; f_LwEnv_lwOpaques = dtb__252; f_LwEnv_lwUnboxed = dtb__253; f_LwEnv_lwHasListFamily = dtb__254; f_LwEnv_lwDefs = dtb__255; f_LwEnv_lwOrigDefs = dtb__256; f_LwEnv_lwDefTbl = dtb__257; f_LwEnv_lwGlobals = dtb__258; f_LwEnv_lwFacts = dtb__259; f_LwEnv_lwUnit = dtb__260 } -> dtb__252
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 50 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwUnboxed = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnboxed)
+let v_lwUnboxed = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__261; f_LwEnv_lwDatas = dtb__262; f_LwEnv_lwDataTbl = dtb__263; f_LwEnv_lwTyParams = dtb__264; f_LwEnv_lwUnboxedInfo = dtb__265; f_LwEnv_lwRecordFields = dtb__266; f_LwEnv_lwCtors = dtb__267; f_LwEnv_lwOpaques = dtb__268; f_LwEnv_lwUnboxed = dtb__269; f_LwEnv_lwHasListFamily = dtb__270; f_LwEnv_lwDefs = dtb__271; f_LwEnv_lwOrigDefs = dtb__272; f_LwEnv_lwDefTbl = dtb__273; f_LwEnv_lwGlobals = dtb__274; f_LwEnv_lwFacts = dtb__275; f_LwEnv_lwUnit = dtb__276 } -> dtb__269
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 52 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwHasListFamily = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwHasListFamily)
+let v_lwHasListFamily = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__277; f_LwEnv_lwDatas = dtb__278; f_LwEnv_lwDataTbl = dtb__279; f_LwEnv_lwTyParams = dtb__280; f_LwEnv_lwUnboxedInfo = dtb__281; f_LwEnv_lwRecordFields = dtb__282; f_LwEnv_lwCtors = dtb__283; f_LwEnv_lwOpaques = dtb__284; f_LwEnv_lwUnboxed = dtb__285; f_LwEnv_lwHasListFamily = dtb__286; f_LwEnv_lwDefs = dtb__287; f_LwEnv_lwOrigDefs = dtb__288; f_LwEnv_lwDefTbl = dtb__289; f_LwEnv_lwGlobals = dtb__290; f_LwEnv_lwFacts = dtb__291; f_LwEnv_lwUnit = dtb__292 } -> dtb__286
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 54 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwDefs = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDefs)
+let v_lwDefs = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__293; f_LwEnv_lwDatas = dtb__294; f_LwEnv_lwDataTbl = dtb__295; f_LwEnv_lwTyParams = dtb__296; f_LwEnv_lwUnboxedInfo = dtb__297; f_LwEnv_lwRecordFields = dtb__298; f_LwEnv_lwCtors = dtb__299; f_LwEnv_lwOpaques = dtb__300; f_LwEnv_lwUnboxed = dtb__301; f_LwEnv_lwHasListFamily = dtb__302; f_LwEnv_lwDefs = dtb__303; f_LwEnv_lwOrigDefs = dtb__304; f_LwEnv_lwDefTbl = dtb__305; f_LwEnv_lwGlobals = dtb__306; f_LwEnv_lwFacts = dtb__307; f_LwEnv_lwUnit = dtb__308 } -> dtb__303
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 56 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwOrigDefs = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwOrigDefs)
+let v_lwOrigDefs = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__309; f_LwEnv_lwDatas = dtb__310; f_LwEnv_lwDataTbl = dtb__311; f_LwEnv_lwTyParams = dtb__312; f_LwEnv_lwUnboxedInfo = dtb__313; f_LwEnv_lwRecordFields = dtb__314; f_LwEnv_lwCtors = dtb__315; f_LwEnv_lwOpaques = dtb__316; f_LwEnv_lwUnboxed = dtb__317; f_LwEnv_lwHasListFamily = dtb__318; f_LwEnv_lwDefs = dtb__319; f_LwEnv_lwOrigDefs = dtb__320; f_LwEnv_lwDefTbl = dtb__321; f_LwEnv_lwGlobals = dtb__322; f_LwEnv_lwFacts = dtb__323; f_LwEnv_lwUnit = dtb__324 } -> dtb__320
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 62 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwDefTbl = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDefTbl)
+let v_lwDefTbl = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__325; f_LwEnv_lwDatas = dtb__326; f_LwEnv_lwDataTbl = dtb__327; f_LwEnv_lwTyParams = dtb__328; f_LwEnv_lwUnboxedInfo = dtb__329; f_LwEnv_lwRecordFields = dtb__330; f_LwEnv_lwCtors = dtb__331; f_LwEnv_lwOpaques = dtb__332; f_LwEnv_lwUnboxed = dtb__333; f_LwEnv_lwHasListFamily = dtb__334; f_LwEnv_lwDefs = dtb__335; f_LwEnv_lwOrigDefs = dtb__336; f_LwEnv_lwDefTbl = dtb__337; f_LwEnv_lwGlobals = dtb__338; f_LwEnv_lwFacts = dtb__339; f_LwEnv_lwUnit = dtb__340 } -> dtb__337
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 65 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwGlobals = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwGlobals)
+let v_lwGlobals = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__341; f_LwEnv_lwDatas = dtb__342; f_LwEnv_lwDataTbl = dtb__343; f_LwEnv_lwTyParams = dtb__344; f_LwEnv_lwUnboxedInfo = dtb__345; f_LwEnv_lwRecordFields = dtb__346; f_LwEnv_lwCtors = dtb__347; f_LwEnv_lwOpaques = dtb__348; f_LwEnv_lwUnboxed = dtb__349; f_LwEnv_lwHasListFamily = dtb__350; f_LwEnv_lwDefs = dtb__351; f_LwEnv_lwOrigDefs = dtb__352; f_LwEnv_lwDefTbl = dtb__353; f_LwEnv_lwGlobals = dtb__354; f_LwEnv_lwFacts = dtb__355; f_LwEnv_lwUnit = dtb__356 } -> dtb__354
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 67 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwFacts = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwFacts)
+let v_lwFacts = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__357; f_LwEnv_lwDatas = dtb__358; f_LwEnv_lwDataTbl = dtb__359; f_LwEnv_lwTyParams = dtb__360; f_LwEnv_lwUnboxedInfo = dtb__361; f_LwEnv_lwRecordFields = dtb__362; f_LwEnv_lwCtors = dtb__363; f_LwEnv_lwOpaques = dtb__364; f_LwEnv_lwUnboxed = dtb__365; f_LwEnv_lwHasListFamily = dtb__366; f_LwEnv_lwDefs = dtb__367; f_LwEnv_lwOrigDefs = dtb__368; f_LwEnv_lwDefTbl = dtb__369; f_LwEnv_lwGlobals = dtb__370; f_LwEnv_lwFacts = dtb__371; f_LwEnv_lwUnit = dtb__372 } -> dtb__371
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 69 "Vuna/Compiler/Lowering/Env.vuna"
-let v_lwUnit = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnit)
+let v_lwUnit = (fun (p : t_LwEnv) -> (match p with
+  | { f_LwEnv_lwShared = dtb__373; f_LwEnv_lwDatas = dtb__374; f_LwEnv_lwDataTbl = dtb__375; f_LwEnv_lwTyParams = dtb__376; f_LwEnv_lwUnboxedInfo = dtb__377; f_LwEnv_lwRecordFields = dtb__378; f_LwEnv_lwCtors = dtb__379; f_LwEnv_lwOpaques = dtb__380; f_LwEnv_lwUnboxed = dtb__381; f_LwEnv_lwHasListFamily = dtb__382; f_LwEnv_lwDefs = dtb__383; f_LwEnv_lwOrigDefs = dtb__384; f_LwEnv_lwDefTbl = dtb__385; f_LwEnv_lwGlobals = dtb__386; f_LwEnv_lwFacts = dtb__387; f_LwEnv_lwUnit = dtb__388 } -> dtb__388
+  | _ -> failwith "DT: impossible branch"
+))

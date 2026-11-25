@@ -480,25 +480,49 @@ and v_step = (fun (mc0 : int) mc1 mc2 -> (match (Obj.magic mc2) with
 let v_machineRun = (fun c -> (((v_runGo 1000000000) v_emptySt) (Obj.magic c)))
 
 # 439 "Base/Effect/Core.vuna"
-let v_msFrames = (fun p -> (p).f_MSt_msFrames)
+let v_msFrames = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__206; f_MSt_msCtx = dtb__207; f_MSt_msUsed = dtb__208; f_MSt_msNext = dtb__209; f_MSt_msFree = dtb__210; f_MSt_msEpoch = dtb__211; f_MSt_msCleanups = dtb__212; f_MSt_msCleanDepth = dtb__213 } -> dtb__206
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 440 "Base/Effect/Core.vuna"
-let v_msCtx = (fun p -> (p).f_MSt_msCtx)
+let v_msCtx = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__214; f_MSt_msCtx = dtb__215; f_MSt_msUsed = dtb__216; f_MSt_msNext = dtb__217; f_MSt_msFree = dtb__218; f_MSt_msEpoch = dtb__219; f_MSt_msCleanups = dtb__220; f_MSt_msCleanDepth = dtb__221 } -> dtb__215
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 441 "Base/Effect/Core.vuna"
-let v_msUsed = (fun p -> (p).f_MSt_msUsed)
+let v_msUsed = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__222; f_MSt_msCtx = dtb__223; f_MSt_msUsed = dtb__224; f_MSt_msNext = dtb__225; f_MSt_msFree = dtb__226; f_MSt_msEpoch = dtb__227; f_MSt_msCleanups = dtb__228; f_MSt_msCleanDepth = dtb__229 } -> dtb__224
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 442 "Base/Effect/Core.vuna"
-let v_msNext = (fun p -> (p).f_MSt_msNext)
+let v_msNext = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__230; f_MSt_msCtx = dtb__231; f_MSt_msUsed = dtb__232; f_MSt_msNext = dtb__233; f_MSt_msFree = dtb__234; f_MSt_msEpoch = dtb__235; f_MSt_msCleanups = dtb__236; f_MSt_msCleanDepth = dtb__237 } -> dtb__233
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 443 "Base/Effect/Core.vuna"
-let v_msFree = (fun p -> (p).f_MSt_msFree)
+let v_msFree = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__238; f_MSt_msCtx = dtb__239; f_MSt_msUsed = dtb__240; f_MSt_msNext = dtb__241; f_MSt_msFree = dtb__242; f_MSt_msEpoch = dtb__243; f_MSt_msCleanups = dtb__244; f_MSt_msCleanDepth = dtb__245 } -> dtb__242
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 444 "Base/Effect/Core.vuna"
-let v_msEpoch = (fun p -> (p).f_MSt_msEpoch)
+let v_msEpoch = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__246; f_MSt_msCtx = dtb__247; f_MSt_msUsed = dtb__248; f_MSt_msNext = dtb__249; f_MSt_msFree = dtb__250; f_MSt_msEpoch = dtb__251; f_MSt_msCleanups = dtb__252; f_MSt_msCleanDepth = dtb__253 } -> dtb__251
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 445 "Base/Effect/Core.vuna"
-let v_msCleanups = (fun p -> (p).f_MSt_msCleanups)
+let v_msCleanups = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__254; f_MSt_msCtx = dtb__255; f_MSt_msUsed = dtb__256; f_MSt_msNext = dtb__257; f_MSt_msFree = dtb__258; f_MSt_msEpoch = dtb__259; f_MSt_msCleanups = dtb__260; f_MSt_msCleanDepth = dtb__261 } -> dtb__260
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 446 "Base/Effect/Core.vuna"
-let v_msCleanDepth = (fun p -> (p).f_MSt_msCleanDepth)
+let v_msCleanDepth = (fun p -> (match p with
+  | { f_MSt_msFrames = dtb__262; f_MSt_msCtx = dtb__263; f_MSt_msUsed = dtb__264; f_MSt_msNext = dtb__265; f_MSt_msFree = dtb__266; f_MSt_msEpoch = dtb__267; f_MSt_msCleanups = dtb__268; f_MSt_msCleanDepth = dtb__269 } -> dtb__269
+  | _ -> failwith "DT: impossible branch"
+))

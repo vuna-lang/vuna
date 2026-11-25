@@ -167,16 +167,31 @@ let rec v_nameOwnerPairsOfDatas = (fun (mc0 : t_SplitMeta) (mc1 : Elab_dTypes.t_
 ))
 
 # 156 "Vuna/Compiler/Driver/Owner.vuna"
-let v_smDefOwners = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDefOwners)
+let v_smDefOwners = (fun (p : t_SplitMeta) -> (match p with
+  | { f_SplitMeta_smDefOwners = dtb__114; f_SplitMeta_smDataOwners = dtb__115; f_SplitMeta_smKnownModules = dtb__116; f_SplitMeta_smDefOwnerT = dtb__117; f_SplitMeta_smDataOwnerT = dtb__118 } -> dtb__114
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 157 "Vuna/Compiler/Driver/Owner.vuna"
-let v_smDataOwners = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDataOwners)
+let v_smDataOwners = (fun (p : t_SplitMeta) -> (match p with
+  | { f_SplitMeta_smDefOwners = dtb__119; f_SplitMeta_smDataOwners = dtb__120; f_SplitMeta_smKnownModules = dtb__121; f_SplitMeta_smDefOwnerT = dtb__122; f_SplitMeta_smDataOwnerT = dtb__123 } -> dtb__120
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 158 "Vuna/Compiler/Driver/Owner.vuna"
-let v_smKnownModules = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smKnownModules)
+let v_smKnownModules = (fun (p : t_SplitMeta) -> (match p with
+  | { f_SplitMeta_smDefOwners = dtb__124; f_SplitMeta_smDataOwners = dtb__125; f_SplitMeta_smKnownModules = dtb__126; f_SplitMeta_smDefOwnerT = dtb__127; f_SplitMeta_smDataOwnerT = dtb__128 } -> dtb__126
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 162 "Vuna/Compiler/Driver/Owner.vuna"
-let v_smDefOwnerT = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDefOwnerT)
+let v_smDefOwnerT = (fun (p : t_SplitMeta) -> (match p with
+  | { f_SplitMeta_smDefOwners = dtb__129; f_SplitMeta_smDataOwners = dtb__130; f_SplitMeta_smKnownModules = dtb__131; f_SplitMeta_smDefOwnerT = dtb__132; f_SplitMeta_smDataOwnerT = dtb__133 } -> dtb__132
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 163 "Vuna/Compiler/Driver/Owner.vuna"
-let v_smDataOwnerT = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDataOwnerT)
+let v_smDataOwnerT = (fun (p : t_SplitMeta) -> (match p with
+  | { f_SplitMeta_smDefOwners = dtb__134; f_SplitMeta_smDataOwners = dtb__135; f_SplitMeta_smKnownModules = dtb__136; f_SplitMeta_smDefOwnerT = dtb__137; f_SplitMeta_smDataOwnerT = dtb__138 } -> dtb__138
+  | _ -> failwith "DT: impossible branch"
+))

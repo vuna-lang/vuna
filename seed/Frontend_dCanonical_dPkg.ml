@@ -122,31 +122,61 @@ let v_decPackageIdentity = (fun (raw : string) -> (let nd_uscrut1 = ((v_decIdent
 )))
 
 # 25 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_pfPath = (fun (p : t_PackageFile) -> (p).f_PackageFile_pfPath)
+let v_pfPath = (fun (p : t_PackageFile) -> (match p with
+  | { f_PackageFile_pfPath = dtb__30; f_PackageFile_pfContent = dtb__31 } -> dtb__30
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 26 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_pfContent = (fun (p : t_PackageFile) -> (p).f_PackageFile_pfContent)
+let v_pfContent = (fun (p : t_PackageFile) -> (match p with
+  | { f_PackageFile_pfPath = dtb__32; f_PackageFile_pfContent = dtb__33 } -> dtb__33
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 30 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_psName = (fun (p : t_PackageSource) -> (p).f_PackageSource_psName)
+let v_psName = (fun (p : t_PackageSource) -> (match p with
+  | { f_PackageSource_psName = dtb__34; f_PackageSource_psExports = dtb__35; f_PackageSource_psDeps = dtb__36; f_PackageSource_psFiles = dtb__37 } -> dtb__34
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 31 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_psExports = (fun (p : t_PackageSource) -> (p).f_PackageSource_psExports)
+let v_psExports = (fun (p : t_PackageSource) -> (match p with
+  | { f_PackageSource_psName = dtb__38; f_PackageSource_psExports = dtb__39; f_PackageSource_psDeps = dtb__40; f_PackageSource_psFiles = dtb__41 } -> dtb__39
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 32 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_psDeps = (fun (p : t_PackageSource) -> (p).f_PackageSource_psDeps)
+let v_psDeps = (fun (p : t_PackageSource) -> (match p with
+  | { f_PackageSource_psName = dtb__42; f_PackageSource_psExports = dtb__43; f_PackageSource_psDeps = dtb__44; f_PackageSource_psFiles = dtb__45 } -> dtb__44
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 33 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_psFiles = (fun (p : t_PackageSource) -> (p).f_PackageSource_psFiles)
+let v_psFiles = (fun (p : t_PackageSource) -> (match p with
+  | { f_PackageSource_psName = dtb__46; f_PackageSource_psExports = dtb__47; f_PackageSource_psDeps = dtb__48; f_PackageSource_psFiles = dtb__49 } -> dtb__49
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 37 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_piName = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piName)
+let v_piName = (fun (p : t_PackageIdentity) -> (match p with
+  | { f_PackageIdentity_piName = dtb__50; f_PackageIdentity_piExports = dtb__51; f_PackageIdentity_piDeps = dtb__52; f_PackageIdentity_piFiles = dtb__53 } -> dtb__50
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 38 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_piExports = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piExports)
+let v_piExports = (fun (p : t_PackageIdentity) -> (match p with
+  | { f_PackageIdentity_piName = dtb__54; f_PackageIdentity_piExports = dtb__55; f_PackageIdentity_piDeps = dtb__56; f_PackageIdentity_piFiles = dtb__57 } -> dtb__55
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 39 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_piDeps = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piDeps)
+let v_piDeps = (fun (p : t_PackageIdentity) -> (match p with
+  | { f_PackageIdentity_piName = dtb__58; f_PackageIdentity_piExports = dtb__59; f_PackageIdentity_piDeps = dtb__60; f_PackageIdentity_piFiles = dtb__61 } -> dtb__60
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 40 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_piFiles = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piFiles)
+let v_piFiles = (fun (p : t_PackageIdentity) -> (match p with
+  | { f_PackageIdentity_piName = dtb__62; f_PackageIdentity_piExports = dtb__63; f_PackageIdentity_piDeps = dtb__64; f_PackageIdentity_piFiles = dtb__65 } -> dtb__65
+  | _ -> failwith "DT: impossible branch"
+))

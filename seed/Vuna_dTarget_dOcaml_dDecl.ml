@@ -161,10 +161,19 @@ let rec v_irTyDepsGo = (fun (mc0 : t_QualCtx) (mc1 : string B_dData_dList.t_List
 let v_irTyDeclDeps = (fun (qc : t_QualCtx) (tys : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (((v_irTyDepsGo qc) ((B_dData_dList.v_concatMap v_irTyGlobalNames) tys)) B_dData_dList.C_List_Nil))
 
 # 108 "Vuna/Target/Ocaml/Decl.vuna"
-let v_qcUnit = (fun (p : t_QualCtx) -> (p).f_QualCtx_qcUnit)
+let v_qcUnit = (fun (p : t_QualCtx) -> (match p with
+  | { f_QualCtx_qcUnit = dtb__40; f_QualCtx_qcDefs = dtb__41; f_QualCtx_qcDatas = dtb__42 } -> dtb__40
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 109 "Vuna/Target/Ocaml/Decl.vuna"
-let v_qcDefs = (fun (p : t_QualCtx) -> (p).f_QualCtx_qcDefs)
+let v_qcDefs = (fun (p : t_QualCtx) -> (match p with
+  | { f_QualCtx_qcUnit = dtb__43; f_QualCtx_qcDefs = dtb__44; f_QualCtx_qcDatas = dtb__45 } -> dtb__44
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 110 "Vuna/Target/Ocaml/Decl.vuna"
-let v_qcDatas = (fun (p : t_QualCtx) -> (p).f_QualCtx_qcDatas)
+let v_qcDatas = (fun (p : t_QualCtx) -> (match p with
+  | { f_QualCtx_qcUnit = dtb__46; f_QualCtx_qcDefs = dtb__47; f_QualCtx_qcDatas = dtb__48 } -> dtb__48
+  | _ -> failwith "DT: impossible branch"
+))
