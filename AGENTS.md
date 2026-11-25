@@ -61,9 +61,10 @@
    Int/Nat 归一化只在 handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    可变单元的隐藏原语（`@vuna@prim_mref*` 等）实现全是 `Eff []`。
    **无 manifest 门控**：没有能力/特权/信任机制；`prim_*`（纯原语）任何包（含 ad-hoc 文件）都可直调。
-   **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
-   `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；
-   tracing 走隐藏 runtime 原语。
+   **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行，也不得在 base
+   之外用 `runHost` / `hostSync` / 宿主原语就地关闭宿主行（宿主探测要补成正常效应族，如
+   `Base.Effect.Tty`）；`checks.eff-boundary` 两项基线都为 0
+   （`nix/checks/data/eff-boundary.allowlist` 为空），无例外；tracing 走隐藏 runtime 原语。
 6. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。

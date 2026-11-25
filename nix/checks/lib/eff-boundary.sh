@@ -84,6 +84,29 @@ if [ -n "$oldNames" ]; then
   printf '%s\n' "$oldNames" | head -10 | sed 's/^/  /' >&2
   fail=1
 fi
+
+# 宿主层只能在 base 里关闭：`runHost` / `hostSync` / `@vuna@host@_*` / `@vuna@prim_eff_*`
+# 出现在 base 之外的 lib 代码位置即违规。允许的口子是正常效应（`Base.Effect.*` 标签 + handler），
+# 不是就地关闭宿主行——否则 `Eff []` 会重新出现“类型说纯、实际摸宿主”。
+# 判定口径同上（剥字符串与行注释）；诊断旁路 `@vuna@obs@*` 不在其中。
+hostClosers=$(
+  cd "$root" || exit 1
+  find \
+    packages/compiler/lib packages/compiler-base/lib packages/ir/lib \
+    packages/target-ocaml/lib packages/target-native/lib packages/target-wasm/lib \
+    packages/plugin-web/lib packages/dev/lib packages/cli/lib packages/toolchain/lib \
+    packages/plugin-kit/lib \
+    -name '*.vuna' 2>/dev/null | sort | while read -r f; do
+    sed -E 's/"([^"\\]|\\.)*"//g; s/--.*$//' "$f" |
+      grep -nE '(^|[^@[:alnum:]_])(runHost|hostSync)([^[:alnum:]_]|$)|@vuna@(host|prim_eff)[@_]' |
+      sed "s|^|$f:|"
+  done
+)
+if [ -n "$hostClosers" ]; then
+  echo "eff-boundary: base 之外出现宿主层入口（应改成 Base.Effect.* 标签 + handler）：" >&2
+  printf '%s\n' "$hostClosers" | head -10 | sed 's/^/  /' >&2
+  fail=1
+fi
 if [ -s "$excTmp" ]; then
   echo "eff-boundary: sanctioned exceptions（不计入基线）："
   sed 's/^/  /' "$excTmp"
