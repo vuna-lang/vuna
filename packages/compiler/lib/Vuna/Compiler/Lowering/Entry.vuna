@@ -49,7 +49,7 @@ tagOf label rest =
     TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
     _ => rest
 
-mainRowTags : Term -> List String
+export mainRowTags : Term -> List String
 mainRowTags (TApp (TApp fn row _) _ _) =
   case fn of
     TGlobal g => if g == effTypeName then collectBuiltinRowTags (quote 0 (eval [] row)) else []

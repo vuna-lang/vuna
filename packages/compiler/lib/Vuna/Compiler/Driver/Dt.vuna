@@ -36,6 +36,7 @@ import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Lowering.Entry
 import Vuna.Target.Ocaml.Assembly
 import Vuna.Compiler.Lowering.Program
 import Vuna.Target.Ocaml.Decl
@@ -860,40 +861,6 @@ dtGoalsSourceTolerant ctx label source =
               OkC resolved => goalsOfProgramTolerant (toRastDecls (dtProjectDecls (secondOf resolved)))
       )
 
--- `vuna test`：main 的返回类别，决定执行路径。
---   "Eff"    —— 效果程序，走 compile + 运行（退出码判定）；
---   "String" —— 纯测试，空串通过；
---   "Int"    —— 0 通过；
---   "Bool"   —— True 通过；
---   "Other"  —— 明确拒绝（不是静默当失败）。
-export dtMainKind : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check String)
-dtMainKind ctx entry =
-  do
-    declsR <- dtLoad ctx entry
-    pure (
-        case declsR of
-          ErrC e => ErrC e
-          OkC loaded =>
-            case elabProgram (toRastDecls (firstOf loaded)) of
-              ErrC e => ErrC e
-              OkC p =>
-                case findMainDef (secondOf p) of
-                  Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
-                  Just mainDef =>
-                    if mainActionKind (dtDefType mainDef) == "Eff" then
-                      OkC "Eff"
-                    else
-                      case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
-                        VNeutral n =>
-                          case n of
-                            NGlobal g sp =>
-                              case sp of
-                                [] => mainKindForName g
-                                _ => OkC "Other"
-                            _ => OkC "Other"
-                        _ => OkC "Other"
-      )
-
 -- `vuna test` 的 main 结果类型名（展示用）；其它类型归 `Other`。
 mainKindNames : List (String, String)
 mainKindNames =
@@ -908,6 +875,64 @@ mainKindForName g =
 lookupMainKind : String -> List (String, String) -> Maybe String
 lookupMainKind g [] = Nothing
 lookupMainKind g (p :: rest) = if firstOf p == g then Just (secondOf p) else lookupMainKind g rest
+
+-- | main 的类别 + 行里的内建宿主标签（声明顺序；非 `Eff` main 为空表）。
+-- 标签来自入口 lowering 的同一份提取（`Lowering.Entry.mainRowTags`），与 entry 预装
+-- handler 的口径一致。
+export record MainInfo(..) where
+  miKind : String
+  miHostTags : List String
+
+mainInfoForName : String -> Check MainInfo
+mainInfoForName g =
+  case mainKindForName g of
+    ErrC e => ErrC e
+    OkC k => OkC (MainInfo k [])
+
+-- `vuna test`：main 的返回类别，决定执行路径。
+--   "Eff"    —— 效果程序，走 compile + 运行（退出码判定）；
+--   "String" —— 纯测试，空串通过；
+--   "Int"    —— 0 通过；
+--   "Bool"   —— True 通过；
+--   "Other"  —— 明确拒绝（不是静默当失败）。
+export dtMainKind : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check String)
+dtMainKind ctx entry =
+  do
+    infoR <- dtMainInfo ctx entry
+    pure (
+        case infoR of
+          ErrC e => ErrC e
+          OkC i => OkC i.miKind
+      )
+
+-- | main 的类别 + 行里的内建宿主标签（声明顺序；非 `Eff` main 为空表）。
+export dtMainInfo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check MainInfo)
+dtMainInfo ctx entry =
+  do
+    declsR <- dtLoad ctx entry
+    pure (
+        case declsR of
+          ErrC e => ErrC e
+          OkC loaded =>
+            case elabProgram (toRastDecls (firstOf loaded)) of
+              ErrC e => ErrC e
+              OkC p =>
+                case findMainDef (secondOf p) of
+                  Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
+                  Just mainDef =>
+                    if mainActionKind (dtDefType mainDef) == "Eff" then
+                      OkC (MainInfo "Eff" (mainRowTags (dtDefType mainDef)))
+                    else
+                      case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+                        VNeutral n =>
+                          case n of
+                            NGlobal g sp =>
+                              case sp of
+                                [] => mainInfoForName g
+                                _ => OkC (MainInfo "Other" [])
+                            _ => OkC (MainInfo "Other" [])
+                        _ => OkC (MainInfo "Other" [])
+      )
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String

@@ -1,0 +1,114 @@
+-- 内建宿主能力矩阵与 main 行标签提取：`Intrinsics.hostSupportOf` 是 suite matrix / 文档 /
+-- 后续 test-target 的唯一真源，这里锁住三端分档与 `mainRowTags` 的提取口径。
+import Base
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Lowering.Entry
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("host capability failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "all-tags-ocaml-full" allTagsOcamlFull,
+    Pair "native-missing-stdin-net" nativeMissingStdinNet,
+    Pair "wasm-missing-process" wasmMissingProcess,
+    Pair "wasm-partial-clock-fs" wasmPartialClockFs,
+    Pair "wasm-unsupported-filter" wasmUnsupportedFilter,
+    Pair "row-tags-order" rowTagsOk,
+    Pair "row-tags-wasm" rowTagsWasmOk
+  ]
+
+consoleTag : String
+consoleTag = "Base.Effect.Console.ConsoleOp"
+
+clockTag : String
+clockTag = "Base.Effect.Clock.ClockOp"
+
+processTag : String
+processTag = "Base.Effect.Process.ProcessOp"
+
+stdinTag : String
+stdinTag = "Base.Effect.Stdin.StdinOp"
+
+netTag : String
+netTag = "Base.Effect.Net.NetOp"
+
+fsTag : String
+fsTag = "Base.Effect.Fs.FsOp"
+
+envTag : String
+envTag = "Base.Effect.Env.EnvOp"
+
+exitTag : String
+exitTag = "Base.Effect.Exit.ExitOp"
+
+argsTag : String
+argsTag = "Base.Effect.Args.ArgsOp"
+
+-- 每个内建标签在 ocaml 上都必须满档；标签集必须与 `builtinEffects` 对齐（数量变化会提醒更新本表）。
+allTagsOcamlFull : Bool
+allTagsOcamlFull = allFull "ocaml" allTags && allBuiltinTags && length builtinEffects == 9
+
+allTags : List String
+allTags = [consoleTag, fsTag, clockTag, envTag, processTag, exitTag, stdinTag, argsTag, netTag]
+
+allBuiltinTags : Bool
+allBuiltinTags = allBuiltinGo allTags
+
+allBuiltinGo : List String -> Bool
+allBuiltinGo [] = True
+allBuiltinGo (t :: rest) = isBuiltinEffectTag t && allBuiltinGo rest
+
+allFull : String -> List String -> Bool
+allFull target [] = True
+allFull target (t :: rest) = hostSupportOf target t == "full" && allFull target rest
+
+-- native 有 fs / clock / process，但没有 stdin / net。
+nativeMissingStdinNet : Bool
+nativeMissingStdinNet =
+  hostSupportOf "native" stdinTag
+    == "none"
+    && hostSupportOf "native" netTag == "none" && hostSupportOf "native" processTag == "full"
+
+-- wasm 没有 process；console 满档。
+wasmMissingProcess : Bool
+wasmMissingProcess =
+  hostSupportOf "wasm" processTag == "none" && hostSupportOf "wasm" consoleTag == "full"
+
+-- wasm 的 clock（缺 SleepMicros）与 fs（缺 symlink）是 partial，不是 full。
+wasmPartialClockFs : Bool
+wasmPartialClockFs =
+  hostSupportOf "wasm" clockTag == "partial" && hostSupportOf "wasm" fsTag == "partial"
+
+-- 过滤保持输入顺序，partial 也算不可依赖。
+wasmUnsupportedFilter : Bool
+wasmUnsupportedFilter =
+  unsupportedHostTags "wasm" [consoleTag, processTag, clockTag] == [processTag, clockTag]
+
+-- `main : Eff [ClockOp, ConsoleOp] Int` 的行标签按声明顺序提取。
+rowTagsOk : Bool
+rowTagsOk = mainRowTags effClockConsole == [clockTag, consoleTag]
+
+rowTagsWasmOk : Bool
+rowTagsWasmOk = unsupportedHostTags "wasm" (mainRowTags effClockConsole) == [clockTag]
+
+effClockConsole : Term
+effClockConsole = TApp (TApp (TGlobal effTypeName) rowTerm Rig0) (TGlobal "Int") Rig1
+
+rowTerm : Term
+rowTerm =
+  TCon
+    effRowConsCtor
+    [(TGlobal clockTag, Rig0), (TCon effRowConsCtor [(TGlobal consoleTag, Rig0), (TCon effRowNilCtor [], Rig0)], Rig0)]

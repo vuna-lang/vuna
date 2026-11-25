@@ -94,6 +94,13 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
 
 - 取值在 `[family.<name>]` 的 `matrix` 键；steps 用任意位置的 `# matrix: <分类>` 覆盖 family
   默认。未知取值是配置错误（`matrix must be tool/pure/...`）。
+- 后端能力的唯一真源是 `Compiler.Base.Intrinsics.hostSupportOf`（标签 × `ocaml` / `native` /
+  `wasm` → `full` / `partial` / `none`，`partial` 的具体缺项写在注释里）。`partial` 表示
+  「该标签下有 op 没实现」，家族分档是粗粒度近似：用例只要不碰缺的那条 op 仍可进该后端
+  （如 wasm 的 `FsOp` 缺 symlink，`effect-common` 的相对路径 FS 仍在三端跑）。只有标签、
+  没有 op 信息的消费者（如未来的 `vuna test --target`）按 `full` 保守处理。`main` 行里的
+  内建标签用 `Driver.Dt.dtMainInfo`（同一份 `Lowering.Entry.mainRowTags`，与 entry 预装
+  handler 同源）。
 - `--backend ocaml|wasm|native|all` 选执行目标：只保留 `matrixTargets` 允许该目标的 case；
   未选中是**排除**，不是 skip（不影响 `--strict-skips`）。
 - `--matrix <分类>` 精确筛选，`--filter layer:pure|effect` 按层次筛选；每个 case 自动带

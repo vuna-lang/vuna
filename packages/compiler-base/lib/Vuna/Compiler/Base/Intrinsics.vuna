@@ -267,6 +267,65 @@ builtinEffectExistsRest tag [] = False
 builtinEffectExistsRest tag (e :: rest) =
   if e.beTag == tag then True else builtinEffectExistsRest tag rest
 
+-- ---------------------------------------------------------------
+-- 内建宿主能力矩阵：标签 × 后端
+-- ---------------------------------------------------------------
+-- | 三个产品后端（`build --target` 的取值）。
+export hostTargetNames : List String
+hostTargetNames = ["ocaml", "native", "wasm"]
+
+-- | 内建宿主标签在某个后端上的实现程度。
+--
+-- `full` = 标签下全部 op 都有宿主实现；`partial` = 至少一条 op 缺实现；
+-- `none` = 该后端没有这个家族的宿主实现。未知标签 / 未知后端一律 `none`。
+--
+-- 证据（改表时必须同步核对）：
+--   * native：`Target.Native.Runtime.hostLeafGroups` 覆盖 fs / clock / process / env /
+--     args / exit，没有 stdin / net；
+--   * wasm：只有 console / 相对 FS（preopen）/ env / args / exit / clock.Now；`ProcessOp`、
+--     `StdinOp`、`NetOp` 没有宿主实现，`FsOp` 缺 symlink、`mtime` 恒 `Nothing`，
+--     `ClockOp` 缺 `SleepMicros`，`EnvOp` 的 execPath 恒空（常量，不算缺 op）。
+export hostSupportOf : String -> String -> String
+hostSupportOf target tag = pickHostSupport target (findHostSupport tag hostSupportTable)
+
+-- | 某个后端上不可依赖（非 `full`）的标签子集，保持输入顺序（含 `partial`）。
+export unsupportedHostTags : String -> List String -> List String
+unsupportedHostTags target tags = filter (\t => hostSupportOf target t /= "full") tags
+
+record HostSupport where
+  hsTag : String
+  hsOcaml : String
+  hsNative : String
+  hsWasm : String
+
+unknownHostSupport : HostSupport
+unknownHostSupport = HostSupport "" "none" "none" "none"
+
+-- | 标签 → 三端实现程度。`partial` 的具体缺项写在 `hostSupportOf` 的注释里。
+hostSupportTable : List HostSupport
+hostSupportTable =
+  [
+    HostSupport "Base.Effect.Console.ConsoleOp" "full" "full" "full",
+    HostSupport "Base.Effect.Fs.FsOp" "full" "full" "partial",
+    HostSupport "Base.Effect.Clock.ClockOp" "full" "full" "partial",
+    HostSupport "Base.Effect.Env.EnvOp" "full" "full" "full",
+    HostSupport "Base.Effect.Process.ProcessOp" "full" "full" "none",
+    HostSupport "Base.Effect.Exit.ExitOp" "full" "full" "full",
+    HostSupport "Base.Effect.Stdin.StdinOp" "full" "none" "none",
+    HostSupport "Base.Effect.Args.ArgsOp" "full" "full" "full",
+    HostSupport "Base.Effect.Net.NetOp" "full" "none" "none"
+  ]
+
+findHostSupport : String -> List HostSupport -> HostSupport
+findHostSupport tag [] = unknownHostSupport
+findHostSupport tag (s :: rest) = if s.hsTag == tag then s else findHostSupport tag rest
+
+pickHostSupport : String -> HostSupport -> String
+pickHostSupport "ocaml" s = s.hsOcaml
+pickHostSupport "native" s = s.hsNative
+pickHostSupport "wasm" s = s.hsWasm
+pickHostSupport _ s = "none"
+
 -- | `sendCore` 的两种名字：派发前的源码形与派发 pass 之后的 `*Id` 形；后端的静态
 -- 直连改写必须同时认（`isSendCoreName`）。
 export effSendCoreName : String
