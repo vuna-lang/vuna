@@ -606,7 +606,16 @@ memberLookupRowLabel fuel depth ec eVal rVal =
                 case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
                   OkC (proof, ec1) => MemberFound proof ec1
                   ErrC _ => MemberStuck
-              _ => MemberAmbiguous (map labelCandName cands)
+              _ =>
+                if hasUnsolvedMetaValue sols eF then
+                  MemberAmbiguous (map labelCandName cands)
+                else
+                  case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
+                    -- 具体条目的重复候选是同一行条目（例如无名的标记行）：任何一处都是合法证明，
+                    -- 取最近的头部。只有目标里带未解元（裸标签要解出实例名）时，选候选才会
+                    -- 武断地定下那个元，保留歧义。
+                    OkC (proof, ec1) => MemberFound proof ec1
+                    ErrC _ => MemberStuck
 
 ctxMemberProofUnify : Ctx -> Ec -> Value -> Maybe (Term, Ec)
 ctxMemberProofUnify ctx ec dom = ctxMemberProofUnifyGo ctx ctx.ctxItems 0 ec dom

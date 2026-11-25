@@ -1,0 +1,14 @@
+-- 具体行条目的重复候选是同一标记：嵌套作用域里 `Member` 取最近的头部，不报歧义。
+import Base.Effect.Core as Eff
+import Base.Trait.Monad
+
+data Mark : Type where
+
+readMark : {r : Row} -> {w : Member Mark r} -> Eff r Int
+readMark = pure 1
+
+nested : Eff (Mark :: Nil) Int
+nested = dropEffHead (readMark : Eff (Mark :: Mark :: Nil) Int)
+
+main : Int
+main = runPure (dropEffHead nested)
