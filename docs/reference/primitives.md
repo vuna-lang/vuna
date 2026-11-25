@@ -320,6 +320,12 @@ OCaml 端不需要额外链接库（`Domain` / `Mutex` / `Condition` / `Atomic` 
 `bracket` cleanup 栈按 `Domain.DLS` 分域存放；`dtp_print` / `dtp_eprint` 用进程级锁保证整次调用
 不交错。
 
+**GC 参数按 domain 生效**：生成的 `dtRuntime` 前缀用 `Gc.set` 调的是**主 domain**（`minor_heap_size`
+16 MB、`space_overhead` 200）；`Domain.spawn` 出来的 domain 用运行时启动参数
+（`OCAMLRUNPARAM`）或 OCaml 默认值（256k words = 2 MB minor heap），不继承主 domain 的
+`Gc.set`。分配量大的纯函数负载因此在 worker 里做更多次 minor GC：`parMap` 的 user 时间高于
+同工作量的串行路径，wall 收益低于核数。
+
 ## 7. 效果原语、Eff 动作与宿主层
 
 **动作类型**：唯一动作类型是 `Eff r a`（`Base.Effect.Core`，装箱 data；行是擦除索引）。
