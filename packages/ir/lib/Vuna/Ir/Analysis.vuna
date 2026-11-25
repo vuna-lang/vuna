@@ -504,8 +504,8 @@ reachableDefsByRefs keepDep fuel roots defs =
   let
     tbl = HashMap.fromList (map (\d => (irDefName d, d)) defs)
     budget = 8 + fuel + refEdgeCount defs
-    names = closeRefsByRefs budget tbl keepDep roots []
-  in filter (\d => memName (irDefName d) names) defs
+    seen = closeRefsByRefs budget tbl keepDep roots (HashMap.fromList [])
+  in filter (\d => HashMap.member (irDefName d) seen) defs
 
 refEdgeCount : List IrDef -> Int
 refEdgeCount defs =
@@ -521,20 +521,20 @@ refsOfDef keepDep d =
     Nothing => filter keepDep (irDefDeps d)
     Just b => append (irGlobalsOf b) (filter keepDep (irDefDeps d))
 
-closeRefsByRefs : Int -> HashMap String IrDef -> (String -> Bool) -> List String -> List String -> List String
-closeRefsByRefs fuel tbl keepDep work acc =
+closeRefsByRefs : Int -> HashMap String IrDef -> (String -> Bool) -> List String -> HashMap String Bool -> HashMap String Bool
+closeRefsByRefs fuel tbl keepDep work seen =
   if fuel <= 0 then
-    acc
+    seen
   else
     case work of
-      [] => acc
+      [] => seen
       name :: rest =>
-        if memName name acc then
-          closeRefsByRefs (fuel - 1) tbl keepDep rest acc
+        if HashMap.member name seen then
+          closeRefsByRefs (fuel - 1) tbl keepDep rest seen
         else
           case HashMap.lookup name tbl of
-            Nothing => closeRefsByRefs (fuel - 1) tbl keepDep rest (name :: acc)
-            Just d => closeRefsByRefs (fuel - 1) tbl keepDep (append (refsOfDef keepDep d) rest) (name :: acc)
+            Nothing => closeRefsByRefs (fuel - 1) tbl keepDep rest (HashMap.insert name True seen)
+            Just d => closeRefsByRefs (fuel - 1) tbl keepDep (append (refsOfDef keepDep d) rest) (HashMap.insert name True seen)
 
 -- | 一个运行时定义体的字符串字面量（extern / 无体定义为空）。
 export irStringsOfDef : IrDef -> List String
