@@ -64,7 +64,7 @@ export obsSpanP : String -> (Int -> a) -> a
 obsSpanP name f = obsSpan name "vuna.user" f
 
 -- | 包住一个 `Eff` 动作的跨度：begin → action → end，`finally` 保证 abort 路径也结束
--- 跨度。用于对象库读写这类「动作本身就是工作单元」的边界。
+-- 跨度。用于缓存读写 / 文件段落这类「动作本身就是工作单元」的边界。
 export obsSpanEff : {r : Row} -> {a : Type} -> String -> String -> Eff r a -> Eff r a
 obsSpanEff name cat action =
   do

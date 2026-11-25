@@ -607,6 +607,7 @@ in
     srcs = [
       src.codegenCorpus
       src.base
+      src.obs
     ];
     env = {
       VUNA_BASE = "${repo}/packages/base";

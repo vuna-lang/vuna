@@ -231,7 +231,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 | 日志行 | `VUNA_LOG=debug`（缺省 `warn`，`off` 关闭） | stderr | `<epoch-us> DEBUG <scope> <text>`，相邻两行相减 = 阶段耗时 |
 | 结构化观测 | `VUNA_OBS=1..3` / `--obs` / `--obs-level N` | Chrome Trace Event JSONL | `ph:"X"` 跨度（自带 `dur` 与 `args.allocWords`）、`ph:"C"` 计数、`ph:"i"` 标记与采样栈 |
 
-结构化观测是**语言层**能力（任何 vuna 应用可用），完整规范见
+结构化观测是**运行时层**能力：应用通过生态包 `vuna-obs`（模块 `Obs`）使用，完整规范见
 [observability.md](observability.md)；本页只讲「用它来量编译器」：
 
 ```console

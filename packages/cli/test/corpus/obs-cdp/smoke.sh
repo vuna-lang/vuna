@@ -2,7 +2,8 @@
 # `vuna dev obs serve --cdp` 的冒烟（suite e2e tier 用）。
 #
 # 用法：sh test/corpus/obs-cdp/smoke.sh <path-to-vuna>
-#   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/packages/base）；SKIP_BRIDGE=1 只测 serve 的 CDP 部分。
+#   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/packages/base）、
+#             VUNA_OBS_PKG（vuna-obs 目录，默认 <repo>/packages/obs）；SKIP_BRIDGE=1 只测 serve 的 CDP 部分。
 #
 # 覆盖：
 #   1) 造一份带 `vuna.sample.cpu` 的 trace（小包 + obsSample + VUNA_OBS=3）；
