@@ -127,6 +127,15 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    闭包扫描 **125 ms → 34 ms**、`build` up-to-date **0.42–0.44 → 0.34–0.40 s**；
    同一份源码冷 / 热两次构建的产物树 `diff -r` 逐字节一致（命中不改变产物）。
 
+   **`sort_lib` 的 3.9× 不是排序算法**：`Base.Data.Sort.sortBy` 的 20k 排序在同进程
+   循环里约 3.9 ms（与手写 OCaml 同量级），bench 的 wall 里主要是分配与 minor heap
+   （单次排序分配 ~3.3M words ≈ 27 MB）。`dtRuntime` 曾把 `minor_heap_size` 设成
+   16M words = 128 MB，低存活程序把页逐个触进 RSS；改回文档写明的 2M words = 16 MB 后
+   同窗口交替：RSS `gc_retain` −69% / `gc_array_churn` −50% / `sort_lib` −30%，
+   CPU `gc_retain` −47% / `gc_array_churn` −19% / `sort_lib` −16%。**不要**为此把
+   `sortBy` 改成 `MutArray` 双缓冲归并：每次 `get`/`set` 是 Eff 步，分配不比 cons 少，
+   同进程测量里不占优。
+
    口径：接口载荷里的**依赖表值是模块对象地址 `cmAddr`（含编译器标签）**，不是 iface
    哈希——跨编译器比较 payload 会看到依赖项整体变化，那不代表哈希漂移；判定哈希是否变了
    要比 `miIfaceHash` / `miImplHash` 本身，或用 `checks.vuna-iface-selftest`。
