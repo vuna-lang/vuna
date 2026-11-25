@@ -472,3 +472,18 @@ let v_renderJsonList = (fun (lang : string) (ds : Base_dDiag.t_Diagnostic B_dDat
 
 # 443 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_renderJsonListWithSources = (fun (lang : string) (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (sources : t_SourceRef B_dData_dList.t_List) -> (String.concat "" ["{\"version\":1,\"tool\":\"vuna\",\"sources\":["; ((B_dData_dString.v_join ",") ((B_dData_dList.v_map v_jsonSource) sources)); "],\"diagnostics\":["; ((B_dData_dString.v_join ",") ((B_dData_dList.v_map (v_jsonDiag lang)) ds)); "]}"]))
+
+# 432 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_srcFile = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcFile)
+
+# 433 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_srcDigest = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcDigest)
+
+# 434 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_srcPackage = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcPackage)
+
+# 435 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_srcModule = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcModule)
+
+# 436 "Vuna/Compiler/Base/Diag/Format.vuna"
+let v_srcRelPath = (fun (p : t_SourceRef) -> (p).f_SourceRef_srcRelPath)

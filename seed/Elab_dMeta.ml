@@ -918,7 +918,7 @@ let v_isTypeLayerValue = (fun (v : Core_dTerm.t_Value) -> ((v_isTypeLayerValueFu
 let v_isTypeDomain = (fun (v : Core_dTerm.t_Value) -> (v_isTypeLayerValue v))
 
 # 927 "Vuna/Compiler/Elab/Meta.vuna"
-let v_binderRig = (fun (implicit : bool) (dom : Core_dTerm.t_Value) -> ((Core_dTerm.v_rigOfBinder implicit) (v_isTypeDomain dom)))
+let v_piBinderRig = (fun (implicit : bool) (dom : Core_dTerm.t_Value) -> ((Core_dTerm.v_rigOfBinder implicit) (v_isTypeDomain dom)))
 
 # 1239 "Vuna/Compiler/Elab/Meta.vuna"
 let v_isDataHead = (fun (mc0 : Elab_dTypes.t_DtData B_dData_dList.t_List) (mc1 : Core_dTerm.t_Value) -> (match mc1 with
@@ -1220,3 +1220,12 @@ let rec v_findCatchAllBody = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 672 "Vuna/Compiler/Elab/Meta.vuna"
+let v_dataHeadName = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadName)
+
+# 673 "Vuna/Compiler/Elab/Meta.vuna"
+let v_dataHeadKind = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadKind)
+
+# 674 "Vuna/Compiler/Elab/Meta.vuna"
+let v_dataHeadArity = (fun (p : t_DataHead) -> (p).f_DataHead_dataHeadArity)

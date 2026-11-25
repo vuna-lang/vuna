@@ -478,3 +478,27 @@ and v_step = (fun (mc0 : int) mc1 mc2 -> (match (Obj.magic mc2) with
 
 # 815 "Base/Effect/Core.vuna"
 let v_machineRun = (fun c -> (((v_runGo 1000000000) v_emptySt) (Obj.magic c)))
+
+# 439 "Base/Effect/Core.vuna"
+let v_msFrames = (fun p -> (p).f_MSt_msFrames)
+
+# 440 "Base/Effect/Core.vuna"
+let v_msCtx = (fun p -> (p).f_MSt_msCtx)
+
+# 441 "Base/Effect/Core.vuna"
+let v_msUsed = (fun p -> (p).f_MSt_msUsed)
+
+# 442 "Base/Effect/Core.vuna"
+let v_msNext = (fun p -> (p).f_MSt_msNext)
+
+# 443 "Base/Effect/Core.vuna"
+let v_msFree = (fun p -> (p).f_MSt_msFree)
+
+# 444 "Base/Effect/Core.vuna"
+let v_msEpoch = (fun p -> (p).f_MSt_msEpoch)
+
+# 445 "Base/Effect/Core.vuna"
+let v_msCleanups = (fun p -> (p).f_MSt_msCleanups)
+
+# 446 "Base/Effect/Core.vuna"
+let v_msCleanDepth = (fun p -> (p).f_MSt_msCleanDepth)

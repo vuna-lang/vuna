@@ -354,7 +354,7 @@ let rec v_sourceOf = (fun (mc0 : (string, t_SourceInfo) B_dData_dPair.t_Pair B_d
 ))
 
 # 607 "Vuna/Compiler/Driver/Iface.vuna"
-let v_importNameOf = Loader_dModules.v_importName
+let v_importNameOf = Loader_dModules.v_importModuleName
 
 # 610 "Vuna/Compiler/Driver/Iface.vuna"
 let v_importNamesOfModule = (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_map v_importNameOf) ((B_dData_dList.v_append (m).Loader_dModules.f_Module_moduleImportsOf) (m).Loader_dModules.f_Module_moduleImplicitImportsOf)))
@@ -558,3 +558,96 @@ let v_decModuleIfaceComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decMod
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))
+
+# 62 "Vuna/Compiler/Driver/Iface.vuna"
+let v_siPath = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siPath)
+
+# 63 "Vuna/Compiler/Driver/Iface.vuna"
+let v_siHash = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siHash)
+
+# 64 "Vuna/Compiler/Driver/Iface.vuna"
+let v_siMtime = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siMtime)
+
+# 65 "Vuna/Compiler/Driver/Iface.vuna"
+let v_siSize = (fun (p : t_SourceInfo) -> (p).f_SourceInfo_siSize)
+
+# 68 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miName = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miName)
+
+# 69 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miPackage = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miPackage)
+
+# 70 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miSource = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miSource)
+
+# 71 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miIfaceHash = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miIfaceHash)
+
+# 73 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miImplHash = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImplHash)
+
+# 77 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miDepHashes = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDepHashes)
+
+# 78 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miImports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImports)
+
+# 79 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miImplicitImports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miImplicitImports)
+
+# 80 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miExports = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miExports)
+
+# 81 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miFixities = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miFixities)
+
+# 82 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miDecls = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDecls)
+
+# 85 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miRecords = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miRecords)
+
+# 91 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miPrepared = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miPrepared)
+
+# 92 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miCached = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miCached)
+
+# 98 "Vuna/Compiler/Driver/Iface.vuna"
+let v_miDefLocs = (fun (p : t_ModuleIface) -> (p).f_ModuleIface_miDefLocs)
+
+# 268 "Vuna/Compiler/Driver/Iface.vuna"
+let v_csNext = (fun (p : t_CanonState) -> (p).f_CanonState_csNext)
+
+# 269 "Vuna/Compiler/Driver/Iface.vuna"
+let v_csMap = (fun (p : t_CanonState) -> (p).f_CanonState_csMap)
+
+# 479 "Vuna/Compiler/Driver/Iface.vuna"
+let v_oiDef = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiDef)
+
+# 480 "Vuna/Compiler/Driver/Iface.vuna"
+let v_oiData = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiData)
+
+# 481 "Vuna/Compiler/Driver/Iface.vuna"
+let v_oiCtor = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiCtor)
+
+# 482 "Vuna/Compiler/Driver/Iface.vuna"
+let v_oiKnown = (fun (p : t_OwnerIndex) -> (p).f_OwnerIndex_oiKnown)
+
+# 550 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppSols = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppSols)
+
+# 551 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppDatas = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppDatas)
+
+# 552 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppDefs = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppDefs)
+
+# 553 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppGlobals = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppGlobals)
+
+# 554 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppInsts = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppInsts)
+
+# 555 "Vuna/Compiler/Driver/Iface.vuna"
+let v_ppClasses = (fun (p : t_ProgParts) -> (p).f_ProgParts_ppClasses)

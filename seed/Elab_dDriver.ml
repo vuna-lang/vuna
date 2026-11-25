@@ -1216,3 +1216,51 @@ let v_goalsOfProgram = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List)
 
 # 1555 "Vuna/Compiler/Elab/Driver.vuna"
 let v_elabProgram = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (v_elabProgramFull decls)) (fun (prog : Elab_dTypes.t_DtProgram) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtProgDatas prog); B_dData_dPair.f_Pair_second = (Elab_dTypes.v_dtProgDefs prog) })))))
+
+# 242 "Vuna/Compiler/Elab/Driver.vuna"
+let v_declDictName = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictName)
+
+# 243 "Vuna/Compiler/Elab/Driver.vuna"
+let v_declDictLevel = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictLevel)
+
+# 244 "Vuna/Compiler/Elab/Driver.vuna"
+let v_declDictDom = (fun (p : t_DeclDictBinder) -> (p).f_DeclDictBinder_declDictDom)
+
+# 274 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dictSubstMeta = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstMeta)
+
+# 275 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dictSubstName = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstName)
+
+# 276 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dictSubstQ = (fun (p : t_DictSubst) -> (p).f_DictSubst_dictSubstQ)
+
+# 991 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreDatas = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreDatas)
+
+# 992 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreEc = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreEc)
+
+# 993 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreDefs = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreDefs)
+
+# 994 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreInstDefs = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreInstDefs)
+
+# 995 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreGlobals = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreGlobals)
+
+# 996 "Vuna/Compiler/Elab/Driver.vuna"
+let v_coreProjSpans = (fun (p : t_ElabCore) -> (p).f_ElabCore_coreProjSpans)
+
+# 1497 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dtGoalInfoSpan = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoSpan)
+
+# 1498 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dtGoalInfoGoal = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoGoal)
+
+# 1499 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dtGoalInfoCtx = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoCtx)
+
+# 1500 "Vuna/Compiler/Elab/Driver.vuna"
+let v_dtGoalInfoName = (fun (p : t_DtGoalInfo) -> (p).f_DtGoalInfo_dtGoalInfoName)

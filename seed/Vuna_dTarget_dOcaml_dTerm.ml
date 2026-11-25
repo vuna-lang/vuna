@@ -923,3 +923,15 @@ let v_genEntryHook = (fun (st : t_GenSt) (entry : Vuna_dIr_dModel.t_IrEntry) (pr
 ) else (let mainP = ((v_genValueRef dtb__397) (Vuna_dIr_dModel.v_irEntryMainOf entry)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_hookText (Vuna_dTarget_dOcaml_dRender.v_renderTerm dtb__396)) (B_dData_dPair.v_firstOf mainP)) printResult); B_dData_dPair.f_Pair_second = ((B_dData_dPair.v_secondOf mainP)).f_GenSt_gsDeps }))))
   | _ -> failwith "DT: impossible branch"
 ))))
+
+# 2071 "Vuna/Target/Ocaml/Term.vuna"
+let v_gsShared = (fun (p : t_GenSt) -> (p).f_GenSt_gsShared)
+
+# 2072 "Vuna/Target/Ocaml/Term.vuna"
+let v_gsQual = (fun (p : t_GenSt) -> (p).f_GenSt_gsQual)
+
+# 2073 "Vuna/Target/Ocaml/Term.vuna"
+let v_gsDeps = (fun (p : t_GenSt) -> (p).f_GenSt_gsDeps)
+
+# 2074 "Vuna/Target/Ocaml/Term.vuna"
+let v_gsNormPath = (fun p -> (p).f_GenSt_gsNormPath)

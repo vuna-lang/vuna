@@ -860,3 +860,54 @@ let v_runCompilerCliFor = (fun (nFs : string) (nConsole : string) (nClock : stri
 
 # 69 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_runCompilerCli = (fun (nFs : string) (nConsole : string) (nClock : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (nTty : string) (args : string B_dData_dList.t_List) -> ((((((((((v_runCompilerCliFor nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) nTty) "vuna") args))
+
+# 73 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optDiagFormat = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDiagFormat)
+
+# 74 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optDiagLang = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDiagLang)
+
+# 75 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optLangExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optLangExplicit)
+
+# 76 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optDenyWarnings = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDenyWarnings)
+
+# 77 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optShowWarnings = (fun (p : t_CliOpts) -> (p).f_CliOpts_optShowWarnings)
+
+# 78 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optFormatExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optFormatExplicit)
+
+# 79 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optWarningsExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWarningsExplicit)
+
+# 80 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optDenyExplicit = (fun (p : t_CliOpts) -> (p).f_CliOpts_optDenyExplicit)
+
+# 81 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optMaxErrors = (fun (p : t_CliOpts) -> (p).f_CliOpts_optMaxErrors)
+
+# 82 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optContinueOnError = (fun (p : t_CliOpts) -> (p).f_CliOpts_optContinueOnError)
+
+# 83 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optSarifItems = (fun (p : t_CliOpts) -> (p).f_CliOpts_optSarifItems)
+
+# 84 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optRelease = (fun (p : t_CliOpts) -> (p).f_CliOpts_optRelease)
+
+# 85 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optShowCascade = (fun (p : t_CliOpts) -> (p).f_CliOpts_optShowCascade)
+
+# 86 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optWithSources = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWithSources)
+
+# 87 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optFailFast = (fun (p : t_CliOpts) -> (p).f_CliOpts_optFailFast)
+
+# 88 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optTarget = (fun (p : t_CliOpts) -> (p).f_CliOpts_optTarget)
+
+# 89 "Vuna/Compiler/Driver/CompilerCli.vuna"
+let v_optWasmOpt = (fun (p : t_CliOpts) -> (p).f_CliOpts_optWasmOpt)

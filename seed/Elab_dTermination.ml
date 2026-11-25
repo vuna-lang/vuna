@@ -484,3 +484,12 @@ let v_checkTerminationDeclsWith = (fun (own : string B_dData_dList.t_List) (decl
 
 # 554 "Vuna/Compiler/Elab/Termination.vuna"
 let v_checkTerminationDecls = (fun (decls : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((v_checkTerminationDeclsWith (v_dfunNames decls)) decls))
+
+# 463 "Vuna/Compiler/Elab/Termination.vuna"
+let v_fcRank = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcRank)
+
+# 464 "Vuna/Compiler/Elab/Termination.vuna"
+let v_fcPos = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcPos)
+
+# 465 "Vuna/Compiler/Elab/Termination.vuna"
+let v_fcEdges = (fun (p : t_FailCandidate) -> (p).f_FailCandidate_fcEdges)

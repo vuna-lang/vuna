@@ -491,3 +491,24 @@ let v_contextForFile = (fun (nFs : string) (nEnv : string) (path : string) -> ((
 
 # 743 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_contextForDir = (fun (nFs : string) (nEnv : string) (dir : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_absolutePath nEnv) dir)) (fun absolute -> (((v_contextAt nFs) nEnv) absolute))))
+
+# 36 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_rootExports = (fun (p : t_Root) -> (p).f_Root_rootExports)
+
+# 37 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_rootLayerRules = (fun (p : t_Root) -> (p).f_Root_rootLayerRules)
+
+# 41 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_packageManifest = (fun (p : t_Package) -> (p).f_Package_packageManifest)
+
+# 58 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_contextPackage = (fun (p : t_PackageContext) -> (p).f_PackageContext_contextPackage)
+
+# 469 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_workspaceDir = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceDir)
+
+# 470 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_workspaceRoot = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceRoot)
+
+# 471 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
+let v_workspaceMembers = (fun (p : t_Workspace) -> (p).f_Workspace_workspaceMembers)

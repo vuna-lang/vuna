@@ -1295,3 +1295,15 @@ let rec v_resolveRowGoalsCtxGo = (fun (mc0 : (string, Core_dTerm.t_Term) B_dData
 
 # 643 "Vuna/Compiler/Elab/Dict.vuna"
 let v_resolveRowGoalsCtx = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (sp : Base_dSource.t_Span) -> ((((((v_resolveRowGoalsCtxGo globals) ctx) sp) (Elab_dTypes.v_ecPendingList ec)) ec) B_dData_dList.C_List_Nil))
+
+# 52 "Vuna/Compiler/Elab/Dict.vuna"
+let v_instMatchTerm = (fun (p : t_InstMatch) -> (p).f_InstMatch_instMatchTerm)
+
+# 1087 "Vuna/Compiler/Elab/Dict.vuna"
+let v_boShort = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boShort)
+
+# 1088 "Vuna/Compiler/Elab/Dict.vuna"
+let v_boOp = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boOp)
+
+# 1089 "Vuna/Compiler/Elab/Dict.vuna"
+let v_boRuntime = (fun (p : t_BuiltinOp) -> (p).f_BuiltinOp_boRuntime)

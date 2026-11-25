@@ -626,3 +626,87 @@ let v_buildManifest = (fun (path : string) (entries : Frontend_dToml.t_TomlEntry
 
 # 556 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_parseManifest = (fun (path : string) (contents : string) -> ((Base_dCommon.v_bind ((Frontend_dToml.v_parseTomlAt path) contents)) (fun (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> ((v_buildManifest path) entries))))
+
+# 36 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAlias = (fun (p : t_Dependency) -> (p).f_Dependency_depAlias)
+
+# 37 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depSource = (fun (p : t_Dependency) -> (p).f_Dependency_depSource)
+
+# 38 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depHash = (fun (p : t_Dependency) -> (p).f_Dependency_depHash)
+
+# 39 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depIdentity = (fun (p : t_Dependency) -> (p).f_Dependency_depIdentity)
+
+# 54 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_layerName = (fun (p : t_Layer) -> (p).f_Layer_layerName)
+
+# 55 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_layerUses = (fun (p : t_Layer) -> (p).f_Layer_layerUses)
+
+# 56 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_layerLine = (fun (p : t_Layer) -> (p).f_Layer_layerLine)
+
+# 59 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestName = (fun (p : t_Manifest) -> (p).f_Manifest_manifestName)
+
+# 60 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestMembers = (fun (p : t_Manifest) -> (p).f_Manifest_manifestMembers)
+
+# 62 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestIsWorkspace = (fun (p : t_Manifest) -> (p).f_Manifest_manifestIsWorkspace)
+
+# 63 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestExports = (fun (p : t_Manifest) -> (p).f_Manifest_manifestExports)
+
+# 64 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDependencies = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDependencies)
+
+# 65 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestPath = (fun (p : t_Manifest) -> (p).f_Manifest_manifestPath)
+
+# 67 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDiagFormat = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagFormat)
+
+# 68 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDiagWarnings = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagWarnings)
+
+# 69 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDiagMaxErrors = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagMaxErrors)
+
+# 70 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDiagLang = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagLang)
+
+# 71 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestDiagDenyWarnings = (fun (p : t_Manifest) -> (p).f_Manifest_manifestDiagDenyWarnings)
+
+# 73 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestRegistryIndex = (fun (p : t_Manifest) -> (p).f_Manifest_manifestRegistryIndex)
+
+# 75 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_manifestLayers = (fun (p : t_Manifest) -> (p).f_Manifest_manifestLayers)
+
+# 79 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccAlias = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccAlias)
+
+# 80 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccPath = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccPath)
+
+# 81 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccGit = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccGit)
+
+# 82 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccRev = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccRev)
+
+# 83 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccUrl = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccUrl)
+
+# 84 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccHash = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccHash)
+
+# 85 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccIdentity = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccIdentity)
+
+# 86 "Vuna/Compiler/Frontend/Manifest.vuna"
+let v_depAccTableLine = (fun (p : t_DepAcc) -> (p).f_DepAcc_depAccTableLine)

@@ -417,3 +417,39 @@ let v_badCaseIndent = (fun (st : t_PState) (altCol : int) -> (if (v_isEof st) th
   | { Base_dSource.f_Pos_posLine = dtb__134; Base_dSource.f_Pos_posCol = dtb__135; Base_dSource.f_Pos_posOffset = dtb__136; Base_dSource.f_Pos_posEndOffset = dtb__137 } -> (if (dtb__135 > altCol) then (if (v_terminatesExpression (v_peekTok st)) then false else true) else false)
   | _ -> failwith "DT: impossible branch"
 )))
+
+# 30 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_sourceOf = (fun (p : t_PState) -> (p).f_PState_sourceOf)
+
+# 31 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_toksOf = (fun (p : t_PState) -> (p).f_PState_toksOf)
+
+# 33 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_toksLeft = (fun (p : t_PState) -> (p).f_PState_toksLeft)
+
+# 35 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_tokIndex = (fun (p : t_PState) -> (p).f_PState_tokIndex)
+
+# 36 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_pendEvents = (fun (p : t_PState) -> (p).f_PState_pendEvents)
+
+# 39 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_nextNodeId = (fun (p : t_PState) -> (p).f_PState_nextNodeId)
+
+# 42 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_openNodeId = (fun (p : t_PState) -> (p).f_PState_openNodeId)
+
+# 47 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_subStream = (fun (p : t_PState) -> (p).f_PState_subStream)
+
+# 50 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_backtickShapes = (fun (p : t_PState) -> (p).f_PState_backtickShapes)
+
+# 52 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_sectionShapes = (fun (p : t_PState) -> (p).f_PState_sectionShapes)
+
+# 54 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_interpMultis = (fun (p : t_PState) -> (p).f_PState_interpMultis)
+
+# 59 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_templateHoles = (fun (p : t_PState) -> (p).f_PState_templateHoles)

@@ -1106,3 +1106,30 @@ and v_showSigAppText = (fun (mc0 : string) (mc1 : (t_Term, t_Rig) B_dData_dPair.
   | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 161 "Vuna/Compiler/Core/Term.vuna"
+let v_binderName = (fun (p : t_Binder) -> (p).f_Binder_binderName)
+
+# 162 "Vuna/Compiler/Core/Term.vuna"
+let v_binderRig = (fun (p : t_Binder) -> (p).f_Binder_binderRig)
+
+# 163 "Vuna/Compiler/Core/Term.vuna"
+let v_binderSpan = (fun (p : t_Binder) -> (p).f_Binder_binderSpan)
+
+# 204 "Vuna/Compiler/Core/Term.vuna"
+let v_closureEnv = (fun (p : t_Closure) -> (p).f_Closure_closureEnv)
+
+# 205 "Vuna/Compiler/Core/Term.vuna"
+let v_closureBody = (fun (p : t_Closure) -> (p).f_Closure_closureBody)
+
+# 234 "Vuna/Compiler/Core/Term.vuna"
+let v_vCaseAltName = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltName)
+
+# 235 "Vuna/Compiler/Core/Term.vuna"
+let v_vCaseAltBinders = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltBinders)
+
+# 236 "Vuna/Compiler/Core/Term.vuna"
+let v_vCaseAltClosure = (fun (p : t_VCaseAlt) -> (p).f_VCaseAlt_vCaseAltClosure)
+
+# 385 "Vuna/Compiler/Core/Term.vuna"
+let v_solsTbl = (fun (p : t_Sols) -> (p).f_Sols_solsTbl)

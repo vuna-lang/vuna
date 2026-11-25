@@ -361,3 +361,21 @@ let v_reorderDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (
 
 # 480 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_reorderProgram = (fun (t : t_FixityTable) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderDecl t) v))) decls))
+
+# 30 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_fixityDecls = (fun (p : t_FixityTable) -> (p).f_FixityTable_fixityDecls)
+
+# 31 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_fixFacts = (fun (p : t_FixityTable) -> (p).f_FixityTable_fixFacts)
+
+# 103 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_chainOp = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainOp)
+
+# 104 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_chainIsBacktick = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainIsBacktick)
+
+# 105 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_chainRhs = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainRhs)
+
+# 106 "Vuna/Compiler/Loader/Fixity.vuna"
+let v_chainRef = (fun (p : t_ChainOp) -> (p).f_ChainOp_chainRef)

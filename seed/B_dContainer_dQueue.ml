@@ -88,3 +88,12 @@ let v_toList = (fun mc0 -> (match mc0 with
 
 # 90 "Base/Container/Queue.vuna"
 let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_Queue_x36_46_x36_Queue_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun q -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) (v_toList q)))))))
+
+# 20 "Base/Container/Queue.vuna"
+let v_queueFront = (fun p -> (p).f_Queue_queueFront)
+
+# 22 "Base/Container/Queue.vuna"
+let v_queueBack = (fun p -> (p).f_Queue_queueBack)
+
+# 24 "Base/Container/Queue.vuna"
+let v_queueCount = (fun p -> (p).f_Queue_queueCount)

@@ -1633,3 +1633,75 @@ let v_parseSourceRecoveringTokens = (fun (file : string) (source : string) (mode
 
 # 2803 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parseSourceRecovering = (fun (file : string) (source : string) -> ((Base_dCommon.v_bind (Frontend_dLexer.v_lexSource source)) (fun (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> ((((v_parseSourceRecoveringTokens file) source) Frontend_dParser_dSupport.C_ParseMode_PmStrict) toks))))
+
+# 34 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedFile = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedFile)
+
+# 36 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedComments = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedComments)
+
+# 38 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedRawToks = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedRawToks)
+
+# 44 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedCst = (fun (p : t_ParsedSource) -> (p).f_ParsedSource_parsedCst)
+
+# 49 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_pcSource = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcSource)
+
+# 50 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_pcComments = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcComments)
+
+# 51 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_pcToks = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcToks)
+
+# 52 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_pcFin = (fun (p : t_ParsedCore) -> (p).f_ParsedCore_pcFin)
+
+# 112 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declAccFixities = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccFixities)
+
+# 113 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declAccDecls = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccDecls)
+
+# 114 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declAccExports = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccExports)
+
+# 115 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declAccOpacity = (fun (p : t_DeclAcc) -> (p).f_DeclAcc_declAccOpacity)
+
+# 121 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedFixity = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedFixity)
+
+# 122 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedDecl = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedDecl)
+
+# 123 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedExport = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedExport)
+
+# 124 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_parsedOpacity = (fun (p : t_ParsedDecl) -> (p).f_ParsedDecl_parsedOpacity)
+
+# 131 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declStartId = (fun (p : t_DeclStart) -> (p).f_DeclStart_declStartId)
+
+# 132 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_declStartPos = (fun (p : t_DeclStart) -> (p).f_DeclStart_declStartPos)
+
+# 363 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_dbOpen = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbOpen)
+
+# 364 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_dbClauses = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbClauses)
+
+# 365 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_dbFirst = (fun (p : t_DeclBlock) -> (p).f_DeclBlock_dbFirst)
+
+# 883 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_traitHeadName = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadName)
+
+# 884 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_traitHeadParams = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadParams)
+
+# 885 "Vuna/Compiler/Frontend/Parser.vuna"
+let v_traitHeadSupers = (fun (p : t_TraitHead) -> (p).f_TraitHead_traitHeadSupers)

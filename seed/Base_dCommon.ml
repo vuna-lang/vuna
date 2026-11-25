@@ -44,3 +44,6 @@ let rec v_traverse = (fun mc0 mc1 -> (match mc1 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 32 "Vuna/Compiler/Base/Common.vuna"
+let v_effCheckRun = (fun p -> (p).f_EffCheck_effCheckRun)

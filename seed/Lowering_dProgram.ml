@@ -1166,3 +1166,36 @@ let v_lowerProgramOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) 
 
 # 1534 "Vuna/Compiler/Lowering/Program.vuna"
 let v_lowerProgramCheckedOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind (((v_lowerProgramOf datas) defs) globals)) (fun (program : Vuna_dIr_dModel.t_IrProgram) -> ((Base_dCommon.v_bind (Vuna_dIr_dValidate.v_validateProgram program)) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (program)))))))
+
+# 51 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lwNext = (fun (p : t_LwSt) -> (p).f_LwSt_lwNext)
+
+# 53 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lwBinder = (fun (p : t_LwSt) -> (p).f_LwSt_lwBinder)
+
+# 224 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamParamName = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamName)
+
+# 225 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamParamRig = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamRig)
+
+# 226 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamParamTy = (fun (p : t_LamParam) -> (p).f_LamParam_lamParamTy)
+
+# 229 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamChainBinders = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainBinders)
+
+# 230 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamChainBody = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainBody)
+
+# 231 "Vuna/Compiler/Lowering/Program.vuna"
+let v_lamChainResultTy = (fun (p : t_LamChainIn) -> (p).f_LamChainIn_lamChainResultTy)
+
+# 687 "Vuna/Compiler/Lowering/Program.vuna"
+let v_aeEnv = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aeEnv)
+
+# 688 "Vuna/Compiler/Lowering/Program.vuna"
+let v_aePats = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aePats)
+
+# 689 "Vuna/Compiler/Lowering/Program.vuna"
+let v_aeSt = (fun (p : t_AltEnvIn) -> (p).f_AltEnvIn_aeSt)

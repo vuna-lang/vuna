@@ -190,3 +190,6 @@ let rec v_declsRefs = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> 
 
 # 64 "Vuna/Compiler/Frontend/Refs.vuna"
 let v_annotateDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((v_foldRefs (v_declsRefs decls)) v_emptyRefTable))
+
+# 27 "Vuna/Compiler/Frontend/Refs.vuna"
+let v_anRefs = (fun (p : t_Annot) -> (let dtb__154 = p in dtb__154))

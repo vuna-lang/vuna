@@ -114,3 +114,27 @@ let rec v_lastMatch = (fun (mc0 : t_IgnoreRule B_dData_dList.t_List) (mc1 : stri
 
 # 175 "Vuna/Compiler/Base/Ignore.vuna"
 let v_isIgnored = (fun (ctx : t_IgnoreContext) (rel : string) (isDir : bool) -> ((((v_lastMatch (ctx).f_IgnoreContext_ignoreRules) ((v_ignorePathOf ctx) rel)) isDir) false))
+
+# 28 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreBase = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreBase)
+
+# 30 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreNegate = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreNegate)
+
+# 32 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreDirOnly = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreDirOnly)
+
+# 34 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreAnchored = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreAnchored)
+
+# 36 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreSegs = (fun (p : t_IgnoreRule) -> (p).f_IgnoreRule_ignoreSegs)
+
+# 41 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreRoot = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignoreRoot)
+
+# 43 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignorePrefix = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignorePrefix)
+
+# 45 "Vuna/Compiler/Base/Ignore.vuna"
+let v_ignoreRules = (fun (p : t_IgnoreContext) -> (p).f_IgnoreContext_ignoreRules)

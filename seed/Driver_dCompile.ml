@@ -1275,3 +1275,78 @@ let v_buildSplit = (fun (nFs : string) (nConsole : string) (nClock : string) (nE
 ))))
   | _ -> failwith "DT: impossible branch"
 ))))
+
+# 827 "Vuna/Compiler/Driver/Compile.vuna"
+let v_peName = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peName)
+
+# 828 "Vuna/Compiler/Driver/Compile.vuna"
+let v_peDir = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peDir)
+
+# 829 "Vuna/Compiler/Driver/Compile.vuna"
+let v_peKey = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peKey)
+
+# 830 "Vuna/Compiler/Driver/Compile.vuna"
+let v_peEnv = (fun (p : t_PkgEntry) -> (p).f_PkgEntry_peEnv)
+
+# 834 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmPkgKey = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPkgKey)
+
+# 835 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmPkgEnv = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPkgEnv)
+
+# 836 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmName = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmName)
+
+# 837 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmPath = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmPath)
+
+# 838 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmSrc = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmSrc)
+
+# 839 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmImports = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmImports)
+
+# 840 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmAddr = (fun (p : t_ClosureMod) -> (p).f_ClosureMod_cmAddr)
+
+# 1413 "Vuna/Compiler/Driver/Compile.vuna"
+let v_tcDepIfaces = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcDepIfaces)
+
+# 1414 "Vuna/Compiler/Driver/Compile.vuna"
+let v_tcDepHashes = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcDepHashes)
+
+# 1415 "Vuna/Compiler/Driver/Compile.vuna"
+let v_tcNeeded = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcNeeded)
+
+# 1418 "Vuna/Compiler/Driver/Compile.vuna"
+let v_tcOwnNames = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcOwnNames)
+
+# 1419 "Vuna/Compiler/Driver/Compile.vuna"
+let v_tcStats = (fun (p : t_ToolContext) -> (p).f_ToolContext_tcStats)
+
+# 1740 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmKind = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmKind)
+
+# 1741 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmManifest = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmManifest)
+
+# 1742 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmSources = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmSources)
+
+# 1743 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmDeps = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmDeps)
+
+# 1744 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmVer = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmVer)
+
+# 1746 "Vuna/Compiler/Driver/Compile.vuna"
+let v_cmFlags = (fun (p : t_CheckMods) -> (p).f_CheckMods_cmFlags)
+
+# 2499 "Vuna/Compiler/Driver/Compile.vuna"
+let v_siClosure = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siClosure)
+
+# 2500 "Vuna/Compiler/Driver/Compile.vuna"
+let v_siDepIfaces = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siDepIfaces)
+
+# 2501 "Vuna/Compiler/Driver/Compile.vuna"
+let v_siMods = (fun (p : t_SplitInputs) -> (p).f_SplitInputs_siMods)

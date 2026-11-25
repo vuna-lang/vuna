@@ -120,3 +120,33 @@ let v_decPackageIdentity = (fun (raw : string) -> (let nd_uscrut1 = ((v_decIdent
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))
+
+# 25 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_pfPath = (fun (p : t_PackageFile) -> (p).f_PackageFile_pfPath)
+
+# 26 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_pfContent = (fun (p : t_PackageFile) -> (p).f_PackageFile_pfContent)
+
+# 30 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_psName = (fun (p : t_PackageSource) -> (p).f_PackageSource_psName)
+
+# 31 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_psExports = (fun (p : t_PackageSource) -> (p).f_PackageSource_psExports)
+
+# 32 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_psDeps = (fun (p : t_PackageSource) -> (p).f_PackageSource_psDeps)
+
+# 33 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_psFiles = (fun (p : t_PackageSource) -> (p).f_PackageSource_psFiles)
+
+# 37 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_piName = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piName)
+
+# 38 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_piExports = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piExports)
+
+# 39 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_piDeps = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piDeps)
+
+# 40 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+let v_piFiles = (fun (p : t_PackageIdentity) -> (p).f_PackageIdentity_piFiles)

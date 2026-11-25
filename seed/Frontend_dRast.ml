@@ -499,3 +499,33 @@ let v_ofDeclsWith = (fun (at : Frontend_dRefs.t_Annot) (decls : Frontend_dAst.t_
 
 # 399 "Vuna/Compiler/Frontend/Rast.vuna"
 let v_ofDecls = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((v_ofDeclsWith (Frontend_dRefs.v_annotateDecls decls)) decls))
+
+# 30 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_traitMethodType = (fun (p : t_TraitMethod) -> (p).f_TraitMethod_traitMethodType)
+
+# 35 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_traitParamName = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamName)
+
+# 36 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_traitParamKind = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamKind)
+
+# 124 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileModDecl = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileModDecl)
+
+# 125 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileImports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileImports)
+
+# 126 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileFixities = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileFixities)
+
+# 127 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileDecls = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileDecls)
+
+# 129 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileExports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileExports)
+
+# 130 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileReexports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileReexports)
+
+# 131 "Vuna/Compiler/Frontend/Rast.vuna"
+let v_sourceFileOpacity = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileOpacity)

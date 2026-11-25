@@ -383,3 +383,96 @@ and v_irSizeAlt = (fun (mc0 : t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 121 "Vuna/Ir/Model.vuna"
+let v_irBinderId = (fun (p : t_IrBinder) -> (p).f_IrBinder_irBinderId)
+
+# 122 "Vuna/Ir/Model.vuna"
+let v_irBinderName = (fun (p : t_IrBinder) -> (p).f_IrBinder_irBinderName)
+
+# 124 "Vuna/Ir/Model.vuna"
+let v_irBinderErased = (fun (p : t_IrBinder) -> (p).f_IrBinder_irBinderErased)
+
+# 126 "Vuna/Ir/Model.vuna"
+let v_irBinderTy = (fun (p : t_IrBinder) -> (p).f_IrBinder_irBinderTy)
+
+# 168 "Vuna/Ir/Model.vuna"
+let v_irAltCtor = (fun (p : t_IrAlt) -> (p).f_IrAlt_irAltCtor)
+
+# 169 "Vuna/Ir/Model.vuna"
+let v_irAltBinders = (fun (p : t_IrAlt) -> (p).f_IrAlt_irAltBinders)
+
+# 170 "Vuna/Ir/Model.vuna"
+let v_irAltBody = (fun (p : t_IrAlt) -> (p).f_IrAlt_irAltBody)
+
+# 380 "Vuna/Ir/Model.vuna"
+let v_irEntryShow = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryShow)
+
+# 382 "Vuna/Ir/Model.vuna"
+let v_irEntryMain = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryMain)
+
+# 384 "Vuna/Ir/Model.vuna"
+let v_irEntryIsAction = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryIsAction)
+
+# 386 "Vuna/Ir/Model.vuna"
+let v_irEntryRunMain = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryRunMain)
+
+# 388 "Vuna/Ir/Model.vuna"
+let v_irEntryHandlers = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryHandlers)
+
+# 390 "Vuna/Ir/Model.vuna"
+let v_irEntryRowTags = (fun (p : t_IrEntry) -> (p).f_IrEntry_irEntryRowTags)
+
+# 397 "Vuna/Ir/Model.vuna"
+let v_irListFamily = (fun (p : t_IrListFam) -> (p).f_IrListFam_irListFamily)
+
+# 398 "Vuna/Ir/Model.vuna"
+let v_irListNil = (fun (p : t_IrListFam) -> (p).f_IrListFam_irListNil)
+
+# 399 "Vuna/Ir/Model.vuna"
+let v_irListCons = (fun (p : t_IrListFam) -> (p).f_IrListFam_irListCons)
+
+# 409 "Vuna/Ir/Model.vuna"
+let v_irSharedRecordFields = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedRecordFields)
+
+# 411 "Vuna/Ir/Model.vuna"
+let v_irSharedListFam = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedListFam)
+
+# 413 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesFloat = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedUsesFloat)
+
+# 415 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesTrace = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedUsesTrace)
+
+# 418 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesObs = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedUsesObs)
+
+# 421 "Vuna/Ir/Model.vuna"
+let v_irSharedDefLocs = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedDefLocs)
+
+# 423 "Vuna/Ir/Model.vuna"
+let v_irSharedUnboxed = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedUnboxed)
+
+# 426 "Vuna/Ir/Model.vuna"
+let v_irSharedCtorShapes = (fun (p : t_IrShared) -> (p).f_IrShared_irSharedCtorShapes)
+
+# 446 "Vuna/Ir/Model.vuna"
+let v_irUnitTyDecls = (fun (p : t_IrUnit) -> (p).f_IrUnit_irUnitTyDecls)
+
+# 448 "Vuna/Ir/Model.vuna"
+let v_irUnitGroups = (fun (p : t_IrUnit) -> (p).f_IrUnit_irUnitGroups)
+
+# 450 "Vuna/Ir/Model.vuna"
+let v_irUnitHasListFamily = (fun (p : t_IrUnit) -> (p).f_IrUnit_irUnitHasListFamily)
+
+# 452 "Vuna/Ir/Model.vuna"
+let v_irUnitTypeRefs = (fun (p : t_IrUnit) -> (p).f_IrUnit_irUnitTypeRefs)
+
+# 454 "Vuna/Ir/Model.vuna"
+let v_irUnitEntry = (fun (p : t_IrUnit) -> (p).f_IrUnit_irUnitEntry)
+
+# 458 "Vuna/Ir/Model.vuna"
+let v_irProgShared = (fun (p : t_IrProgram) -> (p).f_IrProgram_irProgShared)
+
+# 459 "Vuna/Ir/Model.vuna"
+let v_irProgUnit = (fun (p : t_IrProgram) -> (p).f_IrProgram_irProgUnit)

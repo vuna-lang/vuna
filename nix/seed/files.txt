@@ -143,6 +143,7 @@ Loader_dHeader.ml
 Loader_dLayers.ml
 Loader_dModules.ml
 Loader_dResolve.ml
+Loader_dSelectors.ml
 Lowering_dChecks.ml
 Lowering_dEntry.ml
 Lowering_dEnv.ml

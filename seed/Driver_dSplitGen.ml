@@ -334,3 +334,33 @@ let v_generateDtSplitProgramWith = (fun (lookup : (string) -> Driver_dSplit.t_Sp
 
 # 348 "Vuna/Compiler/Driver/SplitGen.vuna"
 let v_generateDtSplitProgram = (fun (modules : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (prog : Elab_dTypes.t_DtProgram) (printResult : bool) (roots : string B_dData_dList.t_List) (contextDir : string) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((((((((v_generateDtSplitProgramWith v_noUnitLookup) v_noUnitStore) modules) entryDecls) prog) printResult) roots) contextDir) extraDefLocs))
+
+# 189 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcEnv = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcEnv)
+
+# 190 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcAllDefs = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcAllDefs)
+
+# 191 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDefOwnerT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefOwnerT)
+
+# 192 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDataOwnerT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataOwnerT)
+
+# 193 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDefUnitT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefUnitT)
+
+# 194 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDataUnitT = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataUnitT)
+
+# 195 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcOrdered = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcOrdered)
+
+# 197 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDefBuckets = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDefBuckets)
+
+# 198 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcDataBuckets = (fun (p : t_SplitGenCtx) -> (p).f_SplitGenCtx_sgcDataBuckets)
+
+# 200 "Vuna/Compiler/Driver/SplitGen.vuna"
+let v_sgcNormPath = (fun p -> (p).f_SplitGenCtx_sgcNormPath)

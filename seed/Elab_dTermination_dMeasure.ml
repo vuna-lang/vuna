@@ -1595,3 +1595,33 @@ let rec v_filterModes = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 152 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_fwdCallee = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdCallee)
+
+# 153 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_fwdCbParam = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdCbParam)
+
+# 154 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_fwdArgParams = (fun (p : t_Forwarder) -> (p).f_Forwarder_fwdArgParams)
+
+# 1287 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofLambdaArity = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofLambdaArity)
+
+# 1288 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofElemParam = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofElemParam)
+
+# 1289 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofListArg = (fun (p : t_HofSpec) -> (p).f_HofSpec_hofListArg)
+
+# 1292 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofElemBinder = (fun (p : t_HofCall) -> (p).f_HofCall_hofElemBinder)
+
+# 1293 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofListExpr = (fun (p : t_HofCall) -> (p).f_HofCall_hofListExpr)
+
+# 1294 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofSideArgs = (fun (p : t_HofCall) -> (p).f_HofCall_hofSideArgs)
+
+# 1295 "Vuna/Compiler/Elab/Termination/Measure.vuna"
+let v_hofBody = (fun (p : t_HofCall) -> (p).f_HofCall_hofBody)

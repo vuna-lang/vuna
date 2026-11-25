@@ -42,3 +42,21 @@ let v_headerOfSource = (fun (mc0 : string) (mc1 : Frontend_dAst.t_SourceFile) ->
   | { Frontend_dAst.f_SourceFile_sourceFileModDecl = dtb__11; Frontend_dAst.f_SourceFile_sourceFileImports = dtb__12; Frontend_dAst.f_SourceFile_sourceFileFixities = dtb__13; Frontend_dAst.f_SourceFile_sourceFileDecls = dtb__14; Frontend_dAst.f_SourceFile_sourceFileExports = dtb__15; Frontend_dAst.f_SourceFile_sourceFileReexports = dtb__16; Frontend_dAst.f_SourceFile_sourceFileOpacity = dtb__17 } -> { f_ModHeader_mhName = mc0; f_ModHeader_mhImports = (v_dedupNames ((B_dData_dList.v_append ((B_dData_dList.v_map v_importNameOf) dtb__12)) ((B_dData_dList.v_concatMap v_exportItemDep) dtb__16))); f_ModHeader_mhFixities = ((B_dData_dList.v_map v_fixRowOf) dtb__13) }
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 51 "Vuna/Compiler/Loader/Addr.vuna"
+let v_frOp = (fun (p : t_FixRow) -> (p).f_FixRow_frOp)
+
+# 52 "Vuna/Compiler/Loader/Addr.vuna"
+let v_frLevel = (fun (p : t_FixRow) -> (p).f_FixRow_frLevel)
+
+# 53 "Vuna/Compiler/Loader/Addr.vuna"
+let v_frAssoc = (fun (p : t_FixRow) -> (p).f_FixRow_frAssoc)
+
+# 56 "Vuna/Compiler/Loader/Addr.vuna"
+let v_mhName = (fun (p : t_ModHeader) -> (p).f_ModHeader_mhName)
+
+# 57 "Vuna/Compiler/Loader/Addr.vuna"
+let v_mhImports = (fun (p : t_ModHeader) -> (p).f_ModHeader_mhImports)
+
+# 58 "Vuna/Compiler/Loader/Addr.vuna"
+let v_mhFixities = (fun (p : t_ModHeader) -> (p).f_ModHeader_mhFixities)

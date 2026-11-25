@@ -108,3 +108,9 @@ let v_size = (fun mc0 -> (match mc0 with
   | { f_HashMap_hashMapBuckets = dtb__37; f_HashMap_hashMapCount = dtb__38 } -> (bi_natFromInt dtb__38)
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 22 "Base/Container/HashMap.vuna"
+let v_hashMapBuckets = (fun p -> (p).f_HashMap_hashMapBuckets)
+
+# 24 "Base/Container/HashMap.vuna"
+let v_hashMapCount = (fun p -> (p).f_HashMap_hashMapCount)

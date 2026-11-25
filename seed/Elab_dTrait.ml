@@ -170,7 +170,7 @@ let rec v_flagAt = (fun (mc0 : int) (mc1 : bool B_dData_dList.t_List) -> (match 
 let rec v_projectionDefsOpaqueGo = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : string) (mc2 : int) (mc3 : (string, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc4 : Core_dTerm.t_Term B_dData_dList.t_List) (mc5 : int) (mc6 : int) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__53, dtb__54) -> (match dtb__53 with
   | { B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = dtb__56 } -> (match mc4 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = ((((((v_projectionBodyOpaque ((v_flagAt mc5) mc0)) mc1) mc5) ((Elab_dSig.v_methodArgRigsOf Elab_dMeta.v_binderRig) dtb__57)) mc6) mc2) }, (((((((v_projectionDefsOpaqueGo mc0) mc1) mc2) dtb__54) dtb__58) (mc5 + 1)) mc6)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__57, dtb__58) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = ((((((v_projectionBodyOpaque ((v_flagAt mc5) mc0)) mc1) mc5) ((Elab_dSig.v_methodArgRigsOf Elab_dMeta.v_piBinderRig) dtb__57)) mc6) mc2) }, (((((((v_projectionDefsOpaqueGo mc0) mc1) mc2) dtb__54) dtb__58) (mc5 + 1)) mc6)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 )
@@ -1479,3 +1479,24 @@ let v_bindIndexBinder = (fun (a1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_P
 
 # 1733 "Vuna/Compiler/Elab/Trait.vuna"
 let v_bindOnePattern = (fun (a1 : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (a2 : Elab_dTypes.t_Ctx) (a3 : Elab_dTypes.t_Ec) (a4 : Core_dTerm.t_Rig) (a5 : string) (a6 : Frontend_dRast.t_Pat B_dData_dList.t_List) (a7 : Frontend_dRast.t_Expr) (a8 : Core_dTerm.t_Value) (a9 : Core_dTerm.t_Closure) (a10 : Base_dSource.t_Span) (a11 : Base_dSource.t_Span) -> ((((((((((((v_bindOnePatternFuel 512) a1) a2) a3) a4) a5) a6) a7) a8) a9) a10) a11))
+
+# 1142 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dictGoalGroupRep = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupRep)
+
+# 1143 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dictGoalGroupDom = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupDom)
+
+# 1144 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dictGoalGroupExtras = (fun (p : t_DictGoalGroup) -> (p).f_DictGoalGroup_dictGoalGroupExtras)
+
+# 1219 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dpName = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpName)
+
+# 1221 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dpLevel = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpLevel)
+
+# 1223 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dpDom = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpDom)
+
+# 1225 "Vuna/Compiler/Elab/Trait.vuna"
+let v_dpMetas = (fun (p : t_DictPlan) -> (p).f_DictPlan_dpMetas)

@@ -1032,3 +1032,30 @@ let v_edgeModeOf = (fun (mc0 : (((string, string) B_dData_dPair.t_Pair, int) B_d
 
 # 982 "Vuna/Compiler/Elab/Termination/Scc.vuna"
 let v_tryFuelThread = (fun (comp : string B_dData_dList.t_List) (defTbl : (string, (Frontend_dRast.t_Pat B_dData_dList.t_List, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (ctors : string B_dData_dList.t_List) (projs : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (facts : (string, int B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (msg : Base_dDiag.t_Diagnostic) -> (let sites = (((((v_siteCollect comp) ctors) projs) defTbl) facts) in (let edges = (((v_fuelEdgesOf comp) defTbl) sites) in (let strictCount = (B_dData_dList.v_length (Elab_dTermination_dMeasure.v_filterModes ((B_dData_dList.v_map v_edgeModeOf) edges))) in (if (if (if (strictCount > 0) then (((v_fuelAcceptable comp) defTbl) edges) else false) then (B_dData_dBool.v_not ((Elab_dTermination_dMeasure.v_hasWeakCycle comp) edges)) else false) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.C_Check_ErrC (msg)))))))
+
+# 13 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteCaller = (fun (p : t_Site) -> (p).f_Site_siteCaller)
+
+# 14 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteCallee = (fun (p : t_Site) -> (p).f_Site_siteCallee)
+
+# 15 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteArgs = (fun (p : t_Site) -> (p).f_Site_siteArgs)
+
+# 16 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteSizes = (fun (p : t_Site) -> (p).f_Site_siteSizes)
+
+# 17 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteRegion = (fun (p : t_Site) -> (p).f_Site_siteRegion)
+
+# 19 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_siteBlind = (fun (p : t_Site) -> (p).f_Site_siteBlind)
+
+# 27 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_edgeFrom = (fun (p : t_ScEdge) -> (p).f_ScEdge_edgeFrom)
+
+# 28 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_edgeTo = (fun (p : t_ScEdge) -> (p).f_ScEdge_edgeTo)
+
+# 29 "Vuna/Compiler/Elab/Termination/Scc.vuna"
+let v_scStrictEdge = (fun (p : t_ScEdge) -> (p).f_ScEdge_scStrictEdge)

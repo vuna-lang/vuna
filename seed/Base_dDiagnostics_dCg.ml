@@ -60,3 +60,12 @@ let v_cgErr0At = (fun (sp : Base_dSource.t_Span) (e : t_CgErr) -> (Base_dDiag.C_
 
 # 135 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
 let v_cgErrDefAt = (fun (span : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (name : string) (e : t_CgErr) (args : string B_dData_dVec.t_Vec) -> (Base_dDiag.C_Check_ErrC ((((Base_dDiag.v_withContext span) name) ((v_cgMsg e) args)))))
+
+# 61 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
+let v_cgEntryCode = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryCode)
+
+# 62 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
+let v_cgEntryTemplate = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryTemplate)
+
+# 63 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
+let v_cgEntryDesc = (fun (p : t_CgEntry) -> (p).f_CgEntry_cgEntryDesc)

@@ -48,3 +48,12 @@ let v_ldErr4 = (fun (e : t_LdDiag) (a0 : string) (a1 : string) (a2 : string) (a3
 
 # 100 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
 let v_ldErr2 = (fun (e : t_LdDiag) (a0 : string) (a1 : string) -> ((v_ldErr e) (B_dData_dVec.C_Vec_VCons (a0, (B_dData_dVec.C_Vec_VCons (a1, B_dData_dVec.C_Vec_Nil))))))
+
+# 48 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
+let v_ldEntryCode = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryCode)
+
+# 49 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
+let v_ldEntryTemplate = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryTemplate)
+
+# 50 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
+let v_ldEntryDesc = (fun (p : t_LdEntry) -> (p).f_LdEntry_ldEntryDesc)

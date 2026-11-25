@@ -268,3 +268,12 @@ let v_storeRootProjectListEff = (fun (nFs : string) (nEnv : string) (nProcess : 
 
 # 650 "Vuna/Compiler/Base/Store.vuna"
 let v_storeRootRemoveEff = (fun (nFs : string) (nEnv : string) (nProcess : string) (projectId : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((v_storeRootsPathEff nFs) nEnv) nProcess) projectId)) (fun path -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsIsDirectory nFs) path)) (fun isDir -> (if isDir then ((B_dEffect_dFs.v_fsRemoveTree nFs) path) else ((B_dEffect_dFs.v_fsRemoveFile nFs) path)))) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) 0)))))))
+
+# 51 "Vuna/Compiler/Base/Store.vuna"
+let v_fTag = (fun (p : t_Frame) -> (p).f_Frame_fTag)
+
+# 52 "Vuna/Compiler/Base/Store.vuna"
+let v_fCodec = (fun (p : t_Frame) -> (p).f_Frame_fCodec)
+
+# 53 "Vuna/Compiler/Base/Store.vuna"
+let v_fPayload = (fun (p : t_Frame) -> (p).f_Frame_fPayload)

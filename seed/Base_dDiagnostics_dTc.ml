@@ -311,3 +311,12 @@ let v_coverageCandidate = (fun (mc0 : (string, Base_dSource.t_Span B_dData_dMayb
 
 # 908 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcCoverageMissing = (fun (sp : Base_dSource.t_Span) (ctors : (string, Base_dSource.t_Span B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let joined = ((B_dData_dString.v_join ", ") ((B_dData_dList.v_map B_dData_dPair.v_firstOf) ctors)) in (let cands = ((B_dData_dList.v_map v_coverageCandidate) ctors) in (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldCandidates (cands))) ((Base_dDiagnostics_dCommon.v_withDiagSpan sp) ((v_tcMsg (C_TcErr_NotExhaustive (joined))) (B_dData_dVec.C_Vec_VCons (joined, B_dData_dVec.C_Vec_Nil))))))))))
+
+# 407 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryCode = (fun (p : t_TcEntry) -> (p).f_TcEntry_tcEntryCode)
+
+# 408 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryTemplate = (fun (p : t_TcEntry) -> (p).f_TcEntry_tcEntryTemplate)
+
+# 409 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryDesc = (fun (p : t_TcEntry) -> (p).f_TcEntry_tcEntryDesc)

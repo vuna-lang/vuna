@@ -393,3 +393,21 @@ let rec v_erasureFuelForAlts = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_
 
 # 488 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkAltErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> ((((v_checkAltErasureFuel (v_erasureFuelFor (v_erasureFuelForAlts a3))) a1) a2) a3))
+
+# 268 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsFloat = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsFloat)
+
+# 269 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsTrace = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsTrace)
+
+# 270 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsObs = (fun (p : t_UseFlags) -> (p).f_UseFlags_useFlagsObs)
+
+# 284 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_termUseDeps = (fun (p : t_TermUse) -> (p).f_TermUse_termUseDeps)
+
+# 285 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_termUseFlags = (fun (p : t_TermUse) -> (p).f_TermUse_termUseFlags)
+
+# 286 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_termUseFloatLit = (fun (p : t_TermUse) -> (p).f_TermUse_termUseFloatLit)

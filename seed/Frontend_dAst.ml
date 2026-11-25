@@ -464,3 +464,135 @@ let v_declDerivings = (fun (mc0 : t_Decl) -> (match mc0 with
   | C_Decl_DData (dtb__459, dtb__460, dtb__461, dtb__462, dtb__463, dtb__464, dtb__465, dtb__466, dtb__467) -> dtb__463
   | _ -> B_dData_dList.C_List_Nil
 ))
+
+# 37 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_fieldRef = (fun (p : t_Field) -> (p).f_Field_fieldRef)
+
+# 46 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_traitMethodType = (fun (p : t_TraitMethod) -> (p).f_TraitMethod_traitMethodType)
+
+# 47 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_traitMethodRef = (fun (p : t_TraitMethod) -> (p).f_TraitMethod_traitMethodRef)
+
+# 54 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_traitParamName = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamName)
+
+# 55 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_traitParamKind = (fun (p : t_TraitParam) -> (p).f_TraitParam_traitParamKind)
+
+# 100 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_lcPats = (fun (p : t_LocalClause) -> (p).f_LocalClause_lcPats)
+
+# 101 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_lcBody = (fun (p : t_LocalClause) -> (p).f_LocalClause_lcBody)
+
+# 102 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_lcRef = (fun (p : t_LocalClause) -> (p).f_LocalClause_lcRef)
+
+# 103 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_lcHead = (fun (p : t_LocalClause) -> (p).f_LocalClause_lcHead)
+
+# 108 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_altPat = (fun (p : t_Alt) -> (p).f_Alt_altPat)
+
+# 109 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_altBody = (fun (p : t_Alt) -> (p).f_Alt_altBody)
+
+# 110 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_altRef = (fun (p : t_Alt) -> (p).f_Alt_altRef)
+
+# 114 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sigType = (fun (p : t_BindingSig) -> (p).f_BindingSig_sigType)
+
+# 115 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sigRef = (fun (p : t_BindingSig) -> (p).f_BindingSig_sigRef)
+
+# 126 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_bindPat = (fun (p : t_Binding) -> (p).f_Binding_bindPat)
+
+# 127 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_bindValue = (fun (p : t_Binding) -> (p).f_Binding_bindValue)
+
+# 128 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_bindSig = (fun (p : t_Binding) -> (p).f_Binding_bindSig)
+
+# 129 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_bindRef = (fun (p : t_Binding) -> (p).f_Binding_bindRef)
+
+# 170 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_fixityOp = (fun (p : t_FixityDecl) -> (p).f_FixityDecl_fixityOp)
+
+# 171 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_fixityLevel = (fun (p : t_FixityDecl) -> (p).f_FixityDecl_fixityLevel)
+
+# 172 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_fixityAssoc = (fun (p : t_FixityDecl) -> (p).f_FixityDecl_fixityAssoc)
+
+# 173 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_fixityRef = (fun (p : t_FixityDecl) -> (p).f_FixityDecl_fixityRef)
+
+# 189 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_ctorRef = (fun (p : t_Ctor) -> (p).f_Ctor_ctorRef)
+
+# 256 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_opacityName = (fun (p : t_OpacitySpec) -> (p).f_OpacitySpec_opacityName)
+
+# 257 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_opacityKind = (fun (p : t_OpacitySpec) -> (p).f_OpacitySpec_opacityKind)
+
+# 258 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_opacitySpan = (fun (p : t_OpacitySpec) -> (p).f_OpacitySpec_opacitySpan)
+
+# 269 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclName = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclName)
+
+# 270 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclHasExportList = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclHasExportList)
+
+# 271 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclExportItems = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclExportItems)
+
+# 272 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclExports = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclExports)
+
+# 273 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclReexports = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclReexports)
+
+# 274 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclOpacity = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclOpacity)
+
+# 275 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_modDeclRef = (fun (p : t_ModDecl) -> (p).f_ModDecl_modDeclRef)
+
+# 282 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileModDecl = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileModDecl)
+
+# 283 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileImports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileImports)
+
+# 284 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileFixities = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileFixities)
+
+# 285 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileDecls = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileDecls)
+
+# 287 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileExports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileExports)
+
+# 288 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileReexports = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileReexports)
+
+# 289 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_sourceFileOpacity = (fun (p : t_SourceFile) -> (p).f_SourceFile_sourceFileOpacity)
+
+# 449 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_importName = (fun (p : t_Import) -> (p).f_Import_importName)
+
+# 450 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_importIsQualified = (fun (p : t_Import) -> (p).f_Import_importIsQualified)
+
+# 451 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_importAlias = (fun (p : t_Import) -> (p).f_Import_importAlias)
+
+# 452 "Vuna/Compiler/Frontend/Ast.vuna"
+let v_importRef = (fun (p : t_Import) -> (p).f_Import_importRef)

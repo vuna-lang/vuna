@@ -165,3 +165,18 @@ let rec v_nameOwnerPairsOfDatas = (fun (mc0 : t_SplitMeta) (mc1 : Elab_dTypes.t_
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 156 "Vuna/Compiler/Driver/Owner.vuna"
+let v_smDefOwners = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDefOwners)
+
+# 157 "Vuna/Compiler/Driver/Owner.vuna"
+let v_smDataOwners = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDataOwners)
+
+# 158 "Vuna/Compiler/Driver/Owner.vuna"
+let v_smKnownModules = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smKnownModules)
+
+# 162 "Vuna/Compiler/Driver/Owner.vuna"
+let v_smDefOwnerT = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDefOwnerT)
+
+# 163 "Vuna/Compiler/Driver/Owner.vuna"
+let v_smDataOwnerT = (fun (p : t_SplitMeta) -> (p).f_SplitMeta_smDataOwnerT)

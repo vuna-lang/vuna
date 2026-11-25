@@ -789,3 +789,141 @@ let v_ecPutDefTbl = (fun (mc0 : t_Ec) (mc1 : (string, Core_dTerm.t_Term) B_dCont
   | { f_Ec_ecNext = dtb__1273; f_Ec_ecSols = dtb__1274; f_Ec_ecDefsRev = dtb__1275; f_Ec_ecDatas = dtb__1276; f_Ec_ecDepthOfMeta = dtb__1277; f_Ec_ecGoals = dtb__1278; f_Ec_ecInsts = dtb__1279; f_Ec_ecClasses = dtb__1280; f_Ec_ecConstraints = dtb__1281; f_Ec_ecDefTbl = dtb__1282; f_Ec_ecGlobalsTbl = dtb__1283; f_Ec_ecSolTbl = dtb__1284; f_Ec_ecDepthTbl = dtb__1285; f_Ec_ecGlobalsComplete = dtb__1286; f_Ec_ecClausesTbl = dtb__1287; f_Ec_ecCtorTbl = dtb__1288; f_Ec_ecHasLinear = dtb__1289; f_Ec_ecMetaSpans = dtb__1290; f_Ec_ecUseSpans = dtb__1291; f_Ec_ecWarnings = dtb__1292; f_Ec_ecCounters = dtb__1293; f_Ec_ecErrors = dtb__1294 } -> { f_Ec_ecNext = dtb__1273; f_Ec_ecSols = dtb__1274; f_Ec_ecDefsRev = dtb__1275; f_Ec_ecDatas = dtb__1276; f_Ec_ecDepthOfMeta = dtb__1277; f_Ec_ecGoals = dtb__1278; f_Ec_ecInsts = dtb__1279; f_Ec_ecClasses = dtb__1280; f_Ec_ecConstraints = dtb__1281; f_Ec_ecDefTbl = mc1; f_Ec_ecGlobalsTbl = dtb__1283; f_Ec_ecSolTbl = dtb__1284; f_Ec_ecDepthTbl = dtb__1285; f_Ec_ecGlobalsComplete = dtb__1286; f_Ec_ecClausesTbl = dtb__1287; f_Ec_ecCtorTbl = dtb__1288; f_Ec_ecHasLinear = dtb__1289; f_Ec_ecMetaSpans = dtb__1290; f_Ec_ecUseSpans = dtb__1291; f_Ec_ecWarnings = dtb__1292; f_Ec_ecCounters = dtb__1293; f_Ec_ecErrors = dtb__1294 }
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 69 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtCtorSpan = (fun (p : t_DtCtor) -> (p).f_DtCtor_dtCtorSpan)
+
+# 88 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtFieldName = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldName)
+
+# 89 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtFieldIndex = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldIndex)
+
+# 90 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtFieldType = (fun (p : t_DtFieldMeta) -> (p).f_DtFieldMeta_dtFieldType)
+
+# 95 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtDataParams = (fun (p : t_DtData) -> (p).f_DtData_dtDataParams)
+
+# 141 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtGoalMeta = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalMeta)
+
+# 142 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtGoalSpan = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalSpan)
+
+# 143 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtGoalType = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalType)
+
+# 144 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtGoalCtx = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalCtx)
+
+# 145 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtGoalName = (fun (p : t_DtGoal) -> (p).f_DtGoal_dtGoalName)
+
+# 150 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtClassParams = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassParams)
+
+# 152 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtClassSupers = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassSupers)
+
+# 153 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtClassMethods = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassMethods)
+
+# 154 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtClassFieldTys = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassFieldTys)
+
+# 156 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtClassMethodSpans = (fun (p : t_DtClass) -> (p).f_DtClass_dtClassMethodSpans)
+
+# 172 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtInstTele = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstTele)
+
+# 173 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtInstCtx = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstCtx)
+
+# 174 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtInstHead = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstHead)
+
+# 175 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtInstSpan = (fun (p : t_DtInst) -> (p).f_DtInst_dtInstSpan)
+
+# 206 "Vuna/Compiler/Elab/Types.vuna"
+let v_instsList = (fun (p : t_InstStore) -> (p).f_InstStore_instsList)
+
+# 207 "Vuna/Compiler/Elab/Types.vuna"
+let v_instsByFamily = (fun (p : t_InstStore) -> (p).f_InstStore_instsByFamily)
+
+# 261 "Vuna/Compiler/Elab/Types.vuna"
+let v_conId = (fun (p : t_Constraint) -> (p).f_Constraint_conId)
+
+# 262 "Vuna/Compiler/Elab/Types.vuna"
+let v_conKind = (fun (p : t_Constraint) -> (p).f_Constraint_conKind)
+
+# 263 "Vuna/Compiler/Elab/Types.vuna"
+let v_conMeta = (fun (p : t_Constraint) -> (p).f_Constraint_conMeta)
+
+# 264 "Vuna/Compiler/Elab/Types.vuna"
+let v_conDom = (fun (p : t_Constraint) -> (p).f_Constraint_conDom)
+
+# 265 "Vuna/Compiler/Elab/Types.vuna"
+let v_conSpan = (fun (p : t_Constraint) -> (p).f_Constraint_conSpan)
+
+# 266 "Vuna/Compiler/Elab/Types.vuna"
+let v_conDepth = (fun (p : t_Constraint) -> (p).f_Constraint_conDepth)
+
+# 271 "Vuna/Compiler/Elab/Types.vuna"
+let v_csPending = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPending)
+
+# 272 "Vuna/Compiler/Elab/Types.vuna"
+let v_csNextId = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csNextId)
+
+# 276 "Vuna/Compiler/Elab/Types.vuna"
+let v_csTried = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csTried)
+
+# 278 "Vuna/Compiler/Elab/Types.vuna"
+let v_csSolsCount = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csSolsCount)
+
+# 280 "Vuna/Compiler/Elab/Types.vuna"
+let v_csPassNext = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPassNext)
+
+# 281 "Vuna/Compiler/Elab/Types.vuna"
+let v_csPassSols = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csPassSols)
+
+# 284 "Vuna/Compiler/Elab/Types.vuna"
+let v_csCtorIndexComplete = (fun (p : t_ConstraintStore) -> (p).f_ConstraintStore_csCtorIndexComplete)
+
+# 297 "Vuna/Compiler/Elab/Types.vuna"
+let v_ecDefsRev = (fun (p : t_Ec) -> (p).f_Ec_ecDefsRev)
+
+# 299 "Vuna/Compiler/Elab/Types.vuna"
+let v_ecDepthOfMeta = (fun (p : t_Ec) -> (p).f_Ec_ecDepthOfMeta)
+
+# 310 "Vuna/Compiler/Elab/Types.vuna"
+let v_ecGlobalsComplete = (fun (p : t_Ec) -> (p).f_Ec_ecGlobalsComplete)
+
+# 311 "Vuna/Compiler/Elab/Types.vuna"
+let v_ecClausesTbl = (fun (p : t_Ec) -> (p).f_Ec_ecClausesTbl)
+
+# 312 "Vuna/Compiler/Elab/Types.vuna"
+let v_ecCtorTbl = (fun (p : t_Ec) -> (p).f_Ec_ecCtorTbl)
+
+# 1117 "Vuna/Compiler/Elab/Types.vuna"
+let v_ctxItems = (fun (p : t_Ctx) -> (p).f_Ctx_ctxItems)
+
+# 1118 "Vuna/Compiler/Elab/Types.vuna"
+let v_ctxEnvF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxEnvF)
+
+# 1119 "Vuna/Compiler/Elab/Types.vuna"
+let v_ctxRefVals = (fun (p : t_Ctx) -> (p).f_Ctx_ctxRefVals)
+
+# 1122 "Vuna/Compiler/Elab/Types.vuna"
+let v_ctxDepthF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxDepthF)
+
+# 1124 "Vuna/Compiler/Elab/Types.vuna"
+let v_ctxEnvRF = (fun (p : t_Ctx) -> (p).f_Ctx_ctxEnvRF)
+
+# 1267 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtProgNext = (fun (p : t_DtProgram) -> (p).f_DtProgram_dtProgNext)
+
+# 1268 "Vuna/Compiler/Elab/Types.vuna"
+let v_dtProgDepths = (fun (p : t_DtProgram) -> (p).f_DtProgram_dtProgDepths)

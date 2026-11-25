@@ -288,3 +288,36 @@ let v_prepareDeclsWith = (fun (auxDecls : Frontend_dRast.t_Decl B_dData_dList.t_
 
 # 340 "Vuna/Compiler/Elab/Records.vuna"
 let v_prepareDecls = (fun (decls0 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> ((v_prepareDeclsWith B_dData_dList.C_List_Nil) decls0))
+
+# 22 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordFieldName = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldName)
+
+# 23 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordFieldType = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldType)
+
+# 24 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordFieldIndex = (fun (p : t_RecordFieldMeta) -> (p).f_RecordFieldMeta_recordFieldIndex)
+
+# 29 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaName = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaName)
+
+# 30 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaParams = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaParams)
+
+# 31 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaFields = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaFields)
+
+# 32 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaDerivings = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaDerivings)
+
+# 33 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaDerivingVia = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaDerivingVia)
+
+# 35 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaRepr = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaRepr)
+
+# 36 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaCtor = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaCtor)
+
+# 37 "Vuna/Compiler/Elab/Records.vuna"
+let v_recordMetaLinear = (fun (p : t_RecordMeta) -> (p).f_RecordMeta_recordMetaLinear)

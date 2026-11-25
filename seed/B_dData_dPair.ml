@@ -42,3 +42,9 @@ let v_secondOf = (fun mc0 -> (match mc0 with
   | { f_Pair_first = dtb__14; f_Pair_second = dtb__15 } -> dtb__15
   | _ -> failwith "DT: impossible branch"
 ))
+
+# 13 "Base/Data/Pair.vuna"
+let v_first = (fun p -> (p).f_Pair_first)
+
+# 15 "Base/Data/Pair.vuna"
+let v_second = (fun p -> (p).f_Pair_second)

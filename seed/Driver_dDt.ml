@@ -1346,3 +1346,75 @@ let v_dtCheckLibraryPackageWithIfacesParts = (fun (nFs : string) (nEnv : string)
 )
   | _ -> failwith "DT: impossible branch"
 )))))
+
+# 65 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedProgram = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedProgram)
+
+# 66 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedModules = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedModules)
+
+# 67 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedEntryDecls = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedEntryDecls)
+
+# 70 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedInherited = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedInherited)
+
+# 72 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedWarnings = (fun (p : t_CheckedPackage) -> (p).f_CheckedPackage_checkedWarnings)
+
+# 578 "Vuna/Compiler/Driver/Dt.vuna"
+let v_genMetaId = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaId)
+
+# 579 "Vuna/Compiler/Driver/Dt.vuna"
+let v_genMetaName = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaName)
+
+# 580 "Vuna/Compiler/Driver/Dt.vuna"
+let v_genMetaKind = (fun (p : t_GenMeta) -> (p).f_GenMeta_genMetaKind)
+
+# 882 "Vuna/Compiler/Driver/Dt.vuna"
+let v_miKind = (fun (p : t_MainInfo) -> (p).f_MainInfo_miKind)
+
+# 883 "Vuna/Compiler/Driver/Dt.vuna"
+let v_miHostTags = (fun (p : t_MainInfo) -> (p).f_MainInfo_miHostTags)
+
+# 1311 "Vuna/Compiler/Driver/Dt.vuna"
+let v_auxCacheKey = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheKey)
+
+# 1312 "Vuna/Compiler/Driver/Dt.vuna"
+let v_auxCacheDecls = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheDecls)
+
+# 1313 "Vuna/Compiler/Driver/Dt.vuna"
+let v_auxCacheStart = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheStart)
+
+# 1314 "Vuna/Compiler/Driver/Dt.vuna"
+let v_auxCacheDepCps = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheDepCps)
+
+# 1315 "Vuna/Compiler/Driver/Dt.vuna"
+let v_auxCacheCleanCps = (fun (p : t_AuxCache) -> (p).f_AuxCache_auxCacheCleanCps)
+
+# 1348 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsStartEc = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsStartEc)
+
+# 1349 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsStartGlobals = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsStartGlobals)
+
+# 1350 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsTermAux = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsTermAux)
+
+# 1351 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsPrepared = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsPrepared)
+
+# 1352 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsDecls = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsDecls)
+
+# 1353 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsWarns = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsWarns)
+
+# 1354 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsDepCps = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsDepCps)
+
+# 1355 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsCleanCps = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsCleanCps)
+
+# 1356 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dsNext = (fun (p : t_DtIncrSetup) -> (p).f_DtIncrSetup_dsNext)

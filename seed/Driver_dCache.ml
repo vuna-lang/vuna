@@ -425,3 +425,6 @@ let v_decCachedProgramComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decC
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))
+
+# 34 "Vuna/Compiler/Driver/Cache.vuna"
+let v_cachedOpaque = (fun (p : t_CachedProgram) -> (p).f_CachedProgram_cachedOpaque)

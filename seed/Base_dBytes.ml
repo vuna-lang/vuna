@@ -137,3 +137,9 @@ let v_decListHead = (fun (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dDat
   | B_dData_dMaybe.C_Maybe_Just (dtb__19) -> (if (dtb__19 = 91) then ((v_thenPair ((((v_decNumStop (fuel - 1)) 58) 0) (v_curSkip c))) (fun (n : int) (b : t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = b })))) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))))
+
+# 43 "Vuna/Compiler/Base/Bytes.vuna"
+let v_curS = (fun (p : t_Cur) -> (p).f_Cur_curS)
+
+# 44 "Vuna/Compiler/Base/Bytes.vuna"
+let v_curI = (fun (p : t_Cur) -> (p).f_Cur_curI)

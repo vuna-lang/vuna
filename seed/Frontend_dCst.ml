@@ -628,3 +628,135 @@ let rec v_parenWalk = (fun (mc0 : (int, int) B_dData_dPair.t_Pair B_dData_dList.
 
 # 1019 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_parenEntriesOf = (fun (toks : Frontend_dLexer.t_PTok B_dData_dList.t_List) (events : t_NodeEvent B_dData_dList.t_List) -> ((((((v_parenWalk B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil) 0) B_dData_dMaybe.C_Maybe_Nothing) toks) events))
+
+# 60 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_triviaKind = (fun (p : t_Trivia) -> (p).f_Trivia_triviaKind)
+
+# 62 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_triviaText = (fun (p : t_Trivia) -> (p).f_Trivia_triviaText)
+
+# 64 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_triviaSpan = (fun (p : t_Trivia) -> (p).f_Trivia_triviaSpan)
+
+# 69 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstTag = (fun (p : t_CstToken) -> (p).f_CstToken_cstTag)
+
+# 71 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstText = (fun (p : t_CstToken) -> (p).f_CstToken_cstText)
+
+# 73 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstSpan = (fun (p : t_CstToken) -> (p).f_CstToken_cstSpan)
+
+# 75 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstLeading = (fun (p : t_CstToken) -> (p).f_CstToken_cstLeading)
+
+# 83 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lcOff = (fun (p : t_LineCur) -> (p).f_LineCur_lcOff)
+
+# 84 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lcLine = (fun (p : t_LineCur) -> (p).f_LineCur_lcLine)
+
+# 85 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lcCol = (fun (p : t_LineCur) -> (p).f_LineCur_lcCol)
+
+# 86 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_lcOffset = (fun (p : t_LineCur) -> (p).f_LineCur_lcOffset)
+
+# 181 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_tcommKind = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommKind)
+
+# 182 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_tcommSpan = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommSpan)
+
+# 183 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_tcommStart = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommStart)
+
+# 184 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_tcommEnd = (fun (p : t_TrivComment) -> (p).f_TrivComment_tcommEnd)
+
+# 388 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstParenDepth = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstParenDepth)
+
+# 390 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstBacktick = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstBacktick)
+
+# 392 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstSection = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstSection)
+
+# 394 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstInterpMulti = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstInterpMulti)
+
+# 400 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_cstHoleTrees = (fun (p : t_CstSurface) -> (p).f_CstSurface_cstHoleTrees)
+
+# 486 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_nfKind = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfKind)
+
+# 487 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_nfId = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfId)
+
+# 488 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_nfStart = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfStart)
+
+# 489 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_nfKids = (fun (p : t_NestFrame) -> (p).f_NestFrame_nfKids)
+
+# 669 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_ffParens = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffParens)
+
+# 670 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_ffBackticks = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffBackticks)
+
+# 671 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_ffSections = (fun (p : t_FixityFacts) -> (p).f_FixityFacts_ffSections)
+
+# 721 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_feParens = (fun (p : t_FactEntries) -> (p).f_FactEntries_feParens)
+
+# 722 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_feBackticks = (fun (p : t_FactEntries) -> (p).f_FactEntries_feBackticks)
+
+# 723 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_feSections = (fun (p : t_FactEntries) -> (p).f_FactEntries_feSections)
+
+# 786 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_ciById = (fun (p : t_CstIndex) -> (p).f_CstIndex_ciById)
+
+# 787 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_ciBySpan = (fun (p : t_CstIndex) -> (p).f_CstIndex_ciBySpan)
+
+# 790 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_iaById = (fun (p : t_IndexAcc) -> (p).f_IndexAcc_iaById)
+
+# 791 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_iaBySpan = (fun (p : t_IndexAcc) -> (p).f_IndexAcc_iaBySpan)
+
+# 924 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKind = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKind)
+
+# 925 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfId = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfId)
+
+# 926 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfOpen = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfOpen)
+
+# 927 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfFirst = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfFirst)
+
+# 928 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfPrev = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfPrev)
+
+# 929 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKids = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKids)
+
+# 930 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKidKind = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidKind)
+
+# 931 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKidOpen = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidOpen)
+
+# 932 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKidEnd = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidEnd)
+
+# 933 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_pfKidStructDepth = (fun (p : t_ParenFrame) -> (p).f_ParenFrame_pfKidStructDepth)

@@ -159,3 +159,21 @@ let v_psErr0At = (fun (sp : Base_dSource.t_Span) (e : t_PsDiag) -> (((v_psErrAt 
 
 # 441 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
 let v_psErr1At = (fun (sp : Base_dSource.t_Span) (e : t_PsDiag) (a0 : string) -> (((v_psErrAt sp) e) (B_dData_dVec.C_Vec_VCons (a0, B_dData_dVec.C_Vec_Nil))))
+
+# 221 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_lexEntryCode = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryCode)
+
+# 222 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_lexEntryTemplate = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryTemplate)
+
+# 223 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_lexEntryDesc = (fun (p : t_LexEntry) -> (p).f_LexEntry_lexEntryDesc)
+
+# 226 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_psEntryCode = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryCode)
+
+# 227 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_psEntryTemplate = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryTemplate)
+
+# 228 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
+let v_psEntryDesc = (fun (p : t_PsEntry) -> (p).f_PsEntry_psEntryDesc)

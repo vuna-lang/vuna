@@ -425,3 +425,51 @@ let rec v_projectionTable = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List
 
 # 90 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
 let v_elabTermInput = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (classes : Elab_dTypes.t_DtClass B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let projs = (v_projectionTable defs) in (let dicts = ((v_dictSymbolsOf classes) defs) in (let shapes = ((B_dData_dList.v_mapMaybe v_defShape) defs) in (let fields = (v_recordFieldTable datas) in (let groups = ((B_dData_dList.v_concatMap (((((v_groupsOfDef projs) dicts) shapes) classes) fields)) defs) in { B_dData_dPair.f_Pair_first = ((B_dData_dList.v_map v_grNameOf) groups); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_map v_groupToDecl) groups) }))))))
+
+# 47 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_peName = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peName)
+
+# 48 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_peCtor = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peCtor)
+
+# 49 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_peField = (fun (p : t_ProjEntry) -> (p).f_ProjEntry_peField)
+
+# 55 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_dsName = (fun (p : t_DefShape) -> (p).f_DefShape_dsName)
+
+# 57 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_dsPrefix = (fun (p : t_DefShape) -> (p).f_DefShape_dsPrefix)
+
+# 59 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_dsArity = (fun (p : t_DefShape) -> (p).f_DefShape_dsArity)
+
+# 63 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccProjs = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccProjs)
+
+# 65 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccDicts = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccDicts)
+
+# 66 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccShapes = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccShapes)
+
+# 67 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccClasses = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccClasses)
+
+# 70 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccFields = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccFields)
+
+# 73 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_ccSpan = (fun (p : t_ConvCtx) -> (p).f_ConvCtx_ccSpan)
+
+# 80 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_grName = (fun (p : t_Group) -> (p).f_Group_grName)
+
+# 81 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_grParams = (fun (p : t_Group) -> (p).f_Group_grParams)
+
+# 82 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_grBody = (fun (p : t_Group) -> (p).f_Group_grBody)
+
+# 83 "Vuna/Compiler/Elab/Termination/ElabInput.vuna"
+let v_grSpan = (fun (p : t_Group) -> (p).f_Group_grSpan)

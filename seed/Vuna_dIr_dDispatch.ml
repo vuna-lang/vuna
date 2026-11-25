@@ -145,3 +145,9 @@ let v_dispatchEntryM = (fun (mc0 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Ma
 
 # 191 "Vuna/Ir/Dispatch.vuna"
 let v_dispatchIdsUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> { Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls = (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls; Vuna_dIr_dModel.f_IrUnit_irUnitGroups = ((B_dData_dList.v_map v_dispatchGroup) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups); Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily = (u).Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily; Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs = (u).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs; Vuna_dIr_dModel.f_IrUnit_irUnitEntry = (v_dispatchEntryM (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry) })
+
+# 38 "Vuna/Ir/Dispatch.vuna"
+let v_saTy = (fun (p : t_SpineArg) -> (p).f_SpineArg_saTy)
+
+# 39 "Vuna/Ir/Dispatch.vuna"
+let v_saValue = (fun (p : t_SpineArg) -> (p).f_SpineArg_saValue)

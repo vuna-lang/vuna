@@ -290,3 +290,129 @@ let rec v_labelSpanOf = (fun (mc0 : t_Label B_dData_dList.t_List) -> (match mc0 
 
 # 678 "Vuna/Compiler/Base/Diag.vuna"
 let v_sameDiag = (fun (a : t_Diagnostic) (b : t_Diagnostic) -> (if (if (if ((a).f_Diagnostic_diagCode = (b).f_Diagnostic_diagCode) then ((a).f_Diagnostic_diagMessage = (b).f_Diagnostic_diagMessage) else false) then ((v_sameSeverity (a).f_Diagnostic_diagSeverity) (b).f_Diagnostic_diagSeverity) else false) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dList.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) ((B_dData_dPair.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Pair_x36_46_x36_Pair_ua_ub B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt))))) (v_labelSpanOf (a).f_Diagnostic_diagLabels)) (v_labelSpanOf (b).f_Diagnostic_diagLabels)) else false))
+
+# 100 "Vuna/Compiler/Base/Diag.vuna"
+let v_labelSpan = (fun (p : t_Label) -> (p).f_Label_labelSpan)
+
+# 101 "Vuna/Compiler/Base/Diag.vuna"
+let v_labelText = (fun (p : t_Label) -> (p).f_Label_labelText)
+
+# 102 "Vuna/Compiler/Base/Diag.vuna"
+let v_labelStyle = (fun (p : t_Label) -> (p).f_Label_labelStyle)
+
+# 103 "Vuna/Compiler/Base/Diag.vuna"
+let v_labelProvenance = (fun (p : t_Label) -> (p).f_Label_labelProvenance)
+
+# 107 "Vuna/Compiler/Base/Diag.vuna"
+let v_editSpan = (fun (p : t_DiagEdit) -> (p).f_DiagEdit_editSpan)
+
+# 108 "Vuna/Compiler/Base/Diag.vuna"
+let v_editNewText = (fun (p : t_DiagEdit) -> (p).f_DiagEdit_editNewText)
+
+# 112 "Vuna/Compiler/Base/Diag.vuna"
+let v_suggestionTitle = (fun (p : t_Suggestion) -> (p).f_Suggestion_suggestionTitle)
+
+# 113 "Vuna/Compiler/Base/Diag.vuna"
+let v_suggestionApplicability = (fun (p : t_Suggestion) -> (p).f_Suggestion_suggestionApplicability)
+
+# 114 "Vuna/Compiler/Base/Diag.vuna"
+let v_suggestionEdits = (fun (p : t_Suggestion) -> (p).f_Suggestion_suggestionEdits)
+
+# 118 "Vuna/Compiler/Base/Diag.vuna"
+let v_candidateText = (fun (p : t_Candidate) -> (p).f_Candidate_candidateText)
+
+# 119 "Vuna/Compiler/Base/Diag.vuna"
+let v_candidateSpan = (fun (p : t_Candidate) -> (p).f_Candidate_candidateSpan)
+
+# 120 "Vuna/Compiler/Base/Diag.vuna"
+let v_candidateReason = (fun (p : t_Candidate) -> (p).f_Candidate_candidateReason)
+
+# 124 "Vuna/Compiler/Base/Diag.vuna"
+let v_callCallee = (fun (p : t_CallInfo) -> (p).f_CallInfo_callCallee)
+
+# 125 "Vuna/Compiler/Base/Diag.vuna"
+let v_callArg = (fun (p : t_CallInfo) -> (p).f_CallInfo_callArg)
+
+# 126 "Vuna/Compiler/Base/Diag.vuna"
+let v_callRelation = (fun (p : t_CallInfo) -> (p).f_CallInfo_callRelation)
+
+# 127 "Vuna/Compiler/Base/Diag.vuna"
+let v_callSpan = (fun (p : t_CallInfo) -> (p).f_CallInfo_callSpan)
+
+# 144 "Vuna/Compiler/Base/Diag.vuna"
+let v_tracePhase = (fun (p : t_TraceFrame) -> (p).f_TraceFrame_tracePhase)
+
+# 145 "Vuna/Compiler/Base/Diag.vuna"
+let v_traceText = (fun (p : t_TraceFrame) -> (p).f_TraceFrame_traceText)
+
+# 146 "Vuna/Compiler/Base/Diag.vuna"
+let v_traceSpan = (fun (p : t_TraceFrame) -> (p).f_TraceFrame_traceSpan)
+
+# 147 "Vuna/Compiler/Base/Diag.vuna"
+let v_traceChildren = (fun (p : t_TraceFrame) -> (p).f_TraceFrame_traceChildren)
+
+# 151 "Vuna/Compiler/Base/Diag.vuna"
+let v_icePhase = (fun (p : t_IceInfo) -> (p).f_IceInfo_icePhase)
+
+# 152 "Vuna/Compiler/Base/Diag.vuna"
+let v_iceFunction = (fun (p : t_IceInfo) -> (p).f_IceInfo_iceFunction)
+
+# 153 "Vuna/Compiler/Base/Diag.vuna"
+let v_iceInvariant = (fun (p : t_IceInfo) -> (p).f_IceInfo_iceInvariant)
+
+# 154 "Vuna/Compiler/Base/Diag.vuna"
+let v_iceFingerprint = (fun (p : t_IceInfo) -> (p).f_IceInfo_iceFingerprint)
+
+# 155 "Vuna/Compiler/Base/Diag.vuna"
+let v_iceHint = (fun (p : t_IceInfo) -> (p).f_IceInfo_iceHint)
+
+# 159 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagId = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagId)
+
+# 160 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagSeverity = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagSeverity)
+
+# 161 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagPhase = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagPhase)
+
+# 162 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagCategory = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagCategory)
+
+# 163 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagCode = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagCode)
+
+# 164 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagMessage = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagMessage)
+
+# 165 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagLabels = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagLabels)
+
+# 166 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagFields = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagFields)
+
+# 167 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagTrace = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagTrace)
+
+# 168 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagNotes = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagNotes)
+
+# 169 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagSuggestions = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagSuggestions)
+
+# 170 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagOrigin = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagOrigin)
+
+# 171 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagChildren = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagChildren)
+
+# 172 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagInternal = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagInternal)
+
+# 173 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagIce = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagIce)
+
+# 175 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagAbsent = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagAbsent)
+
+# 177 "Vuna/Compiler/Base/Diag.vuna"
+let v_diagStability = (fun (p : t_Diagnostic) -> (p).f_Diagnostic_diagStability)

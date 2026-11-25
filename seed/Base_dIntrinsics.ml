@@ -556,3 +556,33 @@ let rec v_dispatchIdChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int) ->
 
 # 1386 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dispatchIdOf = (fun (s : string) -> ((v_dispatchIdChars (B_dData_dList.dtp_unpack s)) 2166136261))
+
+# 184 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_beTag = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beTag)
+
+# 186 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_beImpl = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beImpl)
+
+# 188 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_beHost = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beHost)
+
+# 190 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_beErrorImpl = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beErrorImpl)
+
+# 192 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_beErrorHost = (fun (p : t_BuiltinEffect) -> (p).f_BuiltinEffect_beErrorHost)
+
+# 343 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hsTag = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsTag)
+
+# 344 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hsOcaml = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsOcaml)
+
+# 345 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hsNative = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsNative)
+
+# 346 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hsWasm = (fun (p : t_HostSupport) -> (p).f_HostSupport_hsWasm)
+
+# 687 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_intrinsicOp = (fun (p : t_Intrinsic) -> (p).f_Intrinsic_intrinsicOp)

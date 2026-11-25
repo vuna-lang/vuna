@@ -994,3 +994,24 @@ let rec v_sectionsUnderGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_To
 
 # 1026 "Vuna/Compiler/Frontend/Toml.vuna"
 let v_sectionsUnder = (fun (prefix : string B_dData_dList.t_List) (entries : t_TomlEntry B_dData_dList.t_List) -> (((v_sectionsUnderGo prefix) entries) B_dData_dList.C_List_Nil))
+
+# 51 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_tomlEntrySection = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntrySection)
+
+# 52 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_tomlEntryKey = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryKey)
+
+# 53 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_tomlEntryValue = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryValue)
+
+# 54 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_tomlEntryLine = (fun (p : t_TomlEntry) -> (p).f_TomlEntry_tomlEntryLine)
+
+# 58 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_cursorChars = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorChars)
+
+# 59 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_cursorLine = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorLine)
+
+# 60 "Vuna/Compiler/Frontend/Toml.vuna"
+let v_cursorCol = (fun (p : t_TomlCursor) -> (p).f_TomlCursor_cursorCol)

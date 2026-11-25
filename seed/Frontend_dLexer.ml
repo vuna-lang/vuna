@@ -377,3 +377,15 @@ let v_lexComments = (fun (source : string) -> (let nd_uscrut1 = (v_lexSourceWith
   | Base_dDiag.C_Check_ErrC (dtb__106) -> (Base_dDiag.C_Check_ErrC (dtb__106))
   | _ -> failwith "DT: impossible branch"
 )))
+
+# 42 "Vuna/Compiler/Frontend/Lexer.vuna"
+let v_ptokTok = (fun (p : t_PTok) -> (p).f_PTok_ptokTok)
+
+# 43 "Vuna/Compiler/Frontend/Lexer.vuna"
+let v_ptokPos = (fun (p : t_PTok) -> (p).f_PTok_ptokPos)
+
+# 225 "Vuna/Compiler/Frontend/Lexer.vuna"
+let v_commentKind = (fun (p : t_Comment) -> (p).f_Comment_commentKind)
+
+# 226 "Vuna/Compiler/Frontend/Lexer.vuna"
+let v_commentText = (fun (p : t_Comment) -> (p).f_Comment_commentText)

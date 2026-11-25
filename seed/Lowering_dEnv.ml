@@ -393,3 +393,51 @@ let v_mkLwEnvFromErased = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_Lis
 
 # 465 "Vuna/Compiler/Lowering/Env.vuna"
 let v_mkLwEnv = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (unit : string) -> ((Base_dCommon.v_bind (v_eraseDefs defs)) (fun (defs2 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((((((v_mkLwEnvFromErased datas) defs2) defs) globals) unit))))))
+
+# 33 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwShared = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwShared)
+
+# 35 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwDatas = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDatas)
+
+# 38 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwDataTbl = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDataTbl)
+
+# 40 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwTyParams = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwTyParams)
+
+# 42 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwUnboxedInfo = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnboxedInfo)
+
+# 44 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwRecordFields = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwRecordFields)
+
+# 46 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwCtors = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwCtors)
+
+# 48 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwOpaques = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwOpaques)
+
+# 50 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwUnboxed = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnboxed)
+
+# 52 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwHasListFamily = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwHasListFamily)
+
+# 54 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwDefs = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDefs)
+
+# 56 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwOrigDefs = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwOrigDefs)
+
+# 62 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwDefTbl = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwDefTbl)
+
+# 65 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwGlobals = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwGlobals)
+
+# 67 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwFacts = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwFacts)
+
+# 69 "Vuna/Compiler/Lowering/Env.vuna"
+let v_lwUnit = (fun (p : t_LwEnv) -> (p).f_LwEnv_lwUnit)
