@@ -78,16 +78,117 @@ corpusDirs =
     "packages/web-cli/test/corpus"
   ]
 
+-- | 内部：`exampleOf` / `exampleIndex` 的候选目录，按查找优先级排列。
+exampleDirs : List String
+exampleDirs =
+  append
+    (append corpusDirs (map (\d => "../${d}") corpusDirs))
+    (append (map (\d => "../../${d}") corpusDirs) (append (map (\d => "../../../${d}") corpusDirs) ["test/corpus", "corpus", "../test/corpus"]))
+
 -- | 在包 suite 的 corpus（及旧 `test/corpus` / cwd 下的 `corpus`）找第一个包含该码的
 -- `.diag.json`；返回路径按 `corpus/...` 归一，`explain` / `gen-errors` 输出不随仓库布局变化。
 export exampleOf : Member n FsOp r => String -> Eff r (Maybe String)
 exampleOf code =
   do
-    found <-
-      firstDiagExample
-        (append (append corpusDirs (map (\d => "../${d}") corpusDirs)) (append (map (\d => "../../${d}") corpusDirs) (append (map (\d => "../../../${d}") corpusDirs) ["test/corpus", "corpus", "../test/corpus"])))
-        code
+    found <- firstDiagExample exampleDirs code
     pure (fmap corpusRelPath found)
+
+-- | 全部码 → 示例路径：按 [exampleOf] 的目录与条目顺序**单遍**遍历 corpus，每个
+-- `.diag.json` 只读一次；同一个码取第一次出现的文件（与逐个码查找的结果一致）。
+-- 路径同样按 `corpus/...` 归一；`gen-errors` 用它替代逐码扫描。
+export exampleIndex : Member n FsOp r => Eff r (List (String, String))
+exampleIndex =
+  do
+    pairs <- examplePairsOf exampleDirs
+    pure (firstWins (map exampleRelOf pairs))
+
+-- | 内部：索引里的路径归一成 `corpus/...`。
+exampleRelOf : (String, String) -> (String, String)
+exampleRelOf pair = (firstOf pair, corpusRelPath (secondOf pair))
+
+-- | 内部：按目录顺序展开成 `(码, 路径)`（目录内保持 `fsReadDir` 顺序）。
+examplePairsOf : Member n FsOp r => List String -> Eff r (List (String, String))
+examplePairsOf [] = pure []
+examplePairsOf (dir :: rest) =
+  do
+    here <- diagPairsOf 512 dir
+    more <- examplePairsOf rest
+    pure (append here more)
+
+-- | 内部：一个目录下所有 `.diag.json` 的 `(码, 路径)`；目录缺失或预算耗尽给空表。
+diagPairsOf : Member n FsOp r => Int -> String -> Eff r (List (String, String))
+diagPairsOf fuel dir =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      exists <- pathExistsDir dir
+      if not exists then
+        pure []
+      else
+        do
+          names <- fsReadDir dir
+          diagPairsOfNames (fuel - 1) dir names
+
+-- | 内部：按 `fsReadDir` 顺序展开条目。
+diagPairsOfNames : Member n FsOp r => Int -> String -> List String -> Eff r (List (String, String))
+diagPairsOfNames _ _ [] = pure []
+diagPairsOfNames fuel dir (name :: rest) =
+  do
+    here <- diagPairsOfEntry fuel dir name
+    more <- diagPairsOfNames fuel dir rest
+    pure (append here more)
+
+-- | 内部：单个条目——子目录递归，`.diag.json` 读一次并取出其中所有码。
+diagPairsOfEntry : Member n FsOp r => Int -> String -> String -> Eff r (List (String, String))
+diagPairsOfEntry fuel dir name =
+  if name == "." || name == ".." || name == ".git" || name == ".local" then
+    pure []
+  else
+    let
+      path = "${dir}/${name}"
+    in do
+      isDir <- pathExistsDir path
+      if isDir then
+        diagPairsOf fuel path
+      else if not (endsWith ".diag.json" name) then
+        pure []
+      else
+        do
+          isFile <- pathExistsFile path
+          if isFile then
+            do
+              text <- fsReadFile path
+              pure (map (\code => (code, path)) (codesInText text))
+          else
+            pure []
+
+-- | 内部：`.diag.json` 里的全部 `"code":"<值>"`（按出现顺序，重复保留）。
+codesInText : String -> List String
+codesInText text =
+  case split "\"code\":\"" text of
+    [] => []
+    _ :: rest => map codeValue rest
+
+-- | 内部：切出来的片段取引号之前的部分（没有闭合引号时取整段）。
+codeValue : String -> String
+codeValue part =
+  case split "\"" part of
+    v :: _ => v
+    [] => part
+
+-- | 内部：保序去重（同一个码保留第一次出现的路径）。
+firstWins : List (String, String) -> List (String, String)
+firstWins pairs = firstWinsGo pairs []
+
+-- | 内部：`firstWins` 的累积实现。
+firstWinsGo : List (String, String) -> List String -> List (String, String)
+firstWinsGo [] _ = []
+firstWinsGo ((code, path) :: rest) seen =
+  if memName code seen then
+    firstWinsGo rest seen
+  else
+    (code, path) :: firstWinsGo rest (code :: seen)
 
 -- | 内部：按顺序找第一个命中的目录。
 firstDiagExample : Member n FsOp r => List String -> String -> Eff r (Maybe String)
