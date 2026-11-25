@@ -131,7 +131,9 @@ run: sh -c 'd="$TMPDIR/natinline"; mkdir -p "$d/app"; printf "[package]\nname = 
 exit: 0
 run: sh -c '"$TMPDIR/natinline-n/bin/natinline"'
 out-equals: "15150"
-file-contains: $TMPDIR/natinline-n/Main.s cmovno
+file-contains: $TMPDIR/natinline-n/Main.s cmova
+run: sh -c '! grep -q "cmovno" "$TMPDIR/natinline-n/Main.s"'
+exit: 0
 run: sh -c '! grep -q "call rt_nat_mul" "$TMPDIR/natinline-n/Main.s"'
 exit: 0
 run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natinline-n/Main.s"'

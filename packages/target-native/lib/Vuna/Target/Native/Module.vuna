@@ -1462,6 +1462,10 @@ genScalarOpW bud _ st pool (ScalarCmp cc) args =
               Nothing => Nothing
           Nothing => Nothing
       _ => Nothing
+genScalarOpW _ _ st pool ScalarNatFromInt [IrInt n] =
+  case pool of
+    r :: rest => Just (r, [IMov (OpReg r) (OpImm (if n < 0 then 0 else n))], rest)
+    [] => Nothing
 genScalarOpW bud _ st pool ScalarNatFromInt args =
   case args of
     [a] =>
@@ -1478,6 +1482,21 @@ genScalarOpW bud _ st pool ScalarNatFromInt args =
             Nothing => Nothing
         [] => Nothing
     _ => Nothing
+-- 小非负常量乘：`a` 是 Nat（0 ≤ a ≤ maxInt），`c ≤ 4` 时 `a*c < 2^64`，无符号比较
+-- `cmova` 就是完整的饱和判据；比通用 NatMul 的 `imul` OF + 二次夹取短。
+genScalarOpW bud wrap st pool ScalarNatMul [a, b] =
+  case natConstOf a of
+    Just c =>
+      case natMulSmall bud st pool c b of
+        Just p => Just p
+        Nothing => genScalarOpGeneric bud wrap st pool ScalarNatMul [a, b]
+    Nothing =>
+      case natConstOf b of
+        Just c =>
+          case natMulSmall bud st pool c a of
+            Just p => Just p
+            Nothing => genScalarOpGeneric bud wrap st pool ScalarNatMul [a, b]
+        Nothing => genScalarOpGeneric bud wrap st pool ScalarNatMul [a, b]
 -- `band x 常量掩码`：掩码清掉高位（`0 ≤ m ≤ maxInt`），所以 x 不必先 wrap，
 -- 结果也天然落在 `[0, m]` 里。
 genScalarOpW bud _ st pool (ScalarBitOp "and") [a, IrInt m] =
@@ -1494,6 +1513,33 @@ genScalarOpW bud _ st pool (ScalarBitOp "and") [a, IrInt m] =
   else
     genScalarOpGeneric bud False st pool (ScalarBitOp "and") [a, IrInt m]
 genScalarOpW bud wrap st pool op args = genScalarOpGeneric bud wrap st pool op args
+
+-- | Nat 常量实参：字面量，或尚未折掉的 `natFromInt <literal>`。
+natConstOf : Ir -> Maybe Int
+natConstOf (IrInt n) = Just n
+natConstOf (IrRtApp "natFromInt" [IrInt n]) = Just (if n < 0 then 0 else n)
+natConstOf _ = Nothing
+
+natMulSmall : Int -> FGen -> List Reg -> Int -> Ir -> Maybe (Reg, List Instr, List Reg)
+natMulSmall bud st pool c a =
+  if c < 0 || c > 4 then
+    Nothing
+  else
+    case genScalarIntoW (bud - 1) True st pool a of
+      Nothing => Nothing
+      Just pa =>
+        let
+          r = firstOf pa
+          ins = firstOf (secondOf pa)
+          rest = secondOf (secondOf pa)
+        in if c == 0 then
+          Just (r, append ins [IMov (OpReg r) (OpImm 0)], rest)
+        else if c == 1 then
+          Just (r, ins, rest)
+        else
+          case rest of
+            s :: rest2 => Just (r, append ins [IBinReg "imul" r (OpImm c), IMov (OpReg s) (OpImm nativeMaxInt), ICmp (OpReg r) (OpReg s), ICmov "cmova" r (OpReg s)], s :: rest2)
+            [] => Nothing
 
 genScalarOpGeneric : Int -> Bool -> FGen -> List Reg -> ScalarOp -> List Ir -> Maybe (Reg, List Instr, List Reg)
 genScalarOpGeneric _ _ st pool op [] =
@@ -4102,9 +4148,11 @@ build program printResult =
                       -- 高阶参数特化：已知的闭合函数实参把被调定义的形参替换成直调，
                       -- 克隆按（被调名、形参序号、实参指纹）去重。
                       cpsSpecialized = Specialize.specializeDefs cps0
-                      recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsSpecialized
+                      -- 循环归纳变量消去：`n - K` 与 `n` 同步递减时只保留 `n - K`。
+                      cpsLsr = Inline.lsrDefs cpsSpecialized
+                      recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsLsr
                       -- 小函数内联：体够小、非递归、实参平凡的调用点直接代进去。
-                      inlined = Inline.inlineDefs recNames cpsSpecialized
+                      inlined = Inline.inlineDefs recNames cpsLsr
                       -- 尾位置内联：把互递归 SCC 沿定义序单向展开成自递归。
                       tailInlined = Inline.inlineTailDefs recNames (firstOf inlined)
                       cps1 = Inline.simplifyDefs (firstOf tailInlined)

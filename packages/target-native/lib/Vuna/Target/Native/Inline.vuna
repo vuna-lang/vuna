@@ -553,6 +553,433 @@ indexOfName _ [] = 0 - 1
 indexOfName n (p :: rest) = if firstOf p == n then secondOf p else indexOfName n rest
 
 -- ---------------------------------------------------------------
+-- 循环归纳变量消去
+-- ---------------------------------------------------------------
+-- | `loop acc n = if n <= 0 then acc else loop (acc + (n - K) / D) (n - 1)`
+--   里的 `n - K` 与 `n` 同步递减。把参数改成 `m = n - K`：所有外部调用点传 `n - K`，
+--   守卫变成 `m <= -K`，自调用仍是 `m - 1`，循环里不再每轮重算 `n - K`。
+--   判据：`n` 在函数体里恰好出现三次（守卫、`n - K`、自调用实参 `n - 1`），
+--   `K > 1`，且每个调用方的函数体里只引用这个定义一次（直接饱和调用，实参是非负字面量）。
+--   入口实参限制为字面量，保证 `n - K` 不会在 63-bit 边界上回绕。
+record LsrPlan where
+  lsrName : String
+  lsrArity : Int
+  lsrIdx : Int
+  lsrId : Int
+  lsrK : Int
+
+export lsrDefs : List IrDef -> List IrDef
+lsrDefs defs =
+  case firstLsrPlan defs of
+    Nothing => defs
+    Just plan =>
+      case lsrCallersOf plan defs of
+        Nothing => defs
+        Just _ => map (lsrApply plan) defs
+
+firstLsrPlan : List IrDef -> Maybe LsrPlan
+firstLsrPlan [] = Nothing
+firstLsrPlan (d :: rest) =
+  case lsrPlanOf d of
+    Just p => Just p
+    Nothing => firstLsrPlan rest
+
+lsrPlanOf : IrDef -> Maybe LsrPlan
+lsrPlanOf (IrExternDef _ _ _ _) = Nothing
+lsrPlanOf (IrDef name arity _ _ body _ _ _) =
+  case body of
+    IrLam bs _ inner =>
+      case inner of
+        IrIf (IrRtApp "bi_le_int" [IrVar n, IrInt 0]) _ rest =>
+          case lsrSelfArgs name rest of
+            Just args =>
+              let
+                rbs = runtimeBindersOf bs
+              in if length args /= arity then
+                Nothing
+              else
+                case lsrCounterIdx rbs args 0 of
+                  Just idx =>
+                    case lsrNthBinder idx rbs of
+                      Just nb =>
+                        if nb.irBinderId == n.irBinderId && lsrCountVar nb.irBinderId inner == 3 && lsrCountGlobal name inner == 1 then
+                          case lsrSubKs nb.irBinderId inner of
+                            [k] => if k > 1 then Just (LsrPlan name arity idx nb.irBinderId k) else Nothing
+                            _ => Nothing
+                        else
+                          Nothing
+                      Nothing => Nothing
+                  Nothing => Nothing
+            Nothing => Nothing
+        _ => Nothing
+    _ => Nothing
+
+lsrSelfArgs : String -> Ir -> Maybe (List Ir)
+lsrSelfArgs name (IrTail inner) = lsrSelfArgs name inner
+lsrSelfArgs name (ir@(IrApp _ _ _)) =
+  let
+    flat = Analysis.flattenApp ir
+  in case firstOf flat of
+    IrGlobal g => if g == name then Just (secondOf flat) else Nothing
+    _ => Nothing
+lsrSelfArgs name _ = Nothing
+
+lsrCounterIdx : List IrBinder -> List Ir -> Int -> Maybe Int
+lsrCounterIdx _ [] _ = Nothing
+lsrCounterIdx [] _ _ = Nothing
+lsrCounterIdx (b :: brest) (a :: arest) i =
+  case a of
+    IrRtApp "-" [IrVar x, IrInt 1] =>
+      if x.irBinderId == b.irBinderId then Just i else lsrCounterIdx brest arest (i + 1)
+    _ => lsrCounterIdx brest arest (i + 1)
+
+lsrNthBinder : Int -> List IrBinder -> Maybe IrBinder
+lsrNthBinder i bs =
+  if i <= 0 then
+    case bs of
+      b :: _ => Just b
+      [] => Nothing
+  else
+    case bs of
+      [] => Nothing
+      _ :: rest => lsrNthBinder (i - 1) rest
+
+lsrSubKs : Int -> Ir -> List Int
+lsrSubKs id (IrRtApp "-" [IrVar b, IrInt k]) =
+  if b.irBinderId == id && k > 1 then [k] else lsrSubKsList id [IrVar b, IrInt k]
+lsrSubKs id (IrTail x) = lsrSubKs id x
+lsrSubKs id (IrCtor _ _ _ args) = lsrSubKsList id args
+lsrSubKs id (IrRecord _ _ fields) = lsrSubKsFields id fields
+lsrSubKs id (IrProj base _ _ _) = lsrSubKs id base
+lsrSubKs id (IrRecUpd base _ fields _) = append (lsrSubKs id base) (lsrSubKsFields id fields)
+lsrSubKs id (IrRtApp _ args) = lsrSubKsList id args
+lsrSubKs id (IrCast _ _ x) = lsrSubKs id x
+lsrSubKs id (IrLet _ s b) = append (lsrSubKs id s) (lsrSubKs id b)
+lsrSubKs id (IrLam _ _ b) = lsrSubKs id b
+lsrSubKs id (IrApp _ f a) = append (lsrSubKs id f) (lsrSubKs id a)
+lsrSubKs id (IrIf c t e) = append (lsrSubKs id c) (append (lsrSubKs id t) (lsrSubKs id e))
+lsrSubKs id (IrCase _ _ s alts) = append (lsrSubKs id s) (lsrSubKsAlts id alts)
+lsrSubKs id (IrNatCase s _ z su c) =
+  append
+    (lsrSubKs id s)
+    (append (lsrSubKsAltM id z) (append (lsrSubKsAltM id su) (lsrSubKsAltM id c)))
+lsrSubKs id (IrConcatMany parts) = lsrSubKsList id parts
+lsrSubKs id (IrEffThunk _ _ _ _ prim) = lsrSubKs id prim
+lsrSubKs id _ = []
+
+lsrSubKsList : Int -> List Ir -> List Int
+lsrSubKsList _ [] = []
+lsrSubKsList id (x :: rest) = append (lsrSubKs id x) (lsrSubKsList id rest)
+
+lsrSubKsFields : Int -> List (String, Ir) -> List Int
+lsrSubKsFields _ [] = []
+lsrSubKsFields id (p :: rest) = append (lsrSubKs id (secondOf p)) (lsrSubKsFields id rest)
+
+lsrSubKsAlts : Int -> List IrAlt -> List Int
+lsrSubKsAlts _ [] = []
+lsrSubKsAlts id (a :: rest) = append (lsrSubKs id a.irAltBody) (lsrSubKsAlts id rest)
+
+lsrSubKsAltM : Int -> Maybe IrAlt -> List Int
+lsrSubKsAltM _ Nothing = []
+lsrSubKsAltM id (Just a) = lsrSubKs id a.irAltBody
+
+lsrCountVar : Int -> Ir -> Int
+lsrCountVar id (IrVar b) = if b.irBinderId == id then 1 else 0
+lsrCountVar id (IrTail x) = lsrCountVar id x
+lsrCountVar id (IrCtor _ _ _ args) = lsrCountList id args
+lsrCountVar id (IrRecord _ _ fields) = lsrCountFields id fields
+lsrCountVar id (IrProj base _ _ _) = lsrCountVar id base
+lsrCountVar id (IrRecUpd base _ fields _) = lsrCountVar id base + lsrCountFields id fields
+lsrCountVar id (IrRtApp _ args) = lsrCountList id args
+lsrCountVar id (IrCast _ _ x) = lsrCountVar id x
+lsrCountVar id (IrLet _ s b) = lsrCountVar id s + lsrCountVar id b
+lsrCountVar id (IrLam _ _ b) = lsrCountVar id b
+lsrCountVar id (IrApp _ f a) = lsrCountVar id f + lsrCountVar id a
+lsrCountVar id (IrIf c t e) = lsrCountVar id c + lsrCountVar id t + lsrCountVar id e
+lsrCountVar id (IrCase _ _ s alts) = lsrCountVar id s + lsrCountAlts id alts
+lsrCountVar id (IrNatCase s _ z su c) =
+  lsrCountVar id s + lsrCountAltM id z + lsrCountAltM id su + lsrCountAltM id c
+lsrCountVar id (IrConcatMany parts) = lsrCountList id parts
+lsrCountVar id (IrEffThunk _ _ _ _ prim) = lsrCountVar id prim
+lsrCountVar id _ = 0
+
+lsrCountGlobal : String -> Ir -> Int
+lsrCountGlobal name (IrGlobal g) = if g == name then 1 else 0
+lsrCountGlobal name (IrTail x) = lsrCountGlobal name x
+lsrCountGlobal name (IrCtor _ _ _ args) = lsrCountGlobalList name args
+lsrCountGlobal name (IrRecord _ _ fields) = lsrCountGlobalFields name fields
+lsrCountGlobal name (IrProj base _ _ _) = lsrCountGlobal name base
+lsrCountGlobal name (IrRecUpd base _ fields _) =
+  lsrCountGlobal name base + lsrCountGlobalFields name fields
+lsrCountGlobal name (IrRtApp _ args) = lsrCountGlobalList name args
+lsrCountGlobal name (IrCast _ _ x) = lsrCountGlobal name x
+lsrCountGlobal name (IrLet _ s b) = lsrCountGlobal name s + lsrCountGlobal name b
+lsrCountGlobal name (IrLam _ _ b) = lsrCountGlobal name b
+lsrCountGlobal name (IrApp _ f a) = lsrCountGlobal name f + lsrCountGlobal name a
+lsrCountGlobal name (IrIf c t e) =
+  lsrCountGlobal name c + lsrCountGlobal name t + lsrCountGlobal name e
+lsrCountGlobal name (IrCase _ _ s alts) = lsrCountGlobal name s + lsrCountGlobalAlts name alts
+lsrCountGlobal name (IrNatCase s _ z su c) =
+  lsrCountGlobal name s
+    + lsrCountGlobalAltM name z + lsrCountGlobalAltM name su + lsrCountGlobalAltM name c
+lsrCountGlobal name (IrConcatMany parts) = lsrCountGlobalList name parts
+lsrCountGlobal name (IrEffThunk _ _ _ _ prim) = lsrCountGlobal name prim
+lsrCountGlobal name _ = 0
+
+lsrCountList : Int -> List Ir -> Int
+lsrCountList _ [] = 0
+lsrCountList id (x :: rest) = lsrCountVar id x + lsrCountList id rest
+
+lsrCountFields : Int -> List (String, Ir) -> Int
+lsrCountFields _ [] = 0
+lsrCountFields id (p :: rest) = lsrCountVar id (secondOf p) + lsrCountFields id rest
+
+lsrCountAlts : Int -> List IrAlt -> Int
+lsrCountAlts _ [] = 0
+lsrCountAlts id (a :: rest) = lsrCountVar id a.irAltBody + lsrCountAlts id rest
+
+lsrCountAltM : Int -> Maybe IrAlt -> Int
+lsrCountAltM _ Nothing = 0
+lsrCountAltM id (Just a) = lsrCountVar id a.irAltBody
+
+lsrCountGlobalList : String -> List Ir -> Int
+lsrCountGlobalList _ [] = 0
+lsrCountGlobalList name (x :: rest) = lsrCountGlobal name x + lsrCountGlobalList name rest
+
+lsrCountGlobalFields : String -> List (String, Ir) -> Int
+lsrCountGlobalFields _ [] = 0
+lsrCountGlobalFields name (p :: rest) =
+  lsrCountGlobal name (secondOf p) + lsrCountGlobalFields name rest
+
+lsrCountGlobalAlts : String -> List IrAlt -> Int
+lsrCountGlobalAlts _ [] = 0
+lsrCountGlobalAlts name (a :: rest) = lsrCountGlobal name a.irAltBody + lsrCountGlobalAlts name rest
+
+lsrCountGlobalAltM : String -> Maybe IrAlt -> Int
+lsrCountGlobalAltM _ Nothing = 0
+lsrCountGlobalAltM name (Just a) = lsrCountGlobal name a.irAltBody
+
+-- | 所有调用方（除目标定义本身）都必须只有一次引用、直接饱和调用、实参是非负字面量。
+lsrCallersOf : LsrPlan -> List IrDef -> Maybe Unit
+lsrCallersOf plan defs = lsrCallersGo plan defs
+
+lsrCallersGo : LsrPlan -> List IrDef -> Maybe Unit
+lsrCallersGo _ [] = Just MkUnit
+lsrCallersGo plan (d :: rest) =
+  case d of
+    IrExternDef _ _ _ _ => lsrCallersGo plan rest
+    IrDef name _ _ _ body _ _ _ =>
+      if name == plan.lsrName then
+        lsrCallersGo plan rest
+      else if lsrCountGlobal plan.lsrName body == 0 then
+        lsrCallersGo plan rest
+      else
+        case lsrCallerArgs plan body of
+          Just args =>
+            if length args == plan.lsrArity then
+              case lsrArgAt plan.lsrIdx args of
+                Just (IrInt n0) => if n0 >= 0 then lsrCallersGo plan rest else Nothing
+                _ => Nothing
+            else
+              Nothing
+          Nothing => Nothing
+
+-- | 调用方里目标定义的实参（要求整个函数体只引用它一次）。
+lsrCallerArgs : LsrPlan -> Ir -> Maybe (List Ir)
+lsrCallerArgs plan ir =
+  if lsrCountGlobal plan.lsrName ir /= 1 then Nothing else lsrFindCallArgs plan.lsrName ir
+
+lsrFindCallArgs : String -> Ir -> Maybe (List Ir)
+lsrFindCallArgs name (ir@(IrApp _ _ _)) =
+  let
+    flat = Analysis.flattenApp ir
+  in case firstOf flat of
+    IrGlobal g => if g == name then Just (secondOf flat) else lsrFindChildCall name ir
+    _ => lsrFindChildCall name ir
+lsrFindCallArgs name ir = lsrFindChildCall name ir
+
+lsrFindChildCall : String -> Ir -> Maybe (List Ir)
+lsrFindChildCall name (IrTail x) = lsrFindCallArgs name x
+lsrFindChildCall name (IrCtor _ _ _ args) = lsrFindInList name args
+lsrFindChildCall name (IrRecord _ _ fields) = lsrFindInFields name fields
+lsrFindChildCall name (IrProj base _ _ _) = lsrFindCallArgs name base
+lsrFindChildCall name (IrRecUpd base _ fields _) =
+  lsrFindEither name (lsrFindCallArgs name base) (lsrFindInFields name fields)
+lsrFindChildCall name (IrRtApp _ args) = lsrFindInList name args
+lsrFindChildCall name (IrCast _ _ x) = lsrFindCallArgs name x
+lsrFindChildCall name (IrLet _ s b) =
+  lsrFindEither name (lsrFindCallArgs name s) (lsrFindCallArgs name b)
+lsrFindChildCall name (IrLam _ _ b) = lsrFindCallArgs name b
+lsrFindChildCall name (IrApp _ f a) =
+  lsrFindEither name (lsrFindCallArgs name f) (lsrFindCallArgs name a)
+lsrFindChildCall name (IrIf c t e) = lsrFindFirst name [c, t, e]
+lsrFindChildCall name (IrCase _ _ s alts) =
+  lsrFindEither name (lsrFindCallArgs name s) (lsrFindInAlts name alts)
+lsrFindChildCall name (IrNatCase s _ z su c) = lsrFindFirstAlt name s z su c
+lsrFindChildCall name (IrConcatMany parts) = lsrFindInList name parts
+lsrFindChildCall name (IrEffThunk _ _ _ _ prim) = lsrFindCallArgs name prim
+lsrFindChildCall _ _ = Nothing
+
+lsrFindEither : String -> Maybe (List Ir) -> Maybe (List Ir) -> Maybe (List Ir)
+lsrFindEither _ (Just a) _ = Just a
+lsrFindEither _ Nothing (Just x) = Just x
+lsrFindEither _ Nothing Nothing = Nothing
+
+lsrFindFirst : String -> List Ir -> Maybe (List Ir)
+lsrFindFirst _ [] = Nothing
+lsrFindFirst name (x :: rest) =
+  case lsrFindCallArgs name x of
+    Just a => Just a
+    Nothing => lsrFindFirst name rest
+
+lsrFindFirstAlt : String -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Maybe (List Ir)
+lsrFindFirstAlt name scrut z su c =
+  case lsrFindCallArgs name scrut of
+    Just a => Just a
+    Nothing =>
+      case lsrFindAlt name z of
+        Just a => Just a
+        Nothing =>
+          case lsrFindAlt name su of
+            Just a => Just a
+            Nothing => lsrFindAlt name c
+
+lsrFindAlt : String -> Maybe IrAlt -> Maybe (List Ir)
+lsrFindAlt _ Nothing = Nothing
+lsrFindAlt name (Just a) = lsrFindCallArgs name a.irAltBody
+
+lsrFindInList : String -> List Ir -> Maybe (List Ir)
+lsrFindInList _ [] = Nothing
+lsrFindInList name (x :: rest) =
+  case lsrFindCallArgs name x of
+    Just a => Just a
+    Nothing => lsrFindInList name rest
+
+lsrFindInFields : String -> List (String, Ir) -> Maybe (List Ir)
+lsrFindInFields _ [] = Nothing
+lsrFindInFields name (p :: rest) =
+  case lsrFindCallArgs name (secondOf p) of
+    Just a => Just a
+    Nothing => lsrFindInFields name rest
+
+lsrFindInAlts : String -> List IrAlt -> Maybe (List Ir)
+lsrFindInAlts _ [] = Nothing
+lsrFindInAlts name (a :: rest) =
+  case lsrFindCallArgs name a.irAltBody of
+    Just x => Just x
+    Nothing => lsrFindInAlts name rest
+
+lsrApply : LsrPlan -> IrDef -> IrDef
+lsrApply _ (d@(IrExternDef _ _ _ _)) = d
+lsrApply plan (IrDef name ar deps ty body recOk guard span) =
+  if name == plan.lsrName then
+    IrDef name ar deps ty (lsrRewriteBody plan body) recOk guard span
+  else
+    IrDef name ar deps ty (lsrRewriteCaller (lsrFuelOf body) plan body) recOk guard span
+
+lsrFuelOf : Ir -> Int
+lsrFuelOf ir = 64 + 8 * irSize ir
+
+lsrRewriteBody : LsrPlan -> Ir -> Ir
+lsrRewriteBody plan body = lsrRw (lsrFuelOf body) plan.lsrId plan.lsrK body
+
+lsrRw : Int -> Int -> Int -> Ir -> Ir
+lsrRw fuel id k ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrRtApp "-" [IrVar b, IrInt c] => if b.irBinderId == id && c == k then IrVar b else IrRtApp "-" (map (\x => lsrRw (fuel - 1) id k x) [IrVar b, IrInt c])
+      IrRtApp "bi_le_int" [IrVar b, IrInt 0] => if b.irBinderId == id then IrRtApp "bi_le_int" [IrVar b, IrInt (0 - k)] else IrRtApp "bi_le_int" (map (\x => lsrRw (fuel - 1) id k x) [IrVar b, IrInt 0])
+      IrTail x => IrTail (lsrRw (fuel - 1) id k x)
+      IrCtor fam ctor ty args => IrCtor fam ctor ty (map (\x => lsrRw (fuel - 1) id k x) args)
+      IrRecord fam ty fields => IrRecord fam ty (map (\p => (firstOf p, lsrRw (fuel - 1) id k (secondOf p))) fields)
+      IrProj base fam field ty => IrProj (lsrRw (fuel - 1) id k base) fam field ty
+      IrRecUpd base fam fields ty => IrRecUpd (lsrRw (fuel - 1) id k base) fam (map (\p => (firstOf p, lsrRw (fuel - 1) id k (secondOf p))) fields) ty
+      IrRtApp sym args => IrRtApp sym (map (\x => lsrRw (fuel - 1) id k x) args)
+      IrCast a b x => IrCast a b (lsrRw (fuel - 1) id k x)
+      IrLet bs s b => IrLet bs (lsrRw (fuel - 1) id k s) (lsrRw (fuel - 1) id k b)
+      IrLam bs rt b => IrLam bs rt (lsrRw (fuel - 1) id k b)
+      IrApp ty a b => IrApp ty (lsrRw (fuel - 1) id k a) (lsrRw (fuel - 1) id k b)
+      IrIf c t e => IrIf (lsrRw (fuel - 1) id k c) (lsrRw (fuel - 1) id k t) (lsrRw (fuel - 1) id k e)
+      IrCase ty r s alts => IrCase ty r (lsrRw (fuel - 1) id k s) (map (lsrRwAlt (fuel - 1) id k) alts)
+      IrNatCase s fr z su c => IrNatCase (lsrRw (fuel - 1) id k s) fr (lsrRwAltM (fuel - 1) id k z) (lsrRwAltM (fuel - 1) id k su) (lsrRwAltM (fuel - 1) id k c)
+      IrConcatMany parts => IrConcatMany (map (\x => lsrRw (fuel - 1) id k x) parts)
+      IrEffThunk fam ctor ty ar prim => IrEffThunk fam ctor ty ar (lsrRw (fuel - 1) id k prim)
+      _ => ir
+
+lsrRwAlt : Int -> Int -> Int -> IrAlt -> IrAlt
+lsrRwAlt fuel id k (IrAlt ctor binders body) = IrAlt ctor binders (lsrRw (fuel - 1) id k body)
+
+lsrRwAltM : Int -> Int -> Int -> Maybe IrAlt -> Maybe IrAlt
+lsrRwAltM _ _ _ Nothing = Nothing
+lsrRwAltM fuel id k (Just a) = Just (lsrRwAlt (fuel - 1) id k a)
+
+lsrRewriteCaller : Int -> LsrPlan -> Ir -> Ir
+lsrRewriteCaller fuel plan ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrApp ty f a =>
+        let
+          flat = Analysis.flattenApp ir
+        in case firstOf flat of
+          IrGlobal g =>
+            if g == plan.lsrName then
+              case lsrArgAt plan.lsrIdx (secondOf flat) of
+                Just (IrInt n0) => Synthetic.applyAllIr (IrGlobal plan.lsrName) (lsrReplaceAt plan.lsrIdx (IrRtApp "-" [IrInt n0, IrInt plan.lsrK]) (secondOf flat))
+                _ => ir
+            else
+              IrApp ty (lsrRewriteCaller (fuel - 1) plan f) (lsrRewriteCaller (fuel - 1) plan a)
+          _ => IrApp ty (lsrRewriteCaller (fuel - 1) plan f) (lsrRewriteCaller (fuel - 1) plan a)
+      IrTail x => IrTail (lsrRewriteCaller (fuel - 1) plan x)
+      IrCtor fam ctor ty args => IrCtor fam ctor ty (map (\x => lsrRewriteCaller (fuel - 1) plan x) args)
+      IrRecord fam ty fields => IrRecord fam ty (map (\p => (firstOf p, lsrRewriteCaller (fuel - 1) plan (secondOf p))) fields)
+      IrProj base fam field ty => IrProj (lsrRewriteCaller (fuel - 1) plan base) fam field ty
+      IrRecUpd base fam fields ty => IrRecUpd (lsrRewriteCaller (fuel - 1) plan base) fam (map (\p => (firstOf p, lsrRewriteCaller (fuel - 1) plan (secondOf p))) fields) ty
+      IrRtApp sym args => IrRtApp sym (map (\x => lsrRewriteCaller (fuel - 1) plan x) args)
+      IrCast a b x => IrCast a b (lsrRewriteCaller (fuel - 1) plan x)
+      IrLet bs s b => IrLet bs (lsrRewriteCaller (fuel - 1) plan s) (lsrRewriteCaller (fuel - 1) plan b)
+      IrLam bs rt b => IrLam bs rt (lsrRewriteCaller (fuel - 1) plan b)
+      IrIf c t e => IrIf (lsrRewriteCaller (fuel - 1) plan c) (lsrRewriteCaller (fuel - 1) plan t) (lsrRewriteCaller (fuel - 1) plan e)
+      IrCase ty r s alts => IrCase ty r (lsrRewriteCaller (fuel - 1) plan s) (map (lsrCallerAlt (fuel - 1) plan) alts)
+      IrNatCase s fr z su c => IrNatCase (lsrRewriteCaller (fuel - 1) plan s) fr (lsrCallerAltM (fuel - 1) plan z) (lsrCallerAltM (fuel - 1) plan su) (lsrCallerAltM (fuel - 1) plan c)
+      IrConcatMany parts => IrConcatMany (map (\x => lsrRewriteCaller (fuel - 1) plan x) parts)
+      IrEffThunk fam ctor ty ar prim => IrEffThunk fam ctor ty ar (lsrRewriteCaller (fuel - 1) plan prim)
+      _ => ir
+
+lsrCallerAlt : Int -> LsrPlan -> IrAlt -> IrAlt
+lsrCallerAlt fuel plan (IrAlt ctor binders body) =
+  IrAlt ctor binders (lsrRewriteCaller (fuel - 1) plan body)
+
+lsrCallerAltM : Int -> LsrPlan -> Maybe IrAlt -> Maybe IrAlt
+lsrCallerAltM _ _ Nothing = Nothing
+lsrCallerAltM fuel plan (Just a) = Just (lsrCallerAlt (fuel - 1) plan a)
+
+lsrArgAt : Int -> List Ir -> Maybe Ir
+lsrArgAt i args =
+  if i <= 0 then
+    case args of
+      a :: _ => Just a
+      [] => Nothing
+  else
+    case args of
+      [] => Nothing
+      _ :: rest => lsrArgAt (i - 1) rest
+
+lsrReplaceAt : Int -> Ir -> List Ir -> List Ir
+lsrReplaceAt i x args =
+  if i <= 0 then
+    case args of
+      _ :: rest => x :: rest
+      [] => [x]
+  else
+    case args of
+      [] => []
+      a :: rest => a :: lsrReplaceAt (i - 1) x rest
+
+-- ---------------------------------------------------------------
 -- 纯条件化简：消掉内联后重复的守卫
 -- ---------------------------------------------------------------
 -- `if c then a else if c then b else e` 在 `c` 纯时等价于 `if c then a else e`；
@@ -581,6 +1008,8 @@ simplifyIr (IrCase ty k scrut alts) = IrCase ty k (simplifyIr scrut) (map simpli
 simplifyIr (IrNatCase scrut f z s c) =
   IrNatCase (simplifyIr scrut) f (simplifyAltM z) (simplifyAltM s) (simplifyAltM c)
 simplifyIr (IrApp ty f a) = IrApp ty (simplifyIr f) (simplifyIr a)
+simplifyIr (IrRtApp "natFromInt" [IrInt n]) = IrInt (if n < 0 then 0 else n)
+simplifyIr (IrRtApp "natToInt" [IrInt n]) = IrInt n
 simplifyIr (IrRtApp "+" [a, b]) = foldAdd (simplifyIr a) (simplifyIr b)
 simplifyIr (IrRtApp "-" [a, b]) = foldSub (simplifyIr a) (simplifyIr b)
 simplifyIr (IrRtApp "*" [a, b]) = foldMul (simplifyIr a) (simplifyIr b)

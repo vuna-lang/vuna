@@ -344,6 +344,14 @@ prologue 保存用到的寄存器（奇数个补 8 字节，保持 `call` 前 16
 - **比较结果直写**：`xor rax, rax; cmp a, b; setcc al; mov d, rax` 在 `d` 是提升槽、
   比较不读 `d`/`rax` 且 `rax` 之后先被写时，改写成 `xor d, d; cmp a, b; setcc dl`，
   省掉每条物化比较末尾的搬运。
+- **循环归纳变量消去**：`loop acc n = if n <= 0 then acc else loop (acc + (n - K) / D) (n - 1)`
+  里的 `n - K` 与 `n` 同步递减。`Native.Inline.lsrDefs` 把参数改成 `m = n - K`：外部调用点
+  传 `n - K`、守卫变成 `m <= -K`、自调用仍是 `m - 1`，循环里不再每轮重算 `n - K`。
+  入口实参限制为非负字面量，避免 63-bit 边界回绕；触发条件是 `n` 在函数体里恰好出现三次
+  （守卫、`n - K`、自调用实参 `n - 1`）。
+- **Nat 常量折叠与乘常数**：`natFromInt <literal>` 直接折成 clamp 后的字面量；`Nat.mult` 的
+  一个实参是 `0..4` 的常量时，`a*c < 2^64` 且 `a` 是 Nat，用 `imul` + 无符号 `cmova` 夹取，
+  不再走通用的 `imul` OF + 二次夹取。
 
 ## 4. IR 支持面
 

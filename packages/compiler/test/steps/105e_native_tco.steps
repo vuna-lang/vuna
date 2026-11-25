@@ -54,6 +54,27 @@ run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natloop-out/Main.s"'
 exit: 0
 file-contains: $TMPDIR/natloop-out/Main.s jle .L
 
+# 9ae3) Nat 乘常数：`Nat.fromIntClamp 3` 在编译期折成 3，`Nat.mult` 的 0..4 常量走
+#       `imul` + 无符号 `cmova`（不再有通用 NatMul 的 `cmovno`）。
+run: sh -c 'd="$TMPDIR/natmul"; mkdir -p "$d/app"; printf "[package]\nname = \"natmul\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Nat as Nat\n\nloop : Nat -> Nat -> Nat\nloop acc 0 = acc\nloop acc (Succ k) = loop (Nat.plus acc (Nat.mult k 3)) k\n\nmain : Int\nmain = Nat.toInt (loop 0 (Nat.fromIntClamp 800000))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/natmul-out" "$d"'
+exit: 0
+run: "$TMPDIR/natmul-out/bin/natmul" 2>&1
+exit: 0
+out-equals: 959998800000
+run: sh -c '! grep -q "cmovno" "$TMPDIR/natmul-out/Main.s"'
+exit: 0
+
+# 9ae4) 循环归纳变量消去：`(n - 5000000) / 1000` 与 `n - 1` 同步递减，只保留
+#        `m = n - 5000000`；守卫变成 `cmp m, -5000000`，循环里不再重算 `n - 5000000`。
+run: sh -c 'd="$TMPDIR/lsr"; mkdir -p "$d/app"; printf "[package]\nname = \"lsr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (acc + (n - 5000000) / 1000) (n - 1)\n\nmain : Int\nmain = loop 0 1000000\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/lsr-out" "$d"'
+exit: 0
+run: "$TMPDIR/lsr-out/bin/lsr" 2>&1
+exit: 0
+out-equals: -4499500000
+file-contains: $TMPDIR/lsr-out/Main.s cmp rbx, -5000000
+run: sh -c '! grep -q "sub rax, 5000000" "$TMPDIR/lsr-out/Main.s"'
+exit: 0
+
 # 9af) 尾调用 × 续延 × GC：resume 之后的尾递归循环在 `GC_STRESS` 下输出一致。
 run: sh -c 'd="$TMPDIR/tcoeff"; mkdir -p "$d/app"; printf "[package]\nname = \"tcoeff\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nloop : Nat -> Int -> Int\nloop n acc = case n of\n  Zero => acc\n  Succ k => loop k (acc + strLength (strFromInt k))\n\nwork : Eff [POp] Int\nwork = do\n  x <- perform (P 1)\n  pure (loop (natFromInt 20000) x)\n\nmain : Int\nmain = runPure (handle work { P n k -> k n })\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/tcoeff-out" "$d"'
 exit: 0
@@ -171,8 +192,9 @@ exit: 0
 run: "$TMPDIR/alias-out/bin/alias" 2>&1
 exit: 0
 out-equals: 1600001
-file-contains: $TMPDIR/alias-out/Main.s imul
-file-contains: $TMPDIR/alias-out/Main.s cmovno
+file-contains: $TMPDIR/alias-out/Main.s cmova
+run: sh -c '! grep -q "cmovno" "$TMPDIR/alias-out/Main.s"'
+exit: 0
 run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/alias-out/Main.s"'
 exit: 0
 run: sh -c '! grep -q "call rt_nat_mul" "$TMPDIR/alias-out/Main.s"'
