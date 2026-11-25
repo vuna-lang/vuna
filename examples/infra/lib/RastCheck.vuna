@@ -17,6 +17,35 @@ fixture =
     (Ast.EApp (Ast.EVar "Base.Data.Int.add" (detachedNodeRef sp)) [Ast.EVar "x" (detachedNodeRef sp)] (detachedNodeRef sp))
     (Ast.detachedNodeRef sp)
 
+-- | 作用域覆盖：binder 名与内建 / prelude 名同名时必须仍是 `RLocal`；没有 binder 时
+-- 同名引用才是 `RIntrinsic`。用 `detachedNodeRef`（普通引用的真实形态：没有节点 id，
+-- 只有 span 身份）。
+shadowSp : Int -> Span
+shadowSp n = Span "shadow.vuna" 1 1 1 1 n n
+
+shadowFixture : Ast.Decl
+shadowFixture =
+  Ast.DFun
+    "shadow"
+    [Ast.PVar "Type" (Ast.NodeRef 101 (shadowSp 101))]
+    (Ast.EVar "Type" (Ast.detachedNodeRef (shadowSp 102)))
+    (Ast.NodeRef 100 (shadowSp 100))
+
+plainFixture : Ast.Decl
+plainFixture =
+  Ast.DFun
+    "plain"
+    []
+    (Ast.EVar "Type" (Ast.detachedNodeRef (shadowSp 202)))
+    (Ast.NodeRef 200 (shadowSp 200))
+
+export rastShadowOk : Bool
+rastShadowOk =
+  case Rast.ofDecls [shadowFixture, plainFixture] of
+    [Rast.DFun _ [Rast.PVar "Type" _] (Rast.EVar (RastName.RLocal "Type") _) _, Rast.DFun _ [] (Rast.EVar (RastName.RIntrinsic "Type") _) _] =>
+      True
+    _ => False
+
 -- | 转换后：全局引用变 `RGlobal module name`，binder 保持 `RLocal`。
 export rastConvertOk : Bool
 rastConvertOk =

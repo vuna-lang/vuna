@@ -8,6 +8,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast as Ast
 import Vuna.Compiler.Frontend.Rast as Rast
 import Vuna.Compiler.Frontend.Rast.Name as RastName
+import Vuna.Compiler.Frontend.Refs as Refs
 
 -- | RAst 表达式 → Ast 表达式（名字还原为解析后的字符串）。
 export toAstExpr : Rast.Expr -> Ast.Expr
@@ -86,7 +87,7 @@ toAstPatField (fname, pat) = (fname, toAstPat pat)
 
 -- | Ast 表达式 → RAst（解码路径用；名字按无作用域分类）。
 export toRastExpr : Ast.Expr -> Rast.Expr
-toRastExpr e = Rast.ofExpr [] e
+toRastExpr e = Rast.ofExpr (Refs.annotateExpr e) e
 
 -- | Ast 声明列表 → RAst（Loader → Elab 的边界）。
 export toRastDecls : List Ast.Decl -> List Rast.Decl
@@ -94,7 +95,7 @@ toRastDecls decls = Rast.ofDecls decls
 
 -- | 单条 Ast 声明 → RAst。
 export toRastDecl : Ast.Decl -> Rast.Decl
-toRastDecl d = Rast.ofDecl [] d
+toRastDecl d = Rast.ofDecl (Refs.annotateDecls [d]) d
 
 -- | RAst 声明列表 → Ast（iface / 规范编码等仍以 Ast 为输入的消费者）。
 export toAstDecls : List Rast.Decl -> List Ast.Decl

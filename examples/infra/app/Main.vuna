@@ -72,6 +72,7 @@ main =
       consolePrint (("cst-tree-file " ++ (if pathOk then verdict (treeOk raw) else "skip")) ++ "\n")
     _ <- consolePrint (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
     _ <- consolePrint (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
+    _ <- consolePrint (("rast-shadow " ++ verdict rastShadowOk) ++ "\n")
     _ <- consolePrint (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
     _ <- consolePrint (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
     _ <- consolePrint (("canon-defs-rt " ++ verdict defsRT) ++ "\n")

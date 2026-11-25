@@ -3,13 +3,14 @@
 -- 形状与 [Vuna.Compiler.Frontend.Ast] 大体对应（便于 Elab 逐步迁移）：局部函数组在 Ast
 -- 是 `BindingValue.BClauses`，在 Rast 仍以 `ELocalFun` 表达式作为 Elab 的输入。所有**引用**
 -- 位置（变量、构造子、记录类型）都用 `RName`；binder 与声明名仍是源码短名。
--- `RName` 与字符串分类在 [Vuna.Compiler.Frontend.Rast.Name]（本模块重导出）。
+-- `RName` 与字符串分类在 [Vuna.Compiler.Frontend.Rast.Name]（本模块重导出）；作用域敏感的
+-- 引用分类在 [Vuna.Compiler.Frontend.Refs]（键是引用节点的 span 身份 + 源码名）。
 module Vuna.Compiler.Frontend.Rast where
 
-import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast as Ast
 import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Refs
 export import Vuna.Compiler.Frontend.Ast (Qty, Q0, Q1, qtyIsZero, ReprTier, ReprAuto, ReprAlias, ReprBoxed, reprPrefix, FixityDecl, fixitySpan, Import, ExportItem, XBare, XTypeAll, XTypeSome, XModule, XNamespace, ExportMembers, EMNone, EMAll, EMOnly, ExportSpec, ESValue, ESType, exportSpecName, exportSpecSpan, Opacity, OpacityOpaque, OpacityTransparent, OpacityAbstract, OpacitySpec, opacitySpecName, opacitySpecSpan, ModDecl)
 export module Vuna.Compiler.Frontend.Reserved
 
@@ -276,7 +277,7 @@ export traitMethodSpan : TraitMethod -> Span
 traitMethodSpan (TraitMethod name ty sp) = sp
 
 export exportItemSpan : ExportItem -> Span
-exportItemSpan item = nodeRefSpan (exportItemRef item)
+exportItemSpan item = Ast.nodeRefSpan (exportItemRef item)
 
 export collectClauses : List Decl -> String -> List (List Pat, Expr)
 collectClauses [] name = []
@@ -390,199 +391,146 @@ declDerivings _ = []
 -- 解析后的 Ast → RAst
 --
 -- Loader.Resolve 产出的 Ast 已经完成名字解析与去糖；这里只把**引用**名字换成
--- `RName`。作用域只用于区分「局部 binder 恰好与内建同名」的边缘情况。
+-- `RName`。作用域敏感的分类只在一处（[Vuna.Compiler.Frontend.Refs] 的 `annotateDecls`），
+-- 这里按引用节点的 id 取注解，不再自己穿作用域。
 -- ---------------------------------------------------------------
--- | 名字 → RName（在 binder 作用域里的一律是局部）。
-nameOf : List String -> String -> RName
-nameOf scope name = if memName name scope then RLocal name else classifyName name
-
--- | 转换一组顶层声明。
+-- | 转换一组顶层声明（需要注解时现算）。
 export ofDecls : List Ast.Decl -> List Decl
-ofDecls decls = map (ofDecl []) decls
+ofDecls decls = ofDeclsWith (Refs.annotateDecls decls) decls
+
+-- | 用已有注解转换一组顶层声明。
+export ofDeclsWith : Refs.Annot -> List Ast.Decl -> List Decl
+ofDeclsWith at decls = map (ofDecl at) decls
 
 -- | 单条声明。
-export ofDecl : List String -> Ast.Decl -> Decl
-ofDecl scope (Ast.DData name params kind ctors derivings via repr lin r) =
+export ofDecl : Refs.Annot -> Ast.Decl -> Decl
+ofDecl at (Ast.DData name params kind ctors derivings via repr lin r) =
   DData
     name
     params
-    (ofExpr (append params scope) kind)
-    (map (ofCtor (append params scope)) ctors)
+    (ofExpr at kind)
+    (map (ofCtor at) ctors)
     derivings
     via
     repr
     lin
-    (nodeRefSpan r)
-ofDecl scope (Ast.DAxiom name ty r) = DAxiom name (ofExpr scope ty) (nodeRefSpan r)
-ofDecl scope (Ast.DExtern name cName ty r) = DExtern name cName (ofExpr scope ty) (nodeRefSpan r)
-ofDecl scope (Ast.DSig name ctx ty r) =
-  DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) (nodeRefSpan r)
-ofDecl scope (Ast.DFun name pats body r) =
-  let
-    bound = append (bindersOfPats pats) scope
-  in DFun name (map (ofPat scope) pats) (ofExpr bound body) (nodeRefSpan r)
-ofDecl scope (Ast.DRecord name params fields derivings via repr lin r) =
-  DRecord
+    (Ast.nodeRefSpan r)
+ofDecl at (Ast.DAxiom name ty r) = DAxiom name (ofExpr at ty) (Ast.nodeRefSpan r)
+ofDecl at (Ast.DExtern name cName ty r) = DExtern name cName (ofExpr at ty) (Ast.nodeRefSpan r)
+ofDecl at (Ast.DSig name ctx ty r) =
+  DSig name (map (ofExpr at) ctx) (ofExpr at ty) (Ast.nodeRefSpan r)
+ofDecl at (Ast.DFun name pats body r) =
+  DFun name (map (ofPat at) pats) (ofExpr at body) (Ast.nodeRefSpan r)
+ofDecl at (Ast.DRecord name params fields derivings via repr lin r) =
+  DRecord name params (map (ofField at) fields) derivings via repr lin (Ast.nodeRefSpan r)
+ofDecl at (Ast.DTrait name params supers methods r) =
+  DTrait
     name
-    params
-    (map (ofField (append params scope)) fields)
-    derivings
-    via
-    repr
-    lin
-    (nodeRefSpan r)
-ofDecl scope (Ast.DTrait name params supers methods r) =
-  let
-    bound = append (map astTraitParamName params) scope
-  in DTrait
-    name
-    (map (ofTraitParam bound) params)
-    (map (ofExpr bound) supers)
-    (map (ofTraitMethod bound) methods)
-    (nodeRefSpan r)
-ofDecl scope (Ast.DInstance ctx head methods r) =
-  DInstance
-    (map (ofExpr scope) ctx)
-    (ofExpr scope head)
-    (map (ofDecl scope) methods)
-    (nodeRefSpan r)
+    (map (ofTraitParam at) params)
+    (map (ofExpr at) supers)
+    (map (ofTraitMethod at) methods)
+    (Ast.nodeRefSpan r)
+ofDecl at (Ast.DInstance ctx head methods r) =
+  DInstance (map (ofExpr at) ctx) (ofExpr at head) (map (ofDecl at) methods) (Ast.nodeRefSpan r)
 
-ofCtor : List String -> Ast.Ctor -> Ctor
-ofCtor scope (Ast.Ctor name ty arity r) = Ctor name (ofExpr scope ty) arity (nodeRefSpan r)
+ofCtor : Refs.Annot -> Ast.Ctor -> Ctor
+ofCtor at (Ast.Ctor name ty arity r) = Ctor name (ofExpr at ty) arity (Ast.nodeRefSpan r)
 
-ofField : List String -> Ast.Field -> Field
-ofField scope (Ast.Field name ty r) = Field name (ofExpr scope ty) (nodeRefSpan r)
+ofField : Refs.Annot -> Ast.Field -> Field
+ofField at (Ast.Field name ty r) = Field name (ofExpr at ty) (Ast.nodeRefSpan r)
 
-ofTraitMethod : List String -> Ast.TraitMethod -> TraitMethod
-ofTraitMethod scope (Ast.TraitMethod name ty r) = TraitMethod name (ofExpr scope ty) (nodeRefSpan r)
+ofTraitMethod : Refs.Annot -> Ast.TraitMethod -> TraitMethod
+ofTraitMethod at (Ast.TraitMethod name ty r) = TraitMethod name (ofExpr at ty) (Ast.nodeRefSpan r)
 
--- | 模式：引用名（构造子 / 记录）换成 RName；binder 名保持短名。
-ofPat : List String -> Ast.Pat -> Pat
-ofPat scope (Ast.PVar name r) = PVar name (Ast.nodeRefSpan r)
-ofPat scope (Ast.PAs name inner r) = PAs name (ofPat scope inner) (Ast.nodeRefSpan r)
-ofPat scope (Ast.PWild r) = PWild (Ast.nodeRefSpan r)
-ofPat scope (Ast.PCon name pats r) =
-  PCon (nameOf scope name) (map (ofPat scope) pats) (Ast.nodeRefSpan r)
-ofPat scope (Ast.PInt n r) = PInt n (Ast.nodeRefSpan r)
-ofPat scope (Ast.PStr s r) = PStr s (Ast.nodeRefSpan r)
-ofPat scope (Ast.PRecord name fields r) =
-  PRecord (nameOf scope name) (map (ofPatField scope) fields) (Ast.nodeRefSpan r)
+ofTraitParam : Refs.Annot -> Ast.TraitParam -> TraitParam
+ofTraitParam at (Ast.TraitParam name kind) = TraitParam name (ofMaybeExpr at kind)
 
-ofPatField : List String -> (String, Ast.Pat) -> (String, Pat)
-ofPatField scope (fname, pat) = (fname, ofPat scope pat)
+-- | 模式：引用名（构造子 / 记录）按节点取 `RName`；binder 名保持短名。
+ofPat : Refs.Annot -> Ast.Pat -> Pat
+ofPat at (Ast.PVar name r) = PVar name (Ast.nodeRefSpan r)
+ofPat at (Ast.PAs name inner r) = PAs name (ofPat at inner) (Ast.nodeRefSpan r)
+ofPat at (Ast.PWild r) = PWild (Ast.nodeRefSpan r)
+ofPat at (Ast.PCon name pats r) =
+  PCon (Refs.rnameAt at name r) (map (ofPat at) pats) (Ast.nodeRefSpan r)
+ofPat at (Ast.PInt n r) = PInt n (Ast.nodeRefSpan r)
+ofPat at (Ast.PStr s r) = PStr s (Ast.nodeRefSpan r)
+ofPat at (Ast.PRecord name fields r) =
+  PRecord (Refs.rnameAt at name r) (map (ofPatField at) fields) (Ast.nodeRefSpan r)
 
--- | 模式引入的 binder 名。
-patBinders : Ast.Pat -> List String
-patBinders (Ast.PVar name _) = [name]
-patBinders (Ast.PAs name inner _) = name :: patBinders inner
-patBinders (Ast.PWild _) = []
-patBinders (Ast.PCon name pats _) = concatMap patBinders pats
-patBinders (Ast.PInt n _) = []
-patBinders (Ast.PStr s _) = []
-patBinders (Ast.PRecord name fields _) = concatMap patFieldBinders fields
-
-bindersOfPats : List Ast.Pat -> List String
-bindersOfPats pats = concatMap patBinders pats
+ofPatField : Refs.Annot -> (String, Ast.Pat) -> (String, Pat)
+ofPatField at (fname, pat) = (fname, ofPat at pat)
 
 -- | 表达式转换。
-export ofExpr : List String -> Ast.Expr -> Expr
-ofExpr scope e =
+export ofExpr : Refs.Annot -> Ast.Expr -> Expr
+ofExpr at e =
   case e of
     -- vuna-lint: disable-next-line dispatch-lift
-    Ast.EVar name sp => EVar (nameOf scope name) (Ast.nodeRefSpan sp)
+    Ast.EVar name sp => EVar (Refs.rnameAt at name sp) (Ast.nodeRefSpan sp)
     Ast.EInt n sp => EInt n (Ast.nodeRefSpan sp)
     Ast.EStr s sp => EStr s (Ast.nodeRefSpan sp)
     Ast.EFloat raw sp => EFloat raw (Ast.nodeRefSpan sp)
-    Ast.EInterp parts sp => EInterp (map (ofInterpPart scope) parts) (Ast.nodeRefSpan sp)
-    Ast.ELam params body sp =>
-      ELam params (ofExpr (append (map firstOf params) scope) body) (Ast.nodeRefSpan sp)
+    Ast.EInterp parts sp => EInterp (map (ofInterpPart at) parts) (Ast.nodeRefSpan sp)
+    Ast.ELam params body sp => ELam params (ofExpr at body) (Ast.nodeRefSpan sp)
     Ast.EApp fn args sp =>
       case fn of
         Ast.EVar name _ =>
           case args of
             [v, t] =>
               case classify name of
-                Just RsAscribe => EAnn (ofExpr scope v) (ofExpr scope t) (Ast.nodeRefSpan sp)
-                _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
-            _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
-        _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
+                Just RsAscribe => EAnn (ofExpr at v) (ofExpr at t) (Ast.nodeRefSpan sp)
+                _ => EApp (ofExpr at fn) (map (ofExpr at) args) (Ast.nodeRefSpan sp)
+            _ => EApp (ofExpr at fn) (map (ofExpr at) args) (Ast.nodeRefSpan sp)
+        _ => EApp (ofExpr at fn) (map (ofExpr at) args) (Ast.nodeRefSpan sp)
     Ast.EPi name implicit qty dom cod sp =>
-      EPi name implicit qty (ofExpr scope dom) (ofExpr (name :: scope) cod) (Ast.nodeRefSpan sp)
+      EPi name implicit qty (ofExpr at dom) (ofExpr at cod) (Ast.nodeRefSpan sp)
     Ast.ELet binds body rec_ sp =>
-      let
-        bound = append (concatMap bindingBinders binds) scope
-      in ELet (map (ofBinding bound scope) binds) (ofExpr bound body) rec_ (Ast.nodeRefSpan sp)
-    Ast.ECase scrut alts sp =>
-      ECase (ofExpr scope scrut) (map (ofAlt scope) alts) (Ast.nodeRefSpan sp)
-    Ast.EIf c t f sp => EIf (ofExpr scope c) (ofExpr scope t) (ofExpr scope f) (Ast.nodeRefSpan sp)
-    Ast.EField base fname sp => EField (ofExpr scope base) fname (Ast.nodeRefSpan sp)
+      ELet (map (ofBinding at) binds) (ofExpr at body) rec_ (Ast.nodeRefSpan sp)
+    Ast.ECase scrut alts sp => ECase (ofExpr at scrut) (map (ofAlt at) alts) (Ast.nodeRefSpan sp)
+    Ast.EIf c t f sp => EIf (ofExpr at c) (ofExpr at t) (ofExpr at f) (Ast.nodeRefSpan sp)
+    Ast.EField base fname sp => EField (ofExpr at base) fname (Ast.nodeRefSpan sp)
     Ast.ERecord name fields sp =>
-      ERecord (nameOf scope name) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
+      ERecord (Refs.rnameAt at name sp) (map (ofFieldValue at) fields) (Ast.nodeRefSpan sp)
     Ast.ERecUpdate base fields sp =>
-      ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) (Ast.nodeRefSpan sp)
-    Ast.EDo stmts sp => EDo (ofStmts scope stmts) (Ast.nodeRefSpan sp)
+      ERecUpdate (ofExpr at base) (map (ofFieldValue at) fields) (Ast.nodeRefSpan sp)
+    Ast.EDo stmts sp => EDo (ofStmts at stmts) (Ast.nodeRefSpan sp)
 
-ofBinding : List String -> List String -> Ast.Binding -> (Pat, Expr)
-ofBinding bound scope (Ast.Binding pat (Ast.BVal e) sig ref) =
+ofBinding : Refs.Annot -> Ast.Binding -> (Pat, Expr)
+ofBinding at (Ast.Binding pat (Ast.BVal e) sig ref) =
   let
-    valueScope = append (patBinders pat) bound
-    value = ofExpr valueScope e
+    value = ofExpr at e
   in case sig of
     -- 绑定签名行重新合成 Rast 的 `EAnn`（Elab 的 where 组按签名递归提升）。
-    Just s => (ofPat scope pat, EAnn value (ofExpr valueScope s.sigType) (Ast.nodeRefSpan s.sigRef))
-    Nothing => (ofPat scope pat, value)
-ofBinding bound scope (Ast.Binding pat (Ast.BClauses clauses) sig ref) =
+    Just s => (ofPat at pat, EAnn value (ofExpr at s.sigType) (Ast.nodeRefSpan s.sigRef))
+    Nothing => (ofPat at pat, value)
+ofBinding at (Ast.Binding pat (Ast.BClauses clauses) sig ref) =
   let
-    valueScope = append (patBinders pat) bound
-    value = ELocalFun (map (ofLocalClause valueScope) clauses) (Ast.nodeRefSpan ref)
+    value = ELocalFun (map (ofLocalClause at) clauses) (Ast.nodeRefSpan ref)
   in case sig of
-    Just s => (ofPat scope pat, EAnn value (ofExpr valueScope s.sigType) (Ast.nodeRefSpan s.sigRef))
-    Nothing => (ofPat scope pat, value)
+    Just s => (ofPat at pat, EAnn value (ofExpr at s.sigType) (Ast.nodeRefSpan s.sigRef))
+    Nothing => (ofPat at pat, value)
 
-ofLocalClause : List String -> Ast.LocalClause -> (List Pat, Expr)
-ofLocalClause scope clause =
-  let
-    pats = clause.lcPats
-  in (map (ofPat scope) pats, ofExpr (append (bindersOfPats pats) scope) clause.lcBody)
+ofLocalClause : Refs.Annot -> Ast.LocalClause -> (List Pat, Expr)
+ofLocalClause at clause = (map (ofPat at) clause.lcPats, ofExpr at clause.lcBody)
 
-ofAlt : List String -> Ast.Alt -> (Pat, Expr)
-ofAlt scope alt =
-  let
-    pat = alt.altPat
-  in (ofPat scope pat, ofExpr (append (patBinders pat) scope) alt.altBody)
+ofAlt : Refs.Annot -> Ast.Alt -> (Pat, Expr)
+ofAlt at alt = (ofPat at alt.altPat, ofExpr at alt.altBody)
 
-ofFieldValue : List String -> (String, Ast.Expr) -> (String, Expr)
-ofFieldValue scope (fname, value) = (fname, ofExpr scope value)
+ofFieldValue : Refs.Annot -> (String, Ast.Expr) -> (String, Expr)
+ofFieldValue at (fname, value) = (fname, ofExpr at value)
 
-ofInterpPart : List String -> Ast.InterpPart -> InterpPart
-ofInterpPart scope (Ast.IPText s) = IPText s
-ofInterpPart scope (Ast.IPHole e) = IPHole (ofExpr scope e)
+ofInterpPart : Refs.Annot -> Ast.InterpPart -> InterpPart
+ofInterpPart at (Ast.IPText s) = IPText s
+ofInterpPart at (Ast.IPHole e) = IPHole (ofExpr at e)
 
-ofStmts : List String -> List Ast.DoStmt -> List DoStmt
-ofStmts scope [] = []
-ofStmts scope (stmt :: rest) =
+ofStmts : Refs.Annot -> List Ast.DoStmt -> List DoStmt
+ofStmts at [] = []
+ofStmts at (stmt :: rest) =
   case stmt of
     Ast.DBind pat value r =>
-      DBind (ofPat scope pat) (ofExpr scope value) (nodeRefSpan r)
-        :: ofStmts (append (patBinders pat) scope) rest
-    Ast.DLet binds r =>
-      let
-        bound = append (concatMap bindingBinders binds) scope
-      in DLet (map (ofBinding bound scope) binds) (nodeRefSpan r) :: ofStmts bound rest
-    Ast.DExpr value r => DExpr (ofExpr scope value) (nodeRefSpan r) :: ofStmts scope rest
+      DBind (ofPat at pat) (ofExpr at value) (Ast.nodeRefSpan r) :: ofStmts at rest
+    Ast.DLet binds r => DLet (map (ofBinding at) binds) (Ast.nodeRefSpan r) :: ofStmts at rest
+    Ast.DExpr value r => DExpr (ofExpr at value) (Ast.nodeRefSpan r) :: ofStmts at rest
 
-patFieldBinders : (String, Ast.Pat) -> List String
-patFieldBinders (fname, pat) = patBinders pat
-
-bindingBinders : Ast.Binding -> List String
-bindingBinders binding = patBinders binding.bindPat
-
-astTraitParamName : Ast.TraitParam -> String
-astTraitParamName p = p.traitParamName
-
-ofTraitParam : List String -> Ast.TraitParam -> TraitParam
-ofTraitParam scope (Ast.TraitParam name kind) = TraitParam name (ofMaybeExpr scope kind)
-
-ofMaybeExpr : List String -> Maybe Ast.Expr -> Maybe Expr
-ofMaybeExpr scope Nothing = Nothing
-ofMaybeExpr scope (Just e) = Just (ofExpr scope e)
+ofMaybeExpr : Refs.Annot -> Maybe Ast.Expr -> Maybe Expr
+ofMaybeExpr at Nothing = Nothing
+ofMaybeExpr at (Just e) = Just (ofExpr at e)

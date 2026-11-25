@@ -27,6 +27,7 @@ out-contains: cst-file ok
 out-contains: cst-tree-file ok
 out-contains: name-identity ok
 out-contains: rast-convert ok
+out-contains: rast-shadow ok
 
 
 
