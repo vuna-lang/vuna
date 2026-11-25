@@ -1,0 +1,11 @@
+-- native 标量树「先右后左」求值：结果寄存器不能再回到空闲池。
+-- `pair` 内联把常量除法表达式代进 `a * 1000`；复用结果寄存器会把乘法的常量
+-- 写进仍在用的寄存器，输出静默变错。三端都必须给出 6021。
+pair : Int -> Int -> Int
+pair a b = a * 1000 + b
+
+loop : Int -> Int -> Int
+loop n acc = if n <= 0 then acc else loop (n - 1) (acc + pair (n - n / 1000 * 1000) 7)
+
+main : Int
+main = loop 3 0

@@ -1666,6 +1666,7 @@ genScalarBinRightFirst bud wrap st pool op a b =
   case genScalarIntoW (bud - 1) (childWrap op) st (pickFirst pool (needsRax a)) b of
     Just pb =>
       case genScalarIntoW (bud - 1) (childWrap op) st (secondOf (secondOf pb)) a of
+        -- 结果落在 rA；rB 已被消费。只把 rB 还给池，rA 仍被结果占着。
         Just pa =>
           let
             rA = firstOf pa
@@ -1674,7 +1675,7 @@ genScalarBinRightFirst bud wrap st pool op a b =
             inB = firstOf (secondOf pb)
             restA = secondOf (secondOf pa)
             res = resOf (wrap && not (rangeSkips st op a b)) op rA rB
-          in Just (firstOf res, append inB (append inA (secondOf res)), rA :: restA)
+          in Just (firstOf res, append inB (append inA (secondOf res)), rB :: restA)
         Nothing => Nothing
     Nothing => Nothing
 
