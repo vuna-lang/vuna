@@ -282,7 +282,7 @@ isSendCoreName name = name == effSendCoreName || name == effSendCoreIdName
 -- | Eff 版线性绑定（当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。
 export primEffBind1Name : String
-primEffBind1Name = "prim_eff_bind1"
+primEffBind1Name = "@vuna@prim_eff_bind1"
 
 -- | 表现层 cast：精化器在「运行时位置出现不可命名的擦除依赖类型」时插入
 -- （见 docs/reference/effects.md §5/§6）。隐藏 intrinsic：只供精化器引用，
@@ -543,7 +543,7 @@ export data IntrinsicOp(..) : Type where
 -- `Target.Ocaml.Runtime`；本模块只声明目标中立的语义（名字/签名/arity/归约/可见性）。
 -- | 内建声明：名字、签名形状、interp 归约标签、可见性。
 export record Intrinsic where
-  -- | 内建的源码名字（如 `+`、`strFromInt`、`prim_eff_print`）。
+  -- | 内建的源码名字（如 `+`、`strFromInt`）。
   intrinsicName : String
   -- | 签名形状（`IType`）。
   intrinsicSignature : IType
@@ -809,8 +809,8 @@ baseIntrinsics : List Intrinsic
 -- 异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
 -- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
 -- 语义：add/mul 饱和到 max_int，sub 截断到 0，div 除零与 Int 同文案失败。
--- 运行时诊断原语。`prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；
--- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`prim_eff_eprint`
+-- 运行时诊断原语。`@vuna@prim_eff_eprint` 写 stderr 并 flush（报告器/调试输出用）；
+-- `prim_fail` 抛 Failure（报告器把它渲染成 "vuna: runtime error: ..."）。`@vuna@prim_eff_eprint`
 -- 供工具链的 stderr 报告使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
@@ -948,7 +948,7 @@ floatIntrinsics =
     Intrinsic "bi_ge_float" (IFun IFloat (IFun IFloat IBool)) OpGeF False
   ]
 
--- | Eff 动作版本的宿主原语：名字带 `prim_eff_` 前缀，
+-- | Eff 动作版本的宿主原语：名字是隐藏的 `@vuna@prim_eff_*`，
 -- 类型为 `Eff [] a`。单独成表是为了让每段列表字面量
 -- 留在 seed 的 fuel 内（同 `floatIntrinsics`）。
 effIntrinsics : List Intrinsic
@@ -979,9 +979,8 @@ effIntrinsics =
       primEffBind1Name
       (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b"))))))
       OpNone
-      True,
+      False,
     Intrinsic "effTimeUs" (IEff IInt) OpNone True,
-    Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic
       "@vuna@prim_eff_newRef"
@@ -1058,53 +1057,30 @@ effIntrinsics =
     Intrinsic "@vuna@prim_mbufLen" (IFun IMBuffer IInt) OpNone False,
     Intrinsic "@vuna@prim_mbufClear" (IFun IMBuffer (IEff IInt)) OpNone False,
     Intrinsic "@vuna@prim_mbufToString" (IFun IMBuffer IStr) OpNone False,
-    Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_print" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_print_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_print_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@print" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_eprint" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readFile" (IFun IStr (IEff IStr)) OpNone False,
-    Intrinsic "prim_eff_readFileRange" (IFun IStr (IFun IInt (IFun IInt (IEff IStr)))) OpNone True,
     Intrinsic
       "@vuna@prim_eff_readFileRange"
       (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
       OpNone
       False,
-    Intrinsic "prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_readLine" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_readLine" (IEff IStr) OpNone False,
-    Intrinsic "prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readBytes" (IFun IInt (IEff IStr)) OpNone False,
-    Intrinsic "prim_eff_getArgs" (IEff (IList IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getArgs" (IEff (IList IStr)) OpNone False,
-    Intrinsic "prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone True,
     Intrinsic "@vuna@prim_eff_readDir" (IFun IStr (IEff (IList IStr))) OpNone False,
-    Intrinsic "prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone True,
     Intrinsic "@vuna@prim_eff_isDirectory" (IFun IStr (IEff IBool)) OpNone False,
-    Intrinsic "prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_makeDir" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_removeFile" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileExists" (IFun IStr (IEff IBool)) OpNone False,
-    Intrinsic "prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileMtime" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileSize" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_readFile_host" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readFile_host" (IFun IStr (IEff IStr)) OpNone False,
     Intrinsic "@vuna@host@readFile" (IFun IStr (IEff IStr)) OpNone False,
-    Intrinsic
-      "prim_eff_readFileRange_host"
-      (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
-      OpNone
-      True,
     Intrinsic
       "@vuna@prim_eff_readFileRange_host"
       (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
@@ -1120,31 +1096,22 @@ effIntrinsics =
       (IFun IStr (IFun IInt (IFun IInt (IEff IStr))))
       OpNone
       False,
-    Intrinsic "prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFile_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@writeFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_writeFileAtomic_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_writeFileAtomic_host" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@writeFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_readDir_host" (IFun IStr (IEff (IList IStr))) OpNone True,
     Intrinsic "@vuna@prim_eff_readDir_host" (IFun IStr (IEff (IList IStr))) OpNone False,
     Intrinsic "@vuna@host@readDir" (IFun IStr (IEff (IList IStr))) OpNone False,
-    Intrinsic "prim_eff_isDirectory_host" (IFun IStr (IEff IBool)) OpNone True,
     Intrinsic "@vuna@prim_eff_isDirectory_host" (IFun IStr (IEff IBool)) OpNone False,
     Intrinsic "@vuna@host@isDirectory" (IFun IStr (IEff IBool)) OpNone False,
-    Intrinsic "prim_eff_makeDir_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_makeDir_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@makeDir" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_removeFile_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_removeFile_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@removeFile" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_fileExists_host" (IFun IStr (IEff IBool)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileExists_host" (IFun IStr (IEff IBool)) OpNone False,
     Intrinsic "@vuna@host@fileExists" (IFun IStr (IEff IBool)) OpNone False,
-    Intrinsic "prim_eff_fileMtime_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileMtime_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@fileMtime" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_fileSize_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_fileSize_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@fileSize" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@prim_eff_hostStatus" (IEff IInt) OpNone False,
@@ -1161,61 +1128,41 @@ effIntrinsics =
     Intrinsic "@vuna@host@tryMakeDirExclusive" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@isTty" (IEff IBool) OpNone False,
     Intrinsic "@vuna@host@tryRunIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_exit" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone False,
     Intrinsic "effTimeUs_host" (IEff IInt) OpNone True,
-    Intrinsic "prim_eff_sleep_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_sleep_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@sleep" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_getenv_host" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getenv_host" (IFun IStr (IEff IStr)) OpNone False,
     Intrinsic "@vuna@host@getenv" (IFun IStr (IEff IStr)) OpNone False,
-    Intrinsic "prim_eff_getcwd_host" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_getcwd_host" (IEff IStr) OpNone False,
     Intrinsic "@vuna@host@getcwd" (IEff IStr) OpNone False,
-    Intrinsic "prim_eff_execPath_host" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_execPath_host" (IEff IStr) OpNone False,
     Intrinsic "@vuna@host@execPath" (IEff IStr) OpNone False,
-    Intrinsic "prim_eff_getArgs_process_host" (IEff (IList IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getArgs_process_host" (IEff (IList IStr)) OpNone False,
-    Intrinsic "prim_eff_exit_process_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_exit_process_host" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_exitOp_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_exitOp_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@exitOp" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_readLine_host" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_readLine_host" (IEff IStr) OpNone False,
     Intrinsic "@vuna@host@readLine" (IEff IStr) OpNone False,
-    Intrinsic "prim_eff_readBytes_host" (IFun IInt (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_readBytes_host" (IFun IInt (IEff IStr)) OpNone False,
     Intrinsic "@vuna@host@readBytes" (IFun IInt (IEff IStr)) OpNone False,
-    Intrinsic "prim_eff_getArgs_host" (IEff (IList IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getArgs_host" (IEff (IList IStr)) OpNone False,
     Intrinsic "@vuna@host@getArgs" (IEff (IList IStr)) OpNone False,
-    Intrinsic "prim_eff_netListen_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netListen_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netListen" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netPort_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netPort_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netPort" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netAccept_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netAccept_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netAccept" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netRecv_host" (IFun IInt (IFun IInt (IEff IStr))) OpNone True,
     Intrinsic "@vuna@prim_eff_netRecv_host" (IFun IInt (IFun IInt (IEff IStr))) OpNone False,
     Intrinsic "@vuna@host@netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone False,
-    Intrinsic "prim_eff_netSend_host" (IFun IInt (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_netSend_host" (IFun IInt (IFun IStr (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_netClose_host" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netClose_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netClose" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netConnect_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netConnect_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netConnect" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@tryNetListen" (IFun IStr (IEff IInt)) OpNone False,
@@ -1236,29 +1183,17 @@ effIntrinsics =
       (IFun IInt (IFun IStr (IFun IInt (IEff IInt))))
       OpNone
       False,
-    Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_wait" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netListen" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netPort" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netAccept" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone True,
     Intrinsic "@vuna@prim_eff_netRecv" (IFun IInt (IFun IInt (IEff IStr))) OpNone False,
-    Intrinsic "prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_netSend" (IFun IInt (IFun IStr (IEff IInt))) OpNone False,
-    Intrinsic "prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netClose" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netConnect" (IFun IStr (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getenv" (IFun IStr (IEff IStr)) OpNone False,
-    Intrinsic "prim_eff_getcwd" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_getcwd" (IEff IStr) OpNone False,
-    Intrinsic "prim_eff_execPath" (IEff IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_execPath" (IEff IStr) OpNone False
   ]
 

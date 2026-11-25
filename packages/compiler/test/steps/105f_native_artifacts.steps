@@ -1,7 +1,7 @@
 # matrix: effect-native
 # 105f) native 后端：产物文件集、增量构建与宿主失败面。
 #     模块切分后的文件集、build.sh 增量、深目录删除、非 try 宿主符号失败、大文件读取、
-#     strict 包装族、浮点字面量与浮点比较、标量选择/常量除法/零参别名、循环体旋转。
+#     浮点字面量与浮点比较、标量选择/常量除法/零参别名、循环体旋转。
 # 11) 文件集按模块切分：改一个模块只重写该模块的 `.s`，其它模块与 runtime 逐字节不变。
 run: sh -c 'd="$TMPDIR/loc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"loc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-a" "$d"'
 exit: 0
@@ -37,41 +37,12 @@ run: sh -c '"$TMPDIR/deeptree-out/bin/deeptree" 2>&1'
 exit: 2
 out-contains: directory tree too deep
 
-# 9v) 非 try 宿主符号失败：必须显式可见（exit 2），且首行与 OCaml 后端逐字一致。
-#     `try*` 叶子仍返回默认值 + 状态码（库的 Fs handler 走那条路）。
-run: sh -c 'd="$TMPDIR/strictfs"; mkdir -p "$d/app"; printf "[package]\nname = \"strictfs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\n\nmain : Eff [] Int\nmain = do\n  s <- prim_eff_readFile \"/nonexistent-vuna-strict\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/strictfs-n" "$d"'
-exit: 0
-run: sh -c 'd="$TMPDIR/strictfs"; "$VUNA" build --out "$TMPDIR/strictfs-o" "$d"'
-exit: 0
-run: sh -c '"$TMPDIR/strictfs-n/bin/strictfs" 2> "$TMPDIR/strictfs-n.err"; echo $?'
-out-equals: 2
-run: sh -c '"$TMPDIR/strictfs-o/bin/strictfs" 2> "$TMPDIR/strictfs-o.err"; echo $?'
-out-equals: 2
-run: sh -c 'head -1 "$TMPDIR/strictfs-n.err"'
-out-equals: vuna: runtime error: readFile: /nonexistent-vuna-strict: No such file or directory
-run: sh -c 'head -1 "$TMPDIR/strictfs-n.err" > "$TMPDIR/strictfs-n.line"; head -1 "$TMPDIR/strictfs-o.err" > "$TMPDIR/strictfs-o.line"; cmp "$TMPDIR/strictfs-n.line" "$TMPDIR/strictfs-o.line"'
-exit: 0
-
 # 9w) 大文件读取：没有固定缓冲上界（12 MiB > 8 MiB 旧上界），按 stat 尺寸一次分配再读到 EOF。
 run: sh -c 'dd if=/dev/zero of="$TMPDIR/big-read.dat" bs=1024 count=12288 2>/dev/null'
 run: sh -c 'd="$TMPDIR/bigread"; mkdir -p "$d/app"; printf "[package]\nname = \"bigread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/big-read.dat\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/bigread-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/bigread-out/bin/bigread" 2>&1'
 out-equals: 12582912
-
-# 9y) strict 包装族：`prim_eff_readFileRange` / `writeFile` / `writeFileAtomic` /
-#     `readDir` / `isDirectory` / `makeDir` / `removeFile` 失败时都必须显式退出 2。
-#     除 writeFileAtomic（OCaml 的临时文件名带 pid，消息不可跨端逐字比）外，首行
-#     还必须与 OCaml 后端逐字一致。用 argv 选操作，避免七个包各建一次。
-run: sh -c 'd="$TMPDIR/strict7"; mkdir -p "$d/app"; printf "[package]\nname = \"strict7\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\n\npick : List String -> String\npick xs = case xs of\n  a :: _ => a\n  _ => \"none\"\n\nmain : Eff [] Int\nmain = do\n  args <- prim_eff_getArgs\n  let op = pick args\n  if op == \"readFileRange\" then do\n    _ <- prim_eff_readFileRange \"/nonexistent-vuna-strict7\" 0 4\n    pure 0\n  else if op == \"writeFile\" then do\n    _ <- prim_eff_writeFile \"/nonexistent-vuna-strict7/x\" \"s\"\n    pure 0\n  else if op == \"writeFileAtomic\" then do\n    _ <- prim_eff_writeFileAtomic \"/nonexistent-vuna-strict7/x\" \"s\"\n    pure 0\n  else if op == \"readDir\" then do\n    _ <- prim_eff_readDir \"/nonexistent-vuna-strict7\"\n    pure 0\n  else if op == \"isDirectory\" then do\n    _ <- prim_eff_isDirectory \"/nonexistent-vuna-strict7\"\n    pure 0\n  else if op == \"makeDir\" then do\n    n <- prim_eff_makeDir \"$TMPDIR/strict7-parent/child\"\n    pure n\n  else if op == \"removeFile\" then do\n    n <- prim_eff_removeFile \"$TMPDIR/strict7-nonempty\"\n    pure n\n  else pure 9\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/strict7-n" "$d"'
-exit: 0
-run: sh -c 'd="$TMPDIR/strict7"; "$VUNA" build --out "$TMPDIR/strict7-o" "$d"'
-exit: 0
-run: sh -c ': > "$TMPDIR/strict7-parent"; rm -rf "$TMPDIR/strict7-nonempty"; mkdir -p "$TMPDIR/strict7-nonempty"; : > "$TMPDIR/strict7-nonempty/x"'
-exit: 0
-run: sh -c 'ok=0; for op in readFileRange writeFile writeFileAtomic readDir isDirectory makeDir removeFile; do "$TMPDIR/strict7-n/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7n-$op.err"; [ $? -eq 2 ] || ok=1; "$TMPDIR/strict7-o/bin/strict7" "$op" > /dev/null 2> "$TMPDIR/s7o-$op.err"; [ $? -eq 2 ] || ok=1; if [ "$op" != writeFileAtomic ]; then head -1 "$TMPDIR/s7n-$op.err" > "$TMPDIR/s7n-$op.line"; head -1 "$TMPDIR/s7o-$op.err" > "$TMPDIR/s7o-$op.line"; cmp -s "$TMPDIR/s7n-$op.line" "$TMPDIR/s7o-$op.line" || ok=2; fi; done; echo $ok'
-exit: 0
-out-equals: 0
 
 # 9ao) 浮点字面量是 `.rodata` 里的 `.double` 常量：使用点只发一条 `lea`，
 #     不再走「整数装盒 + `float_from_int` + `float_div`」。

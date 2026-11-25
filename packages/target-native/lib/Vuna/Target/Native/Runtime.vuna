@@ -1780,156 +1780,135 @@ hostLeafGroups =
     ("cleanup_push", ["prim_cleanupPush"]),
     ("exec_path",
       [
-        "prim_eff_execPath",
         "@vuna@prim_eff_execPath",
-        "prim_eff_execPath_host",
         "@vuna@prim_eff_execPath_host",
         "@vuna@host@execPath"
       ]),
-    ("exit_with", ["prim_eff_exit_process_host", "@vuna@prim_eff_exit_process_host"]),
+    ("exit_with", ["@vuna@prim_eff_exit_process_host"]),
     ("file_exists",
       [
         "@vuna@host@fileExists",
-        "prim_eff_fileExists",
         "@vuna@prim_eff_fileExists",
-        "prim_eff_fileExists_host",
         "@vuna@prim_eff_fileExists_host"
       ]),
     ("file_mtime",
       [
         "@vuna@host@fileMtime",
-        "prim_eff_fileMtime",
         "@vuna@prim_eff_fileMtime",
-        "prim_eff_fileMtime_host",
         "@vuna@prim_eff_fileMtime_host"
       ]),
     ("file_size",
       [
         "@vuna@host@fileSize",
-        "prim_eff_fileSize",
         "@vuna@prim_eff_fileSize",
-        "prim_eff_fileSize_host",
         "@vuna@prim_eff_fileSize_host"
       ]),
     ("getArgs",
       [
-        "prim_eff_getArgs",
         "@vuna@prim_eff_getArgs",
-        "prim_eff_getArgs_host",
         "@vuna@prim_eff_getArgs_host",
         "@vuna@host@getArgs",
-        "prim_eff_getArgs_process_host",
         "@vuna@prim_eff_getArgs_process_host"
       ]),
     ("getcwd",
       [
-        "prim_eff_getcwd",
         "@vuna@prim_eff_getcwd",
-        "prim_eff_getcwd_host",
         "@vuna@prim_eff_getcwd_host",
         "@vuna@host@getcwd"
       ]),
     ("getenv",
       [
-        "prim_eff_getenv",
         "@vuna@prim_eff_getenv",
-        "prim_eff_getenv_host",
         "@vuna@prim_eff_getenv_host",
         "@vuna@host@getenv"
       ]),
     ("host_status_get", ["@vuna@prim_eff_hostStatus"]),
     ("is_tty", ["@vuna@host@isTty"]),
-    ("now_us", ["effTimeUs", "effTimeUs_host"]),
-    ("prim_eff_eprint", ["prim_eff_eprint", "@vuna@prim_eff_eprint"]),
+    ("now_us",
+      [
+        "effTimeUs",
+        "effTimeUs_host"
+      ]),
+    ("prim_eff_eprint", ["@vuna@prim_eff_eprint"]),
     ("prim_eff_exit",
       [
         "@vuna@host@exitOp",
-        "prim_eff_exitOp_host",
         "@vuna@prim_eff_exitOp_host",
-        "prim_eff_exit",
         "@vuna@prim_eff_exit"
       ]),
-    ("prim_eff_new_ref", ["@vuna@prim_eff_newRef", "@vuna@prim_mrefNew"]),
+    ("prim_eff_new_ref",
+      [
+        "@vuna@prim_eff_newRef",
+        "@vuna@prim_mrefNew"
+      ]),
     ("prim_eff_print",
       [
         "@vuna@host@print",
-        "prim_eff_print_host",
         "@vuna@prim_eff_print_host",
-        "prim_eff_print",
         "@vuna@prim_eff_print"
       ]),
-    ("prim_eff_read_ref", ["@vuna@prim_eff_readRef", "@vuna@prim_mrefRead"]),
-    ("prim_eff_write_ref", ["@vuna@prim_eff_writeRef", "@vuna@prim_mrefWrite"]),
+    ("prim_eff_read_ref",
+      [
+        "@vuna@prim_eff_readRef",
+        "@vuna@prim_mrefRead"
+      ]),
+    ("prim_eff_write_ref",
+      [
+        "@vuna@prim_eff_writeRef",
+        "@vuna@prim_mrefWrite"
+      ]),
     ("sleep_us",
       [
-        "prim_eff_sleep",
         "@vuna@prim_eff_sleep",
-        "prim_eff_sleep_host",
         "@vuna@prim_eff_sleep_host",
         "@vuna@host@sleep"
       ]),
-    ("spawn_self", ["prim_eff_spawn", "@vuna@prim_eff_spawn"]),
+    ("spawn_self", ["@vuna@prim_eff_spawn"]),
     ("strict_is_dir",
       [
-        "prim_eff_isDirectory",
         "@vuna@prim_eff_isDirectory",
-        "prim_eff_isDirectory_host",
         "@vuna@prim_eff_isDirectory_host",
         "@vuna@host@isDirectory"
       ]),
     ("strict_make_dir",
       [
-        "prim_eff_makeDir",
         "@vuna@prim_eff_makeDir",
-        "prim_eff_makeDir_host",
         "@vuna@prim_eff_makeDir_host",
         "@vuna@host@makeDir"
       ]),
     ("strict_read_dir",
       [
-        "prim_eff_readDir",
         "@vuna@prim_eff_readDir",
-        "prim_eff_readDir_host",
         "@vuna@prim_eff_readDir_host",
         "@vuna@host@readDir"
       ]),
     ("strict_read_file",
       [
-        "prim_eff_readFile",
         "@vuna@prim_eff_readFile",
-        "prim_eff_readFile_host",
         "@vuna@prim_eff_readFile_host",
         "@vuna@host@readFile"
       ]),
     ("strict_read_file_range",
       [
-        "prim_eff_readFileRange",
         "@vuna@prim_eff_readFileRange",
-        "prim_eff_readFileRange_host",
         "@vuna@prim_eff_readFileRange_host",
         "@vuna@host@readFileRange"
       ]),
     ("strict_remove_file",
       [
-        "prim_eff_removeFile",
         "@vuna@prim_eff_removeFile",
-        "prim_eff_removeFile_host",
         "@vuna@prim_eff_removeFile_host",
         "@vuna@host@removeFile"
       ]),
     ("strict_write_file",
       [
-        "prim_eff_writeFile",
         "@vuna@prim_eff_writeFile",
-        "prim_eff_writeFile_host",
         "@vuna@prim_eff_writeFile_host",
         "@vuna@host@writeFile"
       ]),
     ("strict_write_file_atomic",
       [
-        "prim_eff_writeFileAtomic",
         "@vuna@prim_eff_writeFileAtomic",
-        "prim_eff_writeFileAtomic_host",
         "@vuna@prim_eff_writeFileAtomic_host",
         "@vuna@host@writeFileAtomic"
       ]),
@@ -1937,9 +1916,7 @@ hostLeafGroups =
     ("tryRunIn",
       [
         "@vuna@host@tryRunIn",
-        "prim_eff_runIn",
         "@vuna@prim_eff_runIn",
-        "prim_eff_runIn_host",
         "@vuna@prim_eff_runIn_host",
         "@vuna@host@runIn"
       ]),
@@ -1954,9 +1931,8 @@ hostLeafGroups =
     ("try_symlink", ["@vuna@host@trySymlink"]),
     ("try_write_file", ["@vuna@host@tryWriteFile"]),
     ("try_write_file_atomic", ["@vuna@host@tryWriteFileAtomic"]),
-    ("wait_pid", ["prim_eff_wait", "@vuna@prim_eff_wait"])
+    ("wait_pid", ["@vuna@prim_eff_wait"])
   ]
-
 nameInGroup : String -> List String -> Bool
 nameInGroup _ [] = False
 nameInGroup name (n :: rest) = if n == name then True else nameInGroup name rest
@@ -2039,10 +2015,8 @@ nativeRtValueArityBase _ = 0
 
 nativeRtValueArityHost : String -> Int
 nativeRtValueArityHost "@vuna@host@print" = 1
-nativeRtValueArityHost "prim_eff_print_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_print_host" = 1
 nativeRtValueArityHost "@vuna@host@exitOp" = 1
-nativeRtValueArityHost "prim_eff_exitOp_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_exitOp_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
@@ -2050,102 +2024,68 @@ nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
 nativeRtValueArityHost "@vuna@prim_mrefNew" = 1
 nativeRtValueArityHost "@vuna@prim_mrefRead" = 1
 nativeRtValueArityHost "@vuna@prim_mrefWrite" = 2
-nativeRtValueArityHost "prim_eff_print" = 1
 nativeRtValueArityHost "@vuna@prim_eff_print" = 1
-nativeRtValueArityHost "prim_eff_eprint" = 1
 nativeRtValueArityHost "@vuna@prim_eff_eprint" = 1
-nativeRtValueArityHost "prim_eff_exit" = 1
 nativeRtValueArityHost "@vuna@prim_eff_exit" = 1
-nativeRtValueArityHost "prim_eff_getenv" = 1
 nativeRtValueArityHost "@vuna@host@tryRunIn" = 2
-nativeRtValueArityHost "prim_eff_runIn" = 2
 nativeRtValueArityHost "@vuna@prim_eff_runIn" = 2
-nativeRtValueArityHost "prim_eff_runIn_host" = 2
 nativeRtValueArityHost "@vuna@prim_eff_runIn_host" = 2
 nativeRtValueArityHost "@vuna@host@runIn" = 2
-nativeRtValueArityHost "prim_eff_spawn" = 1
 nativeRtValueArityHost "@vuna@prim_eff_spawn" = 1
-nativeRtValueArityHost "prim_eff_wait" = 1
 nativeRtValueArityHost "@vuna@prim_eff_wait" = 1
-nativeRtValueArityHost "prim_eff_exit_process_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_exit_process_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_getenv" = 1
-nativeRtValueArityHost "prim_eff_getenv_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_getenv_host" = 1
 nativeRtValueArityHost "@vuna@host@getenv" = 1
-nativeRtValueArityHost "prim_eff_sleep" = 1
 nativeRtValueArityHost "@vuna@prim_eff_sleep" = 1
-nativeRtValueArityHost "prim_eff_sleep_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_sleep_host" = 1
 nativeRtValueArityHost "@vuna@host@sleep" = 1
 nativeRtValueArityHost "prim_cleanupPush" = 1
 nativeRtValueArityHost "prim_cleanupPop" = 1
 nativeRtValueArityHost "@vuna@host@tryReadFile" = 1
 nativeRtValueArityHost "@vuna@host@tryReadFileRange" = 3
-nativeRtValueArityHost "prim_eff_readFile" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readFile" = 1
-nativeRtValueArityHost "prim_eff_readFile_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readFile_host" = 1
 nativeRtValueArityHost "@vuna@host@readFile" = 1
-nativeRtValueArityHost "prim_eff_readFileRange" = 3
 nativeRtValueArityHost "@vuna@prim_eff_readFileRange" = 3
-nativeRtValueArityHost "prim_eff_readFileRange_host" = 3
 nativeRtValueArityHost "@vuna@prim_eff_readFileRange_host" = 3
 nativeRtValueArityHost "@vuna@host@readFileRange" = 3
 nativeRtValueArityHost "@vuna@host@tryWriteFile" = 2
-nativeRtValueArityHost "prim_eff_writeFile" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeFile" = 2
-nativeRtValueArityHost "prim_eff_writeFile_host" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeFile_host" = 2
 nativeRtValueArityHost "@vuna@host@writeFile" = 2
 nativeRtValueArityHost "@vuna@host@tryWriteFileAtomic" = 2
-nativeRtValueArityHost "prim_eff_writeFileAtomic" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic" = 2
-nativeRtValueArityHost "prim_eff_writeFileAtomic_host" = 2
 nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic_host" = 2
 nativeRtValueArityHost "@vuna@host@writeFileAtomic" = 2
 nativeRtValueArityHost "@vuna@host@tryReadDir" = 1
-nativeRtValueArityHost "prim_eff_readDir" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readDir" = 1
-nativeRtValueArityHost "prim_eff_readDir_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_readDir_host" = 1
 nativeRtValueArityHost "@vuna@host@readDir" = 1
 nativeRtValueArityHost "@vuna@host@tryIsDirectory" = 1
-nativeRtValueArityHost "prim_eff_isDirectory" = 1
 nativeRtValueArityHost "@vuna@prim_eff_isDirectory" = 1
-nativeRtValueArityHost "prim_eff_isDirectory_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_isDirectory_host" = 1
 nativeRtValueArityHost "@vuna@host@isDirectory" = 1
 nativeRtValueArityHost "@vuna@host@tryMakeDir" = 1
-nativeRtValueArityHost "prim_eff_makeDir" = 1
 nativeRtValueArityHost "@vuna@prim_eff_makeDir" = 1
-nativeRtValueArityHost "prim_eff_makeDir_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_makeDir_host" = 1
 nativeRtValueArityHost "@vuna@host@makeDir" = 1
 nativeRtValueArityHost "@vuna@host@tryMakeDirExclusive" = 1
 nativeRtValueArityHost "@vuna@host@tryRemoveFile" = 1
-nativeRtValueArityHost "prim_eff_removeFile" = 1
 nativeRtValueArityHost "@vuna@prim_eff_removeFile" = 1
-nativeRtValueArityHost "prim_eff_removeFile_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_removeFile_host" = 1
 nativeRtValueArityHost "@vuna@host@removeFile" = 1
 nativeRtValueArityHost "@vuna@host@tryRemoveTree" = 1
 nativeRtValueArityHost "@vuna@host@tryRename" = 2
 nativeRtValueArityHost "@vuna@host@trySymlink" = 2
 nativeRtValueArityHost "@vuna@host@fileExists" = 1
-nativeRtValueArityHost "prim_eff_fileExists" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileExists" = 1
-nativeRtValueArityHost "prim_eff_fileExists_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileExists_host" = 1
 nativeRtValueArityHost "@vuna@host@fileMtime" = 1
-nativeRtValueArityHost "prim_eff_fileMtime" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileMtime" = 1
-nativeRtValueArityHost "prim_eff_fileMtime_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileMtime_host" = 1
 nativeRtValueArityHost "@vuna@host@fileSize" = 1
-nativeRtValueArityHost "prim_eff_fileSize" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileSize" = 1
-nativeRtValueArityHost "prim_eff_fileSize_host" = 1
 nativeRtValueArityHost "@vuna@prim_eff_fileSize_host" = 1
 nativeRtValueArityHost _ = 0
 

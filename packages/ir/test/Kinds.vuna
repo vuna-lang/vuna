@@ -91,7 +91,10 @@ rtChecks =
     checkKind "rt ++" KRef (Just (irRtKindToValue (irRtKind "++"))),
     checkKind "rt assert dependent" KVar (Just (irRtKindToValue (irRtKind "assert"))),
     checkKind "rt arrayGet" KVar (Just (irRtKindToValue (irRtKind "arrayGet"))),
-    checkKind "rt prim_eff_print" KInt (Just (irRtKindToValue (irRtKind "prim_eff_print"))),
+    checkKind
+      "rt @vuna@prim_eff_print"
+      KInt
+      (Just (irRtKindToValue (irRtKind "@vuna@prim_eff_print"))),
     checkKind "rt unknown" KSymbol (Just (irRtKindToValue (irRtKind "no_such_symbol"))),
     checkKind "rt value is ref" KRef (irKindOfValue [] [] [] (IrRt "natAdd"))
   ]

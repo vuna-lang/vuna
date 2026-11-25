@@ -114,7 +114,7 @@ isDotEntry name = name == "." || name == ".."
 sortEntries : List String -> List String
 sortEntries xs = sortBy (\a, b => a <= b) (filter (\name => not (isDotEntry name)) xs)
 
--- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
+-- | 通过命名实例读整个文件为 String；带行 handler 走 `@vuna@host@tryReadFile` + 状态槽。
 export fsReadFile : Member n FsOp r => String -> Eff r String
 fsReadFile p =
   do

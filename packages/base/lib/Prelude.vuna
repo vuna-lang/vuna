@@ -1,4 +1,4 @@
--- | 默认导入（自动 import）的精选门面：只重导出最常用的核心模块，`Map` / `Sort` 需要显式 import。`Show` / `Eq` / `Ord` 的 trait 声明与内建类型实例在库里（[Base.Trait.Show] / [Base.Trait.Eq] / [Base.Trait.Ord]），因此随 Prelude 自动可见，用户程序不必显式 import。宿主层（`@vuna@prim_eff_*`）是全局内建名，任何模块可直接调用，不需要也不提供别名门面；需要效果标签或运行入口时显式 `import Base.Effect.Core`。
+-- | 默认导入（自动 import）的精选门面：只重导出最常用的核心模块，`Map` / `Sort` 需要显式 import。`Show` / `Eq` / `Ord` 的 trait 声明与内建类型实例在库里（[Base.Trait.Show] / [Base.Trait.Eq] / [Base.Trait.Ord]），因此随 Prelude 自动可见，用户程序不必显式 import。宿主原语（`@vuna@prim_eff_*`）是隐藏内部名，源码写不出；用户面走 `Base.Effect.Core.*` 标签 + handler，需要标签或运行入口时显式 `import Base.Effect.Core`。
 --
 -- `Base.Data.Float` 也随 Prelude 可见：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import。代价是 Prelude 闭包包含 `Base.Data.Float`，所有程序生成的运行时都会带浮点 helper（见 docs/reference/floats.md）。
 module Prelude where
