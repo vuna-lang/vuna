@@ -359,7 +359,9 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | 全部 `OpNone` 原语：效果原语（`@vuna@prim_eff_*`）、容器原语、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
-- 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
+- 不可归约时 `main` 报
+  `[CG_MainNotValue] main does not reduce to a value (stuck at <卡住的值>)`；括号里是卡住
+  的值的头部（通常是没归约的原语或中立项）。
 - `main : Eff [] a` 一律报
   `[CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
   （无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。

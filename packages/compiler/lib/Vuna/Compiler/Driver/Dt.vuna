@@ -970,7 +970,14 @@ interpMainShow table sols mainVal =
     -- 与非内建 main 的编译路径一致：main 钩子直接 `print_endline (show T x)`（不加引号），
     -- 所以 interp 也返回 raw 文本（内建 String main 仍走 dt_show_string 的加引号形态）。
     VStr s => OkC s
-    _ => cgErr0 MainNotValue
+    _ => cgErr1 (MainNotValue "") (stuckText mainVal)
+
+-- | 卡住值的展示：只取前 300 字符。未归约项可能很深，诊断给能定位的头部即可。
+stuckText : Value -> String
+stuckText v =
+  let
+    s = showValueAt 6 v
+  in if strLength s > 300 then substring 0 300 s ++ "…" else s
 
 -- main 的动作层类别："Eff"（行已处理干净的 Eff 入口）/ ""（纯 main）。
 mainActionKind : Term -> String

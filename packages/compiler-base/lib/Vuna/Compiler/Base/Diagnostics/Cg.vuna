@@ -17,12 +17,12 @@ export data CgErr(..) : Nat -> Type where
   -- arity 0
   DependencyCycle : CgErr 0
   InterpCannotExecuteEffects : CgErr 0
-  MainNotValue : CgErr 0
   NoMain : CgErr 0
   TypeUsedAtRuntime : CgErr 0
   -- arity 1
   AxiomAtRuntime : String -> CgErr 1
   ListBridgeRequired : String -> CgErr 1
+  MainNotValue : String -> CgErr 1
   RecursiveValueDefinition : String -> CgErr 1
   TypeLevelBindingRuntime : String -> CgErr 1
   TypeLevelNameRuntime : String -> CgErr 1
@@ -31,7 +31,7 @@ export data CgErr(..) : Nat -> Type where
 export cgCode : {n : Nat} -> CgErr n -> String
 cgCode DependencyCycle = "CG_DependencyCycle"
 cgCode InterpCannotExecuteEffects = "CG_InterpCannotExecuteEffects"
-cgCode MainNotValue = "CG_MainNotValue"
+cgCode (MainNotValue _) = "CG_MainNotValue"
 cgCode NoMain = "CG_NoMain"
 cgCode TypeUsedAtRuntime = "CG_TypeUsedAtRuntime"
 cgCode (AxiomAtRuntime _) = "CG_AxiomAtRuntime"
@@ -45,7 +45,7 @@ export cgTemplate : {n : Nat} -> CgErr n -> String
 cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
   "interp cannot execute effects (main : Eff [] a), so compile and run the program instead"
-cgTemplate MainNotValue = "main does not reduce to a value"
+cgTemplate (MainNotValue _) = "main does not reduce to a value (stuck at <0>)"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime"
 cgTemplate (AxiomAtRuntime _) = "axiom <0> cannot be used at runtime (it has no runtime definition)"
@@ -73,7 +73,7 @@ cgChunk0 =
       (cgCode InterpCannotExecuteEffects)
       (cgTemplate InterpCannotExecuteEffects)
       "interp 不能执行效应",
-    CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约为值",
+    CgEntry (cgCode (MainNotValue "")) (cgTemplate (MainNotValue "")) "main 未归约为值",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型出现在运行时",
     CgEntry

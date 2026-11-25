@@ -356,7 +356,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 纯形态走核心求值，因此**只能用核心求值器实现的原语**：`strUnpack` / `strPack` /
 `strConcatMany` / `strSubstring` 这类 List 桥接原语不在其中，用了会得到
-`CG_MainNotValue: main does not reduce to a value`（语言夹具同理，`packages/base/test/corpus/stdlib/07_string`
+`CG_MainNotValue: main does not reduce to a value (stuck at <卡住的值>)`（语言夹具同理，`packages/base/test/corpus/stdlib/07_string`
 因此用 `.run.out`）。需要这些原语时把测试写成 `Eff` 入口，失败自己收口：
 
 ```vuna
