@@ -12,8 +12,31 @@ import Vuna.Compiler.Frontend.Ast
 -- 不是 handle 块时 `Nothing`。
 export handleParts : Expr -> Maybe (Expr, Expr, Expr)
 handleParts (EApp (EVar name _) [comp, ret, opH] _) =
-  if isHandleSyntax name then Just (comp, ret, opH) else Nothing
+  case classify name of
+    Just RsHandle => Just (comp, ret, opH)
+    _ => Nothing
 handleParts _ = Nothing
+
+-- | 保留标记在原子位置打印的文本（`[]` / `()` / `name!`）。
+-- 应用 / 块形态回落到线上标记本身：正常 AST 里它们由专门的分支拆掉，只有 malformed
+-- 输入会走到这里。无通配分支：新增标记必须在这里给出决定。
+export reservedAtomText : Reserved -> String
+reservedAtomText RsListNil = "[]"
+reservedAtomText RsTupleUnit = "()"
+reservedAtomText (RsMacro macro) = "${macro}!"
+reservedAtomText RsListCons = reservedText RsListCons
+reservedAtomText RsTuplePair = reservedText RsTuplePair
+reservedAtomText RsAscribe = reservedText RsAscribe
+reservedAtomText RsPerform = reservedText RsPerform
+reservedAtomText RsHandle = reservedText RsHandle
+reservedAtomText RsHandleNoRet = reservedText RsHandleNoRet
+reservedAtomText RsRowAt = reservedText RsRowAt
+reservedAtomText RsAppAt = reservedText RsAppAt
+reservedAtomText RsInstArg = reservedText RsInstArg
+reservedAtomText (r@(RsOverCtor _ _)) = reservedText r
+reservedAtomText (r@(RsOverValue _ _)) = reservedText r
+reservedAtomText (r@(RsDoBind _)) = reservedText r
+reservedAtomText (r@(RsDoIgnore _)) = reservedText r
 
 -- | `n` 个空格；`n <= 0` 时为空串。
 export spaces : Int -> String

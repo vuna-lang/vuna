@@ -108,15 +108,15 @@ ityToTermEnv env (IVar name) =
   case indexOfName name env of
     Just i => TVar name i (Span "" 0 0 0 0 0 0)
     Nothing => TGlobal name
-ityToTermEnv env (IArray elem) = TApp (TGlobal "Array") (ityToTermEnv env elem) Rig0
-ityToTermEnv env (ICell elem) = TApp (TGlobal "@vuna@Cell") (ityToTermEnv env elem) Rig0
-ityToTermEnv env (IMArray elem) = TApp (TGlobal "@vuna@MArray") (ityToTermEnv env elem) Rig0
-ityToTermEnv env (IMDynArray elem) = TApp (TGlobal "@vuna@MDynArray") (ityToTermEnv env elem) Rig0
-ityToTermEnv env IMBuffer = TGlobal "@vuna@MBuffer"
-ityToTermEnv env (IThread elem) = TApp (TGlobal "Thread") (ityToTermEnv env elem) Rig0
-ityToTermEnv env IMutex = TGlobal "Mutex"
-ityToTermEnv env ICondvar = TGlobal "Condvar"
-ityToTermEnv env IAtomic = TGlobal "Atomic"
+ityToTermEnv env (IArray elem) = TApp (TGlobal arrayTypeName) (ityToTermEnv env elem) Rig0
+ityToTermEnv env (ICell elem) = TApp (TGlobal cellTypeName) (ityToTermEnv env elem) Rig0
+ityToTermEnv env (IMArray elem) = TApp (TGlobal marrayTypeName) (ityToTermEnv env elem) Rig0
+ityToTermEnv env (IMDynArray elem) = TApp (TGlobal mdynArrayTypeName) (ityToTermEnv env elem) Rig0
+ityToTermEnv env IMBuffer = TGlobal mbufferTypeName
+ityToTermEnv env (IThread elem) = TApp (TGlobal threadTypeName) (ityToTermEnv env elem) Rig0
+ityToTermEnv env IMutex = TGlobal mutexTypeName
+ityToTermEnv env ICondvar = TGlobal condvarTypeName
+ityToTermEnv env IAtomic = TGlobal atomicTypeName
 ityToTermEnv env (IPi name body) =
   TPi name True Rig0 (TType levelZero) (ityToTermEnv (name :: env) body)
 

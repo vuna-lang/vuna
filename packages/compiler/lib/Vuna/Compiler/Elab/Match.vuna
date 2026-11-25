@@ -285,9 +285,10 @@ familyOfHead table h =
   case familyOfCtor table h of
     Just fam => Just (secondOf fam)
     Nothing =>
-      if isListNilSyntax h then
-        familyOfShortCtors table ["Nil"]
-      else if isListConsSyntax h then familyOfShortCtors table ["::", "Cons"] else Nothing
+      case classify h of
+        Just RsListNil => familyOfShortCtors table ["Nil"]
+        Just RsListCons => familyOfShortCtors table ["::", "Cons"]
+        _ => Nothing
 
 -- 该列 head 里的列表哨兵折回族里的 canonical 构造子名；非哨兵原样保留。
 canonHeads : List (String, Int) -> List String -> Maybe (List String)

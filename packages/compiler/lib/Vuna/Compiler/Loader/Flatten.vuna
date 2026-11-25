@@ -1217,12 +1217,11 @@ declGlobalNames d = concatMap expandGlobalName (declRefNames d)
 --     （do 链在 rename 后仍引用 bind 的实现模块，import 是否使用要算上它）。
 expandGlobalName : String -> List String
 expandGlobalName n =
-  if isOverCtorName n then
-    overCtorTargets n
-  else
-    case doSyntaxCanonical n of
-      Just canonical => [canonical]
-      Nothing => [n]
+  case classify n of
+    Just (RsOverCtor _ targets) => targets
+    Just (RsDoBind canonical) => [canonical]
+    Just (RsDoIgnore canonical) => [canonical]
+    _ => [n]
 
 -- | 导出条目的 canonical target。
 exportTargetOf : ExportEntry -> String

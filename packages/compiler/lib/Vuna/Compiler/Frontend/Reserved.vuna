@@ -28,26 +28,269 @@ holeNameOf name = if holeNamed name then name else ""
 -- ---------------------------------------------------------------
 -- `@vuna@` 保留命名空间
 -- ---------------------------------------------------------------
--- 与 `?hole` 同一先例：不新增 AST 构造子，用保留名编码，Fmt/Lint/Doc/Index 等
--- parse 阶段的结构遍历因此零改动（这些名字只在 Loader 之后出现，且不参与用户符号）。
---   `@vuna@ctor@<短名>@<候选 canonical 1>@<候选 canonical 2>...`
---
 -- 卫生性靠**字符集不相交**：lexer 只在 `@vuna@` 前缀之后把 `@` 收进标识符
 -- （`Frontend.Lexer.startsWithVunaAt`），普通用户标识符不可能意外落进这个空间。
--- 引用侧另有一道门（不是能力系统）：`Loader.Resolve` 只放行 parser 合成的标记与
--- `Base.*` / `Vuna.*` 模块（`Rast.Name.isCompilerModulePrefix`），普通包写 `@vuna@…`
--- 会报 `RN_UnknownVariable`；`packages/base` 因此可以直调宿主原语。
+-- 引用侧另有一道门（不是能力系统）：`Loader.Resolve` 放行 `classify` 认出的表面
+-- 标记与 `Base.*` / `Vuna.*` 模块（`Rast.Name.isCompilerModulePrefix`），普通包写
+-- `@vuna@…` 会报 `RN_UnknownVariable`；`packages/base` 因此可以直调宿主原语。
 -- | 内部保留名的前缀（`@vuna@`）。
 export internalNamePrefix : String
 internalNamePrefix = "@vuna@"
 
--- | 重载构造子标记前缀（`@vuna@ctor@`）。
-export overCtorPrefix : String
-overCtorPrefix = "@vuna@ctor@"
-
--- | 是否是内部保留名（以 `@vuna@` 开头）。
+-- | 是否是内部保留名（以 `@vuna@` 开头，含内建 / 原语 / 合成名）。
 export isInternalSyntaxName : String -> Bool
 isInternalSyntaxName name = startsWith internalNamePrefix name
+
+-- ---------------------------------------------------------------
+-- 表面语法糖标记：线上字符串 ↔ `Reserved`
+-- ---------------------------------------------------------------
+-- 每个表面标记有一个构造子。`reservedText` / `classify` 是唯一一对编解码：
+--   * AST / canonical hash / cache / iface 仍然只传字符串（跨进程与跨 seed 的格式）；
+--   * 两者都没有通配分支：新增构造子会让 `reservedText` **和** `classify` 同时编译失败，
+--     标记表不会只更新一半；
+--   * 载荷（宏名 / do 的 canonical bind / 重载候选）是构造子字段，调用方不再各自
+--     切字符串。
+-- 分类只覆盖表面糖；内建 / 原语 / 合成名（`@vuna@Cell`、`@vuna@prim_eff_*`、
+-- `@vuna@cell@x` …）仍是 `isInternalSyntaxName` 的宽命名空间，不属于这里。
+export data Reserved(..) : Type where
+  -- 列表字面量 `[]` / `[a, b]`：Elab 按期望族的 `Nil` / `(::)` 通用展开。
+  RsListNil : Reserved
+  RsListCons : Reserved
+  -- 元组 `(a, b)` 与 unit `()`：Loader 改写成 `Pair` / `MkUnit` / `Unit` 后走名字解析。
+  RsTuplePair : Reserved
+  RsTupleUnit : Reserved
+  -- 类型标注 `(e : T)`：名字解析后由 `Rast.ofExpr` 合成 `Rast.EAnn`。
+  RsAscribe : Reserved
+  -- `perform <op>`：Elab 推导 key / 实例名 / 效应签名后降级到 `performCore`。
+  RsPerform : Reserved
+  -- `handle <comp> { ... }`：`EApp [comp, ret, opH]`。
+  RsHandle : Reserved
+  -- 无 return 子句时 handle 的 ret 位哨兵（Fmt 据此不打印 return 子句）。
+  RsHandleNoRet : Reserved
+  -- 行字面量里的 `X@name`。
+  RsRowAt : Reserved
+  -- 实例名调用糖 `f@name args`。
+  RsAppAt : Reserved
+  -- `@` 降级后插入的隐式实参标记：只在隐式 String 实例名 binder 处消费。
+  RsInstArg : Reserved
+  -- 重载构造子标记：短名 + 候选 canonical target。
+  RsOverCtor : String -> List String -> Reserved
+  -- 重载值标记：短名 + 候选 canonical target。
+  RsOverValue : String -> List String -> Reserved
+  -- 内置宏调用 `name!`。
+  RsMacro : String -> Reserved
+  -- do 链 `pat <- e` 的标记头：携带块作用域里解析出的 bind canonical 名。
+  RsDoBind : String -> Reserved
+  -- do 链丢弃绑定（`_ <- e` / 裸语句）的标记头。
+  RsDoIgnore : String -> Reserved
+
+-- 线上编码的原子段；只在 `reservedText` / `classify` 各引用一次。
+rsListNilText : String
+rsListNilText = "@vuna@list@nil"
+
+rsListConsText : String
+rsListConsText = "@vuna@list@cons"
+
+rsTuplePairText : String
+rsTuplePairText = "@vuna@tuple@pair"
+
+rsTupleUnitText : String
+rsTupleUnitText = "@vuna@tuple@unit"
+
+rsAscribeText : String
+rsAscribeText = "@vuna@ascribe"
+
+rsPerformText : String
+rsPerformText = "@vuna@perform"
+
+rsHandleText : String
+rsHandleText = "@vuna@handle"
+
+rsHandleNoRetText : String
+rsHandleNoRetText = "@vuna@handle@noret"
+
+rsRowAtText : String
+rsRowAtText = "@vuna@row@at"
+
+rsAppAtText : String
+rsAppAtText = "@vuna@app@at"
+
+rsInstArgText : String
+rsInstArgText = "@vuna@inst@arg"
+
+-- 带载荷形态的前缀。
+rsOverCtorPrefix : String
+rsOverCtorPrefix = "@vuna@ctor@"
+
+rsOverValuePrefix : String
+rsOverValuePrefix = "@vuna@value@"
+
+rsMacroPrefix : String
+rsMacroPrefix = "@vuna@macro@"
+
+rsDoBindPrefix : String
+rsDoBindPrefix = "@vuna@do@bind@"
+
+rsDoIgnorePrefix : String
+rsDoIgnorePrefix = "@vuna@do@ignore@"
+
+-- | 表面标记 → 线上字符串。
+export reservedText : Reserved -> String
+reservedText RsListNil = rsListNilText
+reservedText RsListCons = rsListConsText
+reservedText RsTuplePair = rsTuplePairText
+reservedText RsTupleUnit = rsTupleUnitText
+reservedText RsAscribe = rsAscribeText
+reservedText RsPerform = rsPerformText
+reservedText RsHandle = rsHandleText
+reservedText RsHandleNoRet = rsHandleNoRetText
+reservedText RsRowAt = rsRowAtText
+reservedText RsAppAt = rsAppAtText
+reservedText RsInstArg = rsInstArgText
+reservedText (RsOverCtor short targets) = "${rsOverCtorPrefix}${short}@${joinWithAt targets}"
+reservedText (RsOverValue short targets) = "${rsOverValuePrefix}${short}@${joinWithAt targets}"
+reservedText (RsMacro name) = "${rsMacroPrefix}${name}"
+reservedText (RsDoBind canonical) = "${rsDoBindPrefix}${canonical}"
+reservedText (RsDoIgnore canonical) = "${rsDoIgnorePrefix}${canonical}"
+
+-- | 线上字符串 → 表面标记（不是表面标记给 `Nothing`）。
+export classify : String -> Maybe Reserved
+classify name =
+  if name == rsListNilText then
+    Just RsListNil
+  else if name == rsListConsText then
+    Just RsListCons
+  else if name == rsTuplePairText then
+    Just RsTuplePair
+  else if name == rsTupleUnitText then
+    Just RsTupleUnit
+  else if name == rsAscribeText then
+    Just RsAscribe
+  else if name == rsPerformText then
+    Just RsPerform
+  else if name == rsHandleText then
+    Just RsHandle
+  else if name == rsHandleNoRetText then
+    Just RsHandleNoRet
+  else if name == rsRowAtText then
+    Just RsRowAt
+  else if name == rsAppAtText then
+    Just RsAppAt
+  else if name == rsInstArgText then
+    Just RsInstArg
+  else if startsWith rsOverCtorPrefix name then
+    case overParts rsOverCtorPrefix name of
+      Just (short, targets) => Just (RsOverCtor short targets)
+      Nothing => Nothing
+  else if startsWith rsOverValuePrefix name then
+    case overParts rsOverValuePrefix name of
+      Just (short, targets) => Just (RsOverValue short targets)
+      Nothing => Nothing
+  else if startsWith rsMacroPrefix name then Just (RsMacro (dropNamePrefix rsMacroPrefix name)) else if startsWith rsDoBindPrefix name then Just (RsDoBind (dropNamePrefix rsDoBindPrefix name)) else if startsWith rsDoIgnorePrefix name then Just (RsDoIgnore (dropNamePrefix rsDoIgnorePrefix name)) else Nothing
+
+-- | 重载标记的 `<短名>@<target>@...` 段 → 短名 + 候选（尾随分隔符的空段折叠掉）。
+overParts : String -> String -> Maybe (String, List String)
+overParts prefix name =
+  case splitOnChar 64 (dropNamePrefix prefix name) of
+    [] => Nothing
+    short :: targets => Just (short, dropEmpty targets)
+
+-- | 只由 parser 在源码层合成的表面标记（Loader 对普通包放行的白名单）。
+-- 其余形态只在编译器包内可见：`@vuna@ctor@…` / `@vuna@value@…` 能指定任意 canonical
+-- target，`@vuna@do@…` 只在 rename 后出现。
+-- 无通配分支：新增标记必须在这里明确「普通包能否写出它」。
+export isParserSurface : Reserved -> Bool
+isParserSurface RsListNil = True
+isParserSurface RsListCons = True
+isParserSurface RsTuplePair = True
+isParserSurface RsTupleUnit = True
+isParserSurface RsAscribe = True
+isParserSurface RsPerform = True
+isParserSurface RsHandle = True
+isParserSurface RsHandleNoRet = True
+isParserSurface RsRowAt = True
+isParserSurface RsAppAt = True
+isParserSurface RsInstArg = False
+isParserSurface (RsOverCtor _ _) = False
+isParserSurface (RsOverValue _ _) = False
+isParserSurface (RsMacro _) = False
+isParserSurface (RsDoBind _) = False
+isParserSurface (RsDoIgnore _) = False
+
+-- | 丢掉空串（`a@b@` 的尾段是构造 `overCtorName name []` 的形态，不是候选）。
+dropEmpty : List String -> List String
+dropEmpty [] = []
+dropEmpty (x :: rest) = if x == "" then dropEmpty rest else x :: dropEmpty rest
+
+-- | 是否是宏调用标记（`@vuna@macro@<name>`）。
+export isMacroSyntaxName : String -> Bool
+isMacroSyntaxName name = startsWith rsMacroPrefix name
+
+-- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
+export macroNameOf : String -> Maybe String
+macroNameOf name =
+  case classify name of
+    Just (RsMacro macro) => Just macro
+    _ => Nothing
+
+-- ---------------------------------------------------------------
+-- `classify` 的窄视图（载荷直接取出）
+-- ---------------------------------------------------------------
+-- 只服务「以单个形态为核心的判断」；多形态分派直接 `case classify`。
+-- | 是否是重载构造子标记。
+export isOverCtorName : String -> Bool
+isOverCtorName name =
+  case classify name of
+    Just (RsOverCtor _ _) => True
+    _ => False
+
+-- | 重载构造子标记的短名（非标记返回空串）。
+export overCtorShort : String -> String
+overCtorShort name =
+  case classify name of
+    Just (RsOverCtor short _) => short
+    _ => ""
+
+-- | 重载构造子标记的候选 target（非标记返回空表）。
+export overCtorTargets : String -> List String
+overCtorTargets name =
+  case classify name of
+    Just (RsOverCtor _ targets) => targets
+    _ => []
+
+-- | 是否是重载值标记。
+export isOverValueName : String -> Bool
+isOverValueName name =
+  case classify name of
+    Just (RsOverValue _ _) => True
+    _ => False
+
+-- | 重载值标记的短名（非标记返回空串）。
+export overValueShort : String -> String
+overValueShort name =
+  case classify name of
+    Just (RsOverValue short _) => short
+    _ => ""
+
+-- | 重载值标记的候选 target（非标记返回空表）。
+export overValueTargets : String -> List String
+overValueTargets name =
+  case classify name of
+    Just (RsOverValue _ targets) => targets
+    _ => []
+
+-- | do 标记头里的 canonical bind 名；不是 do 标记头返回 `Nothing`。
+export doSyntaxCanonical : String -> Maybe String
+doSyntaxCanonical name =
+  case classify name of
+    Just (RsDoBind canonical) => Just canonical
+    Just (RsDoIgnore canonical) => Just canonical
+    _ => Nothing
+
+-- | 去掉字符串前缀（不匹配则原样返回）。
+export dropNamePrefix : String -> String -> String
+dropNamePrefix p name =
+  if startsWith p name then strPack (dropNChars (strLength p) (strUnpack name)) else name
 
 -- | 丢掉列表前 n 个元素。
 export dropNChars : Int -> List Int -> List Int
@@ -59,248 +302,11 @@ dropNChars n xs =
       [] => []
       _ :: rest => dropNChars (n - 1) rest
 
--- | 去掉字符串前缀（不匹配则原样返回）。
-export dropNamePrefix : String -> String -> String
-dropNamePrefix p name =
-  if startsWith p name then strPack (dropNChars (strLength p) (strUnpack name)) else name
-
 -- | 用 `@` 连接多个名字。
 export joinWithAt : List String -> String
 joinWithAt [] = ""
 joinWithAt [x] = x
 joinWithAt (x :: rest) = "${x}@${joinWithAt rest}"
-
--- | 由短名与候选 target 生成重载构造子标记名。
-export overCtorName : String -> List String -> String
-overCtorName short targets = "${overCtorPrefix}${short}@${joinWithAt targets}"
-
--- | 重载构造子标记名里的短名（非标记名返回空串）。
-export overCtorShort : String -> String
-overCtorShort name =
-  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
-    [] => ""
-    s :: rest => s
-
--- | 重载构造子标记名里的候选 target 列表（非标记名返回空表）。
-export overCtorTargets : String -> List String
-overCtorTargets name =
-  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
-    [] => []
-    s :: rest => rest
-
--- | 是否是重载构造子标记名。
-export isOverCtorName : String -> Bool
-isOverCtorName name = startsWith overCtorPrefix name
-
--- | 重载值标记前缀（`@vuna@value@`）：多个不同 target 的值候选，由精化器按期望类型选择。
-export overValuePrefix : String
-overValuePrefix = "@vuna@value@"
-
-export overValueName : String -> List String -> String
-overValueName short targets = "${overValuePrefix}${short}@${joinWithAt targets}"
-
-export overValueShort : String -> String
-overValueShort name =
-  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
-    [] => ""
-    s :: rest => s
-
-export overValueTargets : String -> List String
-overValueTargets name =
-  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
-    [] => []
-    s :: rest => rest
-
-export isOverValueName : String -> Bool
-isOverValueName name = startsWith overValuePrefix name
-
--- 列表字面量的保留名（parser 产出；Loader 原样放行；Elab 按期望族的 Nil/Cons
--- 通用展开）。不借裸 `Nil`/`Cons` 走构造子名字解析。
--- | 列表字面量展开出的 nil 保留名。
-export listNilSyntax : String
-listNilSyntax = "@vuna@list@nil"
-
--- | 列表字面量展开出的 cons 保留名。
-export listConsSyntax : String
-listConsSyntax = "@vuna@list@cons"
-
--- | 是否是列表 nil 保留名。
-export isListNilSyntax : String -> Bool
-isListNilSyntax name = name == listNilSyntax
-
--- | 是否是列表 cons 保留名。
-export isListConsSyntax : String -> Bool
-isListConsSyntax name = name == listConsSyntax
-
--- 元组与 unit 的保留名（parser 产出；Loader 改写成 `Pair` / `Unit` / `MkUnit` 后走名字解析，
--- 因此元组语法要求这些名字在作用域里）。`(a, b, c)` 右嵌套成两个 pair。
--- | 元组 pair 的保留名。
-export tuplePairSyntax : String
-tuplePairSyntax = "@vuna@tuple@pair"
-
--- | 是否是元组 pair 保留名。
-export isTuplePairSyntax : String -> Bool
-isTuplePairSyntax name = name == tuplePairSyntax
-
--- | unit `()` 的保留名（类型位置展开成 `Unit`，表达式 / 模式位置展开成 `MkUnit`）。
-export tupleUnitSyntax : String
-tupleUnitSyntax = "@vuna@tuple@unit"
-
--- | 是否是 unit `()` 保留名。
-export isTupleUnitSyntax : String -> Bool
-isTupleUnitSyntax name = name == tupleUnitSyntax
-
--- 表达式类型标注 `(e : T)`：parser 编码成
--- `EApp (EVar "@vuna@ascribe") [e, T]`，名字解析后由 `Rast.ofExpr` 合成 `Rast.EAnn`
--- （与 where 签名同一条精化路径）。
--- | 类型标注 `(e : T)` 的保留名（parser 产出、Loader 改写）。
-export ascribeSyntax : String
-ascribeSyntax = "@vuna@ascribe"
-
--- | 是否是类型标注保留名。
-export isAscribeSyntax : String -> Bool
-isAscribeSyntax name = name == ascribeSyntax
-
--- ---------------------------------------------------------------
--- do 块的内部标记链
--- ---------------------------------------------------------------
--- 与 `@vuna@ctor@...` 同一先例：不新增 AST 构造子，用保留名编码。`Resolver` 把 do 降级
--- 成嵌套的 `EApp+ELam` 链（语句边界 / binder 名 / 语句 span 都仍编码在这条链上），但把每个
--- 节点的头部换成携带 **块作用域里解析出的 bind canonical 名** 的内部标记：
---
---   `@vuna@do@bind@<canonical>`    —— `pat <- e`（binder 是用户变量名）
---   `@vuna@do@ignore@<canonical>`  —— `_ <- e` / 裸语句 `e`（binder 是丢弃名）
---
--- 标记名只由 Loader 在 rename 之后产生，普通标识符不可能与它同形；于是
--- Elab 可以把整块按「一个 monad / 一个字典」精化，而不必逐个节点重新做名字解析。不认识
--- 标记的精化器（以及任何形状不符/回退路径）可以剥掉标记、用 canonical 名还原成普通
--- `bind` 应用——语义与今天的降级逐字一致。
--- `perform <op>` 的保留名编码。parser 产出
--- `EApp (EVar "@vuna@perform") [op]`；Elab 按 op 族推导 key（族规范名）、实例名
--- （行解 / 默认名）与效应签名（`sigFn (\i => <Op> <params…> i)`），再降级到 `Base.Effect.Core.performCore`。
--- 标记名落在 `@vuna@` 保留命名空间里，不会与普通用户标识符冲突。
--- | `perform <op>` 的保留名（parser 产出、Elab 展开）。
-export performSyntax : String
-performSyntax = "@vuna@perform"
-
--- | 是否是 `perform` 保留名。
-export isPerformSyntax : String -> Bool
-isPerformSyntax name = name == performSyntax
-
--- `handle <comp> { ... }` 的保留名编码。parser 产出
--- `EApp (EVar "@vuna@handle") [comp, ret, opH]`：
---   * `comp` 是被 handler 包裹的动作；
---   * `ret` 是 `ELam [x] body`（λ 的 `NodeRef` 是 return 子句的 `alt` 节点）；没有
---     return 子句时是哨兵 `EVar "@vuna@handle@noret"`（Fmt 据此不打印 return 子句）；
---   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参
---     （pattern 的 `NodeRef` 是该子句的模式节点，注释挂载点），续延 binder `k` 是 λ 的
---     第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
--- Elab 从 clause 构造子推 op 族，再降级到 `Base.Effect.Core.handleWith`。
--- | `handle <comp> { ... }` 的保留名（parser 产出、Elab 展开）。
-export handleSyntax : String
-handleSyntax = "@vuna@handle"
-
--- | 是否是 `handle` 保留名。
-export isHandleSyntax : String -> Bool
-isHandleSyntax name = name == handleSyntax
-
--- | 无 return 子句时的哨兵名（Fmt 据此不打印 return 子句）。
-export handleNoRetSyntax : String
-handleNoRetSyntax = "@vuna@handle@noret"
-
--- | 是否是无 return 子句的哨兵名。
-export isHandleNoRetSyntax : String -> Bool
-isHandleNoRetSyntax name = name == handleNoRetSyntax
-
--- 行字面量里的显式实例名 `X@name`，编码成
--- `EApp (EVar "@vuna@row@at") [X, name]`；只在行字面量展开时被解释。
--- | 行字面量里 `X@name` 的保留名（Elab 在行展开时解释）。
-export rowAtSyntax : String
-rowAtSyntax = "@vuna@row@at"
-
--- | 是否是行实例名标记名。
-export isRowAtSyntax : String -> Bool
-isRowAtSyntax name = name == rowAtSyntax
-
--- 实例名调用糖：`f@name args` 编码成
--- `EApp (EVar "@vuna@app@at") (f :: name :: args)`。Elab 把它重写成
--- `f (@vuna@inst@arg name) args`，由 `inferArgsGo` 在隐式 `String` 实例名 binder
--- 处消费 `@vuna@inst@arg`。
-export appAtSyntax : String
-appAtSyntax = "@vuna@app@at"
-
--- | 是否是实例名调用标记（`@vuna@app@at`）。
-export isAppAtSyntax : String -> Bool
-isAppAtSyntax name = name == appAtSyntax
-
--- `@` 降级后插入的隐式实参标记：`EApp (EVar "@vuna@inst@arg") [payload]`。
--- 只在 `inferArgsGo` 的隐式 String binder 分支被消费；源码只能经 `f@name` 糖产生。
-export instArgSyntax : String
-instArgSyntax = "@vuna@inst@arg"
-
--- | 是否是实例名实参标记（`@vuna@inst@arg`）。
-export isInstArgSyntax : String -> Bool
-isInstArgSyntax name = name == instArgSyntax
-
--- ---------------------------------------------------------------
--- 内置宏：`name!` 调用的保留名编码
--- ---------------------------------------------------------------
--- 与 `@vuna@perform` / `@vuna@handle` 同一先例：**不新增 AST 构造子**，parser 把
--- `name! args` 编码成 `EApp (EVar "@vuna@macro@name") args`（无参时是裸 `EVar`）。
--- Loader 在名字解析前把标记展开成真正表达式，所以 Elab / Codegen / 缓存 / 无损 CST
--- 都看不到标记；Fmt 反向把标记渲染回 `name!`，Index 过滤标记引用。标记落在 `@vuna@`
--- 保留命名空间里，不会与普通用户标识符冲突。
--- | 宏调用标记的前缀（parser 产出、Loader 展开、Fmt 回渲染共用的唯一真源）。
-export macroSyntaxPrefix : String
-macroSyntaxPrefix = "@vuna@macro@"
-
--- | 由宏名生成 parser / Loader 之间的标记名。
-export macroSyntaxName : String -> String
-macroSyntaxName name = "${macroSyntaxPrefix}${name}"
-
--- | 是否是宏调用标记名（`@vuna@macro@<name>`）。
-export isMacroSyntaxName : String -> Bool
-isMacroSyntaxName name = startsWith macroSyntaxPrefix name
-
--- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
-export macroNameOf : String -> Maybe String
-macroNameOf name =
-  if isMacroSyntaxName name then Just (dropNamePrefix macroSyntaxPrefix name) else Nothing
-
--- | do 链里 `pat <- e` 标记头的前缀。
-export doBindSyntaxPrefix : String
-doBindSyntaxPrefix = "@vuna@do@bind@"
-
--- | do 链里丢弃绑定（`_ <- e` / 裸语句）标记头的前缀。
-export doIgnoreSyntaxPrefix : String
-doIgnoreSyntaxPrefix = "@vuna@do@ignore@"
-
--- | 由 bind 的 canonical 名生成 `pat <- e` 标记头。
-export doBindSyntaxName : String -> String
-doBindSyntaxName canonical = "${doBindSyntaxPrefix}${canonical}"
-
--- | 由 bind 的 canonical 名生成丢弃绑定标记头。
-export doIgnoreSyntaxName : String -> String
-doIgnoreSyntaxName canonical = "${doIgnoreSyntaxPrefix}${canonical}"
-
--- | 是否是 `pat <- e` 标记头。
-export isDoBindSyntaxName : String -> Bool
-isDoBindSyntaxName name = startsWith doBindSyntaxPrefix name
-
--- | 是否是丢弃绑定标记头。
-export isDoIgnoreSyntaxName : String -> Bool
-isDoIgnoreSyntaxName name = startsWith doIgnoreSyntaxPrefix name
-
--- 标记头里的 canonical bind 名；不是 do 标记头返回 `Nothing`。
--- | do 标记头里的 canonical bind 名；不是标记头返回 `Nothing`。
-export doSyntaxCanonical : String -> Maybe String
-doSyntaxCanonical name =
-  if isDoBindSyntaxName name then
-    Just (dropNamePrefix doBindSyntaxPrefix name)
-  else if isDoIgnoreSyntaxName name then
-    Just (dropNamePrefix doIgnoreSyntaxPrefix name)
-  else
-    Nothing
 
 -- 一般模式绑定（`Pair a b <- e`）降级时引入的中间 binder 名：模式拆解在续延里用
 -- `case <该名> of pat => 后续语句` 完成。这个名字落在 `@vuna@` 保留命名空间里，
@@ -308,6 +314,39 @@ doSyntaxCanonical name =
 -- | 模式绑定降级时的中间 binder 名（Loader 产出）。
 export doPatternBinderName : String
 doPatternBinderName = "@vuna@do@pat"
+
+-- ---------------------------------------------------------------
+-- 编译器合成的 `@vuna@` binder 名
+-- ---------------------------------------------------------------
+-- 只由编译器构造、不参与 `classify`：它们不是表面糖标记，只是进 AST / 进 codegen 的
+-- 名字。集中在类型 / 句柄 / 记录 / 宏的合成点上，避免同一个名字在多处手写。
+-- | `handle` op λ 的 op 形参名。
+export handleOpBinderName : String
+handleOpBinderName = "@vuna@handle@o"
+
+-- | `handle` op λ 的结果索引形参名。
+export handleOpIndexBinderName : String
+handleOpIndexBinderName = "@vuna@handle@ix"
+
+-- | handle 降级后效应签名的 binder 名。
+export handleSigBinderName : String
+handleSigBinderName = "@vuna@handle@sig"
+
+-- | handle 默认 return 子句的 binder 名。
+export handleRetBinderName : String
+handleRetBinderName = "@vuna@handle@ret"
+
+-- | 记录降级时字段投影的 binder 名。
+export recordProjBinderName : Int -> String
+recordProjBinderName i = "@vuna@record@proj${strFromInt i}"
+
+-- | 记录降级时字段形参的 binder 名。
+export recordArgBinderName : Int -> String
+recordArgBinderName i = "@vuna@record@arg${strFromInt i}"
+
+-- | 记录降级时隐藏字段字典的 binder 名。
+export recordHiddenFieldBinderName : Int -> String
+recordHiddenFieldBinderName i = "@vuna@record@hf${strFromInt i}"
 
 -- ---------------------------------------------------------------
 -- 编译器合成的 `#` 名

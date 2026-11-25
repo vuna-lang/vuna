@@ -94,19 +94,55 @@ typeIntrinsicCtorName (TypeIntrinsic name arity) = name
 export typeIntrinsicCtorArity : TypeIntrinsic -> Int
 typeIntrinsicCtorArity (TypeIntrinsic name arity) = arity
 
+-- | 内建类型构造子的源码名（`Elab` / `Lowering` 的判定与渲染共用，避免同一字面串多处手写）。
+export arrayTypeName : String
+arrayTypeName = "Array"
+
+-- | `@vuna@Cell a`：`Base.Effect.MutRef` 私有的可变单元类型（源码写不出）。
+export cellTypeName : String
+cellTypeName = "@vuna@Cell"
+
+-- | `@vuna@MArray a`：`Base.Effect.MutArray` 私有的定长原地数组类型（源码写不出）。
+export marrayTypeName : String
+marrayTypeName = "@vuna@MArray"
+
+-- | `@vuna@MDynArray a`：`Base.Effect.MutDynArray` 私有的可变长容器类型（源码写不出）。
+export mdynArrayTypeName : String
+mdynArrayTypeName = "@vuna@MDynArray"
+
+-- | `@vuna@MBuffer`：`Base.Effect.MutBuffer` 私有的变长字节缓冲类型（源码写不出）。
+export mbufferTypeName : String
+mbufferTypeName = "@vuna@MBuffer"
+
+-- | 线程句柄 `Thread a`（native / OCaml 多线程运行时）。
+export threadTypeName : String
+threadTypeName = "Thread"
+
+-- | 互斥锁 `Mutex`。
+export mutexTypeName : String
+mutexTypeName = "Mutex"
+
+-- | 条件变量 `Condvar`。
+export condvarTypeName : String
+condvarTypeName = "Condvar"
+
+-- | 原子单元 `Atomic`。
+export atomicTypeName : String
+atomicTypeName = "Atomic"
+
 -- | 全部内建类型构造子及其 arity（Elab.Prelude 生成 kind、Target.Ocaml.Decl 渲染的唯一真源）。
 export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
   [
-    TypeIntrinsic "Array" 1,
-    TypeIntrinsic "@vuna@Cell" 1,
-    TypeIntrinsic "@vuna@MArray" 1,
-    TypeIntrinsic "@vuna@MDynArray" 1,
-    TypeIntrinsic "@vuna@MBuffer" 0,
-    TypeIntrinsic "Thread" 1,
-    TypeIntrinsic "Mutex" 0,
-    TypeIntrinsic "Condvar" 0,
-    TypeIntrinsic "Atomic" 0
+    TypeIntrinsic arrayTypeName 1,
+    TypeIntrinsic cellTypeName 1,
+    TypeIntrinsic marrayTypeName 1,
+    TypeIntrinsic mdynArrayTypeName 1,
+    TypeIntrinsic mbufferTypeName 0,
+    TypeIntrinsic threadTypeName 1,
+    TypeIntrinsic mutexTypeName 0,
+    TypeIntrinsic condvarTypeName 0,
+    TypeIntrinsic atomicTypeName 0
   ]
 
 -- | 名字对应的内建类型构造子 arity；不是内建类型构造子时返回 `-1`。
@@ -349,6 +385,30 @@ effSendCoreIdName = "Base.Effect.Core.sendCoreId"
 -- | 是否是 `sendCore` 入口（两种名字）。
 export isSendCoreName : String -> Bool
 isSendCoreName name = name == effSendCoreName || name == effSendCoreIdName
+
+-- | `perform` 降级的目标：`Base.Effect.Core.performCore`。
+export effPerformCoreName : String
+effPerformCoreName = "Base.Effect.Core.performCore"
+
+-- | handle 的效应签名包装：`Base.Effect.Core.sigFn`。
+export effSigFnName : String
+effSigFnName = "Base.Effect.Core.sigFn"
+
+-- | handle 降级的目标（rowRem 版）：`Base.Effect.Core.handleWith`。
+export effHandleWithName : String
+effHandleWithName = "Base.Effect.Core.handleWith"
+
+-- | handle 降级的目标（行首条目版）：`Base.Effect.Core.handleWithAt`。
+export effHandleWithAtName : String
+effHandleWithAtName = "Base.Effect.Core.handleWithAt"
+
+-- | 行扩展入口：`Base.Effect.Core.weaken`（运行时恒等，只改类型）。
+export effWeakenName : String
+effWeakenName = "Base.Effect.Core.weaken"
+
+-- | 行内操作执行入口：`Base.Effect.Core.raise`。
+export effRaiseName : String
+effRaiseName = "Base.Effect.Core.raise"
 
 -- | Eff 版线性绑定（当前无库调用方）：`Eff [] a` 的线性 continuation。
 -- runtime 由 codegen 专门生成（装箱 `MkEff` 的 match），不能复用 eager 包装。

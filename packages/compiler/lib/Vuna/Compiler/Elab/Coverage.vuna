@@ -125,9 +125,10 @@ hasShortCtor s ((c, n) :: rest) = ctorShortName c == s || hasShortCtor s rest
 -- | 列表字面量哨兵 → 该族里对应的 canonical 构造子名；非哨兵原样返回。
 export sentinelCtorIn : List (String, Int) -> String -> Maybe String
 sentinelCtorIn ctors h =
-  if isListNilSyntax h then
-    findShortCtor ctors ["Nil"]
-  else if isListConsSyntax h then findShortCtor ctors ["::", "Cons"] else Just h
+  case classify h of
+    Just RsListNil => findShortCtor ctors ["Nil"]
+    Just RsListCons => findShortCtor ctors ["::", "Cons"]
+    _ => Just h
 
 findShortCtor : List (String, Int) -> List String -> Maybe String
 findShortCtor [] shorts = Nothing

@@ -791,7 +791,7 @@ substClassParam pname arg ty = substVarAt 0 arg ty
 
 -- 字面量比较的运行时函数名（`==` 的跨类型特化；codegen 按名字映射）。
 export litEqName : String -> String
-litEqName tyName = if tyName == "String" then "bi_eq_str" else "bi_eq_int"
+litEqName tyName = if tyName == strTypeName then "bi_eq_str" else "bi_eq_int"
 
 -- 隐式 binder 的域可以是：宇宙、已声明归纳族（`{n : Nat}` 这类索引），或**高阶 kind**
 -- （`{f : Type -> Type}`，`trait Mapper f` 需要）。其它类型（Int/String/…）仍

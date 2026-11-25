@@ -942,7 +942,10 @@ liftablePat _ = False
 -- 会被解析成多个参数模式（0 元构造子与后续模式分开）；无参数构造子、字面量、变量不需要。
 -- 元组模式自带括号，不需要再加。
 patNeedsParen : Pat -> Bool
-patNeedsParen (PCon name args _) = if isTuplePairSyntax name then False else notEmptyPatList args
+patNeedsParen (PCon name args _) =
+  case classify name of
+    Just RsTuplePair => False
+    _ => notEmptyPatList args
 patNeedsParen (PRecord _ _ _) = True
 patNeedsParen _ = False
 
@@ -1700,7 +1703,9 @@ scanBodyPos fuel src maybeLane expr =
 -- | 内部：识别 `handle` 标记载荷（comp / return / op 子句），编码见 `Frontend/Ast.handleSyntax`。
 handlePartsOf : Expr -> Maybe (Expr, Expr, Expr)
 handlePartsOf (EApp (EVar name _) [comp, ret, opH] _) =
-  if isHandleSyntax name then Just (comp, ret, opH) else Nothing
+  case classify name of
+    Just RsHandle => Just (comp, ret, opH)
+    _ => Nothing
 handlePartsOf _ = Nothing
 
 -- | 内部：只遍历 handle 里用户写的部分（comp、return 体、op 子句体），不把 parser 合成的
@@ -1984,7 +1989,10 @@ consHeadOf _ = Nothing
 
 -- | 内部：表达式是否为空列表字面量（`[]` 的保留名）。
 isNilExpr : Expr -> Bool
-isNilExpr (EVar name _) = isListNilSyntax name
+isNilExpr (EVar name _) =
+  case classify name of
+    Just RsListNil => True
+    _ => False
 isNilExpr _ = False
 
 -- | 内部：闭合 cons 链的元素列表；开放链或非链返回 `Nothing`。
@@ -2037,7 +2045,10 @@ pairTailElems fuel e =
     lintFuelExhausted "pair chain"
   else
     case e of
-      EApp (EVar name _) [a, b] _ => if name == "Pair" || isTuplePairSyntax name then a :: pairTailElems (fuel - 1) b else [e]
+      EApp (EVar name _) [a, b] _ =>
+        case classify name of
+          Just RsTuplePair => a :: pairTailElems (fuel - 1) b
+          _ => if name == "Pair" then a :: pairTailElems (fuel - 1) b else [e]
       _ => [e]
 
 -- | 内部：显式 `Pair` 应用的元素表（头部必须是裸 `Pair`）；元组语法本身不报。
@@ -2118,7 +2129,10 @@ pairPatTailElems fuel p =
     lintFuelExhausted "pair pattern chain"
   else
     case p of
-      PCon name [a, b] _ => if name == "Pair" || isTuplePairSyntax name then a :: pairPatTailElems (fuel - 1) b else [p]
+      PCon name [a, b] _ =>
+        case classify name of
+          Just RsTuplePair => a :: pairPatTailElems (fuel - 1) b
+          _ => if name == "Pair" then a :: pairPatTailElems (fuel - 1) b else [p]
       _ => [p]
 
 -- | 内部：显式 `Pair` 模式应用的元素表（头部必须是裸 `Pair`）；元组模式本身不报。

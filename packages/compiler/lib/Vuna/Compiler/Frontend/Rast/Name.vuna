@@ -24,7 +24,7 @@ export rnameKey : RName -> String
 rnameKey (RLocal name) = name
 rnameKey (RGlobal moduleName base) = "${moduleName}.${base}"
 rnameKey (RIntrinsic name) = name
-rnameKey (RMacro name) = macroSyntaxName name
+rnameKey (RMacro name) = reservedText (RsMacro name)
 rnameKey (RHole name) = name
 
 -- | 名字是否是全局引用（模块名 + 基名）。
@@ -68,20 +68,19 @@ isCompilerModulePrefix prefix =
 -- | 已解析名字的字符串 → 身份。顺序即优先级：洞 / 宏 / 编译器内部名 / 内建 / 全局 / 局部。
 export classifyName : String -> RName
 classifyName name =
-  if isHoleName name then
-    RHole name
-  else if isMacroSyntaxName name then
-    case macroNameOf name of
-      Just macro => RMacro macro
-      Nothing => RIntrinsic name
-  else if isInternalSyntaxName name then
-    RIntrinsic name
-  else if hasIntrinsic name || isPreludeName name then
-    RIntrinsic name
-  else
-    case splitGlobalKey name of
-      Just parts => RGlobal (firstOf parts) (secondOf parts)
-      Nothing => RLocal name
+  case classify name of
+    Just (RsMacro macro) => RMacro macro
+    _ =>
+      if isHoleName name then
+        RHole name
+      else if isInternalSyntaxName name then
+        RIntrinsic name
+      else if hasIntrinsic name || isPreludeName name then
+        RIntrinsic name
+      else
+        case splitGlobalKey name of
+          Just parts => RGlobal (firstOf parts) (secondOf parts)
+          Nothing => RLocal name
 
 -- | 名字是否是内建声明（含内部可见的 `bi_*`）。
 hasIntrinsic : String -> Bool

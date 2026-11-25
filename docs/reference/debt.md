@@ -69,7 +69,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | LD-10 · C | `Resolve.vuna` 的解析特判：`Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | `Loader/Resolve.vuna` | 后续 |
-| LD-11 · B | `Resolve.vuna` 的内部名旁路：`@vuna@…` 与「属于编译器包」直接放行 | `Loader/Resolve.vuna` | 后续 |
+| LD-11 · B | `Resolve.vuna` 的内部名旁路：`@vuna@…` 按 `classify` 认出的形态 + `isParserSurface` 白名单放行（重载候选 / 宏 / do 标记只在编译器包内可见），编译器包整包放行 | `Loader/Resolve.vuna` | 后续 |
 | LD-12 · C | `Fixity.vuna` 的 `reorderDecl`：实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | `Loader/Fixity.vuna` | 后续 |
 | LD-15 · C | `Addr.vuna` 的模块摘要：无条件并入 Prelude 摘要（过近似） | `Loader/Addr.vuna` | 后续 |
 | LD-16 · C | `Fingerprint.vuna`：无 build-id 时身份退化为「路径+大小+mtime」 | `Loader/Fingerprint.vuna` | 后续 |
@@ -104,7 +104,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-13 · D | `Impl.vuna` 的 `bindShapeOf`：do 块语义靠对 `bind` 签名项做硬编码 de Bruijn 索引匹配（`imD/imE/imM/imR` 与两套 `iaE/iaL/ibL/ibR`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-14 · A | `Impl.vuna` 的 `perform`/`handle`：三候选试错（`handleWithAt` → `…Hole` → `handleWith`），顺序由「是不是裸变量」决定，最后一个失败时抛第一个错误 | `Elab/Term/Impl.vuna` | 后续 |
 | EC-15 · A | `Impl.vuna` 的 `specializeInterpPrimApp`：`Interp` 实例语义硬编码进编译器（与 base 实例双真源） | `Elab/Term/Impl.vuna` | 后续 |
-| EC-16 · D | `Impl.vuna` 的效果协议名字：字面串绕过 `Intrinsics` 的单一真源（`performCore`/`sigFn`/`raise`/`weaken`/`Int`/`String`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
 | EC-21 · A | `Trait.vuna` 的 `instArgAt`：实参取尽时伪造 `TGlobal "Int"`（不可达兜底） | `Elab/Trait.vuna` | 后续 |
 | EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
@@ -214,14 +213,14 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
-   （仅剩诊断展示 EC-35），以及把元数据编进名字（只剩 `@vuna@…` 标记仍靠字符串编解码；
-   `#…` 合成名已集中到 `Frontend.Reserved`，编号只用于定义内去重、不承担身份，也不再
-   拿名字当列表容器）。
+   （仅剩诊断展示 EC-35），以及把元数据编进名字（表面标记的载荷是 `Reserved` 构造子字段，
+   只剩线上字符串编解码本身；`#…` 合成名已集中到 `Frontend.Reserved`，编号只用于定义内
+   去重、不承担身份，也不再拿名字当列表容器）。
 2. **fuel 仍是主要的终止性证书**：多数路径已改成「预算按输入规模派生 + 耗尽 `icFuel`」，
    残留「把固定容量上限当成语义结论」（EL-23、CO-07 的 conv 预算）、
    「只有 SCT 测度、从不检查的 fuel」（FE-09）、「派生预算不可达仅靠注释论证的静默兜底」
    （`Ir/Anf` / `Ir/Cps` 的半变换）、以及把容量上限当成语义结论（EL-23）。
-3. **多真源手工同步**：内建名字（`Intrinsics` vs `Impl` 字面串，EC-16）、prelude 名单（LD-21）、
+3. **多真源手工同步**：prelude 名单（LD-21）、
    运算符别名（`Fixity` / `Dict` / `Prelude`）、能力矩阵（D96）、覆盖率五套口径（EL-24）、
    类型层 / 擦除五套判据（EC-39）、两套 layout（FE-24）、四份 AST 遍历（LD-20）、
    五份结构知识（FE-16 / FE-17 / FE-28 / FE-29）、三份解表真源（EC-31）、两份不透明判据（CO-06）。

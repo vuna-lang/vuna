@@ -19,15 +19,20 @@ import Vuna.Compiler.Frontend.Lexer
 -- | 打印一个类型表达式（无签名约束前缀）：箭头右结合、应用参数与嵌套类型加括号。
 export renderType : Expr -> String
 renderType (EVar name _) =
-  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
+  case classify name of
+    Just r => reservedTypeAtomText r
+    Nothing => name
 renderType (ty@(EApp (EVar op _) [a, b] _)) =
   if op == "->" then
     "${renderTypeArg a} -> ${renderType b}"
-  else if isListConsSyntax op then
-    case listTailText b of
-      Just rest => "[" ++ renderType a ++ rest
-      Nothing => renderTypePlain ty
-  else if isTuplePairSyntax op then "(" ++ renderType a ++ tupleTailText b ++ ")" else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
+  else
+    case classify op of
+      Just RsListCons =>
+        case listTailText b of
+          Just rest => "[" ++ renderType a ++ rest
+          Nothing => renderTypePlain ty
+      Just RsTuplePair => "(" ++ renderType a ++ tupleTailText b ++ ")"
+      _ => if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
 renderType (EPi name implicit qty dom cod _) =
   let
     binder =
@@ -38,23 +43,47 @@ renderType (EPi name implicit qty dom cod _) =
   in "${binder} -> ${renderType cod}"
 renderType ty = renderTypePlain ty
 
+-- | 内部：类型位置原子里的保留标记文本。无通配分支：新增标记必须在这里给出决定。
+reservedTypeAtomText : Reserved -> String
+reservedTypeAtomText RsListNil = "[]"
+reservedTypeAtomText RsTupleUnit = "()"
+reservedTypeAtomText RsListCons = reservedText RsListCons
+reservedTypeAtomText RsTuplePair = reservedText RsTuplePair
+reservedTypeAtomText RsAscribe = reservedText RsAscribe
+reservedTypeAtomText RsPerform = reservedText RsPerform
+reservedTypeAtomText RsHandle = reservedText RsHandle
+reservedTypeAtomText RsHandleNoRet = reservedText RsHandleNoRet
+reservedTypeAtomText RsRowAt = reservedText RsRowAt
+reservedTypeAtomText RsAppAt = reservedText RsAppAt
+reservedTypeAtomText RsInstArg = reservedText RsInstArg
+reservedTypeAtomText (r@(RsOverCtor _ _)) = reservedText r
+reservedTypeAtomText (r@(RsOverValue _ _)) = reservedText r
+reservedTypeAtomText (r@(RsMacro _)) = reservedText r
+reservedTypeAtomText (r@(RsDoBind _)) = reservedText r
+reservedTypeAtomText (r@(RsDoIgnore _)) = reservedText r
+
 -- | 内部：元组类型（parser 保留名）右嵌套尾段：`(a, b, c)` 的 `, b, c`。
 tupleTailText : Expr -> String
 tupleTailText (ty@(EApp (EVar name _) [x, y] _)) =
-  if isTuplePairSyntax name then ", " ++ renderType x ++ tupleTailText y else ", " ++ renderType ty
+  case classify name of
+    Just RsTuplePair => ", " ++ renderType x ++ tupleTailText y
+    _ => ", " ++ renderType ty
 tupleTailText b = ", " ++ renderType b
 
 -- | 内部：列表字面量的尾段——`Nil` 结尾给 `"]"`，每个 cons 头给 `", <元素>"`。只认保留名
 -- （parser 的 `[..]` 形状）；`::` 链不走这里，保持中缀。
 listTailText : Expr -> Maybe String
-listTailText (EVar name _) = if isListNilSyntax name then Just "]" else Nothing
+listTailText (EVar name _) =
+  case classify name of
+    Just RsListNil => Just "]"
+    _ => Nothing
 listTailText (EApp (EVar cons _) [h, t] _) =
-  if isListConsSyntax cons then
-    case listTailText t of
-      Just rest => Just (", " ++ renderType h ++ rest)
-      Nothing => Nothing
-  else
-    Nothing
+  case classify cons of
+    Just RsListCons =>
+      case listTailText t of
+        Just rest => Just (", " ++ renderType h ++ rest)
+        Nothing => Nothing
+    _ => Nothing
 listTailText _ = Nothing
 
 -- | 内部：quantity 前缀（与 Fmt 同形，保证输出可回读）。
@@ -87,19 +116,25 @@ renderTypePlain _ = "_"
 -- | 内部：把表达式打印成应用参数位置的原子——变量与列表字面量不加括号，其余（含 `->`）加括号。
 renderTypeArg : Expr -> String
 renderTypeArg (EVar name _) =
-  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
+  case classify name of
+    Just r => reservedTypeAtomText r
+    Nothing => name
 renderTypeArg (ty@(EApp (EVar cons _) [_, _] _)) =
-  if isListConsSyntax cons then
-    renderType ty
-  else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
+  case classify cons of
+    Just RsListCons => renderType ty
+    Just RsTuplePair => renderType ty
+    _ => "(${renderType ty})"
 renderTypeArg ty = "(${renderType ty})"
 
 -- | 内部：把表达式打印成应用函数位置的原子（与 `renderTypeArg` 同策略）。
 renderTypeAtom : Expr -> String
 renderTypeAtom (EVar name _) =
-  if isTupleUnitSyntax name then "()" else if isListNilSyntax name then "[]" else name
+  case classify name of
+    Just r => reservedTypeAtomText r
+    Nothing => name
 renderTypeAtom (ty@(EApp (EVar cons _) [_, _] _)) =
-  if isListConsSyntax cons then
-    renderType ty
-  else if isTuplePairSyntax cons then renderType ty else "(${renderType ty})"
+  case classify cons of
+    Just RsListCons => renderType ty
+    Just RsTuplePair => renderType ty
+    _ => "(${renderType ty})"
 renderTypeAtom ty = "(${renderType ty})"

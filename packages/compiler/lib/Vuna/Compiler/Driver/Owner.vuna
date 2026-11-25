@@ -205,7 +205,7 @@ splitDataOwnerOf meta d =
 -- 模块、也没有模块前缀；它们由入口收尾阶段产生，归入口单元 `Main`。
 -- 只放行这一族名字：普通无前缀定义仍按「无法确定模块」报错（不静默归到入口）。
 isSyntheticInternalName : String -> Bool
-isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
+isSyntheticInternalName name = name == mainShowDefName || isInternalSyntaxName name
 
 export splitDefOwnerOf : SplitMeta -> String -> Check String
 splitDefOwnerOf meta name =

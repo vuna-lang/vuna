@@ -501,10 +501,9 @@ ofExpr scope e =
         Ast.EVar name _ =>
           case args of
             [v, t] =>
-              if isAscribeSyntax name then
-                EAnn (ofExpr scope v) (ofExpr scope t) (Ast.nodeRefSpan sp)
-              else
-                EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
+              case classify name of
+                Just RsAscribe => EAnn (ofExpr scope v) (ofExpr scope t) (Ast.nodeRefSpan sp)
+                _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
             _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
         _ => EApp (ofExpr scope fn) (map (ofExpr scope) args) (Ast.nodeRefSpan sp)
     Ast.EPi name implicit qty dom cod sp =>

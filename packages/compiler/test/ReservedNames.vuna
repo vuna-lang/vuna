@@ -27,7 +27,14 @@ results =
     Pair "synth-ctors-are-synth" (allTrue (map isSynthName synthSamples)),
     Pair "user-name-not-synth" (not (isSynthName "section")),
     Pair "synth-not-internal" (not (isInternalSyntaxName sectionBinderName)),
-    Pair "internal-not-synth" (not (isSynthName (macroSyntaxName "dbg"))),
+    Pair "internal-not-synth" (not (isSynthName (reservedText (RsMacro "dbg")))),
+    Pair "reserved-roundtrip" (allTrue (map reservedRoundtrip allReserved)),
+    Pair
+      "reserved-not-intrinsic"
+      (not (isSurfaceName "@vuna@prim_eff_print" || isSurfaceName "@vuna@Cell" || isSurfaceName "@vuna@obs@level" || isSurfaceName "@vuna@do@pat")),
+    Pair
+      "parser-surface-narrow"
+      (isParserSurface RsListNil && isParserSurface RsPerform && isParserSurface RsHandle && isParserSurface RsRowAt && isParserSurface RsAppAt && not (isParserSurface (RsOverCtor "X" ["A.B.C"])) && not (isParserSurface (RsOverValue "f" ["A.B.g"])) && not (isParserSurface (RsMacro "dbg")) && not (isParserSurface (RsDoBind "Base.Trait.Monad.bind"))),
     Pair "hash-not-ident-start" (not (isIdentStart 35)),
     Pair "hash-not-ident-char" (not (isIdentChar 35)),
     Pair "at-not-ident-start" (not (isIdentStart 64)),
@@ -48,6 +55,43 @@ synthSamples =
     teleProbeBinderName,
     ovProbeName 2
   ]
+
+-- 每个表面标记各一个样本（带载荷形态覆盖有载荷 / 空载荷两种）。
+allReserved : List Reserved
+allReserved =
+  [
+    RsListNil,
+    RsListCons,
+    RsTuplePair,
+    RsTupleUnit,
+    RsAscribe,
+    RsPerform,
+    RsHandle,
+    RsHandleNoRet,
+    RsRowAt,
+    RsAppAt,
+    RsInstArg,
+    RsOverCtor "Foo" ["A.B.C", "D.E.F"],
+    RsOverCtor "Foo" [],
+    RsOverValue "f" ["A.B.g", "C.D.h"],
+    RsMacro "dbg",
+    RsDoBind "Base.Trait.Monad.bind",
+    RsDoIgnore "Base.Trait.Monad.bind"
+  ]
+
+-- | 线上编码与分类互逆（`reservedText` / `classify` 是唯一一对编解码）。
+reservedRoundtrip : Reserved -> Bool
+reservedRoundtrip r =
+  case classify (reservedText r) of
+    Just r2 => reservedText r2 == reservedText r
+    Nothing => False
+
+-- | 名字是否是表面标记（`classify` 认出的形态）。
+isSurfaceName : String -> Bool
+isSurfaceName name =
+  case classify name of
+    Just _ => True
+    Nothing => False
 
 allTrue : List Bool -> Bool
 allTrue [] = True
