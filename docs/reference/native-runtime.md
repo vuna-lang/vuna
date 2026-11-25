@@ -88,13 +88,16 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 | `init_stack`（自带栈） | 可达函数图里有**真递归**（`call` 边上的环）或间接调用/跳转（闭包调用、续延恢复）。尾调用是 `jmp`，不涨栈，不触发 |
 | 堆起点 + `init_mem` + `init_gc` | 可达代码引用 `alloc` / `alloc_leaf`，或直接读写堆指针（内联 bump） |
 | `init_cpus` | 可达代码引用子进程原语（`spawn` / `runIn` / `wait`）；子进程继承亲和性 |
+| `init_tcb` / `init_tcb_scratch` | `init_tcb` 总是发（`%fs` 基址 + TCB：宿主状态槽 / cleanup 链 / 线程 id）；可达代码出现 `%fs` 的 scratch 访问（fs / process / 时钟 / tty / `threadParallelism` 的固定缓冲）时改发 `init_tcb_scratch`，多一次 8.4 MiB `MAP_NORESERVE` mmap |
 | `init_timeout` | 总是发：`VUNA_NATIVE_TIMEOUT_MS` 对任何程序都成立 |
 
 未用到的运行时函数同样不进产物（从 `_start` 做标签可达性裁剪）：纯算术程序的
 `runtime.s` 只剩入口用到的打印 / 退出叶子，`text` 段约 2 KiB。因此
 `VUNA_NATIVE_STACK_MB` 与 `VUNA_NATIVE_CPUS` 只在对应初始化发出时生效——不含递归 /
 间接调用的程序沿用进程栈（`RLIMIT_STACK` 决定），不含子进程原语的程序不设亲和性。
-解析失败一律回落缺省，不阻断启动。
+宿主 scratch 是**整程序**属性：纯算术 / print-only 程序既不做主线程的一次 mmap，子线程
+也不做——`init_tcb_scratch` 置 `rt_scratch_needed`，`thread_spawn` 按它决定是否为子线程
+映射，`thread_join` 按线程对象里的指针判零跳过 `munmap`。解析失败一律回落缺省，不阻断启动。
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |

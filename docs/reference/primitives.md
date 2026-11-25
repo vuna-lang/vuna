@@ -306,7 +306,9 @@
   （C11 seq_cst 的 x86 映射），`fetchAdd` 用 CAS 循环并保持 63-bit 回绕。
 - 宿主态是**每线程**的：宿主状态槽、cleanup 链头在 TCB；路径 / stat / getdents / 命令行 /
   spawn arena / 8 MiB 读缓冲 / timespec / termios / affinity / 子进程 envp 在每线程的
-  mmap scratch 块（约 8.4 MiB 虚拟，`MAP_NORESERVE`）。仍进程级的只有子进程 pid 表
+  mmap scratch 块（约 8.4 MiB 虚拟，`MAP_NORESERVE`）。scratch 是整程序属性：可达代码
+  用得到宿主叶子时主线程在 `init_tcb_scratch` 映射、子线程按 `rt_scratch_needed` 在
+  `thread_spawn` 映射；否则一次都不映射。仍进程级的只有子进程 pid 表
   （`child_push` / `child_drop` 用一把 futex 锁串行，`sigalrm` 遍历它逐组收掉）。
   见 [debt.md](debt.md) D135。
 

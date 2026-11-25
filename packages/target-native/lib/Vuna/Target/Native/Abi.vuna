@@ -240,8 +240,9 @@ nativeTcbStateOff = 24
 export nativeTcbHostStatusOff : Int
 nativeTcbHostStatusOff = 32
 
--- | 当前线程的宿主 scratch 块基址（`init_tcb` / `thread_spawn` 用 mmap 分配；
---   各段偏移见下面的 `scratch*Off`）。fs / process / 时钟 / tty 的固定缓冲都在这里。
+-- | 当前线程的宿主 scratch 块基址（可达代码需要宿主叶子时由 `init_tcb_scratch` /
+--   `thread_spawn` mmap；各段偏移见下面的 `scratch*Off`）。fs / process / 时钟 / tty
+--   的固定缓冲都在这里；不需要的程序这一格保持 0。
 export nativeTcbScratchOff : Int
 nativeTcbScratchOff = 40
 
@@ -260,9 +261,10 @@ nativeTcbIdOff = 56
 -- ---------------------------------------------------------------
 -- 宿主叶子（fs / process / 时钟 / tty）需要若干固定缓冲：路径、stat、getdents、命令行、
 -- spawn arena、8 MiB 读缓冲、timespec / termios / affinity。它们不能是进程级 `.bss`——
--- 并行区两个线程同用一个缓冲会互相覆盖（路径被改写 ⇒ 操作到别人的文件）。每个线程在
--- `init_tcb` / `thread_spawn` 里 mmap 一块零页区，指针放在 TCB 的 `nativeTcbScratchOff`；
--- 各叶子用 `mov r, fs:[scratch]; add r, <偏移>` 取自己那段。
+-- 并行区两个线程同用一个缓冲会互相覆盖（路径被改写 ⇒ 操作到别人的文件）。可达代码出现
+-- 宿主 scratch 访问时，主线程在 `init_tcb_scratch`、子线程在 `thread_spawn` 里 mmap 一块
+-- 零页区，指针放在 TCB 的 `nativeTcbScratchOff`；各叶子用
+-- `mov r, fs:[scratch]; add r, <偏移>` 取自己那段。
 export scratchPathOff : Int
 scratchPathOff = 0
 

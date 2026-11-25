@@ -3524,7 +3524,9 @@ dedupeClosures (c :: rest) =
 --     碰堆指针时才有；
 --   * 自带栈：可达函数图里有**真递归**（`call` 边上的环）或间接调用/跳转
 --     （闭包调用、续延恢复）时才有——尾调用是 `jmp`，不涨栈，不算；
---   * 核数（亲和性）：可达代码里出现子进程原语时才有（子进程继承亲和性）。
+--   * 核数（亲和性）：可达代码里出现子进程原语时才有（子进程继承亲和性）；
+--   * 宿主 scratch：可达代码里有 `%fs` 的 scratch 访问时才有（fs / process / 时钟 / tty /
+--     线程并行度的固定缓冲）。
 --
 -- `init_timeout` 总是发：`VUNA_NATIVE_TIMEOUT_MS` 是对任何程序的兜底。
 -- 判定只看已发射的指令：运行时函数若新增分配 / spawn 调用，会被自动算进来。
@@ -3534,6 +3536,7 @@ export record InitNeeds(..) where
   inStack : Bool
   inCpus : Bool
   inThreads : Bool
+  inScratch : Bool
 
 -- | 操作数里的标签引用（`[rip + label]`）。
 operandLabelRefs : Operand -> List String
@@ -3626,6 +3629,20 @@ funcCallRefs f = concatMap instrCallRefs f.nfBody
 funcHasIndirect : NativeFunc -> Bool
 funcHasIndirect f = foldl (\acc, i => acc || instrIndirect i) False f.nfBody
 
+-- | 当前线程的宿主 scratch 访问（`%fs` 相对）。只认 fs 形态：子线程 TCB 的
+--   `[reg + nativeTcbScratchOff]` 字段写入是 `thread_spawn` 给新线程建块，不代表
+--   当前线程要；堆对象在偏移 40 上也有字段，按偏移粗判会误开。
+instrScratchAccess : Instr -> Bool
+instrScratchAccess (IMovFsLoad _ off) = off == nativeTcbScratchOff
+instrScratchAccess (IMovFsStore off _) = off == nativeTcbScratchOff
+instrScratchAccess _ = False
+
+funcScratchAccess : NativeFunc -> Bool
+funcScratchAccess f = foldl (\acc, i => acc || instrScratchAccess i) False f.nfBody
+
+funcsScratchAccess : List NativeFunc -> Bool
+funcsScratchAccess funcs = foldl (\acc, f => acc || funcScratchAccess f) False funcs
+
 funcsWithLabelIn : List NativeFunc -> List String -> List NativeFunc
 funcsWithLabelIn funcs known = filter (\f => memName (nativeFuncLabelOf f) known) funcs
 
@@ -3672,6 +3689,7 @@ initNeeds funcs live =
     (hasCallCycle funcs live || anyFuncIndirect liveFuncs)
     (anyMem ["rt_spawn_exec", "rt_cmd_run_sh", "rt_wait_pid", "rt_child_push", "rt_child_drop", "rt_env_filter"] live)
     (anyMem ["rt_thread_spawn", "rt_thread_join", "rt_mutex_lock", "rt_condvar_wait", "rt_safepoint"] live)
+    (funcsScratchAccess liveFuncs)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -3765,9 +3783,10 @@ startFunc printResult kind mainName runMainM handlers cafs needs =
       concatMap
         (\n => [ICall (nativeFuncLabel n), IMov (OpRip (nativeCafCellLabel n)) (OpReg Rax)])
         cafs
+    tcbInit = if needs.inScratch then "init_tcb_scratch" else "init_tcb"
     callMain =
       append
-        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp), ICall (nativeRtLabel "init_tcb")]
+        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp), ICall (nativeRtLabel tcbInit)]
         (append (if needs.inThreads then [ICall (nativeRtLabel "init_threads")] else []) (append cafInit (append [ICall (nativeFuncLabel mainName)] (append handlerPart runPart))))
     printer =
       if printResult then
@@ -4127,4 +4146,7 @@ build program printResult =
                           keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
                           moduleLits = map (\p => (split "." (firstOf p), poolItems (secondOf p))) pools
                           moduleFloats = map (\p => (split "." (firstOf p), floatPoolItems (secondOf p))) fpools
-                        in NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
+                          -- 需求集合与保留集合只差 `start` 的引用（init_*）；入口 init 自己
+                          -- 碰 scratch 时这里会先炸，不会漏映射后带病出产物。
+                          drift = funcsScratchAccess keptFuncs /= needs.inScratch
+                        in if drift then NativeRejected (NativeUnsupported "native target: internal: scratch gating drifted") else NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)

@@ -1,7 +1,8 @@
 -- 入口初始化裁剪（`Native.Module.initNeeds`）的单测。
 --
--- 锁三件事：尾调用（`jmp`）不算递归，真递归（`call` 环）与间接调用才要自带栈；
--- 分配器按可达引用传递（helper 调 alloc 也算）；子进程原语才要核数（亲和性）。
+-- 锁四件事：尾调用（`jmp`）不算递归，真递归（`call` 环）与间接调用才要自带栈；
+-- 分配器按可达引用传递（helper 调 alloc 也算）；子进程原语才要核数（亲和性）；
+-- 宿主 scratch 只认 `%fs` 访问（子线程 TCB 字段写入不算）。
 import Base
 import Base.Data.List as List
 import Base.Effect.Core
@@ -31,10 +32,10 @@ needsOf funcs seeds = initNeeds funcs (reachFuncLabels funcs seeds)
 flag : Bool -> String
 flag b = if b then "on" else "off"
 
--- | 断言 (heap, stack, cpus) 三项。
-expectInit : String -> Bool -> Bool -> Bool -> InitNeeds -> List String
-expectInit label heap stack cpus n =
-  if n.inHeap == heap && n.inStack == stack && n.inCpus == cpus then
+-- | 断言 (heap, stack, cpus, scratch) 四项。
+expectInit : String -> Bool -> Bool -> Bool -> Bool -> InitNeeds -> List String
+expectInit label heap stack cpus scratch n =
+  if n.inHeap == heap && n.inStack == stack && n.inCpus == cpus && n.inScratch == scratch then
     []
   else
     [
@@ -45,12 +46,19 @@ expectInit label heap stack cpus n =
         ++ flag stack
         ++ " cpus="
         ++ flag cpus
+        ++ " scratch="
+        ++ flag scratch
         ++ ", got heap="
-        ++ flag n.inHeap ++ " stack=" ++ flag n.inStack ++ " cpus=" ++ flag n.inCpus
+        ++ flag n.inHeap
+        ++ " stack="
+        ++ flag n.inStack ++ " cpus=" ++ flag n.inCpus ++ " scratch=" ++ flag n.inScratch
     ]
 
 problems : List String
-problems = append (append tailProblems stackProblems) (append heapProblems cpuProblems)
+problems =
+  append
+    (append (append tailProblems stackProblems) (append heapProblems cpuProblems))
+    scratchProblems
 
 -- 尾递归是函数内回边：不涨栈，不需要自带栈。
 tailProblems : List String
@@ -60,25 +68,34 @@ tailProblems =
     False
     False
     False
+    False
     (needsOf [fn "vuna_loop" [ILabel ".Lself", IJmp ".Lself"]] ["vuna_loop"])
 
 -- 直接 `call` 自环 / 互递归 / 间接调用：需要自带栈。
 stackProblems : List String
 stackProblems =
   append
-    (expectInit "self call" False True False (needsOf [fn "vuna_f" [ICall "vuna_f"]] ["vuna_f"]))
-    (append (expectInit "mutual call" False True False (needsOf [fn "vuna_even" [ICall "vuna_odd"], fn "vuna_odd" [ICall "vuna_even"]] ["vuna_even"])) (expectInit "indirect call" False True False (needsOf [fn "vuna_g" [ICallReg R11]] ["vuna_g"])))
+    (expectInit "self call" False True False False (needsOf [fn "vuna_f" [ICall "vuna_f"]] ["vuna_f"]))
+    (append (expectInit "mutual call" False True False False (needsOf [fn "vuna_even" [ICall "vuna_odd"], fn "vuna_odd" [ICall "vuna_even"]] ["vuna_even"])) (expectInit "indirect call" False True False False (needsOf [fn "vuna_g" [ICallReg R11]] ["vuna_g"])))
 
 -- 分配器沿调用边传递；直接读写堆指针也算。
 heapProblems : List String
 heapProblems =
   append
-    (expectInit "transitive alloc" True False False (needsOf [fn "vuna_main" [ICall "rt_helper"], fn "rt_helper" [ICall "rt_alloc"]] ["vuna_main"]))
-    (append (expectInit "inline bump" True False False (needsOf [fn "vuna_main" [IMov (OpRip "rt_heap_ptr") (OpReg Rax)]] ["vuna_main"])) (expectInit "alloc_leaf" True False False (needsOf [fn "vuna_main" [ICall "rt_alloc_leaf"]] ["vuna_main"])))
+    (expectInit "transitive alloc" True False False False (needsOf [fn "vuna_main" [ICall "rt_helper"], fn "rt_helper" [ICall "rt_alloc"]] ["vuna_main"]))
+    (append (expectInit "inline bump" True False False False (needsOf [fn "vuna_main" [IMov (OpRip "rt_heap_ptr") (OpReg Rax)]] ["vuna_main"])) (expectInit "alloc_leaf" True False False False (needsOf [fn "vuna_main" [ICall "rt_alloc_leaf"]] ["vuna_main"])))
 
 -- 子进程原语才要核数；普通运行时调用不要。
 cpuProblems : List String
 cpuProblems =
   append
-    (expectInit "spawn" False False True (needsOf [fn "vuna_main" [ICall "rt_spawn_exec"]] ["vuna_main"]))
-    (expectInit "no spawn" False False False (needsOf [fn "vuna_main" [ICall "rt_print_int"]] ["vuna_main"]))
+    (expectInit "spawn" False False True False (needsOf [fn "vuna_main" [ICall "rt_spawn_exec"]] ["vuna_main"]))
+    (expectInit "no spawn" False False False False (needsOf [fn "vuna_main" [ICall "rt_print_int"]] ["vuna_main"]))
+
+-- 宿主 scratch 只按当前线程的 `%fs` 访问判定：普通 `[reg + off]` 是别处的
+-- 同偏移字段（子线程 TCB / 堆对象），不能拿来开主线程的 scratch。
+scratchProblems : List String
+scratchProblems =
+  append
+    (expectInit "print only" False False False False (needsOf [fn "vuna_main" [ICall "rt_print_int"]] ["vuna_main"]))
+    (append (expectInit "fs leaf" False False False True (needsOf [fn "vuna_main" [IMovFsLoad Rax nativeTcbScratchOff]] ["vuna_main"])) (append (expectInit "scratch store" False False False True (needsOf [fn "vuna_main" [IMovFsStore nativeTcbScratchOff Rax]] ["vuna_main"])) (append (expectInit "transitive scratch" False False False True (needsOf [fn "vuna_main" [ICall "rt_fs_leaf"], fn "rt_fs_leaf" [IMovFsLoad Rax nativeTcbScratchOff]] ["vuna_main"])) (append (expectInit "child tcb field" False False False False (needsOf [fn "vuna_main" [IMov (OpMem Rcx nativeTcbScratchOff) (OpReg Rax)]] ["vuna_main"])) (expectInit "threads without host leaves" False True False False (needsOf [fn "vuna_main" [ICall "rt_thread_spawn"], fn "rt_thread_spawn" [IMov (OpMem Rcx nativeTcbScratchOff) (OpReg Rax), ICallReg Rax]] ["vuna_main"]))))))

@@ -7,6 +7,7 @@ import Base.Effect.Core
 import Base.Effect.Console
 import Base.Effect.Exit
 import Vuna.Ir.Runtime
+import Vuna.Target.Native.Model
 import Vuna.Target.Native.Runtime
 
 main : Eff [ConsoleOp, ExitOp] String
@@ -23,7 +24,50 @@ problem : String -> Bool -> List String
 problem label ok = if ok then [] else [label ++ ": drifted"]
 
 problems : List String
-problems = concatMap expectationProblems expectations
+problems = append (concatMap expectationProblems expectations) gatingProblems
+
+-- 宿主 scratch 只在可达代码用得到时映射：`init_tcb` 不动标志，`init_tcb_scratch`
+-- 置位，`thread_spawn` 读它，`thread_join` 按线程对象里的指针判空跳过 munmap。
+gatingProblems : List String
+gatingProblems =
+  append
+    (checkFunc "init_tcb keeps scratch unmapped" "rt_init_tcb" (\f => not (hasFlagWrite f)))
+    (append (checkFunc "init_tcb_scratch sets flag" "rt_init_tcb_scratch" hasFlagWrite) (append (checkFunc "thread_spawn reads flag" "rt_thread_spawn" hasFlagRead) (checkFunc "thread_join skips unmapped scratch" "rt_thread_join" hasJoinSkip)))
+
+checkFunc : String -> String -> (NativeFunc -> Bool) -> List String
+checkFunc label fnLabel p =
+  case funcByLabel nativeRtFuncs fnLabel of
+    Just f => problem label (p f)
+    Nothing => [label ++ ": missing " ++ fnLabel]
+
+funcByLabel : List NativeFunc -> String -> Maybe NativeFunc
+funcByLabel [] _ = Nothing
+funcByLabel (f :: rest) l = if f.nfLabel == l then Just f else funcByLabel rest l
+
+hasInstr : (Instr -> Bool) -> List Instr -> Bool
+hasInstr p [] = False
+hasInstr p (i :: rest) = p i || hasInstr p rest
+
+hasFlagWrite : NativeFunc -> Bool
+hasFlagWrite f = hasInstr isFlagWrite f.nfBody
+
+isFlagWrite : Instr -> Bool
+isFlagWrite (IMov (OpRip l) (OpReg Rax)) = l == scratchNeededLabel
+isFlagWrite _ = False
+
+hasFlagRead : NativeFunc -> Bool
+hasFlagRead f = hasInstr isFlagRead f.nfBody
+
+isFlagRead : Instr -> Bool
+isFlagRead (IMov (OpReg Rax) (OpRip l)) = l == scratchNeededLabel
+isFlagRead _ = False
+
+hasJoinSkip : NativeFunc -> Bool
+hasJoinSkip f = hasInstr isJoinSkip f.nfBody
+
+isJoinSkip : Instr -> Bool
+isJoinSkip (IJcc "jz" ".Lrt_tj_noscratch") = True
+isJoinSkip _ = False
 
 -- (隐藏原语名, 值形态 arity, native 标签)
 expectations : List (String, Int, String)

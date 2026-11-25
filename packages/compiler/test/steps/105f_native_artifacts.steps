@@ -137,6 +137,17 @@ exit: 0
 run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natinline-n/Main.s"'
 exit: 0
 
+# 13) 入口 scratch 按需：纯 print 程序只用 `init_tcb`（不 mmap 8.4 MiB scratch），
+#     可达代码有宿主叶子时改发 `init_tcb_scratch`。
+run: sh -c 'd="$TMPDIR/noscratch"; mkdir -p "$d/app"; printf "[package]\nname = \"noscratch\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"hi\"\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/noscratch-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/noscratch-out/runtime.s rt_init_tcb
+run: sh -c '! grep -q "rt_init_tcb_scratch" "$TMPDIR/noscratch-out/runtime.s"'
+exit: 0
+run: sh -c 'd="$TMPDIR/scratchfs"; mkdir -p "$d/app"; printf "[package]\nname = \"scratchfs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"/dev/null\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/scratchfs-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/scratchfs-out/runtime.s rt_init_tcb_scratch
+
 # 9s6) 自递归循环体旋转：入口跳到条件检查，回边就是条件分支本身（循环体内不再有
 #      无条件 `jmp` 回边）。
 run: sh -c 'd="$TMPDIR/looprot"; mkdir -p "$d/app"; printf "[package]\nname = \"looprot\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (acc + n) (n - 1)\n\nmain : Int\nmain = loop 0 1000\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/looprot-n" "$d"'
