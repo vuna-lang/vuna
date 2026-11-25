@@ -43,11 +43,16 @@ export record ParsedSource(..) where
   -- 需要的那三条事实（树在加载器里随后就丢，事实按模块保留）。
   parsedCst : CstNode
 
--- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
--- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
--- 不必为注释或原文切片再扫一遍源码。
-export parseSourceDetailed : String -> String -> Check ParsedSource
-parseSourceDetailed file source =
+-- | 内部：一次词法 + 语法分析的核心产物。建树还需要 parser 终态（事件流在那里），
+-- 所以两者一起返回；`parseSourceDetailed` 与 `parseSourceWithComments` 共用这一条路径。
+record ParsedCore where
+  pcSource : SourceFile
+  pcComments : List Comment
+  pcToks : List PTok
+  pcFin : PState
+
+parseSourceCore : String -> String -> Check ParsedCore
+parseSourceCore file source =
   case lexSourceWithComments source of
     ErrC e => ErrC e
     OkC (toks, comments) =>
@@ -55,27 +60,39 @@ parseSourceDetailed file source =
         st0 = mkState file source toks PmTool
       in case parseSourceFile False st0 of
         ErrC e => ErrC e
-        OkC p =>
-          let
-            fin = secondOf (firstOf p)
-            events = eventsOf st0 fin
-            cst =
-              nestToTreeWithSurface
-                (lexTokensOf source toks comments)
-                events
-                (parenEntriesOf toks events)
-                fin.backtickShapes
-                fin.sectionShapes
-                fin.interpMultis
-                fin.templateHoles
-          in OkC (ParsedSource (firstOf (firstOf p)) comments toks cst)
+        OkC p => OkC (ParsedCore (firstOf (firstOf p)) comments toks (secondOf (firstOf p)))
 
--- | 只要 AST 与注释表的入口（复用 `parseSourceDetailed` 同一次词法）。
+-- | 工具路径的唯一入口：**一次**词法同时给出注释表与 token 流，再做语法分析。
+-- 需要注释 / 原文切片 / 保留括号的工具（fmt / lint / index / doc / LSP）用它，
+-- 不必为注释或原文切片再扫一遍源码。
+export parseSourceDetailed : String -> String -> Check ParsedSource
+parseSourceDetailed file source =
+  case parseSourceCore file source of
+    ErrC e => ErrC e
+    OkC c =>
+      let
+        events = eventsOf c.pcFin
+        cst =
+          nestToTreeWithSurface
+            (lexTokensOf source c.pcToks c.pcComments)
+            events
+            (parenEntriesOf c.pcToks events)
+            c.pcFin.backtickShapes
+            c.pcFin.sectionShapes
+            c.pcFin.interpMultis
+            c.pcFin.templateHoles
+      in OkC (ParsedSource c.pcSource c.pcComments c.pcToks cst)
+
+-- | 只要 AST 与注释表的入口。
+--
+-- 与 `parseSourceDetailed` 同一次词法、同一棵 AST，但不组装无损树：只要语法结构的消费者
+-- （REPL / LSP / fixity 上下文）不该为 token + trivia + 建树付成本。需要表面事实的消费者
+-- （fmt / lint / index / doc）走 `parseSourceDetailed`。
 export parseSourceWithComments : String -> String -> Check (SourceFile, List Comment)
 parseSourceWithComments file source =
-  case parseSourceDetailed file source of
+  case parseSourceCore file source of
     ErrC e => ErrC e
-    OkC p => OkC (p.parsedFile, p.parsedComments)
+    OkC c => OkC (c.pcSource, c.pcComments)
 
 export parseSource : String -> String -> Check SourceFile
 parseSource file source =
@@ -1917,7 +1934,7 @@ parseTemplateHole fuel st fallback toks =
           OkC (e, st2) =>
             if isEof st2 then
               let
-                events = eventsOf subState st2
+                events = eventsOf st2
                 tree = nestToTreeWithSurface (lexTokensOfFrom st.sourceOf pos toks) events (parenEntriesOf toks events) st2.backtickShapes st2.sectionShapes st2.interpMultis st2.templateHoles
               in OkC (e, holeRootOf tree)
             else
@@ -2792,8 +2809,8 @@ parseSourceRecovering file source =
 -- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
 --
 -- 加载器只需要中缀重排的三条表面事实，不需要树（树带 token 文本，按模块保留太重）：
--- 这里建一遍树、`fixityFactsOf` 派生事实后就地丢弃。token 流不带注释（加载器不渲染），
--- 原文按 gap 切片，`renderCstTree` 仍逐字节等价，只是注释被归成空白。
+-- 括号表项从事件流单趟算，反引号 / section 是 parser 在解析点登记的；模板洞的子树在
+-- 解析时已经建好（洞内 token 不在主流里），直接并入事实。token 流不带注释（加载器不渲染）。
 export parseSourceRecoveringTokens : String -> String -> ParseMode -> List PTok -> Check ((SourceFile, FixityFacts), List Diagnostic)
 parseSourceRecoveringTokens file source mode toks =
   let
@@ -2802,7 +2819,9 @@ parseSourceRecoveringTokens file source mode toks =
       \p =>
         let
           fin = secondOf (firstOf p)
-          events = eventsOf st0 fin
-          cst = nestToTreeWithSurface (lexTokensOf source toks []) events (parenEntriesOf toks events) fin.backtickShapes fin.sectionShapes fin.interpMultis fin.templateHoles
-        in OkC ((firstOf (firstOf p), fixityFactsOf cst), secondOf p)
+          events = eventsOf fin
+          parens = parenEntriesOf toks events
+          holes = concatMap secondOf fin.templateHoles
+          facts = fixityFactsOfParts parens fin.backtickShapes fin.sectionShapes holes
+        in OkC ((firstOf (firstOf p), facts), secondOf p)
     )

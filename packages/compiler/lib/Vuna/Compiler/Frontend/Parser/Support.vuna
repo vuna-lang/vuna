@@ -80,9 +80,10 @@ export mkStateAt : String -> String -> List PTok -> Pos -> Int -> ParseMode -> P
 mkStateAt file source toks last count mode =
   PState file source toks last count mode 0 [] (0 - (2 + posOffset last)) 0 True [] [] [] []
 
--- | 从起始状态到结束状态的建树事件（按发生顺序；每次事件一次 cons）。
-export eventsOf : PState -> PState -> List NodeEvent
-eventsOf st st2 = reverse (st2.pendEvents)
+-- | 结束状态里的建树事件（按发生顺序；每次事件一次 cons）。只有建树消费者调用，
+-- 不建树时这份列表不会产生。
+export eventsOf : PState -> List NodeEvent
+eventsOf st = reverse st.pendEvents
 
 -- | 在一个节点区间里跑一段解析：入口发 open、成功回流后发 close（区间由调用点的
 -- 递归配对，所以事件流天然真嵌套）。

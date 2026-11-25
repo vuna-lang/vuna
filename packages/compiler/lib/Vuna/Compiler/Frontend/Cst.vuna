@@ -663,7 +663,8 @@ lookupHoleTrees nid ((k, trees) :: rest) = if k == nid then Just trees else look
 -- | 保留到建树之后仍要用的表面事实：fixity 重排靠它认括号边界 / 反引号链步 / section。
 --
 -- 加载器逐文件解析、拿到事实后就丢掉树（树带 token 文本，按模块保留太重），所以这三条
--- 只读事实作为**派生投影**保留下来；它们只从树派生（`fixityFactsOf`），不是第二个源。
+-- 只读事实作为**派生投影**保留下来；它们不是第二个源：从树派生走 `fixityFactsOf`，
+-- 加载路径不建主树，直接从 parser 的三张表派生（`fixityFactsOfParts`）。
 -- 模板 `"""` 不在这里：只有 Fmt 需要，而 Fmt 有树。
 export record FixityFacts(..) where
   ffParens : HashMap Int Int
@@ -745,6 +746,22 @@ factsGo (CstBranch _ nid sp surface kids) acc =
 factsGoList : List CstNode -> FactEntries -> FactEntries
 factsGoList [] acc = acc
 factsGoList (n :: rest) acc = factsGoList rest (factsGo n acc)
+
+-- | 不建主树，直接从 parser 直出的三张表 + 模板洞子树派生事实。
+--
+-- 括号表项由 `parenEntriesOf` 在事件流上单趟给出（与建树时写进 `cstParenDepth` 的是同一份），
+-- 反引号与 section 由 parser 在解析点登记；只有模板洞必须留子树（洞内 token 不在主 token
+-- 流里，洞的括号层数只能从洞自己的事件流算）。与 `fixityFactsOf` 同源同值。
+export fixityFactsOfParts : List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List CstNode -> FixityFacts
+fixityFactsOfParts parens backticks sections holeRoots =
+  let
+    holes = factsGoList holeRoots emptyFactEntries
+    liveParens = List.filter (\p => secondOf p > 0) parens
+    liveBackticks = List.filter (\p => secondOf p) backticks
+    parenEntries = List.append liveParens holes.feParens
+    backtickEntries = List.append liveBackticks holes.feBackticks
+    sectionEntries = List.append sections holes.feSections
+  in FixityFacts (HashMap.fromList parenEntries) backtickEntries sectionEntries
 
 -- | 树的叶序列（源码顺序）。无损断言用它对齐 token 流。
 export collectLeaves : CstNode -> List CstToken
