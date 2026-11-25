@@ -4,12 +4,13 @@ module Vuna.Compiler.Elab.Sig where
 -- 两者都只做 AST 变换，量化依赖 kind 推断，因此放在同一模块。
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Frontend.AstQuery
 
 -- ---------------------------------------------------------------------------
 -- 类参数 kind 推断（原 Elab/Kind.vuna）
@@ -38,27 +39,50 @@ export exprMaxAppArityIn : String -> List Expr -> Int
 exprMaxAppArityIn pname exprs = maxIntList (map (exprMaxAppArity pname) exprs)
 
 export exprMaxAppArity : String -> Expr -> Int
-exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
-  if rnameKey f == pname then
-    maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
+exprMaxAppArity pname e = exprMaxAppArityF (exprBudget 64 e) pname e
+
+exprMaxAppArityF : Int -> String -> Expr -> Int
+exprMaxAppArityF fuel pname e =
+  if fuel <= 0 then
+    0
   else
-    maxIntList (map (exprMaxAppArity pname) args)
-exprMaxAppArity pname (EApp fn args sp) =
-  maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
-exprMaxAppArity pname (ELam names body sp) = exprMaxAppArity pname body
-exprMaxAppArity pname (EPi n implicit _ dom cod sp) =
-  maxIntList [exprMaxAppArity pname dom, exprMaxAppArity pname cod]
-exprMaxAppArity pname (ELet binds body rec_ sp) =
-  maxIntList (exprMaxAppArity pname body :: map (\b => exprMaxAppArity pname (secondOf b)) binds)
-exprMaxAppArity pname (ECase scrut alts sp) =
-  maxIntList (exprMaxAppArity pname scrut :: map (\a => exprMaxAppArity pname (secondOf a)) alts)
-exprMaxAppArity pname (EIf c t f sp) =
-  maxIntList [exprMaxAppArity pname c, exprMaxAppArity pname t, exprMaxAppArity pname f]
-exprMaxAppArity pname (EField b fname sp) = exprMaxAppArity pname b
-exprMaxAppArity pname (ERecord rn fields sp) =
-  maxIntList (map (\p => exprMaxAppArity pname (secondOf p)) fields)
-exprMaxAppArity pname (ERecUpdate b fields sp) = exprMaxAppArity pname b
-exprMaxAppArity pname _ = 0
+    case e of
+      EApp (EVar f fsp) args sp => if f == pname then maxIntList (natToInt (length args) :: map (exprMaxAppArityF (fuel - 1) pname) args) else maxIntList (map (exprMaxAppArityF (fuel - 1) pname) args)
+      EApp fn args sp => maxIntList (exprMaxAppArityF (fuel - 1) pname fn :: map (exprMaxAppArityF (fuel - 1) pname) args)
+      ELam names body sp => exprMaxAppArityF (fuel - 1) pname body
+      EPi n implicit _ dom cod sp => maxIntList [exprMaxAppArityF (fuel - 1) pname dom, exprMaxAppArityF (fuel - 1) pname cod]
+      EIf c t f sp => maxIntList [exprMaxAppArityF (fuel - 1) pname c, exprMaxAppArityF (fuel - 1) pname t, exprMaxAppArityF (fuel - 1) pname f]
+      ELet binds body rec_ sp => maxIntList (exprMaxAppArityF (fuel - 1) pname body :: exprMaxAppArityBindsF (fuel - 1) pname binds)
+      ECase scrut alts sp => maxIntList (exprMaxAppArityF (fuel - 1) pname scrut :: concatMap (\a => [exprMaxAppArityF (fuel - 1) pname (altBodyOf a)]) alts)
+      EField b f sp => exprMaxAppArityF (fuel - 1) pname b
+      ERecord rn fields sp => maxIntList (map (\q => exprMaxAppArityF (fuel - 1) pname (secondOf q)) fields)
+      ERecUpdate b fields sp => exprMaxAppArityF (fuel - 1) pname b
+      _ => 0
+
+exprMaxAppArityBindsF : Int -> String -> List Binding -> List Int
+exprMaxAppArityBindsF fuel pname [] = []
+exprMaxAppArityBindsF fuel pname (b :: rest) =
+  exprMaxAppArityBindingF (fuel - 1) pname b :: exprMaxAppArityBindsF (fuel - 1) pname rest
+
+exprMaxAppArityBindingF : Int -> String -> Binding -> Int
+exprMaxAppArityBindingF fuel pname (Binding pat value sig ref) =
+  maxIntList
+    [exprMaxAppArityValueF (fuel - 1) pname value, exprMaxAppAritySigF (fuel - 1) pname sig]
+
+exprMaxAppArityValueF : Int -> String -> BindingValue -> Int
+exprMaxAppArityValueF fuel pname (BVal e) = exprMaxAppArityF (fuel - 1) pname e
+exprMaxAppArityValueF fuel pname (BClauses cs) =
+  maxIntList (map (\c => exprMaxAppArityF (fuel - 1) pname (clauseBodyOf c)) cs)
+
+exprMaxAppAritySigF : Int -> String -> Maybe BindingSig -> Int
+exprMaxAppAritySigF fuel pname (Just sig) = exprMaxAppArityF (fuel - 1) pname sig.sigType
+exprMaxAppAritySigF fuel pname Nothing = 0
+
+altBodyOf : Alt -> Expr
+altBodyOf a = a.altBody
+
+clauseBodyOf : LocalClause -> Expr
+clauseBodyOf c = c.lcBody
 
 -- 方法的显式参数各自的 multiplicity：逐 binder 按域判断，判据由调用方传入
 -- （`Elab` 的 `piBinderRig`——`Elab.Sig` 不重复定义擦除规则，保持单一入口）。
@@ -92,7 +116,7 @@ keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: k
 quantify : List String -> Expr -> Span -> Expr
 quantify [] e sp = e
 quantify (n :: rest) e sp =
-  EPi n True Nothing (EVar (classifyName "Type") sp) (quantify rest e sp) sp
+  EPi n True Nothing (EVar ("Type") (detachedNodeRef sp)) (quantify rest e sp) (detachedNodeRef sp)
 
 -- 顶层签名的自由名按**用法**给 kind：名字在签名里被应用了 k 个实参 ⇒ `Type -> ... -> Type`
 -- （`bindPair : m a -> m b -> m (Pair a b)` 的 `m`）。一律绑 `Type` 会让 `m a`
@@ -114,7 +138,7 @@ quantifyTopKindsWith domOf (n :: rest) scanExprs e sp =
       case domOf n of
         Just d => d
         Nothing => kindArrowExpr (exprMaxAppArityIn n scanExprs) sp
-  in EPi n True Nothing dom (quantifyTopKindsWith domOf rest scanExprs e sp) sp
+  in EPi n True Nothing dom (quantifyTopKindsWith domOf rest scanExprs e sp) (detachedNodeRef sp)
 
 -- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
 -- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Effect.Core 的 data family，不是 trait。
@@ -124,15 +148,15 @@ memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberD
 
 memberDomainOverridesOne : Expr -> List (String, Expr)
 memberDomainOverridesOne (EApp (EVar g _) [nExpr, _, rExpr] sp) =
-  if rnameKey g == effMemberFamilyName then
+  if g == effMemberFamilyName then
     let
       nPart =
         case nExpr of
-          EVar n nsp => [(rnameKey n, EVar (classifyName strTypeName) nsp)]
+          EVar n nsp => [(n, EVar (strTypeName) nsp)]
           _ => []
       rPart =
         case rExpr of
-          EVar r rsp => [(rnameKey r, EVar (classifyName effRowFamilyName) rsp)]
+          EVar r rsp => [(r, EVar (effRowFamilyName) rsp)]
           _ => []
     in append nPart rPart
   else
@@ -145,10 +169,12 @@ memberDomainOf ((k, v) :: rest) n = if k == n then Just v else memberDomainOf re
 
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
-  if k <= 0 then
-    EVar (classifyName "Type") sp
+  let
+    r = detachedNodeRef sp
+  in if k <= 0 then
+    EVar ("Type") r
   else
-    EPi "_" False Nothing (EVar (classifyName "Type") sp) (kindArrowExpr (k - 1) sp) sp
+    EPi "_" False Nothing (EVar ("Type") r) (kindArrowExpr (k - 1) sp) r
 
 piBoundNames : Expr -> List String
 piBoundNames (EPi n implicit _ dom cod sp) = n :: piBoundNames cod
@@ -157,20 +183,48 @@ piBoundNames _ = []
 lowerVarNames : Expr -> List String
 lowerVarNames e = nubNames (exprLowerVars e)
 
-exprLowerVars : Expr -> List String
-exprLowerVars (EVar n sp) = if isLowerIdent (rnameKey n) then [rnameKey n] else []
-exprLowerVars (EApp fn args sp) = append (exprLowerVars fn) (concatMap exprLowerVars args)
-exprLowerVars (ELam names body sp) = exprLowerVars body
-exprLowerVars (EPi n implicit _ dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
-exprLowerVars (EIf c t f sp) = append (exprLowerVars c) (append (exprLowerVars t) (exprLowerVars f))
-exprLowerVars (ELet binds body rec_ sp) =
-  append (concatMap (\b => exprLowerVars (secondOf b)) binds) (exprLowerVars body)
-exprLowerVars (ECase scrut alts sp) =
-  append (exprLowerVars scrut) (concatMap (\a => exprLowerVars (secondOf a)) alts)
-exprLowerVars (EField b f sp) = exprLowerVars b
-exprLowerVars (ERecord rn fields sp) = concatMap (\p => exprLowerVars (secondOf p)) fields
-exprLowerVars (ERecUpdate b fields sp) = exprLowerVars b
-exprLowerVars _ = []
+export exprLowerVars : Expr -> List String
+exprLowerVars e = exprLowerVarsF (exprBudget 64 e) e
+
+exprLowerVarsF : Int -> Expr -> List String
+exprLowerVarsF fuel e =
+  if fuel <= 0 then
+    []
+  else
+    case e of
+      EVar n sp => if isLowerIdent (n) then [n] else []
+      EApp fn args sp => append (exprLowerVarsF (fuel - 1) fn) (concatMap (exprLowerVarsF (fuel - 1)) args)
+      ELam names body sp => exprLowerVarsF (fuel - 1) body
+      EPi n implicit _ dom cod sp => append (exprLowerVarsF (fuel - 1) dom) (exprLowerVarsF (fuel - 1) cod)
+      EIf c t f sp => append (exprLowerVarsF (fuel - 1) c) (append (exprLowerVarsF (fuel - 1) t) (exprLowerVarsF (fuel - 1) f))
+      ELet binds body rec_ sp => append (exprLowerVarsBindsF (fuel - 1) binds) (exprLowerVarsF (fuel - 1) body)
+      ECase scrut alts sp => append (exprLowerVarsF (fuel - 1) scrut) (concatMap (\a => exprLowerVarsF (fuel - 1) (altBodyOf a)) alts)
+      EField b f sp => exprLowerVarsF (fuel - 1) b
+      ERecord rn fields sp => concatMap (\q => exprLowerVarsF (fuel - 1) (secondOf q)) fields
+      ERecUpdate b fields sp => exprLowerVarsF (fuel - 1) b
+      _ => []
+
+exprLowerVarsBindsF : Int -> List Binding -> List String
+exprLowerVarsBindsF fuel [] = []
+exprLowerVarsBindsF fuel (b :: rest) =
+  append (exprLowerVarsBindingF (fuel - 1) b) (exprLowerVarsBindsF (fuel - 1) rest)
+
+exprLowerVarsBindingF : Int -> Binding -> List String
+exprLowerVarsBindingF fuel (Binding pat value sig ref) =
+  append (exprLowerVarsValueF (fuel - 1) value) (exprLowerVarsSigF (fuel - 1) sig)
+
+exprLowerVarsValueF : Int -> BindingValue -> List String
+exprLowerVarsValueF fuel (BVal e) = exprLowerVarsF (fuel - 1) e
+exprLowerVarsValueF fuel (BClauses cs) = exprLowerVarsClausesF (fuel - 1) cs
+
+exprLowerVarsSigF : Int -> Maybe BindingSig -> List String
+exprLowerVarsSigF fuel (Just sig) = exprLowerVarsF (fuel - 1) sig.sigType
+exprLowerVarsSigF fuel Nothing = []
+
+exprLowerVarsClausesF : Int -> List LocalClause -> List String
+exprLowerVarsClausesF fuel [] = []
+exprLowerVarsClausesF fuel (c :: rest) =
+  append (exprLowerVarsF (fuel - 1) c.lcBody) (exprLowerVarsClausesF (fuel - 1) rest)
 
 isLowerIdent : String -> Bool
 isLowerIdent n =
@@ -209,7 +263,7 @@ kindDomains : Expr -> List Expr
 kindDomains (EPi n implicit _ dom cod sp) = dom :: kindDomains cod
 kindDomains (EApp fn args sp) =
   case fn of
-    EVar (RIntrinsic "->") _ =>
+    EVar "->" _ =>
       case args of
         dom :: cod :: rest => dom :: kindDomains cod
         _ => []
@@ -224,23 +278,47 @@ export argParamKindsIn : List (String, List Expr) -> List Expr -> List (String, 
 argParamKindsIn tbl exprs = concatMap (argParamKinds tbl) exprs
 
 export argParamKinds : List (String, List Expr) -> Expr -> List (String, Expr)
-argParamKinds tbl (EApp (EVar t _) args sp) =
-  append (zipArgKinds (lookupParamKinds tbl (rnameKey t)) args) (concatMap (argParamKinds tbl) args)
-argParamKinds tbl (EApp fn args sp) =
-  append (argParamKinds tbl fn) (concatMap (argParamKinds tbl) args)
-argParamKinds tbl (ELam names body sp) = argParamKinds tbl body
-argParamKinds tbl (EPi n i _ dom cod sp) = append (argParamKinds tbl dom) (argParamKinds tbl cod)
-argParamKinds tbl (ELet binds body rec_ sp) =
-  append (concatMap (\b => argParamKinds tbl (secondOf b)) binds) (argParamKinds tbl body)
-argParamKinds tbl (ECase scrut alts sp) =
-  append (argParamKinds tbl scrut) (concatMap (\a => argParamKinds tbl (secondOf a)) alts)
-argParamKinds tbl (EIf c t f sp) =
-  append (argParamKinds tbl c) (append (argParamKinds tbl t) (argParamKinds tbl f))
-argParamKinds tbl (EField b f sp) = argParamKinds tbl b
-argParamKinds tbl (ERecord rn fields sp) = concatMap (\p => argParamKinds tbl (secondOf p)) fields
-argParamKinds tbl (ERecUpdate b fields sp) = argParamKinds tbl b
-argParamKinds tbl (EAnn v ty sp) = append (argParamKinds tbl v) (argParamKinds tbl ty)
-argParamKinds tbl _ = []
+argParamKinds tbl e = argParamKindsF (exprBudget 64 e) tbl e
+
+argParamKindsF : Int -> List (String, List Expr) -> Expr -> List (String, Expr)
+argParamKindsF fuel tbl e =
+  if fuel <= 0 then
+    []
+  else
+    case e of
+      EApp (EVar t _) args sp => append (zipArgKinds (lookupParamKinds tbl (t)) args) (concatMap (argParamKindsF (fuel - 1) tbl) args)
+      EApp fn args sp => append (argParamKindsF (fuel - 1) tbl fn) (concatMap (argParamKindsF (fuel - 1) tbl) args)
+      ELam names body sp => argParamKindsF (fuel - 1) tbl body
+      EPi n i _ dom cod sp => append (argParamKindsF (fuel - 1) tbl dom) (argParamKindsF (fuel - 1) tbl cod)
+      ELet binds body rec_ sp => append (argParamKindsBindsF (fuel - 1) tbl binds) (argParamKindsF (fuel - 1) tbl body)
+      ECase scrut alts sp => append (argParamKindsF (fuel - 1) tbl scrut) (concatMap (\a => argParamKindsF (fuel - 1) tbl (altBodyOf a)) alts)
+      EIf c t f sp => append (argParamKindsF (fuel - 1) tbl c) (append (argParamKindsF (fuel - 1) tbl t) (argParamKindsF (fuel - 1) tbl f))
+      EField b f sp => argParamKindsF (fuel - 1) tbl b
+      ERecord rn fields sp => concatMap (\q => argParamKindsF (fuel - 1) tbl (secondOf q)) fields
+      ERecUpdate b fields sp => argParamKindsF (fuel - 1) tbl b
+      _ => []
+
+argParamKindsBindsF : Int -> List (String, List Expr) -> List Binding -> List (String, Expr)
+argParamKindsBindsF fuel tbl [] = []
+argParamKindsBindsF fuel tbl (b :: rest) =
+  append (argParamKindsBindingF (fuel - 1) tbl b) (argParamKindsBindsF (fuel - 1) tbl rest)
+
+argParamKindsBindingF : Int -> List (String, List Expr) -> Binding -> List (String, Expr)
+argParamKindsBindingF fuel tbl (Binding pat value sig ref) =
+  append (argParamKindsValueF (fuel - 1) tbl value) (argParamKindsSigF (fuel - 1) tbl sig)
+
+argParamKindsValueF : Int -> List (String, List Expr) -> BindingValue -> List (String, Expr)
+argParamKindsValueF fuel tbl (BVal e) = argParamKindsF (fuel - 1) tbl e
+argParamKindsValueF fuel tbl (BClauses cs) = argParamKindsClausesF (fuel - 1) tbl cs
+
+argParamKindsSigF : Int -> List (String, List Expr) -> Maybe BindingSig -> List (String, Expr)
+argParamKindsSigF fuel tbl (Just sig) = argParamKindsF (fuel - 1) tbl sig.sigType
+argParamKindsSigF fuel tbl Nothing = []
+
+argParamKindsClausesF : Int -> List (String, List Expr) -> List LocalClause -> List (String, Expr)
+argParamKindsClausesF fuel tbl [] = []
+argParamKindsClausesF fuel tbl (c :: rest) =
+  append (argParamKindsF (fuel - 1) tbl c.lcBody) (argParamKindsClausesF (fuel - 1) tbl rest)
 
 lookupParamKinds : List (String, List Expr) -> String -> Maybe (List Expr)
 lookupParamKinds [] name = Nothing
@@ -255,7 +333,7 @@ zipArgKindsGo [] args = []
 zipArgKindsGo doms [] = []
 zipArgKindsGo (dom :: drest) (a :: arest) =
   case a of
-    EVar n nsp => (rnameKey n, dom) :: zipArgKindsGo drest arest
+    EVar n nsp => (n, dom) :: zipArgKindsGo drest arest
     _ => zipArgKindsGo drest arest
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。

@@ -5,9 +5,10 @@ module Vuna.Compiler.Elab.Termination.Scc where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Elab.Termination.Measure
+import Vuna.Compiler.Frontend.AstQuery
 
 record Site where
   siteCaller : String
@@ -66,10 +67,10 @@ siteCollectFields fuel comp ctors projs caller facts sizes region ((fn, fe) :: r
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fe acc)
 
-siteCollectAlts : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List (Pat, Expr) -> List Site -> List Site
+siteCollectAlts : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Alt -> List Site -> List Site
 siteCollectAlts fuel comp ctors projs caller facts sizes region scrut [] acc =
   if fuel <= 0 then acc else acc
-siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((pat, body) :: rest) acc =
+siteCollectAlts fuel comp ctors projs caller facts sizes region scrut (a :: rest) acc =
   if fuel <= 0 then
     append (blindSitesOf comp caller sizes region) acc
   else
@@ -84,7 +85,7 @@ siteCollectAlts fuel comp ctors projs caller facts sizes region scrut ((pat, bod
       region
       scrut
       rest
-      (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes scrut pat) region body acc)
+      (siteWalkC (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes scrut a.altPat) region a.altBody acc)
 
 siteCollectBinds : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Site -> List Site
 siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
@@ -105,6 +106,19 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region ((pat, val) :: 
       rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
 
+-- 绑定列表 → 遍历用的 (模式, 表达式) 序列：普通右值一条；局部函数组的每条子句用
+-- `PWild` 占位（与旧形态一致，只走子句体）。只做形状转换，不参与递归组。
+bindsToWalkPairs : List Binding -> List (Pat, Expr)
+bindsToWalkPairs [] = []
+bindsToWalkPairs (b :: rest) = append (bindingWalkPairs b) (bindsToWalkPairs rest)
+
+bindingWalkPairs : Binding -> List (Pat, Expr)
+bindingWalkPairs (Binding pat (BVal e) sig ref) = [(pat, e)]
+bindingWalkPairs (Binding pat (BClauses cs) sig ref) = map clauseWalkPair cs
+
+clauseWalkPair : LocalClause -> (Pat, Expr)
+clauseWalkPair c = (PWild (detachedNodeRef (exprSpan c.lcBody)), c.lcBody)
+
 siteCollectStmts : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Site -> List Site
 siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
@@ -115,7 +129,7 @@ siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc
     case s of
       DBind pat e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendSizesStrict projs sizes e pat) region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
       DExpr e sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
-      DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
+      DLet binds sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region rest (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region (bindsToWalkPairs binds) acc)
 
 siteWalkC : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Site -> List Site
 siteWalkC fuel comp ctors projs caller facts sizes region e acc =
@@ -131,17 +145,13 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
           acc2 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardThenPosVars c) region) t acc1
         in siteWalkC (fuel - 1) comp ctors projs caller facts sizes (append (guardElsePosVars c) region) el acc2
       ELam ns b sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region b acc
-      ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
+      ELet binds body rec_ sp => siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds projs binds sizes) region body (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region (bindsToWalkPairs binds) acc)
       EPi n implicit _ dom cod sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region dom acc)
       EField base f sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc
       ERecord rn fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields acc
       ERecUpdate base fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc)
       EDo stmts sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region stmts acc
-      EAnn value ty sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region ty (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region value acc)
-      -- where/let 多 clause 局部函数：各 clause body 的调用点同样要收集
-      -- （否则 `where` 绑定体里调外层递归函数会漏检）。
-      ELocalFun clauses sp => siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region (localClauseBinds clauses) acc
-      EVar n sp => if memName (rnameKey n) comp then Site caller (rnameKey n) [] sizes region True :: acc else acc
+      EVar n sp => if memName (n) comp then Site caller (n) [] sizes region True :: acc else acc
       _ => acc
 
 siteWalkEApp : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> List Site -> List Site
@@ -174,8 +184,8 @@ siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc =
     case args of
       [cb, lst] =>
         case cb of
-          EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (rnameKey g) pargs lst cbsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
-          EVar g gsp => if memName (rnameKey g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (rnameKey g) [] lst gsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
+          EApp (EVar g gsp) pargs cbsp => if memName (g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (g) pargs lst (nodeRefSpan cbsp) acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
+          EVar g gsp => if memName (g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (g) [] lst (nodeRefSpan gsp) acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
       _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
 
@@ -187,7 +197,7 @@ siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs
     let
       acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region lst acc
       elems = extendElemSizes sizes lst "$elem"
-      fullArgs = append pargs [EVar (classifyName "$elem") cbsp]
+      fullArgs = append pargs [EVar ("$elem") (detachedNodeRef cbsp)]
       acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
     in Site caller g fullArgs elems region False :: acc2
 
@@ -209,91 +219,114 @@ dropAliases (n :: rest) als = dropAliases rest (filter (\p => aliasNameOf p /= n
 aliasOf : List String -> (Pat, Expr) -> Maybe (String, String)
 aliasOf comp (PVar g gsp, val) =
   case val of
-    EVar n nsp => if memName (rnameKey n) comp then Just (g, rnameKey n) else Nothing
+    EVar n nsp => if memName (n) comp then Just (g, n) else Nothing
     _ => Nothing
 aliasOf comp (_, val) = Nothing
 
-inlArgs : List String -> List (String, String) -> List Expr -> List Expr
-inlArgs comp als [] = []
-inlArgs comp als (a :: rest) = inlGo comp als a :: inlArgs comp als rest
+inlArgsF : Int -> List String -> List (String, String) -> List Expr -> List Expr
+inlArgsF fuel comp als [] = []
+inlArgsF fuel comp als (a :: rest) =
+  inlGoF (fuel - 1) comp als a :: inlArgsF (fuel - 1) comp als rest
 
-inlFields : List String -> List (String, String) -> List (String, Expr) -> List (String, Expr)
-inlFields comp als [] = []
-inlFields comp als ((fn, fe) :: rest) = (fn, inlGo comp als fe) :: inlFields comp als rest
+inlFieldsF : Int -> List String -> List (String, String) -> List (String, Expr) -> List (String, Expr)
+inlFieldsF fuel comp als [] = []
+inlFieldsF fuel comp als ((fn, fe) :: rest) =
+  (fn, inlGoF (fuel - 1) comp als fe) :: inlFieldsF (fuel - 1) comp als rest
 
-inlParts : List String -> List (String, String) -> List InterpPart -> List InterpPart
-inlParts comp als [] = []
-inlParts comp als (p :: rest) =
+inlPartsF : Int -> List String -> List (String, String) -> List InterpPart -> List InterpPart
+inlPartsF fuel comp als [] = []
+inlPartsF fuel comp als (p :: rest) =
   case p of
-    IPText t => IPText t :: inlParts comp als rest
-    IPHole e => IPHole (inlGo comp als e) :: inlParts comp als rest
+    IPText t => IPText t :: inlPartsF (fuel - 1) comp als rest
+    IPHole e => IPHole (inlGoF (fuel - 1) comp als e) :: inlPartsF (fuel - 1) comp als rest
 
-inlBinds : List String -> List (String, String) -> List (Pat, Expr) -> (List (Pat, Expr), List (String, String))
-inlBinds comp als [] = ([], als)
-inlBinds comp als ((pat, val) :: rest) =
+inlBindsF : Int -> List String -> List (String, String) -> List Binding -> (List Binding, List (String, String))
+inlBindsF fuel comp als [] = ([], als)
+inlBindsF fuel comp als (b :: rest) =
   let
-    rhs = inlGo comp als val
-  in case aliasOf comp (pat, rhs) of
-    -- 纯别名（`let g = f`）：绑定本身没有分析价值，丢掉以免它的裸值引用
-    -- 被当成「callee 以值传递」的盲站点；body 里的 `g` 已在 `inlGo` 里替换。
-    Just a =>
+    b2 = inlBindingF (fuel - 1) comp als b
+  in case b2.bindValue of
+    BVal rhs =>
+      case aliasOf comp (b2.bindPat, rhs) of
+        Just a =>
+          let
+            restP = inlBindsF (fuel - 1) comp (a :: als) rest
+          in (firstOf restP, secondOf restP)
+        Nothing =>
+          let
+            restP = inlBindsF (fuel - 1) comp (dropAliases (patNamesOf b2.bindPat) als) rest
+          in (b2 :: firstOf restP, secondOf restP)
+    BClauses cs =>
       let
-        restP = inlBinds comp (a :: als) rest
-      in (firstOf restP, secondOf restP)
-    Nothing =>
-      let
-        restP = inlBinds comp (dropAliases (patNamesOf pat) als) rest
-      in ((pat, rhs) :: firstOf restP, secondOf restP)
+        restP = inlBindsF (fuel - 1) comp (dropAliases (patNamesOf b2.bindPat) als) rest
+      in (b2 :: firstOf restP, secondOf restP)
 
-inlAlts : List String -> List (String, String) -> List (Pat, Expr) -> List (Pat, Expr)
-inlAlts comp als [] = []
-inlAlts comp als ((pat, body) :: rest) =
-  (pat, inlGo comp (dropAliases (patNamesOf pat) als) body) :: inlAlts comp als rest
+inlBindingF : Int -> List String -> List (String, String) -> Binding -> Binding
+inlBindingF fuel comp als b =
+  let
+    value =
+      case b.bindValue of
+        BVal e => BVal (inlGoF (fuel - 1) comp als e)
+        BClauses cs => BClauses (inlClausesF (fuel - 1) comp als cs)
+    sig =
+      case b.bindSig of
+        Just s => Just ({ s | sigType = inlGoF (fuel - 1) comp als s.sigType })
+        Nothing => Nothing
+  in { b | bindValue = value, bindSig = sig }
 
-inlClauses : List String -> List (String, String) -> List (List Pat, Expr) -> List (List Pat, Expr)
-inlClauses comp als [] = []
-inlClauses comp als ((pats, body) :: rest) =
-  (pats, inlGo comp (dropAliases (patNamesOfPats pats) als) body) :: inlClauses comp als rest
+inlAltsF : Int -> List String -> List (String, String) -> List Alt -> List Alt
+inlAltsF fuel comp als [] = []
+inlAltsF fuel comp als (a :: rest) =
+  { a | altBody = inlGoF (fuel - 1) comp (dropAliases (patNamesOf a.altPat) als) a.altBody }
+    :: inlAltsF (fuel - 1) comp als rest
 
-inlStmts : List String -> List (String, String) -> List DoStmt -> List DoStmt
-inlStmts comp als [] = []
-inlStmts comp als (s :: rest) =
+inlClausesF : Int -> List String -> List (String, String) -> List LocalClause -> List LocalClause
+inlClausesF fuel comp als [] = []
+inlClausesF fuel comp als (c :: rest) =
+  { c | lcBody = inlGoF (fuel - 1) comp (dropAliases (patNamesOfPats c.lcPats) als) c.lcBody }
+    :: inlClausesF (fuel - 1) comp als rest
+
+inlStmtsF : Int -> List String -> List (String, String) -> List DoStmt -> List DoStmt
+inlStmtsF fuel comp als [] = []
+inlStmtsF fuel comp als (s :: rest) =
   case s of
     DBind pat e sp =>
-      DBind pat (inlGo comp als e) sp :: inlStmts comp (dropAliases (patNamesOf pat) als) rest
-    DExpr e sp => DExpr (inlGo comp als e) sp :: inlStmts comp als rest
+      DBind pat (inlGoF (fuel - 1) comp als e) sp
+        :: inlStmtsF (fuel - 1) comp (dropAliases (patNamesOf pat) als) rest
+    DExpr e sp => DExpr (inlGoF (fuel - 1) comp als e) sp :: inlStmtsF (fuel - 1) comp als rest
     DLet binds sp =>
       let
-        p = inlBinds comp als binds
-      in DLet (firstOf p) sp :: inlStmts comp (secondOf p) rest
+        p = inlBindsF (fuel - 1) comp als binds
+      in DLet (firstOf p) sp :: inlStmtsF (fuel - 1) comp (secondOf p) rest
 
-inlGo : List String -> List (String, String) -> Expr -> Expr
-inlGo comp als (EVar n sp) =
-  case lookupAlias (rnameKey n) als of
-    Just target => EVar (classifyName target) sp
-    Nothing => EVar n sp
-inlGo comp als (ELam ns body sp) = ELam ns (inlGo comp (dropAliases (map firstOf ns) als) body) sp
-inlGo comp als (EApp fn args sp) = EApp (inlGo comp als fn) (inlArgs comp als args) sp
-inlGo comp als (EPi n implicit qty dom cod sp) =
-  EPi n implicit qty (inlGo comp als dom) (inlGo comp (dropAliases [n] als) cod) sp
-inlGo comp als (ELet binds body rec_ sp) =
-  let
-    p = inlBinds comp als binds
-  in ELet (firstOf p) (inlGo comp (secondOf p) body) rec_ sp
-inlGo comp als (ELocalFun clauses sp) = ELocalFun (inlClauses comp als clauses) sp
-inlGo comp als (ECase scrut alts sp) = ECase (inlGo comp als scrut) (inlAlts comp als alts) sp
-inlGo comp als (EIf c t el sp) = EIf (inlGo comp als c) (inlGo comp als t) (inlGo comp als el) sp
-inlGo comp als (EField base f sp) = EField (inlGo comp als base) f sp
-inlGo comp als (ERecord rn fields sp) = ERecord rn (inlFields comp als fields) sp
-inlGo comp als (ERecUpdate base fields sp) =
-  ERecUpdate (inlGo comp als base) (inlFields comp als fields) sp
-inlGo comp als (EDo stmts sp) = EDo (inlStmts comp als stmts) sp
-inlGo comp als (EAnn value ty sp) = EAnn (inlGo comp als value) (inlGo comp als ty) sp
-inlGo comp als (EInterp parts sp) = EInterp (inlParts comp als parts) sp
-inlGo comp als e = e
+inlGoF : Int -> List String -> List (String, String) -> Expr -> Expr
+inlGoF fuel comp als e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      EVar n sp =>
+        case lookupAlias (n) als of
+          Just target => EVar (target) sp
+          Nothing => EVar n sp
+      ELam ns body sp => ELam ns (inlGoF (fuel - 1) comp (dropAliases (map firstOf ns) als) body) sp
+      EApp fn args sp => EApp (inlGoF (fuel - 1) comp als fn) (inlArgsF (fuel - 1) comp als args) sp
+      EPi n implicit qty dom cod sp => EPi n implicit qty (inlGoF (fuel - 1) comp als dom) (inlGoF (fuel - 1) comp (dropAliases [n] als) cod) sp
+      ELet binds body rec_ sp =>
+        let
+          p = inlBindsF (fuel - 1) comp als binds
+        in ELet (firstOf p) (inlGoF (fuel - 1) comp (secondOf p) body) rec_ sp
+      ECase scrut alts sp => ECase (inlGoF (fuel - 1) comp als scrut) (inlAltsF (fuel - 1) comp als alts) sp
+      EIf c t el sp => EIf (inlGoF (fuel - 1) comp als c) (inlGoF (fuel - 1) comp als t) (inlGoF (fuel - 1) comp als el) sp
+      EField base f sp => EField (inlGoF (fuel - 1) comp als base) f sp
+      ERecord rn fields sp => ERecord rn (inlFieldsF (fuel - 1) comp als fields) sp
+      ERecUpdate base fields sp => ERecUpdate (inlGoF (fuel - 1) comp als base) (inlFieldsF (fuel - 1) comp als fields) sp
+      EDo stmts sp => EDo (inlStmtsF (fuel - 1) comp als stmts) sp
+      EInterp parts sp => EInterp (inlPartsF (fuel - 1) comp als parts) sp
+      _ => e
 
 inlineAliases : List String -> Expr -> Expr
-inlineAliases comp e = inlGo comp [] e
+inlineAliases comp e = inlGoF (exprBudget 32 e) comp [] e
 
 siteCollectClauses : List String -> List String -> List (String, List Int) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> List Site -> List Site
 siteCollectClauses comp ctors projs facts caller [] acc = acc
@@ -549,88 +582,116 @@ patNamesOfFields : List (String, Pat) -> List String
 patNamesOfFields [] = []
 patNamesOfFields ((fn, fp) :: rest) = append (patNamesOf fp) (patNamesOfFields rest)
 
-patNamesOfBinds : List (Pat, Expr) -> List String
+patNamesOfBinds : List Binding -> List String
 patNamesOfBinds [] = []
-patNamesOfBinds ((pat, val) :: rest) = append (patNamesOf pat) (patNamesOfBinds rest)
+patNamesOfBinds (b :: rest) = append (patNamesOf b.bindPat) (patNamesOfBinds rest)
 
 argBasesGo : List (String, Int, Int, List Int) -> List String -> Expr -> List Int
-argBasesGo sizes locals (EVar n sp) =
-  let
-    name = rnameKey n
-  in case sizeOfVarStrict name sizes of
-    Just (base, pr) => [base]
-    Nothing => if memName name locals then basesUpTo (maxBaseOf sizes) else []
-argBasesGo sizes locals (ELam ns body sp) = argBasesGo sizes (append (map firstOf ns) locals) body
-argBasesGo sizes locals (EApp fn args sp) =
-  append (argBasesGo sizes locals fn) (argBasesArgs sizes locals args)
-argBasesGo sizes locals (EPi n implicit qty dom cod sp) =
-  append (argBasesGo sizes locals dom) (argBasesGo sizes locals cod)
-argBasesGo sizes locals (ELet binds body rec_ sp) =
-  append
-    (argBasesBinds sizes locals binds)
-    (argBasesGo sizes (append (patNamesOfBinds binds) locals) body)
-argBasesGo sizes locals (ELocalFun clauses sp) = argBasesClauses sizes locals clauses
-argBasesGo sizes locals (ECase scrut alts sp) =
-  append (argBasesGo sizes locals scrut) (argBasesAlts sizes locals alts)
-argBasesGo sizes locals (EIf c t el sp) =
-  append
-    (argBasesGo sizes locals c)
-    (append (argBasesGo sizes locals t) (argBasesGo sizes locals el))
-argBasesGo sizes locals (EField base f sp) = argBasesGo sizes locals base
-argBasesGo sizes locals (ERecord rn fields sp) = argBasesFields sizes locals fields
-argBasesGo sizes locals (ERecUpdate base fields sp) =
-  append (argBasesGo sizes locals base) (argBasesFields sizes locals fields)
-argBasesGo sizes locals (EDo stmts sp) = argBasesStmts sizes locals stmts
-argBasesGo sizes locals (EAnn value ty sp) =
-  append (argBasesGo sizes locals value) (argBasesGo sizes locals ty)
-argBasesGo sizes locals (EInterp parts sp) = argBasesParts sizes locals parts
-argBasesGo sizes locals _ = []
+argBasesGo sizes locals e = argBasesGoF (exprBudget 32 e) sizes locals e
 
-argBasesArgs : List (String, Int, Int, List Int) -> List String -> List Expr -> List Int
-argBasesArgs sizes locals [] = []
-argBasesArgs sizes locals (a :: rest) =
-  append (argBasesGo sizes locals a) (argBasesArgs sizes locals rest)
+argBasesGoF : Int -> List (String, Int, Int, List Int) -> List String -> Expr -> List Int
+argBasesGoF fuel sizes locals e =
+  if fuel <= 0 then
+    []
+  else
+    case e of
+      EVar n sp =>
+        case sizeOfVarStrict n sizes of
+          Just (base, pr) => [base]
+          Nothing => if memName n locals then basesUpTo (maxBaseOf sizes) else []
+      ELam ns body sp => argBasesGoF (fuel - 1) sizes (append (map firstOf ns) locals) body
+      EApp fn args sp => append (argBasesGoF (fuel - 1) sizes locals fn) (argBasesArgsF (fuel - 1) sizes locals args)
+      EPi n implicit qty dom cod sp => append (argBasesGoF (fuel - 1) sizes locals dom) (argBasesGoF (fuel - 1) sizes locals cod)
+      ELet binds body rec_ sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesGoF (fuel - 1) sizes (append (patNamesOfBinds binds) locals) body)
+      ECase scrut alts sp => append (argBasesGoF (fuel - 1) sizes locals scrut) (argBasesAltsF (fuel - 1) sizes locals alts)
+      EIf c t el sp => append (argBasesGoF (fuel - 1) sizes locals c) (append (argBasesGoF (fuel - 1) sizes locals t) (argBasesGoF (fuel - 1) sizes locals el))
+      EField base f sp => argBasesGoF (fuel - 1) sizes locals base
+      ERecord rn fields sp => argBasesFieldsF (fuel - 1) sizes locals fields
+      ERecUpdate base fields sp => append (argBasesGoF (fuel - 1) sizes locals base) (argBasesFieldsF (fuel - 1) sizes locals fields)
+      EDo stmts sp => argBasesStmtsF (fuel - 1) sizes locals stmts
+      EInterp parts sp => argBasesPartsF (fuel - 1) sizes locals parts
+      _ => []
 
-argBasesFields : List (String, Int, Int, List Int) -> List String -> List (String, Expr) -> List Int
-argBasesFields sizes locals [] = []
-argBasesFields sizes locals ((fn, fe) :: rest) =
-  append (argBasesGo sizes locals fe) (argBasesFields sizes locals rest)
+argBasesArgsF : Int -> List (String, Int, Int, List Int) -> List String -> List Expr -> List Int
+argBasesArgsF fuel sizes locals [] = []
+argBasesArgsF fuel sizes locals (a :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append (argBasesGoF (fuel - 1) sizes locals a) (argBasesArgsF (fuel - 1) sizes locals rest)
 
-argBasesBinds : List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Int
-argBasesBinds sizes locals [] = []
-argBasesBinds sizes locals ((pat, val) :: rest) =
-  append (argBasesGo sizes locals val) (argBasesBinds sizes locals rest)
+argBasesFieldsF : Int -> List (String, Int, Int, List Int) -> List String -> List (String, Expr) -> List Int
+argBasesFieldsF fuel sizes locals [] = []
+argBasesFieldsF fuel sizes locals ((fn, fe) :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append (argBasesGoF (fuel - 1) sizes locals fe) (argBasesFieldsF (fuel - 1) sizes locals rest)
 
-argBasesAlts : List (String, Int, Int, List Int) -> List String -> List (Pat, Expr) -> List Int
-argBasesAlts sizes locals [] = []
-argBasesAlts sizes locals ((pat, body) :: rest) =
-  append (argBasesGo sizes (append (patNamesOf pat) locals) body) (argBasesAlts sizes locals rest)
+argBasesBindsF : Int -> List (String, Int, Int, List Int) -> List String -> List Binding -> List Int
+argBasesBindsF fuel sizes locals [] = []
+argBasesBindsF fuel sizes locals (b :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append
+      (argBasesBindingF (fuel - 1) sizes locals b)
+      (argBasesBindsF (fuel - 1) sizes locals rest)
 
-argBasesClauses : List (String, Int, Int, List Int) -> List String -> List (List Pat, Expr) -> List Int
-argBasesClauses sizes locals [] = []
-argBasesClauses sizes locals ((pats, body) :: rest) =
-  append
-    (argBasesGo sizes (append (patNamesOfPats pats) locals) body)
-    (argBasesClauses sizes locals rest)
+argBasesBindingF : Int -> List (String, Int, Int, List Int) -> List String -> Binding -> List Int
+argBasesBindingF fuel sizes locals b =
+  if fuel <= 0 then
+    []
+  else
+    let
+      value =
+        case b.bindValue of
+          BVal e => argBasesGoF (fuel - 1) sizes locals e
+          BClauses cs => argBasesClausesF (fuel - 1) sizes locals cs
+    in case b.bindSig of
+      Just sig => append value (argBasesGoF (fuel - 1) sizes locals sig.sigType)
+      Nothing => value
 
-argBasesStmts : List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Int
-argBasesStmts sizes locals [] = []
-argBasesStmts sizes locals (s :: rest) =
-  case s of
-    DBind pat e sp =>
-      append (argBasesGo sizes locals e) (argBasesStmts sizes (append (patNamesOf pat) locals) rest)
-    DExpr e sp => append (argBasesGo sizes locals e) (argBasesStmts sizes locals rest)
-    DLet binds sp =>
-      append
-        (argBasesBinds sizes locals binds)
-        (argBasesStmts sizes (append (patNamesOfBinds binds) locals) rest)
+argBasesAltsF : Int -> List (String, Int, Int, List Int) -> List String -> List Alt -> List Int
+argBasesAltsF fuel sizes locals [] = []
+argBasesAltsF fuel sizes locals (a :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append
+      (argBasesGoF (fuel - 1) sizes (append (patNamesOf a.altPat) locals) a.altBody)
+      (argBasesAltsF (fuel - 1) sizes locals rest)
 
-argBasesParts : List (String, Int, Int, List Int) -> List String -> List InterpPart -> List Int
-argBasesParts sizes locals [] = []
-argBasesParts sizes locals (p :: rest) =
-  case p of
-    IPText t => argBasesParts sizes locals rest
-    IPHole e => append (argBasesGo sizes locals e) (argBasesParts sizes locals rest)
+argBasesClausesF : Int -> List (String, Int, Int, List Int) -> List String -> List LocalClause -> List Int
+argBasesClausesF fuel sizes locals [] = []
+argBasesClausesF fuel sizes locals (c :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append
+      (argBasesGoF (fuel - 1) sizes (append (patNamesOfPats c.lcPats) locals) c.lcBody)
+      (argBasesClausesF (fuel - 1) sizes locals rest)
+
+argBasesStmtsF : Int -> List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Int
+argBasesStmtsF fuel sizes locals [] = []
+argBasesStmtsF fuel sizes locals (s :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    case s of
+      DBind pat e sp => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesStmtsF (fuel - 1) sizes (append (patNamesOf pat) locals) rest)
+      DExpr e sp => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesStmtsF (fuel - 1) sizes locals rest)
+      DLet binds sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesStmtsF (fuel - 1) sizes (append (patNamesOfBinds binds) locals) rest)
+
+argBasesPartsF : Int -> List (String, Int, Int, List Int) -> List String -> List InterpPart -> List Int
+argBasesPartsF fuel sizes locals [] = []
+argBasesPartsF fuel sizes locals (p :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    case p of
+      IPText t => argBasesPartsF (fuel - 1) sizes locals rest
+      IPHole e => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesPartsF (fuel - 1) sizes locals rest)
 
 -- 盲站点（callee 以值传递 / 遍历预算耗尽）：caller 全形参位 × callee arity 全弱边。
 blindEdgesJ : Int -> Int -> List ScEdge
@@ -821,24 +882,63 @@ paramIndexGo (p :: rest) name i =
 -- 精化后多子句函数的体先是一层 `case`（子句模式），守卫在各分支里；源码层每个 clause
 -- 的体顶层就是 `if`。两层都看，判定口径保持「这个形参是 fuel」。
 hasFuelGuard : String -> Expr -> Bool
-hasFuelGuard p0 (EIf c t el sp) =
-  case guardPosVar c of
-    Just v => v == p0
-    Nothing => hasFuelGuard p0 t || hasFuelGuard p0 el
-hasFuelGuard p0 (ECase scrut alts sp) = anyAltFuelGuard p0 alts
-hasFuelGuard p0 (ELet binds body rec_ sp) = hasFuelGuard p0 body || anyBindFuelGuard p0 binds
-hasFuelGuard p0 (ELam ns b sp) = hasFuelGuard p0 b
-hasFuelGuard p0 _ = False
+hasFuelGuard p0 e = hasFuelGuardF (exprBudget 32 e) p0 e
 
-anyAltFuelGuard : String -> List (Pat, Expr) -> Bool
-anyAltFuelGuard p0 [] = False
-anyAltFuelGuard p0 ((pat, body) :: rest) =
-  if hasFuelGuard p0 body then True else anyAltFuelGuard p0 rest
+hasFuelGuardF : Int -> String -> Expr -> Bool
+hasFuelGuardF fuel p0 e =
+  if fuel <= 0 then
+    False
+  else
+    case e of
+      EIf c t el sp =>
+        case guardPosVar c of
+          Just v => v == p0
+          Nothing => hasFuelGuardF (fuel - 1) p0 t || hasFuelGuardF (fuel - 1) p0 el
+      ECase scrut alts sp => anyAltFuelGuardF (fuel - 1) p0 alts
+      ELet binds body rec_ sp => hasFuelGuardF (fuel - 1) p0 body || anyBindFuelGuardF (fuel - 1) p0 binds
+      ELam ns b sp => hasFuelGuardF (fuel - 1) p0 b
+      _ => False
 
-anyBindFuelGuard : String -> List (Pat, Expr) -> Bool
-anyBindFuelGuard p0 [] = False
-anyBindFuelGuard p0 ((pat, val) :: rest) =
-  if hasFuelGuard p0 val then True else anyBindFuelGuard p0 rest
+anyAltFuelGuardF : Int -> String -> List Alt -> Bool
+anyAltFuelGuardF fuel p0 [] = False
+anyAltFuelGuardF fuel p0 (a :: rest) =
+  if fuel <= 0 then
+    False
+  else
+    hasFuelGuardF (fuel - 1) p0 a.altBody || anyAltFuelGuardF (fuel - 1) p0 rest
+
+anyBindFuelGuardF : Int -> String -> List Binding -> Bool
+anyBindFuelGuardF fuel p0 [] = False
+anyBindFuelGuardF fuel p0 (b :: rest) =
+  if fuel <= 0 then
+    False
+  else
+    bindingHasFuelGuardF (fuel - 1) p0 b || anyBindFuelGuardF (fuel - 1) p0 rest
+
+bindingHasFuelGuardF : Int -> String -> Binding -> Bool
+bindingHasFuelGuardF fuel p0 b =
+  if fuel <= 0 then
+    False
+  else
+    let
+      value =
+        case b.bindValue of
+          BVal e => hasFuelGuardF (fuel - 1) p0 e
+          BClauses cs => anyClauseFuelGuardF (fuel - 1) p0 cs
+    in if value then
+      True
+    else
+      case b.bindSig of
+        Just sig => hasFuelGuardF (fuel - 1) p0 sig.sigType
+        Nothing => False
+
+anyClauseFuelGuardF : Int -> String -> List LocalClause -> Bool
+anyClauseFuelGuardF fuel p0 [] = False
+anyClauseFuelGuardF fuel p0 (c :: rest) =
+  if fuel <= 0 then
+    False
+  else
+    hasFuelGuardF (fuel - 1) p0 c.lcBody || anyClauseFuelGuardF (fuel - 1) p0 rest
 
 guardParamGo : List String -> Expr -> Maybe String
 guardParamGo [] body = Nothing
@@ -898,20 +998,20 @@ siteFuelStrict callerParams callerGuard (Just i) site =
         Nothing =>
           case a of
             EApp (EVar op osp) xs sp =>
-              if isSubOpName (rnameKey op) then
+              if isSubOpName (op) then
                 case xs of
-                  [EVar n nsp, EInt k ksp] => if k > 0 && memName (rnameKey n) callerParams then Just True else Just False
+                  [EVar n nsp, EInt k ksp] => if k > 0 && memName (n) callerParams then Just True else Just False
                   _ => Just False
               else
                 Just False
             _ => Just False
         Just callerFuel =>
           case a of
-            EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
+            EVar n sp => if n == callerFuel then Just False else Nothing
             EApp (EVar op osp) xs sp =>
-              if isSubOpName (rnameKey op) then
+              if isSubOpName (op) then
                 case xs of
-                  [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
+                  [EVar n nsp, EInt k ksp] => if n == callerFuel then if k > 0 then Just True else Nothing else Nothing
                   _ => Nothing
               else
                 Nothing

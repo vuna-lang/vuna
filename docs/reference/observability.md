@@ -94,7 +94,7 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
 **已插桩**（本仓库代码真的会产出这些名字）：
 
 - `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度，不含 `vuna.codegen.check`）、
-  `vuna.elab.rast`（`toRastDecls`）、`vuna.elab.collectsigs`（签名收集）、
+  `vuna.elab.collectsigs`（签名收集）、
   `vuna.elab.prepare` / `vuna.elab.deriving`
   （record 降级与 `deriving` 展开）、`vuna.elab.datas` / `vuna.elab.traits` /
   `vuna.elab.instheads` / `vuna.elab.sigs`（data / trait / 实例头 / 签名四段）、

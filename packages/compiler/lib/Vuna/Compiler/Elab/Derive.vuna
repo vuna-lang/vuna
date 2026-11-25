@@ -20,8 +20,8 @@ module Vuna.Compiler.Elab.Derive where
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Records
@@ -106,20 +106,22 @@ collectDerivings all (d :: rest) =
     _ => collectDerivings all rest
 
 -- | record 的派生骨架——字段箭头（不含族参数 Pi）+ 返回记录类型；构造子名 = record 名。
-recordCtorOf : String -> List String -> List Field -> Span -> Ctor
+recordCtorOf : String -> List String -> List Field -> NodeRef -> Ctor
 recordCtorOf dname params fields sp =
-  Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp
+  let
+    s = nodeRefSpan sp
+  in Ctor dname (recordArrowType fields (recordRetType dname params s) s) (length fields) sp
 
 -- | record 的 `deriving (...)` 展开成与 data 相同的实例规则（合成单构造子）。
-recordDerivingsFor : List Decl -> String -> List String -> List Field -> List String -> Span -> Check (List Decl)
+recordDerivingsFor : List Decl -> String -> List String -> List Field -> List String -> NodeRef -> Check (List Decl)
 recordDerivingsFor all dname params fields derivings sp =
   derivingsFor all dname params [recordCtorOf dname params fields sp] derivings sp
 
-derivingsFor : List Decl -> String -> List String -> List Ctor -> List String -> Span -> Check (List Decl)
+derivingsFor : List Decl -> String -> List String -> List Ctor -> List String -> NodeRef -> Check (List Decl)
 derivingsFor all dname params ctors derivings sp =
   derivingsForGo all dname params ctors derivings sp []
 
-derivingsForGo : List Decl -> String -> List String -> List Ctor -> List String -> Span -> List Decl -> Check (List Decl)
+derivingsForGo : List Decl -> String -> List String -> List Ctor -> List String -> NodeRef -> List Decl -> Check (List Decl)
 derivingsForGo all dname params ctors [] sp acc = OkC (reverse acc)
 -- 参数化 data 的派生生成**带 context 的实例**（`Eq a => Eq (Box a)`）。
 -- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
@@ -147,10 +149,9 @@ anyCtorMentions p [] = False
 anyCtorMentions p ((Ctor cn ty ar cnsp) :: rest) = exprMentionsName p ty || anyCtorMentions p rest
 
 exprMentionsName : String -> Expr -> Bool
-exprMentionsName p (EVar n sp) = rnameKey n == p
+exprMentionsName p (EVar n sp) = n == p
 exprMentionsName p (EApp fn args sp) = exprMentionsName p fn || anyExprMentions p args
 exprMentionsName p (EPi n i _ dom cod sp) = exprMentionsName p dom || exprMentionsName p cod
-exprMentionsName p (EAnn v ty sp) = exprMentionsName p v || exprMentionsName p ty
 exprMentionsName p _ = False
 
 anyExprMentions : String -> List Expr -> Bool
@@ -160,12 +161,12 @@ anyExprMentions p (e :: rest) = exprMentionsName p e || anyExprMentions p rest
 -- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
 -- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
 -- 参数化 data 生成带 ctx 的 DInstance（ctx 顺序 = 声明顺序，见 deriveCtxParams）。
-deriveInstance : List Decl -> String -> List String -> List Ctor -> String -> Span -> Check Decl
+deriveInstance : List Decl -> String -> List String -> List Ctor -> String -> NodeRef -> Check Decl
 deriveInstance all dname params ctors tn sp =
   let
     hd = instHead tn dname params sp
     used = deriveCtxParams params ctors
-    ctxExprs = map (\p => EApp (EVar (classifyName tn) sp) [EVar (classifyName p) sp] sp) used
+    ctxExprs = map (\p => EApp (EVar (tn) sp) [EVar (p) sp] sp) used
   in case tn of
     "Base.Trait.Show.Show" =>
       let
@@ -205,7 +206,7 @@ deriveInstance all dname params ctors tn sp =
     "Base.Trait.FromString.FromString" => deriveWrapper tn "fromString" "String" ctors hd sp
     "Base.Trait.FromInt.FromInt" => deriveWrapper tn "fromInt" "Int" ctors hd sp
     "Base.Data.Float.FromFloat" => deriveWrapper tn "fromFloat" "Float" ctors hd sp
-    kind => tcErr1 sp (DeriveUnsupportedKind kind) kind
+    kind => tcErr1 (nodeRefSpan sp) (DeriveUnsupportedKind kind) kind
 
 -- 字面量转换派生（FromString / FromInt / FromFloat）：只接受「一个构造子、一个字段、
 -- 字段声明类型就是对应内建类型」的包装类型。记录在 prepareDecls 已降级成单构造子
@@ -214,84 +215,83 @@ deriveInstance all dname params ctors tn sp =
 -- 跨类型转换（如字段是 Email 而不是 String）需要手写 instance。
 -- | 字面量转换派生（`FromString`/`FromInt`/`FromFloat`）：要求「单构造子、单字段、
 -- 字段类型就是目标内建类型」，生成 `instance C T where fromX sx = C sx`。
-deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Check Decl
+deriveWrapper : String -> String -> String -> List Ctor -> Expr -> NodeRef -> Check Decl
 deriveWrapper tn methodName wantTy [] hd sp =
-  tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
+  tcErr1 (nodeRefSpan sp) (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
 deriveWrapper tn methodName wantTy (c :: rest) hd sp =
   case rest of
     [] => deriveWrapperCtor tn methodName wantTy c hd sp
-    _ => tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
+    _ => tcErr1 (nodeRefSpan sp) (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
 
 -- | `deriveWrapper` 的单构造子分支：校验构造子 arity 为 1、字段类型等于目标类型名，
 -- 然后生成转发到构造子的实例方法。
-deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Check Decl
+deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> NodeRef -> Check Decl
 deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp =
   if ar == 1 then
     case deriveFieldTypes ty of
       dom :: rest =>
         case rest of
-          [] => if deriveFieldTypeName dom == wantTy then OkC (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar (classifyName cn) sp) [EVar (classifyName "sx") sp] sp) sp] sp) else tcErr3 sp (DeriveFieldType (traitShortName tn) wantTy (deriveFieldTypeName dom)) (traitShortName tn) wantTy (deriveFieldTypeName dom)
-          _ => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
-      [] => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+          [] => if deriveFieldTypeName dom == wantTy then OkC (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar (cn) sp) [EVar ("sx") sp] sp) sp] sp) else tcErr3 (nodeRefSpan sp) (DeriveFieldType (traitShortName tn) wantTy (deriveFieldTypeName dom)) (traitShortName tn) wantTy (deriveFieldTypeName dom)
+          _ => tcErr1 (nodeRefSpan sp) (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+      [] => tcErr1 (nodeRefSpan sp) (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
   else
-    tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+    tcErr1 (nodeRefSpan sp) (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
 
 -- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr
-deriveFieldTypes (EApp (EVar (RIntrinsic "->") _) [dom, cod] _) = (::) dom (deriveFieldTypes cod)
+deriveFieldTypes (EApp (EVar "->" _) [dom, cod] _) = (::) dom (deriveFieldTypes cod)
 deriveFieldTypes (EPi _ _ _ dom cod _) = dom :: deriveFieldTypes cod
 deriveFieldTypes _ = []
 
 -- | 取表达式形态的类型名（`EVar` 或 `EApp` 的头部名），其它形态返回 `"?"`。
 deriveFieldTypeName : Expr -> String
-deriveFieldTypeName (EVar n sp) = rnameKey n
-deriveFieldTypeName (EApp (EVar n sp) args sp2) = rnameKey n
+deriveFieldTypeName (EVar n sp) = n
+deriveFieldTypeName (EApp (EVar n sp) args sp2) = n
 deriveFieldTypeName _ = "?"
 
 -- `T <Data> a1 .. an` 形态的实例头（`T` 是解析后的完整类名）。
-export instHead : String -> String -> List String -> Span -> Expr
-instHead tn dname params sp =
-  EApp (EVar (classifyName tn) sp) [applyTypeParams (EVar (classifyName dname) sp) params sp] sp
+export instHead : String -> String -> List String -> NodeRef -> Expr
+instHead tn dname params sp = EApp (EVar (tn) sp) [applyTypeParams (EVar (dname) sp) params sp] sp
 
 -- `Box` 应用到 data 参数上：`Box a b`（单参数 trait 的实例头实参是一个**类型**）。
-applyTypeParams : Expr -> List String -> Span -> Expr
+applyTypeParams : Expr -> List String -> NodeRef -> Expr
 applyTypeParams head [] sp = head
-applyTypeParams head ps sp = EApp head (map (\p => EVar (classifyName p) sp) ps) sp
+applyTypeParams head ps sp = EApp head (map (\p => EVar (p) sp) ps) sp
 
 -- ---------------------------------------------------------------
 -- Show
 -- ---------------------------------------------------------------
-showBody : String -> List Ctor -> String -> Span -> Expr
-showBody proj ctors scrut sp = ECase (EVar (classifyName scrut) sp) (showAlts proj ctors sp) sp
+showBody : String -> List Ctor -> String -> NodeRef -> Expr
+showBody proj ctors scrut sp = ECase (EVar (scrut) sp) (showAlts proj ctors sp) sp
 
-showAlts : String -> List Ctor -> Span -> List (Pat, Expr)
+showAlts : String -> List Ctor -> NodeRef -> List Alt
 showAlts proj [] sp = []
 showAlts proj ((Ctor cn ty ar cnsp) :: rest) sp =
   let
     vs = varNames "fa" ar
-    pat = PCon (classifyName cn) (map (\v => PVar v sp) vs) sp
-  in (pat, showCtor proj cn vs sp) :: showAlts proj rest sp
+    pat = PCon (cn) (map (\v => PVar v sp) vs) sp
+  in Alt pat (showCtor proj cn vs sp) sp :: showAlts proj rest sp
 
 -- 零参 ⇒ `"C"`；否则 `"(C " ++ show f0 ++ " " ++ .. ++ ")"`。
 -- | 派生 `Show` 的单个构造子分支：零参输出 `"C"`，否则输出 `"(C f0 ..)"`。
-showCtor : String -> String -> List String -> Span -> Expr
+showCtor : String -> String -> List String -> NodeRef -> Expr
 showCtor proj cn [] sp = EStr (ctorShortName cn) sp
 showCtor proj cn vs sp =
-  EApp (EVar (classifyName "++") sp) [EStr "(${ctorShortName cn} " sp, showFields proj vs sp] sp
+  EApp (EVar ("++") sp) [EStr "(${ctorShortName cn} " sp, showFields proj vs sp] sp
 
-showFields : String -> List String -> Span -> Expr
+showFields : String -> List String -> NodeRef -> Expr
 showFields proj [] sp = EStr ")" sp
 showFields proj (v :: rest) sp =
   case rest of
-    [] => EApp (EVar (classifyName "++") sp) [showOne proj v sp, EStr ")" sp] sp
+    [] => EApp (EVar ("++") sp) [showOne proj v sp, EStr ")" sp] sp
     _ =>
       EApp
-        (EVar (classifyName "++") sp)
-        [showOne proj v sp, EApp (EVar (classifyName "++") sp) [EStr " " sp, showFields proj rest sp] sp]
+        (EVar ("++") sp)
+        [showOne proj v sp, EApp (EVar ("++") sp) [EStr " " sp, showFields proj rest sp] sp]
         sp
 
-showOne : String -> String -> Span -> Expr
-showOne proj v sp = EApp (EVar (classifyName proj) sp) [EVar (classifyName v) sp] sp
+showOne : String -> String -> NodeRef -> Expr
+showOne proj v sp = EApp (EVar (proj) sp) [EVar (v) sp] sp
 
 -- ---------------------------------------------------------------
 -- Hashable
@@ -299,129 +299,127 @@ showOne proj v sp = EApp (EVar (classifyName proj) sp) [EVar (classifyName v) sp
 -- 每个构造子一个分支：`hash (C f0 .. fn) = hashCombine ctorIndex (hashCombine (hash f0) ..)`；
 -- 零字段 = 构造子下标。`hashCombine` 由 `Base.Trait.Hashable` 导出（完全限定）。
 -- | `deriving (Hashable)` 的方法体：对 `sx` 按构造子分派。
-hashBody : String -> String -> List Ctor -> Span -> Expr
+hashBody : String -> String -> List Ctor -> NodeRef -> Expr
 hashBody proj combineProj ctors sp =
-  ECase (EVar (classifyName "sx") sp) (hashAlts proj combineProj ctors 0 sp) sp
+  ECase (EVar ("sx") sp) (hashAlts proj combineProj ctors 0 sp) sp
 
 -- | 每个构造子一个 `hash` 分支（构造子下标 + 字段 hash 的 `hashCombine` 链）。
-hashAlts : String -> String -> List Ctor -> Int -> Span -> List (Pat, Expr)
+hashAlts : String -> String -> List Ctor -> Int -> NodeRef -> List Alt
 hashAlts proj combineProj [] i sp = []
 hashAlts proj combineProj ((Ctor cn ty ar cnsp) :: rest) i sp =
   let
     vs = varNames "fa" ar
-    pat = PCon (classifyName cn) (map (\v => PVar v sp) vs) sp
+    pat = PCon (cn) (map (\v => PVar v sp) vs) sp
     body = hashFields proj combineProj vs (EInt i sp) sp
-  in (pat, body) :: hashAlts proj combineProj rest (i + 1) sp
+  in Alt pat body sp :: hashAlts proj combineProj rest (i + 1) sp
 
 -- | 逐字段把 `hash field` 折进累加器（用完全限定的 `Base.Trait.Hashable.hashCombine`）。
-hashFields : String -> String -> List String -> Expr -> Span -> Expr
+hashFields : String -> String -> List String -> Expr -> NodeRef -> Expr
 hashFields proj combineProj [] acc sp = acc
 hashFields proj combineProj (v :: rest) acc sp =
   hashFields
     proj
     combineProj
     rest
-    (EApp (EVar (classifyName combineProj) sp) [acc, EApp (EVar (classifyName proj) sp) [EVar (classifyName v) sp] sp] sp)
+    (EApp (EVar (combineProj) sp) [acc, EApp (EVar (proj) sp) [EVar (v) sp] sp] sp)
     sp
 
 -- ---------------------------------------------------------------
 -- Eq
 -- ---------------------------------------------------------------
 -- `case sx of C f.. => case sy of C g.. => f0 == g0 && .. | _ => False`
-eqBody : List Ctor -> Span -> Expr
-eqBody ctors sp = ECase (EVar (classifyName "sx") sp) (map (\c => eqAlt c sp) ctors) sp
+eqBody : List Ctor -> NodeRef -> Expr
+eqBody ctors sp = ECase (EVar ("sx") sp) (map (\c => eqAlt c sp) ctors) sp
 
-eqAlt : Ctor -> Span -> (Pat, Expr)
+eqAlt : Ctor -> NodeRef -> Alt
 eqAlt (Ctor cn ty ar cnsp) sp =
   let
     vs = varNames "fa" ar
-    pat = PCon (classifyName cn) (map (\v => PVar v sp) vs) sp
-    body = ECase (EVar (classifyName "sy") sp) (eqInner cn ar sp) sp
-  in (pat, body)
+    pat = PCon (cn) (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar ("sy") sp) (eqInner cn ar sp) sp
+  in Alt pat body sp
 
-eqInner : String -> Int -> Span -> List (Pat, Expr)
+eqInner : String -> Int -> NodeRef -> List Alt
 eqInner cn ar sp =
   [
-    (PCon (classifyName cn) (map (\v => PVar v sp) (varNames "fb" ar)) sp,
-      conjFields (varNames "fa" ar) (varNames "fb" ar) sp),
-    (PWild sp, boolFalse sp)
+    Alt
+      (PCon (cn) (map (\v => PVar v sp) (varNames "fb" ar)) sp)
+      (conjFields (varNames "fa" ar) (varNames "fb" ar) sp)
+      sp,
+    Alt (PWild sp) (boolFalse sp) sp
   ]
 
 -- `f0 == g0 && f1 == g1 && ..`；无字段 ⇒ `True`。
-conjFields : List String -> List String -> Span -> Expr
+conjFields : List String -> List String -> NodeRef -> Expr
 conjFields [] gs sp = boolTrue sp
 conjFields (f :: fs) (g :: gs) sp =
   case fs of
-    [] => EApp (EVar (classifyName "==") sp) [EVar (classifyName f) sp, EVar (classifyName g) sp] sp
+    [] => EApp (EVar ("==") sp) [EVar (f) sp, EVar (g) sp] sp
     _ =>
       EApp
-        (EVar (classifyName "&&") sp)
-        [EApp (EVar (classifyName "==") sp) [EVar (classifyName f) sp, EVar (classifyName g) sp] sp, conjFields fs gs sp]
+        (EVar ("&&") sp)
+        [EApp (EVar ("==") sp) [EVar (f) sp, EVar (g) sp] sp, conjFields fs gs sp]
         sp
 conjFields fs gs sp = boolFalse sp
 
 -- `neq sx sy = if eq sx sy then False else True`（`eq` 用解析后的投影名）。
-neqBody : String -> Span -> Expr
+neqBody : String -> NodeRef -> Expr
 neqBody eqProj sp =
-  EIf
-    (EApp (EVar (classifyName eqProj) sp) [EVar (classifyName "sx") sp, EVar (classifyName "sy") sp] sp)
-    (boolFalse sp)
-    (boolTrue sp)
-    sp
+  EIf (EApp (EVar (eqProj) sp) [EVar ("sx") sp, EVar ("sy") sp] sp) (boolFalse sp) (boolTrue sp) sp
 
 -- ---------------------------------------------------------------
 -- Ord（构造子按声明顺序为序，同构造子逐字段比）
 -- ---------------------------------------------------------------
-ordBody : String -> List Ctor -> Span -> Expr
-ordBody leProj ctors sp = ECase (EVar (classifyName "sx") sp) (ordAlts leProj ctors ctors 0 sp) sp
+ordBody : String -> List Ctor -> NodeRef -> Expr
+ordBody leProj ctors sp = ECase (EVar ("sx") sp) (ordAlts leProj ctors ctors 0 sp) sp
 
-ordAlts : String -> List Ctor -> List Ctor -> Int -> Span -> List (Pat, Expr)
+ordAlts : String -> List Ctor -> List Ctor -> Int -> NodeRef -> List Alt
 ordAlts leProj all [] i sp = []
 ordAlts leProj all ((Ctor cn ty ar cnsp) :: rest) i sp =
   let
     vs = varNames "fa" ar
-    pat = PCon (classifyName cn) (map (\v => PVar v sp) vs) sp
-    body = ECase (EVar (classifyName "sy") sp) (ordInner leProj i ar all sp) sp
-  in (pat, body) :: ordAlts leProj all rest (i + 1) sp
+    pat = PCon (cn) (map (\v => PVar v sp) vs) sp
+    body = ECase (EVar ("sy") sp) (ordInner leProj i ar all sp) sp
+  in Alt pat body sp :: ordAlts leProj all rest (i + 1) sp
 
 -- 对 `sy` 再分派：索引更小的构造子 ⇒ False，同构造子 ⇒ 逐字段 lt，更大 ⇒ True。
-ordInner : String -> Int -> Int -> List Ctor -> Span -> List (Pat, Expr)
+ordInner : String -> Int -> Int -> List Ctor -> NodeRef -> List Alt
 ordInner leProj i ar all sp = ordInnerGo leProj i ar all 0 sp
 
-ordInnerGo : String -> Int -> Int -> List Ctor -> Int -> Span -> List (Pat, Expr)
+ordInnerGo : String -> Int -> Int -> List Ctor -> Int -> NodeRef -> List Alt
 ordInnerGo leProj i ar [] j sp = []
 ordInnerGo leProj i ar ((Ctor cn ty car cnsp) :: rest) j sp =
   let
     gs = varNames "fb" car
-    pat = PCon (classifyName cn) (map (\v => PVar v sp) gs) sp
+    pat = PCon (cn) (map (\v => PVar v sp) gs) sp
     body =
       if j == i then
         ltFields leProj (varNames "fa" ar) gs sp
       else if j < i then boolFalse sp else boolTrue sp
-  in (pat, body) :: ordInnerGo leProj i ar rest (j + 1) sp
+  in Alt pat body sp :: ordInnerGo leProj i ar rest (j + 1) sp
 
 -- 逐字段 `<`：`f0 < g0 || (le f0 g0 && le g0 f0 && (f1 < g1 || ..))`；无字段 ⇒ False。
 -- 只用 Ord 的 lt/le（不用 `==`），因此 `deriving (Ord)` 只需 Ord ctx。
-ltFields : String -> List String -> List String -> Span -> Expr
+ltFields : String -> List String -> List String -> NodeRef -> Expr
 ltFields leProj [] gs sp = boolFalse sp
 ltFields leProj (f :: fs) (g :: gs) sp =
   case fs of
-    [] => EApp (EVar (classifyName "<") sp) [EVar (classifyName f) sp, EVar (classifyName g) sp] sp
+    [] => EApp (EVar ("<") sp) [EVar (f) sp, EVar (g) sp] sp
     _ =>
       EApp
-        (EVar (classifyName "||") sp)
-        [EApp (EVar (classifyName "<") sp) [EVar (classifyName f) sp, EVar (classifyName g) sp] sp, EApp (EVar (classifyName "&&") sp) [EApp (EVar (classifyName leProj) sp) [EVar (classifyName f) sp, EVar (classifyName g) sp] sp, EApp (EVar (classifyName "&&") sp) [EApp (EVar (classifyName leProj) sp) [EVar (classifyName g) sp, EVar (classifyName f) sp] sp, ltFields leProj fs gs sp] sp] sp]
+        (EVar ("||") sp)
+        [EApp (EVar ("<") sp) [EVar (f) sp, EVar (g) sp] sp, EApp (EVar ("&&") sp) [EApp (EVar (leProj) sp) [EVar (f) sp, EVar (g) sp] sp, EApp (EVar ("&&") sp) [EApp (EVar (leProj) sp) [EVar (g) sp, EVar (f) sp] sp, ltFields leProj fs gs sp] sp] sp]
         sp
 -- 字段数不匹配的组合走不到（derive 生成的字段表按构造子对齐），但 DT 要求模式矩阵穷尽。
 ltFields leProj _ _ sp = boolFalse sp
 
 -- `le sx sy = lt sx sy || !(lt sy sx)`——只用 `lt` 派生，不依赖 `Eq` 实例
 -- （`deriving (Ord)` 不要求同时 derive `Eq`）。`lt` 用解析后的投影名。
-leBody : String -> Span -> Expr
+leBody : String -> NodeRef -> Expr
 leBody ltProj sp =
   EApp
-    (EVar (classifyName "||") sp)
-    [EApp (EVar (classifyName ltProj) sp) [EVar (classifyName "sx") sp, EVar (classifyName "sy") sp] sp, EIf (EApp (EVar (classifyName ltProj) sp) [EVar (classifyName "sy") sp, EVar (classifyName "sx") sp] sp) (boolFalse sp) (boolTrue sp) sp]
+    (EVar ("||") sp)
+    [EApp (EVar (ltProj) sp) [EVar ("sx") sp, EVar ("sy") sp] sp, EIf (EApp (EVar (ltProj) sp) [EVar ("sy") sp, EVar ("sx") sp] sp) (boolFalse sp) (boolTrue sp) sp]
     sp
 
 varNames : String -> Int -> List String
@@ -438,13 +436,11 @@ varNamesAtGo remaining prefix n =
     (::) (prefix ++ strFromInt (n - remaining)) (varNamesAtGo (remaining - 1) prefix n)
 
 -- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
-gtBody : String -> Span -> Expr
-gtBody ltProj sp =
-  EApp (EVar (classifyName ltProj) sp) [EVar (classifyName "sy") sp, EVar (classifyName "sx") sp] sp
+gtBody : String -> NodeRef -> Expr
+gtBody ltProj sp = EApp (EVar (ltProj) sp) [EVar ("sy") sp, EVar ("sx") sp] sp
 
-geBody : String -> Span -> Expr
-geBody leProj sp =
-  EApp (EVar (classifyName leProj) sp) [EVar (classifyName "sy") sp, EVar (classifyName "sx") sp] sp
+geBody : String -> NodeRef -> Expr
+geBody leProj sp = EApp (EVar (leProj) sp) [EVar ("sy") sp, EVar ("sx") sp] sp
 
 -- ---------------------------------------------------------------
 -- 派生体里产生 Bool 的辅助
@@ -452,8 +448,8 @@ geBody leProj sp =
 -- 派生展开发生在 Loader 名字解析之后：合成的裸 `True` / `False` 不会再经过 import 解析，
 -- 且可能被同名的用户构造子遮蔽。这里直接引用 canonical 构造子的完整符号
 -- （`Base.Data.Bool.Bool.True` / `.False`）——精化后就是 `TBool` 字面量。
-boolTrue : Span -> Expr
-boolTrue sp = EVar (classifyName boolTrueCtor) sp
+boolTrue : NodeRef -> Expr
+boolTrue sp = EVar (boolTrueCtor) sp
 
-boolFalse : Span -> Expr
-boolFalse sp = EVar (classifyName boolFalseCtor) sp
+boolFalse : NodeRef -> Expr
+boolFalse sp = EVar (boolFalseCtor) sp

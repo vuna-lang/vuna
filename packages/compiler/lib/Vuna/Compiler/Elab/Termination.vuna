@@ -6,10 +6,11 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
+import Vuna.Compiler.Frontend.AstQuery
 
 patNames : Pat -> List String
 patNames (PVar n sp) = [n]
@@ -22,49 +23,98 @@ patNames _ = []
 patsNames : List Pat -> List String
 patsNames ps = concatMap patNames ps
 
-refsOfStmt : List String -> DoStmt -> (List String, List String)
-refsOfStmt bound (DBind pat e sp) = (patNames pat, exprRefsB bound e)
-refsOfStmt bound (DExpr e sp) = ([], exprRefsB bound e)
-refsOfStmt bound (DLet binds sp) =
-  (concatMap (\bd => patNames (firstOf bd)) binds,
-    concatMap (\bd => exprRefsB bound (secondOf bd)) binds)
+altPatOf : Alt -> Pat
+altPatOf a = a.altPat
 
-refsOfStmts : List String -> List DoStmt -> (List String, List String)
-refsOfStmts bound [] = ([], [])
-refsOfStmts bound (st :: rest) =
-  case refsOfStmt bound st of
-    (newNames, refs) =>
-      case refsOfStmts (append newNames bound) rest of
-        (newNames2, restRefs) => (newNames2, append refs restRefs)
+altBodyOf : Alt -> Expr
+altBodyOf a = a.altBody
+
+altsToPairs : List Alt -> List (Pat, Expr)
+altsToPairs [] = []
+altsToPairs (a :: rest) = (a.altPat, a.altBody) :: altsToPairs rest
+
+stmtBinderNames : DoStmt -> List String
+stmtBinderNames (DBind pat e sp) = patNames pat
+stmtBinderNames (DExpr e sp) = []
+stmtBinderNames (DLet binds sp) = concatMap bindingPatNames binds
+
+stmtRefsF : Int -> List String -> DoStmt -> List String
+stmtRefsF fuel bound (DBind pat e sp) = exprRefsBF (fuel - 1) bound e
+stmtRefsF fuel bound (DExpr e sp) = exprRefsBF (fuel - 1) bound e
+stmtRefsF fuel bound (DLet binds sp) = exprRefsBindsF (fuel - 1) bound binds
+
+refsOfStmtsF : Int -> List String -> List DoStmt -> List String
+refsOfStmtsF fuel bound [] = []
+refsOfStmtsF fuel bound (st :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append
+      (stmtRefsF (fuel - 1) bound st)
+      (refsOfStmtsF (fuel - 1) (append (stmtBinderNames st) bound) rest)
 
 exprRefsB : List String -> Expr -> List String
-exprRefsB bound e =
-  case e of
-    EVar n sp => if memName (rnameKey n) bound then [] else [rnameKey n]
-    EInt n sp => []
-    EStr s sp => []
-    ELam ns b sp => exprRefsB (append (map firstOf ns) bound) b
-    EApp fn args sp => append (exprRefsB bound fn) (concatMap (exprRefsB bound) args)
-    EPi n implicit _ dom cod sp => append (exprRefsB bound dom) (exprRefsB (n :: bound) cod)
-    ELet binds b rec_ sp =>
-      append
-        (concatMap (\bd => exprRefsB bound (secondOf bd)) binds)
-        (exprRefsB (append (concatMap (\bd => patNames (firstOf bd)) binds) bound) b)
-    ECase scrut alts sp =>
-      append
-        (exprRefsB bound scrut)
-        (concatMap (\alt => exprRefsB (append (patNames (firstOf alt)) bound) (secondOf alt)) alts)
-    EIf c t el sp => append (exprRefsB bound c) (append (exprRefsB bound t) (exprRefsB bound el))
-    EField base f sp => exprRefsB bound base
-    ERecord rn fields sp => concatMap (\q => exprRefsB bound (secondOf q)) fields
-    ERecUpdate base fields sp =>
-      append (exprRefsB bound base) (concatMap (\q => exprRefsB bound (secondOf q)) fields)
-    EDo stmts sp => secondOf (refsOfStmts bound stmts)
-    EAnn value ty sp => append (exprRefsB bound value) (exprRefsB bound ty)
-    -- 局部函数组：每个 clause 的参数模式绑定在其体内可见。
-    ELocalFun clauses sp =>
-      concatMap (\c => exprRefsB (append (patsNames (firstOf c)) bound) (secondOf c)) clauses
-    _ => []
+exprRefsB bound e = exprRefsBF (exprBudget 64 e) bound e
+
+exprRefsBF : Int -> List String -> Expr -> List String
+exprRefsBF fuel bound e =
+  if fuel <= 0 then
+    []
+  else
+    case e of
+      EVar n sp => if memName (n) bound then [] else [n]
+      EInt n sp => []
+      EStr s sp => []
+      ELam ns b sp => exprRefsBF (fuel - 1) (append (map firstOf ns) bound) b
+      EApp fn args sp => append (exprRefsBF (fuel - 1) bound fn) (concatMap (exprRefsBF (fuel - 1) bound) args)
+      EPi n implicit _ dom cod sp => append (exprRefsBF (fuel - 1) bound dom) (exprRefsBF (fuel - 1) (n :: bound) cod)
+      ELet binds b rec_ sp => append (exprRefsBindsF (fuel - 1) bound binds) (exprRefsBF (fuel - 1) (append (concatMap bindingBinderNames binds) bound) b)
+      ECase scrut alts sp => append (exprRefsBF (fuel - 1) bound scrut) (concatMap (\alt => exprRefsBF (fuel - 1) (append (patNames (altPatOf alt)) bound) (altBodyOf alt)) alts)
+      EIf c t el sp => append (exprRefsBF (fuel - 1) bound c) (append (exprRefsBF (fuel - 1) bound t) (exprRefsBF (fuel - 1) bound el))
+      EField base f sp => exprRefsBF (fuel - 1) bound base
+      ERecord rn fields sp => concatMap (\q => exprRefsBF (fuel - 1) bound (secondOf q)) fields
+      ERecUpdate base fields sp => append (exprRefsBF (fuel - 1) bound base) (concatMap (\q => exprRefsBF (fuel - 1) bound (secondOf q)) fields)
+      EDo stmts sp => refsOfStmtsF (fuel - 1) bound stmts
+      _ => []
+
+exprRefsBindsF : Int -> List String -> List Binding -> List String
+exprRefsBindsF fuel bound [] = []
+exprRefsBindsF fuel bound (b :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append (exprRefsBindingF (fuel - 1) bound b) (exprRefsBindsF (fuel - 1) bound rest)
+
+exprRefsBindingF : Int -> List String -> Binding -> List String
+exprRefsBindingF fuel bound (Binding pat value sig ref) =
+  if fuel <= 0 then
+    []
+  else
+    append (
+        case value of
+          BVal e => exprRefsBF (fuel - 1) bound e
+          BClauses cs => exprRefsClausesF (fuel - 1) bound cs
+      ) (
+        case sig of
+          Just s => exprRefsBF (fuel - 1) bound s.sigType
+          Nothing => []
+      )
+
+exprRefsClausesF : Int -> List String -> List LocalClause -> List String
+exprRefsClausesF fuel bound [] = []
+exprRefsClausesF fuel bound (c :: rest) =
+  if fuel <= 0 then
+    []
+  else
+    append
+      (exprRefsBF (fuel - 1) (append (patsNames c.lcPats) bound) c.lcBody)
+      (exprRefsClausesF (fuel - 1) bound rest)
+
+bindingPatNames : Binding -> List String
+bindingPatNames b = patNames b.bindPat
+
+bindingBinderNames : Binding -> List String
+bindingBinderNames b = patNames b.bindPat
 
 refsOfDef : List (List Pat, Expr) -> List String
 refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)
@@ -202,8 +252,8 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
     markInvalid acc
   else
     case e of
-      EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args sp acc
-      ECase scrut alts sp => strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut alts (strWalk (fuel - 1) comp ctors projs p sizes caller facts region scrut acc)
+      EApp fn args sp => strWalkEApp (fuel - 1) comp ctors projs p sizes caller facts region fn args (nodeRefSpan sp) acc
+      ECase scrut alts sp => strWalkAlts (fuel - 1) comp ctors projs p sizes caller facts region scrut (altsToPairs alts) (strWalk (fuel - 1) comp ctors projs p sizes caller facts region scrut acc)
       EIf c t el sp =>
         let
           acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc
@@ -219,12 +269,7 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       ERecord rn fields sp => strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields acc
       ERecUpdate base fields sp => strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields (strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc)
       EDo stmts sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region stmts acc
-      EAnn value ty sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region ty (strWalk (fuel - 1) comp ctors projs p sizes caller facts region value acc)
-      -- where/let 多 clause 局部函数的每个 clause body 都要进 STR 遍历（body 里可能
-      -- 调用外层递归函数，兜底跳过会漏检）。借用 `strWalkBinds`（参数表与 `strWalk`
-      -- 完全一致，SCT 可证下降）；模式列表只用来定位，不参与 STR。
-      ELocalFun clauses sp => strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region (localClauseBinds clauses) acc
-      EVar n sp => if memName (rnameKey n) comp then markInvalid acc else acc
+      EVar n sp => if memName (n) comp then markInvalid acc else acc
       _ => acc
 
 -- 关系证不出来时记一条诊断边：位置 p 的实参为什么拿不到尺寸关系。
@@ -267,8 +312,8 @@ strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc =
     case args of
       [cb, lst] =>
         case cb of
-          EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (rnameKey g) pargs lst cbsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
-          EVar g gsp => if memName (rnameKey g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (rnameKey g) [] lst gsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+          EApp (EVar g gsp) pargs cbsp => if memName (g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (g) pargs lst (nodeRefSpan cbsp) acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+          EVar g gsp => if memName (g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (g) [] lst (nodeRefSpan gsp) acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
           _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
       _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
 
@@ -280,7 +325,7 @@ strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g parg
     let
       acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
       elems = extendElemSizes sizes lst "$elem"
-      fullArgs = append pargs [EVar (classifyName "$elem") cbsp]
+      fullArgs = append pargs [EVar ("$elem") (detachedNodeRef cbsp)]
       acc2 = strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region pargs acc1
     in case argRel p fullArgs elems ctors projs caller facts region of
       Nothing => markInvalid acc2
@@ -345,10 +390,10 @@ strWalkAlts fuel comp ctors projs p sizes caller facts region scrut ((pat, body)
       rest
       (strWalk (fuel - 1) comp ctors projs p (extendSizesStrict projs sizes scrut pat) caller facts region body acc)
 
-strWalkBinds : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> List (Pat, Expr) -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
+strWalkBinds : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> List Binding -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
 strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
-strWalkBinds fuel comp ctors projs p sizes caller facts region ((pat, val) :: rest) acc =
+strWalkBinds fuel comp ctors projs p sizes caller facts region (b :: rest) acc =
   if fuel <= 0 then
     markInvalid acc
   else
@@ -358,12 +403,60 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region ((pat, val) :: re
       ctors
       projs
       p
-      (extendSizesStrict projs sizes val pat)
+      (extendBindingSizes projs sizes b)
       caller
       facts
       region
       rest
-      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
+      (strWalkBinding (fuel - 1) comp ctors projs p sizes caller facts region b acc)
+
+strWalkBinding : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> Binding -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
+strWalkBinding fuel comp ctors projs p sizes caller facts region b acc =
+  if fuel <= 0 then
+    acc
+  else
+    let
+      acc1 =
+        case b.bindValue of
+          BVal e => strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc
+          BClauses cs => strWalkClauses (fuel - 1) comp ctors projs p sizes caller facts region cs acc
+    in case b.bindSig of
+      Just sig => strWalk (fuel - 1) comp ctors projs p sizes caller facts region sig.sigType acc1
+      Nothing => acc1
+
+strWalkClauses : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> List LocalClause -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
+strWalkClauses fuel comp ctors projs p sizes caller facts region [] acc = acc
+strWalkClauses fuel comp ctors projs p sizes caller facts region (c :: rest) acc =
+  if fuel <= 0 then
+    acc
+  else
+    strWalkClauses
+      (fuel - 1)
+      comp
+      ctors
+      projs
+      p
+      sizes
+      caller
+      facts
+      region
+      rest
+      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c.lcBody acc)
+
+-- 绑定引入的尺寸：普通右值按「值 ↔ 模式」推；局部函数组按每个子句体推（子句模式不参与）。
+extendBindingSizes : List (String, List Int) -> List (String, Int, Int, List Int) -> Binding -> List (String, Int, Int, List Int)
+extendBindingSizes projs sizes b =
+  case b.bindValue of
+    BVal e => extendSizesStrict projs sizes e b.bindPat
+    BClauses cs => extendClauseSizes projs sizes cs
+
+extendClauseSizes : List (String, List Int) -> List (String, Int, Int, List Int) -> List LocalClause -> List (String, Int, Int, List Int)
+extendClauseSizes projs sizes [] = sizes
+extendClauseSizes projs sizes (c :: rest) =
+  extendClauseSizes
+    projs
+    (extendSizesStrict projs sizes c.lcBody (PWild (detachedNodeRef spanEmpty)))
+    rest
 
 strWalkFields : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> List (String, Expr) -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
 strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
@@ -565,7 +658,7 @@ export checkTerminationDeclsWith : List String -> List Decl -> Check Int
 checkTerminationDeclsWith own decls = checkTerminationGroups own decls [] decls
 
 -- | 精化后路径：`ownDecls` 由 `Termination.ElabInput` 从 `DtProgram` 构造（调用名已规范、
---   实例方法按字典符号分组），`depDecls` 是依赖包的 Rast 声明（只作 SCT 上下文；
+--   实例方法按字典符号分组），`depDecls` 是依赖包的 Ast 声明（只作 SCT 上下文；
 --   包依赖无环，不会引入跨包环），`tableDecls` 提供构造子 / 记录字段表。
 export checkTerminationGroups : List String -> List Decl -> List Decl -> List Decl -> Check Int
 checkTerminationGroups own ownDecls depDecls tableDecls =

@@ -15,8 +15,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Parser
-import RastCheck
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.ToolPayload
@@ -71,8 +70,6 @@ main =
     _ <-
       consolePrint (("cst-tree-file " ++ (if pathOk then verdict (treeOk raw) else "skip")) ++ "\n")
     _ <- consolePrint (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
-    _ <- consolePrint (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
-    _ <- consolePrint (("rast-shadow " ++ verdict rastShadowOk) ++ "\n")
     _ <- consolePrint (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
     _ <- consolePrint (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
     _ <- consolePrint (("canon-defs-rt " ++ verdict defsRT) ++ "\n")

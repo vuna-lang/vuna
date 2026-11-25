@@ -17,8 +17,8 @@ import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Obs
 
 -- 引用零参（无显式参数）构造子时，其隐式类型/族参数必须实例化成元变量；
@@ -272,11 +272,12 @@ collectSigsInto banned preludeBanned paramKinds seen acc [] = OkC (reverse acc)
 collectSigsInto banned preludeBanned paramKinds seen acc (d :: rest) =
   case d of
     DSig name ctx ty sp =>
-      collectSigOne banned preludeBanned paramKinds seen acc name ctx ty sp rest
+      collectSigOne banned preludeBanned paramKinds seen acc name ctx ty (nodeRefSpan sp) rest
     -- axiom 与签名同一套类型检查/量化；区别只在 `checkAllDefined` 不要求它有体。
-    DAxiom name ty sp => collectSigOne banned preludeBanned paramKinds seen acc name [] ty sp rest
+    DAxiom name ty sp =>
+      collectSigOne banned preludeBanned paramKinds seen acc name [] ty (nodeRefSpan sp) rest
     DExtern name cName ty sp =>
-      collectSigOne banned preludeBanned paramKinds seen acc name [] ty sp rest
+      collectSigOne banned preludeBanned paramKinds seen acc name [] ty (nodeRefSpan sp) rest
     DFun name pats body sp => collectSigsInto banned preludeBanned paramKinds seen acc rest
     DData name params kind ctors derivings viaField repr lin sp =>
       collectSigsInto banned preludeBanned paramKinds seen acc rest
@@ -308,10 +309,10 @@ collectDataDecls [] acc = reverse acc
 collectDataDecls (d :: rest) acc =
   case d of
     DData dname params kind ctors derivings viaField repr lin sp =>
-      collectDataDecls rest ((d, sp) :: acc)
+      collectDataDecls rest ((d, nodeRefSpan sp) :: acc)
     -- record 声明直接进 `elabDatas` 精化（不再先降级成 DData）。
     DRecord dname params fields derivings viaField repr lin sp =>
-      collectDataDecls rest ((d, sp) :: acc)
+      collectDataDecls rest ((d, nodeRefSpan sp) :: acc)
     _ => collectDataDecls rest acc
 
 -- 绑到实际族上。
@@ -654,7 +655,13 @@ export prependFamParams : Term -> Expr -> Span -> Expr
 prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
   case dom of
     TType l =>
-      EPi n True Nothing (EVar (classifyName "Type") sp) (prependFamParams cod tyExpr sp) sp
+      EPi
+        n
+        True
+        Nothing
+        (EVar ("Type") (detachedNodeRef sp))
+        (prependFamParams cod tyExpr sp)
+        (detachedNodeRef sp)
     _ => tyExpr
 prependFamParams _ tyExpr sp = tyExpr
 
@@ -700,14 +707,14 @@ export collectTraitDecls : List Decl -> List (Decl, Span) -> List (Decl, Span)
 collectTraitDecls [] acc = reverse acc
 collectTraitDecls (d :: rest) acc =
   case d of
-    DTrait tname params supers methods sp => collectTraitDecls rest ((d, sp) :: acc)
+    DTrait tname params supers methods sp => collectTraitDecls rest ((d, nodeRefSpan sp) :: acc)
     _ => collectTraitDecls rest acc
 
 export collectInstDecls : List Decl -> List (Decl, Span) -> List (Decl, Span)
 collectInstDecls [] acc = reverse acc
 collectInstDecls (d :: rest) acc =
   case d of
-    DInstance ctxE head methods sp => collectInstDecls rest ((d, sp) :: acc)
+    DInstance ctxE head methods sp => collectInstDecls rest ((d, nodeRefSpan sp) :: acc)
     _ => collectInstDecls rest acc
 
 -- 单参数接口的参数名（elabTrait 已校验 length params == 1）。
@@ -1401,8 +1408,8 @@ hasFamParams _ = False
 
 -- 语法层的宇宙判定：`Type` / `Type 1`（`Type` 的层级是应用实参）。
 isSortExpr : Expr -> Bool
-isSortExpr (EVar (RIntrinsic "Type") sp) = True
-isSortExpr (EApp (EVar (RIntrinsic "Type") sp) args sp2) = True
+isSortExpr (EVar "Type" sp) = True
+isSortExpr (EApp (EVar "Type" sp) args sp2) = True
 isSortExpr _ = False
 
 -- 模块限定名的最后一段（`Base.Trait.Monad.fmap` → `fmap`）；实现收敛到 `Source.lastSeg`。

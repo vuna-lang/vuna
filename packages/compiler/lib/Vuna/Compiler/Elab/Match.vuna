@@ -19,8 +19,9 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
+import Vuna.Compiler.Frontend.AstQuery
 
 -- 单 clause 的参数全是变量（或通配）时可直接 `checkDef` 绑定；否则需要 `multiToExpr`
 -- 合成 case（如 `firstOf (Pair a b) = a`——参数是构造子模式）。
@@ -124,7 +125,8 @@ paramNamesGo remaining n acc =
 
 wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
-wrapLambdas (n :: rest) body = ELam [(n, spanEmpty)] (wrapLambdas rest body) spanEmpty
+wrapLambdas (n :: rest) body =
+  ELam [(n, spanEmpty)] (wrapLambdas rest body) (detachedNodeRef spanEmpty)
 
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
@@ -144,7 +146,7 @@ litAltExprGo table clauses pos restParams fb fuel =
         case p of
           PVar pname psp => buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
           PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
-          _ => Vuna.Compiler.Base.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1)) (\restExpr => Vuna.Compiler.Base.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar (classifyName "==") (Span "" 0 0 0 0 0 0)) [EVar (classifyName pos) (Span "" 0 0 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+          _ => Vuna.Compiler.Base.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1)) (\restExpr => Vuna.Compiler.Base.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar ("==") (detachedNodeRef (Span "" 0 0 0 0 0 0))) [EVar (pos) (detachedNodeRef (Span "" 0 0 0 0 0 0)), litPatExpr p] (detachedNodeRef (patSpan p))) bodyExpr restExpr (detachedNodeRef (patSpan p)))))
       -- 该字面量分支的子矩阵不只是「当前行 + 剩余列」——同一字面量的后续行与
       -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
       -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
@@ -190,7 +192,7 @@ litPatMatches _ p = False
 litPatExpr : Pat -> Expr
 litPatExpr (PInt n sp) = EInt n sp
 litPatExpr (PStr s sp) = EStr s sp
-litPatExpr _ = EInt 0 (Span "" 0 0 0 0 0 0)
+litPatExpr _ = EInt 0 (detachedNodeRef (Span "" 0 0 0 0 0 0))
 
 -- | 模式矩阵的列下降：按当前列（`pos`）的模式形态分派成 case / if 表达式。
 buildColumnExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> Span -> Int -> Check Expr
@@ -268,7 +270,7 @@ ctorColumn table clauses pos restParams fbSp fuel =
         \alts =>
           let
             caseSp = firstPatSpan clauses
-          in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar (classifyName pos) caseSp) alts caseSp) else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1)) (\fbAlts => OkC (ECase (EVar (classifyName pos) caseSp) (append alts fbAlts) caseSp))
+          in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) alts (detachedNodeRef caseSp)) else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1)) (\fbAlts => OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) (append alts fbAlts) (detachedNodeRef caseSp)))
       )
 
 -- 构造子名 → 所属族的构造子表；列表字面量哨兵按短名找族，其余找不到族时按未知处理。
@@ -377,7 +379,7 @@ allEmptyPats (c :: rest) =
 
 bodyOfFirst : List (List Pat, Expr) -> Expr
 bodyOfFirst ((pats, body) :: rest) = body
-bodyOfFirst [] = EInt 0 (Span "" 0 0 0 0 0 0)
+bodyOfFirst [] = EInt 0 (detachedNodeRef (Span "" 0 0 0 0 0 0))
 
 isVarPatD : Pat -> Bool
 isVarPatD (PVar n sp) = True
@@ -413,77 +415,75 @@ prepVarColumn pos (c :: rest) =
     ([], body) => c :: prepVarColumn pos rest
 
 renameExpr : String -> String -> Expr -> Expr
-renameExpr oldName newName e =
-  case e of
-    EVar nm sp => if rnameKey nm == oldName then EVar (classifyName newName) sp else e
-    EInt n sp => EInt n sp
-    EStr s sp => EStr s sp
-    EFloat raw sp => EFloat raw sp
-    ELam names body sp => ELam names (renameExprUnless oldName newName (map firstOf names) body) sp
-    EApp fn args sp =>
-      EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
-    EPi nm implicit qty dom cod sp =>
-      EPi
-        nm
-        implicit
-        qty
-        (renameExpr oldName newName dom)
-        (renameExprUnless oldName newName [nm] cod)
-        sp
-    ELet binds body rec_ sp =>
-      ELet
-        (map (renameBind oldName newName) binds)
-        (renameExprUnless oldName newName (bindNames binds) body)
-        rec_
-        sp
-    ECase scrut alts sp =>
-      ECase (renameExpr oldName newName scrut) (map (renameAlt oldName newName) alts) sp
-    -- 局部函数组的每个 clause 独立改名（参数模式绑定名遮蔽该 clause 的 body）。
-    ELocalFun clauses sp => ELocalFun (map (renameLocalClause oldName newName) clauses) sp
-    EIf c t e2 sp =>
-      EIf
-        (renameExpr oldName newName c)
-        (renameExpr oldName newName t)
-        (renameExpr oldName newName e2)
-        sp
-    EField b f sp => EField (renameExpr oldName newName b) f sp
-    ERecord rn fields sp => ERecord rn (map (renameFieldValue oldName newName) fields) sp
-    ERecUpdate b fields sp =>
-      ERecUpdate (renameExpr oldName newName b) (map (renameFieldValue oldName newName) fields) sp
-    EDo stmts sp => EDo stmts sp
-    -- parser 中间产物；Elab 阶段正常不存在（Loader 重排已消除），这里保持结构递归。
-    EAnn value ty sp => EAnn (renameExpr oldName newName value) (renameExpr oldName newName ty) sp
-    -- 模板字面量在 Elab 之前已被 Loader 降级（正常不存在）；保持结构递归，
-    -- 不静默丢洞内子表达式。
-    EInterp parts sp => EInterp (renameInterpParts oldName newName parts) sp
+renameExpr oldName newName e = renameExprF (exprBudget 32 e) oldName newName e
 
-renameInterpParts : String -> String -> List InterpPart -> List InterpPart
-renameInterpParts oldName newName [] = []
-renameInterpParts oldName newName ((IPText s) :: rest) =
-  IPText s :: renameInterpParts oldName newName rest
-renameInterpParts oldName newName ((IPHole e) :: rest) =
-  IPHole (renameExpr oldName newName e) :: renameInterpParts oldName newName rest
+renameExprF : Int -> String -> String -> Expr -> Expr
+renameExprF fuel oldName newName e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      EVar nm sp => if nm == oldName then EVar (newName) sp else e
+      EInt n sp => EInt n sp
+      EStr s sp => EStr s sp
+      EFloat raw sp => EFloat raw sp
+      ELam names body sp => ELam names (renameExprUnlessF (fuel - 1) oldName newName (map firstOf names) body) sp
+      EApp fn args sp => EApp (renameExprF (fuel - 1) oldName newName fn) (map (renameExprF (fuel - 1) oldName newName) args) sp
+      EPi nm implicit qty dom cod sp => EPi nm implicit qty (renameExprF (fuel - 1) oldName newName dom) (renameExprUnlessF (fuel - 1) oldName newName [nm] cod) sp
+      ELet binds body rec_ sp => ELet (map (renameBindF (fuel - 1) oldName newName) binds) (renameExprUnlessF (fuel - 1) oldName newName (bindNames binds) body) rec_ sp
+      ECase scrut alts sp => ECase (renameExprF (fuel - 1) oldName newName scrut) (map (renameAltF (fuel - 1) oldName newName) alts) sp
+      EIf c t e2 sp => EIf (renameExprF (fuel - 1) oldName newName c) (renameExprF (fuel - 1) oldName newName t) (renameExprF (fuel - 1) oldName newName e2) sp
+      EField b f sp => EField (renameExprF (fuel - 1) oldName newName b) f sp
+      ERecord rn fields sp => ERecord rn (map (renameFieldValueF (fuel - 1) oldName newName) fields) sp
+      ERecUpdate b fields sp => ERecUpdate (renameExprF (fuel - 1) oldName newName b) (map (renameFieldValueF (fuel - 1) oldName newName) fields) sp
+      EDo stmts sp => EDo stmts sp
+      EInterp parts sp => EInterp (renameInterpPartsF (fuel - 1) oldName newName parts) sp
 
-renameExprUnless : String -> String -> List String -> Expr -> Expr
-renameExprUnless oldName newName names body =
-  if memName oldName names then body else renameExpr oldName newName body
+renameInterpPartsF : Int -> String -> String -> List InterpPart -> List InterpPart
+renameInterpPartsF fuel oldName newName [] = []
+renameInterpPartsF fuel oldName newName (p :: rest) =
+  case p of
+    IPText s => IPText s :: renameInterpPartsF (fuel - 1) oldName newName rest
+    IPHole e =>
+      IPHole (renameExprF (fuel - 1) oldName newName e)
+        :: renameInterpPartsF (fuel - 1) oldName newName rest
 
-renameBind : String -> String -> (Pat, Expr) -> (Pat, Expr)
-renameBind oldName newName bnd = (firstOf bnd, renameExpr oldName newName (secondOf bnd))
+renameExprUnlessF : Int -> String -> String -> List String -> Expr -> Expr
+renameExprUnlessF fuel oldName newName names body =
+  if memName oldName names then body else renameExprF (fuel - 1) oldName newName body
 
-renameFieldValue : String -> String -> (String, Expr) -> (String, Expr)
-renameFieldValue oldName newName field =
-  (firstOf field, renameExpr oldName newName (secondOf field))
+renameBindF : Int -> String -> String -> Binding -> Binding
+renameBindF fuel oldName newName b =
+  let
+    value =
+      case b.bindValue of
+        BVal e => BVal (renameExprF (fuel - 1) oldName newName e)
+        BClauses cs => BClauses (map (renameLocalClauseF (fuel - 1) oldName newName) cs)
+    sig =
+      case b.bindSig of
+        Just s => Just ({ s | sigType = renameExprF (fuel - 1) oldName newName s.sigType })
+        Nothing => Nothing
+  in { b | bindValue = value, bindSig = sig }
 
--- 局部函数 clause —— 参数模式里的绑定名遮蔽 oldName。
-renameLocalClause : String -> String -> (List Pat, Expr) -> (List Pat, Expr)
-renameLocalClause oldName newName clause =
-  (firstOf clause,
-    renameExprUnless oldName newName (concatMap patNamesOf (firstOf clause)) (secondOf clause))
+renameFieldValueF : Int -> String -> String -> (String, Expr) -> (String, Expr)
+renameFieldValueF fuel oldName newName field =
+  (firstOf field, renameExprF (fuel - 1) oldName newName (secondOf field))
 
-bindNames : List (Pat, Expr) -> List String
+renameLocalClauseF : Int -> String -> String -> LocalClause -> LocalClause
+renameLocalClauseF fuel oldName newName clause =
+  { clause
+    | lcBody =
+      renameExprUnlessF
+        (fuel - 1)
+        oldName
+        newName
+        (concatMap patNamesOf clause.lcPats)
+        clause.lcBody
+  }
+
+bindNames : List Binding -> List String
 bindNames [] = []
-bindNames (b :: rest) = append (patNamesOf (firstOf b)) (bindNames rest)
+bindNames (b :: rest) = append (patNamesOf b.bindPat) (bindNames rest)
 
 patNamesOf : Pat -> List String
 patNamesOf (PVar n sp) = [n]
@@ -494,25 +494,25 @@ patNamesOf (PInt n sp) = []
 patNamesOf (PStr s sp) = []
 patNamesOf (PRecord rn fields sp) = concatMap (\f => patNamesOf (secondOf f)) fields
 
-renameAlt : String -> String -> (Pat, Expr) -> (Pat, Expr)
-renameAlt oldName newName alt =
-  let
-    p = firstOf alt
-  in (p, renameExprUnless oldName newName (patNamesOf p) (secondOf alt))
+renameAltF : Int -> String -> String -> Alt -> Alt
+renameAltF fuel oldName newName alt =
+  { alt
+    | altBody = renameExprUnlessF (fuel - 1) oldName newName (patNamesOf alt.altPat) alt.altBody
+  }
 
 -- 该列出现构造子：每个构造子一组。
 --
 -- **分支 pattern 的子模式一律用新鲜变量**（`_sc<i>`）：规范形的精化器只接受变量/通配
 -- 子模式（`bindCtorTele`），位置名与 body 里的引用完全可控；子模式的真实形态交给内层
 -- `buildColumnExpr` 用 case 表达。
-ctorAltList : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check (List (Pat, Expr))
+ctorAltList : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> String -> List String -> Span -> Int -> Check (List Alt)
 ctorAltList table clauses pos restParams fbSp fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
   else
     ctorAltListGo table clauses (ctorHeads clauses) pos restParams fbSp fuel
 
-ctorAltListGo : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> String -> List String -> Span -> Int -> Check (List (Pat, Expr))
+ctorAltListGo : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> List String -> String -> List String -> Span -> Int -> Check (List Alt)
 ctorAltListGo table clauses [] pos restParams fbSp fuel =
   if fuel <= 0 then icFuel "pattern matrix" else OkC []
 ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel =
@@ -523,9 +523,9 @@ ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel =
       subpatCount = ctorSubPatCount clauses cname
       freshSubs = subNamesFor pos subpatCount
       subParams = append freshSubs restParams
-      branchPats = map (\n => PVar n (Span "" 0 0 0 0 0 0)) freshSubs
+      branchPats = map (\n => PVar n (detachedNodeRef (Span "" 0 0 0 0 0 0))) freshSubs
       expanded = clausesForCtor cname branchPats pos clauses
-    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (PCon (classifyName cname) branchPats (Span "" 0 0 0 0 0 0), bodyExpr) tail)))
+    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Alt (PCon (cname) branchPats (detachedNodeRef (Span "" 0 0 0 0 0 0))) bodyExpr (detachedNodeRef (Span "" 0 0 0 0 0 0))) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (List Pat, Expr) -> String -> Int
@@ -534,8 +534,7 @@ ctorSubPatCount (c :: rest) cname =
   case c of
     (p :: ps, body) =>
       case p of
-        PCon cn subpats psp =>
-          if rnameKey cn == cname then length subpats else ctorSubPatCount rest cname
+        PCon cn subpats psp => if cn == cname then length subpats else ctorSubPatCount rest cname
         _ => ctorSubPatCount rest cname
     ([], body) => ctorSubPatCount rest cname
 
@@ -561,7 +560,7 @@ ctorHeads (c :: rest) =
   case c of
     (p :: ps, body) =>
       case p of
-        PCon cname subpats psp => addNameDistinct (rnameKey cname) (ctorHeads rest)
+        PCon cname subpats psp => addNameDistinct (cname) (ctorHeads rest)
         _ => ctorHeads rest
     ([], body) => ctorHeads rest
 
@@ -580,7 +579,7 @@ clausesForCtor cname freshSubs pos (c :: rest) =
     (p :: ps, body) =>
       case p of
         PCon cn subpats psp =>
-          if rnameKey cn == cname then
+          if cn == cname then
             (::) (append subpats ps, body) (clausesForCtor cname freshSubs pos rest)
           else
             clausesForCtor cname freshSubs pos rest
@@ -600,14 +599,14 @@ filterFallback (c :: rest) =
 -- 兜底分支：变量/通配 head 的 clause 在**这一列**被通配吃掉，体里对该变量的引用
 -- 要改写成外层 scrutinee 位置名（`pos`）。直接拿原始体时变量名在通配分支里没有
 -- binder，会报 unknown name（`join sep (x :: rest)` 的 `rest`）。
-fallbackAltList : List (String, Bool, List (String, Int)) -> String -> List (List Pat, Expr) -> List String -> Span -> Int -> Check (List (Pat, Expr))
+fallbackAltList : List (String, Bool, List (String, Int)) -> String -> List (List Pat, Expr) -> List String -> Span -> Int -> Check (List Alt)
 fallbackAltList table pos clauses restParams fbSp fuel =
   if fuel <= 0 then
     icFuel "pattern matrix"
   else
     case prepFallbacks pos (filterFallback clauses) of
       [] => OkC []
-      fbs => Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1)) (\bodyExpr => OkC [(PWild (Span "" 0 0 0 0 0 0), bodyExpr)])
+      fbs => Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1)) (\bodyExpr => OkC [Alt (PWild (detachedNodeRef (Span "" 0 0 0 0 0 0))) bodyExpr (detachedNodeRef (Span "" 0 0 0 0 0 0))])
 
 prepFallbacks : String -> List (List Pat, Expr) -> List (List Pat, Expr)
 prepFallbacks pos [] = []

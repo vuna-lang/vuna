@@ -10,9 +10,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Frontend.Canonical.Ast
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Bridge
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 
 -- | 实例定义名：**单类前缀 + 完整 head 名**（`Eq_Int`、`Eq_Base.Bool.Bool`、`Show_Box_a`）。
 -- 没有命名实例（`as name`），不存在覆盖名；按「类名 + 头实参」派生是唯一规则
@@ -87,17 +86,17 @@ piName dom cod = "Pi_${exprNameFor dom}_${exprNameFor cod}"
 export exprNameFor : Expr -> String
 exprNameFor e =
   case e of
-    EVar n sp => rnameKey n
+    EVar n sp => n
     EInt n sp => strFromInt n
     EStr s sp => s
     EPi _ _ _ dom cod _ => piName dom cod
     EApp (EVar n nsp) args sp =>
-      if rnameKey n == "->" then
+      if n == "->" then
         case args of
           a :: b :: _ => piName a b
-          _ => "?" ++ digestHex (digestOfString (encTop encExpr (toAstExpr e)))
+          _ => "?" ++ digestHex (digestOfString (encTop encExpr (e)))
       else
         exprNameFor (EVar n nsp) ++ argSuffix args
     -- 参数化实例名要能区分 `Box a` / `Pair a b`（一律取同一个占位名会让 `Eq_X` 撞名）。
     EApp fn args sp => exprNameFor fn ++ argSuffix args
-    other => "?" ++ digestHex (digestOfString (encTop encExpr (toAstExpr other)))
+    other => "?" ++ digestHex (digestOfString (encTop encExpr (other)))

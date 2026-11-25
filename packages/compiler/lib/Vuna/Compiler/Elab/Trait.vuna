@@ -19,8 +19,8 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Obs
 
 -- 类参数绑成隐式 binder 后的局部上下文。
@@ -74,12 +74,12 @@ elabTrait globals ec (d, dsp) =
   case d of
     DTrait tname params supers methods sp =>
       if length params == 0 then
-        tcErr0 sp InterfaceNoParam
+        tcErr0 (nodeRefSpan sp) InterfaceNoParam
       else
         let
           -- 方法投影/kind 推断仍吃 (名字, 类型) 对；span 只在 projSpans 里用。
           methodsP = traitMethodPairs methods
-        in Vuna.Compiler.Base.Common.bind (traitParamKinds globals ec params methodsP) (\pk => elabTraitKinds globals (secondOf pk) tname params supers methods methodsP (firstOf pk) sp)
+        in Vuna.Compiler.Base.Common.bind (traitParamKinds globals ec params methodsP) (\pk => elabTraitKinds globals (secondOf pk) tname params supers methods methodsP (firstOf pk) (nodeRefSpan sp))
     _ => errAt dsp "DT: internal: expected a trait declaration"
 
 -- 拿到类参数 kind 后：父类约束 → 字段类型 → 字典族/构造子 → 投影 → 类表项。
@@ -292,7 +292,7 @@ declNamedInFile ((d, sp) :: rest) name file =
     Nothing => declNamedInFile rest name file
 
 headTypeNameOf : Expr -> Maybe String
-headTypeNameOf (EVar n sp) = Just (rnameKey n)
+headTypeNameOf (EVar n sp) = Just (n)
 headTypeNameOf (EApp fn args sp) = headTypeNameOf fn
 headTypeNameOf _ = Nothing
 
@@ -403,24 +403,24 @@ elabInstanceWithClassGo globals allDecls cls info ec0 headExpr methods msp =
 export elabInstance : List (Decl, Span) -> List (Decl, Span) -> List (String, Term) -> List DtClass -> List DtData -> Ec -> (Decl, Span) -> Check (List (String, Term), Ec)
 elabInstance instDecls allDecls globals classes datas ec (DInstance ctxE headExpr methods msp, dsp) =
   Vuna.Compiler.Base.Common.bind
-    (onErrDiag (withFallbackSpan msp) (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec msp headExpr ctxE))
+    (onErrDiag (withFallbackSpan (nodeRefSpan msp)) (elabInstanceSig classes globals (definedNames (map firstOf instDecls)) ec (nodeRefSpan msp) headExpr ctxE))
     (
       \p =>
         case p of
           (info, ec0) =>
             case findClass (instSigClass info) classes of
-              Nothing => tcErr0 msp InstanceHeadNotApp
-              Just cls => if instanceLandingOk allDecls msp cls headExpr then elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp else tcErr0 msp OrphanInstance
+              Nothing => tcErr0 (nodeRefSpan msp) InstanceHeadNotApp
+              Just cls => if instanceLandingOk allDecls (nodeRefSpan msp) cls headExpr then elabInstanceWithClass globals allDecls cls info ec0 headExpr methods (nodeRefSpan msp) else tcErr0 (nodeRefSpan msp) OrphanInstance
     )
 elabInstance instDecls allDecls globals classes datas ec (d, dsp) =
   errAt dsp "DT: internal: expected an instance declaration"
 
 -- 实例头/上下文的语法拆分：头是 `C arg`，约束是 `C arg`。
 instanceHeadParts : Expr -> Maybe (String, List Expr)
-instanceHeadParts (EVar n sp) = Just (rnameKey n, [])
+instanceHeadParts (EVar n sp) = Just (n, [])
 instanceHeadParts (EApp fn args sp) =
   case fn of
-    EVar n fsp => Just (rnameKey n, args)
+    EVar n fsp => Just (n, args)
     _ => Nothing
 instanceHeadParts _ = Nothing
 
@@ -435,9 +435,9 @@ constraintPartsOf sp (e :: rest) =
 instanceConstraintParts : Expr -> Maybe (String, List Expr)
 instanceConstraintParts (EApp fn args sp) =
   case fn of
-    EVar n fsp => Just (rnameKey n, args)
+    EVar n fsp => Just (n, args)
     _ => Nothing
-instanceConstraintParts (EVar n sp) = Just (rnameKey n, [])
+instanceConstraintParts (EVar n sp) = Just (n, [])
 instanceConstraintParts _ = Nothing
 
 -- 实例 signatrue 的精化结果：类名、tele、ctx 字典域、头实参（tele 内）、结果头。
@@ -548,7 +548,7 @@ closedTypeTerms (a :: rest) =
         Just ts => Just (t :: ts)
 
 closedTypeTerm : Expr -> Maybe Term
-closedTypeTerm (EVar n sp) = Just (TGlobal (rnameKey n))
+closedTypeTerm (EVar n sp) = Just (TGlobal (n))
 closedTypeTerm (EApp fn args sp) =
   case closedTypeTerm fn of
     Nothing => Nothing
@@ -616,8 +616,8 @@ bareTeleSeeds [] kinds = []
 bareTeleSeeds (e :: rest) (k :: ks) =
   case e of
     EVar n sp =>
-      if isLowerStart (rnameKey n) then
-        (::) (rnameKey n, quote 0 k) (bareTeleSeeds rest ks)
+      if isLowerStart (n) then
+        (::) (n, quote 0 k) (bareTeleSeeds rest ks)
       else
         bareTeleSeeds rest ks
     _ => bareTeleSeeds rest ks
@@ -655,10 +655,9 @@ fallbackTeleKind : List Expr -> String -> Term
 fallbackTeleKind scanExprs v = arityFun (exprMaxAppArityIn v scanExprs) (TType levelZero)
 
 exprFreeLower : Expr -> List String
-exprFreeLower (EVar n sp) = if isLowerStart (rnameKey n) then [rnameKey n] else []
+exprFreeLower (EVar n sp) = if isLowerStart (n) then [n] else []
 exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeLower args)
 exprFreeLower (EPi n i _ dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
-exprFreeLower (EAnn v ty sp) = append (exprFreeLower v) (exprFreeLower ty)
 exprFreeLower _ = []
 
 keepOutBanned : HashMap String Bool -> List String -> List String
@@ -811,7 +810,7 @@ firstDuplicateInstanceMethodGo known (d :: rest) seen =
         let
           canon = canonicalMethodShort short
         in case lookupPair canon seen of
-          Just prev => if prev == short then firstDuplicateInstanceMethodGo known rest seen else Just (canon, sp)
+          Just prev => if prev == short then firstDuplicateInstanceMethodGo known rest seen else Just (canon, nodeRefSpan sp)
           Nothing => firstDuplicateInstanceMethodGo known rest ((canon, short) :: seen)
       else
         firstDuplicateInstanceMethodGo known rest seen
@@ -1430,7 +1429,7 @@ checkInstanceHeadsGo ((d@(decl, dsp)) :: rest) classes globals ec acc insts seen
   case decl of
     DInstance ctxE headExpr methods msp =>
       Vuna.Compiler.Base.Common.bind
-        (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec msp headExpr ctxE)
+        (elabInstanceSig classes globals (definedNames (map firstOf (d :: rest))) ec (nodeRefSpan msp) headExpr ctxE)
         (
           \p =>
             case p of
@@ -1440,10 +1439,10 @@ checkInstanceHeadsGo ((d@(decl, dsp)) :: rest) classes globals ec acc insts seen
                   isym = instanceSymbol (instSigClass info) headExpr
                   ikey = instanceKey ec1 (instSigClass info) (instSigTele info) (instSigHead info)
                   ty = instTypeOf info
-                  inst = DtInst iname isym ikey (instSigTele info) (instSigCtx info) (instSigHead info) (Just msp)
+                  inst = DtInst iname isym ikey (instSigTele info) (instSigCtx info) (instSigHead info) (Just (nodeRefSpan msp))
                 in case findInstanceClash ec1 iname isym ikey (instSigTele info) (instSigHead info) (append (ecInstList ec1) seen) of
-                  (Just ClashDuplicate, ec2) => tcErr1 msp (DuplicateInstance iname) iname
-                  (Just ClashOverlap, ec2) => tcErr1 msp (OverlappingInstances iname) iname
+                  (Just ClashDuplicate, ec2) => tcErr1 (nodeRefSpan msp) (DuplicateInstance iname) iname
+                  (Just ClashOverlap, ec2) => tcErr1 (nodeRefSpan msp) (OverlappingInstances iname) iname
                   (Nothing, ec2) => checkInstanceHeadsGo rest classes globals ec2 ((isym, ty) :: acc) (inst :: insts) (inst :: seen)
         )
     _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
@@ -1639,8 +1638,8 @@ checkBindersFuel fuel globals ctx ec (pat :: rest) body expected sp =
           if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp else tcErr0 sp ImplicitParamKind
         else
           case pat of
-            PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo (spanAtName pname psp) sp
-            PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig "_" rest body dom clo psp sp
+            PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo (spanAtName pname (nodeRefSpan psp)) sp
+            PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig "_" rest body dom clo (nodeRefSpan psp) sp
             _ => tcErr0 (patSpan pat) DefParamsMustBeVars
       _ => tcErr0 sp DefMoreParams
 

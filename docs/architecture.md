@@ -31,7 +31,7 @@ packages/target-wasm/lib/Vuna/Target/Wasm/      （独立包 vuna-target-wasm �
 packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 packages/compiler/vuna.toml
                                 的 [layers] 执行，见 reference/packages.md「层约束」）
 ├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest Reserved
-│               Canonical/{Ast,Pkg} Packages/{Pkg,Source} Rast{,.Bridge,.Name}
+│               Canonical/{Ast,Pkg} Packages/{Pkg,Source} Name AstQuery
 │                             词法（含无损 CST）/ 语法 / vuna.toml / 规范编码 / 包图
 ├─ Loader/      Modules Resolve Flatten Expand Fixity Addr Fingerprint Layers
 │                             模块图 / 名字解析 / flatten / fixity / 地址与身份 / 层约束
@@ -85,8 +85,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
  → Frontend.Parser.parseSource   （offside layout → AST + imports；工具用 parseSourceWithComments）
  → Frontend.Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
- → Frontend.Rast.Bridge.toRastDecls （解析后的 Ast → RAst：引用名换成 RName；Elab 的唯一输入层）
- → Elab.Driver.elabProgramFull   （只读 RAst；Records/Derive 展开 → 精化）
+ → Elab.Driver.elabProgramFull   （只读 Ast；Records/Derive 展开 → 精化）
  → Lowering.Erased                （运行时 TVar 下标归一化 + 校验；类型面保留）
  → Lowering.Program               （Core → Ir：表示/形态/入口分类，程序级检查）
  → Target.Ocaml.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）

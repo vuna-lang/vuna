@@ -15,12 +15,12 @@
 
 ```text
 源码文本 → Lexer → Parser/Ast（surface，含糖）→ Loader（fixity/section/do/模板/宏）
-        → Rast（名字已解析，糖已消失）→ Elab → Core → IR → 后端
+        → Elab（名字已解析、糖已消失）→ Core → IR → 后端
 ```
 
 - **表面语法只活到 `Frontend.Ast`**：括号 / 中缀 / section 在 parser 里就降级成普通
   `EVar` / `EApp` / 单 binder λ；section 的书写形态记在 `Frontend.Cst.surfaceSections`，
-  `Loader.Fixity` 只按 fixity 重排并折叠立即应用，`Rast` 里没有 section 构造子。
+  `Loader.Fixity` 只按 fixity 重排并折叠立即应用，Elab 的输入里没有 section 构造子。
 - **纯书写形式不建 AST 节点**：括号（层数）与「哪些 token 是括号」由 parser 的建树事件
   按节点 id 记录在 `Frontend.Cst` 里（`(e)` / `((e))` / `(f x) y` / `f (a)` 都覆盖；
   模板洞是独立 token 子流，洞的子树挂在模板节点上）；反引号链步同理（名字是普通标识符，
@@ -29,7 +29,7 @@
   `@vuna@macro@*` / `@vuna@tuple@*` / `@vuna@ascribe` / `@vuna@do@*` / `?hole`）：列表字面量、
   `perform` / `handle`、`f@name`、行条目、元组 / unit、类型标注、do 链、洞、内置宏都走这条路。
   新增形式优先考虑这条路径（§10）。所有前缀常量与编解码都在 `Frontend.Reserved`
-  （唯一真源，`Frontend.Ast` / `Frontend.Rast` 只重导出）：表面标记是 `data Reserved`
+  （唯一真源，`Frontend.Ast` 只重导出）：表面标记是 `data Reserved`
   （载荷在构造子字段里），`classify` / `reservedText` 是唯一一对线上字符串编解码。
 - **工具面看的是 `Frontend.Ast` 原形**：`Fmt` 按源码顺序打印、`Index`/`Lsp` 扫 binder 与引用、
   `Lint` 做归一化建议。任何表面形式都必须在这三处有明确处理，否则工具会漂移。
@@ -91,7 +91,7 @@
 | 内置宏 | `log! "level" msg` / `mark! name` | `Loader.Expand` 展开成隐藏 runtime 原语 | `Loader.Expand`、[logging.md](logging.md)、[observability.md](observability.md) |
 | 元组 | `(a, b, c)` | 右嵌套成 `Pair a (Pair b c)`；类型 / 值 / 模式同一套语法（要求 `Pair` 可见） | `Frontend.Parser`、`Loader.Resolve` |
 | unit | `()` | 类型位置是 `Unit`，值 / 模式位置是 `MkUnit`（要求可见） | `Frontend.Parser`、`Loader.Resolve` |
-| 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，名字解析后由 `Rast.ofExpr` 合成 `EAnn`（按 `T` 检查 `e`） | `Frontend.Parser`、`Frontend.Rast`、`Elab.Term.Impl` |
+| 类型标注 | `(e : T)` | parser 编码成 `@vuna@ascribe`，解析后保持 `EApp (EVar @vuna@ascribe)` 应用，由 Elab 在应用处按 `T` 检查 `e` | `Frontend.Parser`、`Loader.Resolve`、`Elab.Term.Impl` |
 | 低优先级应用 / 管道 | `f $ x` / `x \|> f` | 普通运算符：定义在 `Base.Data.Function`，fixity 在 `Base.Internal.Operator` | `Base.Data.Function`、[operators.md](operators.md) |
 | **不支持** | guard、`\case`、range、comprehension | 见 §11 | — |
 
@@ -199,7 +199,7 @@
 ## 10. 成本模型：新增一个表面形式要动什么
 
 实测一个**新 AST 节点**会落在约 18 个文件里（已删的 `ESect*` 曾是例子）：
-`Frontend.Ast` + `Frontend.Canonical.Ast`（哈希编码 / 解码）+ `Frontend.Rast` 与 `Rast.Bridge`
+`Frontend.Ast` + `Frontend.Canonical.Ast`（哈希编码 / 解码）
 + `Frontend.Parser` + `Loader.{Fixity,Expand,Flatten,Resolve}` + `Elab.{Match,Term.Impl}`
 + `Fmt.{Expr,Comment}` + `Index.Scan` + `Lint.Rules` + `Lsp.{Bindings,Rename}` + `Sig`。
 
@@ -233,7 +233,7 @@
 | lambda 参数模式 | ✓ | ✓ | ✓ | 参数只能是名字 | 不做（无签名 lambda 无期望类型） |
 | `\case` | ✓ | — | ✓ | 无 | 不做 |
 | tuple / unit 语法 | ✓ | ✓ | ✓ | `(a, b, c)` 右嵌套到 `Pair`；`()` 按位置展开成 `Unit` / `MkUnit` | 已支持（要求 `Pair` / `Unit` / `MkUnit` 可见） |
-| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 解析后合成 `Rast.EAnn`（与 where 签名同一路径） | 已支持 |
+| 表达式类型标注 `(e : T)` | ✓ | ✓ | ✓ | 保持 `@vuna@ascribe` 应用（与 where 签名同一条检查路径） | 已支持 |
 | `case` 多 scrutinee | — | — | — | 无专用语法 | 不做（写 `case (a, b)`） |
 | 多 binder 重复（非线性模式） | — | ✓ | — | 拒绝 | 不做（需要相等约束） |
 | Sigma `(n ** p)` / 依赖对 | — | ✓ | — | 无 `Sigma`；`**` 只是未知运算符 | 阻塞于**类型层 lambda**（见下） |

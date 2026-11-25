@@ -93,8 +93,8 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 
 | 阶段 | Idris 2 | Yaffle | vuna（证据见 §6） |
 | --- | --- | --- | --- |
-| 前端 | `Idris/Parser` → `Idris/Desugar` | 同（近移植） | `Frontend/{Lexer,Cst,Parser}` → `Loader.{Fixity,Expand,Resolve}` → `Frontend.Rast.Bridge` |
-| 精化输入 | TTImp（独立语言，糖已消失） | 同 | `Frontend.Rast`——**糖仍在**：pattern / record / where / do / 模板串 / 多 clause 都由 Elab 处理 |
+| 前端 | `Idris/Parser` → `Idris/Desugar` | 同（近移植） | `Frontend/{Lexer,Cst,Parser}` → `Loader.{Fixity,Expand,Resolve}` → `Frontend.Ast`（Elab 直接读） |
+| 精化输入 | TTImp（独立语言，糖已消失） | 同 | `Frontend.Ast`——**糖已在 Loader 去掉**，`Binding` / `Alt` / `LocalClause` 是记录；Elab 直接读 |
 | core | TT + 独立 CaseTree | TT 含 case 表达式 | `Core.Term`（含 `TCase`、`TMk` / `TProj` / `TRecUpd` / `TRecord`） |
 | 擦除 | 独立 pass + 两棵 tree | 同（用 App rig） | `Lowering.Erased`（**同一 Term 类型的视图**：运行期下标归一 + `validateErased`） |
 | 优化 / 决策 | `Compiler/{Inline,LambdaLift,ANF,VMCode}`，按 `UsePhase` 截断 | 同 | 全在 `Lowering.Program`（擦除、表示、内建内联、`++` 展平、Nat 降级、入口分类、SCC）+ `Ir.{Represent,Anf,Cps,Tail}` |
@@ -163,8 +163,8 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 - **诊断的延迟优先级排序**：把 §3 的 `DelayReason` Ord 思路用到等式队列的错误选择上
   （歧义 > 记录更新 > case > rewrite），最可能的真实原因先报。
 - **`CONVENTIONS.md` 式的层禁令**：`Core` 不 import `Elab` 我们已有（`[layers]`）；但 `Elab`
-  层 26 个模块里有 22 个直接 import `Frontend.Rast`（连 `Elab.Types` / `Elab.Meta` 这类叶子也
-  直接读 `Rast.Name`），这条禁令不成立。它不是洁癖：它决定「能否有第二种前端」。照 Yaffle 的
+  层 26 个模块里有 22 个直接 import `Frontend.Ast`（连 `Elab.Types` / `Elab.Meta` 这类叶子也
+  直接读 `Frontend.Name`），这条禁令不成立。它不是洁癖：它决定「能否有第二种前端」。照 Yaffle 的
   方向，中间语言（已解析、糖已消失、名字是身份）应该是 Elab 的唯一输入。
 
 ### 7.3 明确不采纳

@@ -27,15 +27,15 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 
 emptyPatSpan : Span
 emptyPatSpan = Span "" 0 0 0 0 0 0
 
 -- 一行等长的通配模式。
 export wilds : Int -> List Pat
-wilds n = if n <= 0 then [] else PWild emptyPatSpan :: wilds (n - 1)
+wilds n = if n <= 0 then [] else PWild (detachedNodeRef emptyPatSpan) :: wilds (n - 1)
 
 -- 剥掉 as-pattern（覆盖性按内层模式判定）。
 export patHead : Pat -> Pat
@@ -46,7 +46,7 @@ headCtorName : List Pat -> Maybe String
 headCtorName [] = Nothing
 headCtorName (p :: _) =
   case patHead p of
-    PCon c _ _ => Just (rnameKey c)
+    PCon c _ _ => Just (c)
     _ => Nothing
 
 -- 该列出现的构造子名（保序、去重）。
@@ -81,7 +81,7 @@ specializeRow : Int -> String -> List Pat -> List (List Pat)
 specializeRow ar cname [] = []
 specializeRow ar cname (p :: ps) =
   case patHead p of
-    PCon c subs _ => if rnameKey c == cname then [append subs ps] else []
+    PCon c subs _ => if c == cname then [append subs ps] else []
     PVar _ _ => [append (wilds ar) ps]
     PWild _ => [append (wilds ar) ps]
     _ => []
@@ -184,7 +184,7 @@ coverageWitness table fuel pending rows qs =
                 Nothing => coverageWitness table fuel2 (Just rest) rows qs
                 Just w =>
                   Just
-                    (PCon (classifyName (firstOf entry)) (takePats ar w) emptyPatSpan :: dropPats ar w)
+                    (PCon ((firstOf entry)) (takePats ar w) (detachedNodeRef emptyPatSpan) :: dropPats ar w)
         Nothing =>
           case qs of
             [] => if hasNilRow rows then Nothing else Just []
@@ -195,7 +195,7 @@ coverageWitness table fuel pending rows qs =
                 [] =>
                   case coverageWitness table fuel2 Nothing (defaultRows rows) qsRest of
                     Nothing => Nothing
-                    Just w => Just (PWild emptyPatSpan :: w)
+                    Just w => Just (PWild (detachedNodeRef emptyPatSpan) :: w)
                 h :: _ =>
                   case familyCtors table h of
                     -- 未知族（跨包表缺失 / 重载构造子）：不推断，按已覆盖处理。
@@ -241,7 +241,7 @@ clauseCover table fuel rows qs =
               clauseCover
                 table
                 fuel2
-                (specializeCtor (natToInt (length subs)) (rnameKey c) rows)
+                (specializeCtor (natToInt (length subs)) (c) rows)
                 (append subs qsRest)
             -- record 模式：字段匹配的覆盖性判据不在这一层，按未知处理（不报错）。
             PRecord _ _ _ => CovUnknown
@@ -368,16 +368,16 @@ renderPatIn fuel paren p =
     case patHead p of
       PCon c subs _ =>
         if natToInt (length subs) == 0 then
-          rnameKey c
+          c
         else
           let
-            body = "${rnameKey c} ${join " " (map (renderPatIn (fuel - 1) True) subs)}"
+            body = "${c} ${join " " (map (renderPatIn (fuel - 1) True) subs)}"
           in if paren then "(${body})" else body
       PVar _ _ => "_"
       PWild _ => "_"
       PInt n _ => strFromInt n
       PStr s _ => "\"${s}\""
-      PRecord rn fields _ => "{ ${rnameKey rn} }"
+      PRecord rn fields _ => "{ ${rn} }"
       PAs _ inner _ => renderPatIn (fuel - 1) paren inner
 
 export renderWitness : List Pat -> String

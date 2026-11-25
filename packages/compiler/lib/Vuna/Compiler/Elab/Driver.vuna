@@ -27,8 +27,8 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Base.Obs
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 
 -- 计数器渲染（仅 `VUNA_LOG=debug` 的规模行使用）：稳定顺序便于逐行 diff。
 showCounters : List String -> String
@@ -154,14 +154,14 @@ splitMemberCtx (e :: rest) =
 
 isMemberConstraintExpr : Expr -> Bool
 isMemberConstraintExpr (EApp (EVar g _) args _) =
-  rnameKey g == effMemberFamilyName && (length args == 3 || length args == 2)
+  g == effMemberFamilyName && (length args == 3 || length args == 2)
 isMemberConstraintExpr _ = False
 
 -- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
 memberSugarExpr ec (e@(EApp (EVar g a) [n, x, r] sp)) =
-  if rnameKey g == effMemberFamilyName then
-    EApp (EVar g a) [EApp (EVar (classifyName effNamedName) sp) [n, x] sp, r] sp
+  if g == effMemberFamilyName then
+    EApp (EVar g a) [EApp (EVar (effNamedName) sp) [n, x] sp, r] sp
   else
     e
 memberSugarExpr ec e = e
@@ -417,14 +417,14 @@ elabBodies recover (d :: rest) globals doneDefs acc ec =
     DFun name pats body sp =>
       case globalsLookup name globals ec of
         Nothing =>
-          case tcErr1 sp (ExpectedSignature name) name of
+          case tcErr1 (nodeRefSpan sp) (ExpectedSignature name) name of
             OkC _ => elabBodies recover rest globals doneDefs acc ec
             ErrC e => resumeBodies recover rest globals doneDefs acc ec e
         Just tyTerm =>
           if defAlreadyDone name ec then
             elabBodies recover rest globals doneDefs acc ec
           else
-            case elabOneDef (d :: rest) globals name tyTerm sp ec of
+            case elabOneDef (d :: rest) globals name tyTerm (nodeRefSpan sp) ec of
               OkC p =>
                 case p of
                   (def, ec1) => elabBodies recover rest globals ((name, dtDefType def) :: doneDefs) (def :: acc) ec1
@@ -439,19 +439,19 @@ elabBodies recover (d :: rest) globals doneDefs acc ec =
       else
         case globalsLookup name globals ec of
           Nothing =>
-            case tcErr1 sp (ExpectedSignature name) name of
+            case tcErr1 (nodeRefSpan sp) (ExpectedSignature name) name of
               OkC _ => elabBodies recover rest globals doneDefs acc ec
               ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-          Just tyTerm => elabBodies recover rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
+          Just tyTerm => elabBodies recover rest globals doneDefs (DtAxiom name tyTerm (Just (nodeRefSpan sp)) :: acc) ec
     -- extern 的签名同样已在 globals；这里只做受限 FFI 类型检查并落成 DtExtern。
     DExtern name cName tyExpr sp =>
       case globalsLookup name globals ec of
         Nothing =>
-          case tcErr1 sp (ExpectedSignature name) name of
+          case tcErr1 (nodeRefSpan sp) (ExpectedSignature name) name of
             OkC _ => elabBodies recover rest globals doneDefs acc ec
             ErrC e => resumeBodies recover rest globals doneDefs acc ec e
         Just tyTerm =>
-          case checkExternTy sp tyTerm of
+          case checkExternTy (nodeRefSpan sp) tyTerm of
             ErrC e => resumeBodies recover rest globals doneDefs acc ec e
             OkC _ =>
               elabBodies
@@ -459,7 +459,7 @@ elabBodies recover (d :: rest) globals doneDefs acc ec =
                 rest
                 globals
                 doneDefs
-                (DtExtern name tyTerm cName (Just sp) :: acc)
+                (DtExtern name tyTerm cName (Just (nodeRefSpan sp)) :: acc)
                 ec
     _ => elabBodies recover rest globals doneDefs acc ec
 
@@ -505,8 +505,8 @@ axiomSpanPairs : List Decl -> List (String, Span)
 axiomSpanPairs [] = []
 axiomSpanPairs (d :: rest) =
   case d of
-    DAxiom n ty sp => (n, sp) :: axiomSpanPairs rest
-    DExtern n c ty sp => (n, sp) :: axiomSpanPairs rest
+    DAxiom n ty sp => (n, nodeRefSpan sp) :: axiomSpanPairs rest
+    DExtern n c ty sp => (n, nodeRefSpan sp) :: axiomSpanPairs rest
     _ => axiomSpanPairs rest
 
 export hasFunClause : String -> List Decl -> Bool
@@ -521,8 +521,8 @@ axiomSpanOf : String -> List Decl -> Maybe Span
 axiomSpanOf name [] = Nothing
 axiomSpanOf name (d :: rest) =
   case d of
-    DAxiom n ty sp => if n == name then Just sp else axiomSpanOf name rest
-    DExtern n c ty sp => if n == name then Just sp else axiomSpanOf name rest
+    DAxiom n ty sp => if n == name then Just (nodeRefSpan sp) else axiomSpanOf name rest
+    DExtern n c ty sp => if n == name then Just (nodeRefSpan sp) else axiomSpanOf name rest
     _ => axiomSpanOf name rest
 
 -- ---------------------------------------------------------------
@@ -891,9 +891,8 @@ hasExplicitHasFieldInstance (d :: rest) =
     DInstance ctx head methods sp =>
       case head of
         EApp (EVar n _) _ _ =>
-          if rnameKey n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
-        EVar n _ =>
-          if rnameKey n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
+          if n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
+        EVar n _ => if n == hasFieldTraitName then True else hasExplicitHasFieldInstance rest
         _ => hasExplicitHasFieldInstance rest
     _ => hasExplicitHasFieldInstance rest
 

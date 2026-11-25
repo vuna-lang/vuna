@@ -14,7 +14,7 @@ import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Selectors
 import Vuna.Compiler.Base.Intrinsics
@@ -1013,7 +1013,7 @@ hiddenRef name sp =
 
 -- `(a, b)` / `()` 的保留名归一：在名字解析前改写成普通表达式，后续仍走同一条
 -- 解析与精化路径。`(e : T)` 的 `@vuna@ascribe` 不在这里改写：它保持 parser 的应用
--- 形状，由 `Rast.ofExpr` 在名字解析之后合成 `Rast.EAnn`。
+-- 形状：parser 保持 `@vuna@ascribe` 应用，由 Elab 在应用处按标注类型检查。
 normalizeSyntaxNames : Expr -> Maybe Expr
 normalizeSyntaxNames (EVar name sp) =
   case classify name of

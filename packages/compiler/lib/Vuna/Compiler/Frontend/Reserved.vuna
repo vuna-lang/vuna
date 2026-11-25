@@ -1,6 +1,6 @@
 -- | 保留 / 合成名的编码：`@vuna@...` 保留命名空间与编译器合成的 `#...` 名。
 --
--- 这是名字编码的**唯一真源**（`Frontend.Ast` 与 `Frontend.Rast` 都重导出本模块；
+-- 这是名字编码的**唯一真源**（`Frontend.Ast` 重导出本模块；
 -- 两套 AST 的 `Expr` / `Pat` / `Decl` 形状各自独立，只有这里的名字编码共享）。
 module Vuna.Compiler.Frontend.Reserved where
 
@@ -31,7 +31,7 @@ holeNameOf name = if holeNamed name then name else ""
 -- 卫生性靠**字符集不相交**：lexer 只在 `@vuna@` 前缀之后把 `@` 收进标识符
 -- （`Frontend.Lexer.startsWithVunaAt`），普通用户标识符不可能意外落进这个空间。
 -- 引用侧另有一道门（不是能力系统）：`Loader.Resolve` 放行 `classify` 认出的表面
--- 标记与 `Base.*` / `Vuna.*` / `Obs.*` 模块（`Rast.Name.isCompilerModulePrefix`），
+-- 标记与 `Base.*` / `Vuna.*` / `Obs.*` 模块（`Frontend.Name.isCompilerModulePrefix`），
 -- 普通包写 `@vuna@…` 会报 `RN_UnknownVariable`；标准库与第一方观测库因此可以直调。
 -- | 内部保留名的前缀（`@vuna@`）。
 export internalNamePrefix : String
@@ -59,7 +59,7 @@ export data Reserved(..) : Type where
   -- 元组 `(a, b)` 与 unit `()`：Loader 改写成 `Pair` / `MkUnit` / `Unit` 后走名字解析。
   RsTuplePair : Reserved
   RsTupleUnit : Reserved
-  -- 类型标注 `(e : T)`：名字解析后由 `Rast.ofExpr` 合成 `Rast.EAnn`。
+  -- 类型标注 `(e : T)`：parser 保持 `@vuna@ascribe` 应用，由 Elab 在应用处按标注类型检查。
   RsAscribe : Reserved
   -- `perform <op>`：Elab 推导 key / 实例名 / 效应签名后降级到 `performCore`。
   RsPerform : Reserved

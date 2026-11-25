@@ -11,7 +11,7 @@ export module Vuna.Compiler.Frontend.Reserved
 --
 -- id 由 parser 的 `withExtent` 分配（与建树事件携带的 id 相同），span 是同一区间的
 -- 视图。身份不随 span 改写而变（宏展开、编辑）；没有解析身份的路径
--- （接口解码 / Rast 桥）用 `noNodeRef` / `detachedNodeRef`。
+-- （接口解码 / 合成节点）用 `noNodeRef` / `detachedNodeRef`。
 export record NodeRef where
   nodeRefId : Int
   nodeRefSpan : Span
@@ -20,7 +20,7 @@ export record NodeRef where
 export noNodeRef : NodeRef
 noNodeRef = NodeRef (0 - 1) spanEmpty
 
--- | 保留区间、丢掉身份（Rast 桥与宏展开的过渡路径）。
+-- | 保留区间、丢掉身份（接口解码与宏展开的过渡路径）。
 export detachedNodeRef : Span -> NodeRef
 detachedNodeRef sp = NodeRef (0 - 1) sp
 
@@ -151,8 +151,8 @@ export data Expr(..) : Type where
   -- `Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp` 调用 + `++` 链；
   -- Fmt / Lint / Index / Doc 在 parse 后处理它。
   --
-  -- `(e : T)` 不在这里：parser 保持 `@vuna@ascribe` 应用，解析后由 `Rast.ofExpr`
-  -- 合成 `Rast.EAnn`；绑定项的签名行走 `Binding.bindSig`。
+  -- `(e : T)` 不在这里：parser 保持 `@vuna@ascribe` 应用，由 Elab 在应用处检查；
+  -- 绑定项的签名行走 `Binding.bindSig`。
   EInterp : List InterpPart -> NodeRef -> Expr
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> NodeRef -> Expr

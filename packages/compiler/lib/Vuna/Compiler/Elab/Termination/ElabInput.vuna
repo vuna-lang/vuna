@@ -1,7 +1,7 @@
 -- | 从**精化后**的程序构造终止性分析输入。
 --
 -- 分析引擎（`Elab.Termination` / `Scc` / `Measure`）工作在「定义名 → 子句（参数模式 +
--- 体）」这一层。以前这一层直接取 Loader 之后的 Rast 声明，于是实例方法体里的自调用
+-- 体）」这一层：名字解析后的 Ast 声明直接交给 Elab，实例方法体里的自调用也按同一形态分析。
 -- 在包上下文里对不上名字（D124）：Loader 把 trait 方法投影改名成 `<模块前缀>.<方法>`，
 -- 分析只按声明短名连边。
 --
@@ -24,8 +24,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 
 -- ---------------------------------------------------------------
 -- 组名
@@ -97,7 +97,12 @@ elabTermInput datas classes defs =
   in (map grNameOf groups, map groupToDecl groups)
 
 groupToDecl : Group -> Decl
-groupToDecl g = DFun g.grName (map (\p => PVar p spanEmpty) g.grParams) g.grBody g.grSpan
+groupToDecl g =
+  DFun
+    g.grName
+    (map (\p => PVar p (detachedNodeRef spanEmpty)) g.grParams)
+    g.grBody
+    (detachedNodeRef g.grSpan)
 
 groupsOfDef : List ProjEntry -> List (String, String) -> List DefShape -> List DtClass -> List (String, List String) -> DtDef -> List Group
 groupsOfDef projs dicts shapes classes fields d =
@@ -267,19 +272,23 @@ convGo cc t acc =
           if rigIsErased lamRig then
             convGo cc body (a :: rest)
           else
-            ELet [(PVar name spanEmpty, a)] (convGo cc body rest) False cc.ccSpan
+            ELet
+              [Binding (PVar name (detachedNodeRef spanEmpty)) (BVal a) Nothing (detachedNodeRef cc.ccSpan)]
+              (convGo cc body rest)
+              False
+              (detachedNodeRef cc.ccSpan)
         [] =>
           if rigIsErased lamRig then
             convGo cc body []
           else
-            ELam [(name, spanEmpty)] (convGo cc body []) cc.ccSpan
+            ELam [(name, spanEmpty)] (convGo cc body []) (detachedNodeRef cc.ccSpan)
     _ => convLeaf cc t acc
 
 convLeaf : ConvCtx -> Term -> List Expr -> Expr
 convLeaf cc t acc =
   case t of
     TGlobal name => appGlobal cc name acc
-    TVar name _ _ => applyAcc cc (EVar (RLocal name) cc.ccSpan) acc
+    TVar name _ _ => applyAcc cc (EVar (name) (detachedNodeRef cc.ccSpan)) acc
     TCon ctor args => tagApply cc ctor (convArgs cc args) acc
     TMk ctor args => tagApply cc ctor (convArgs cc args) acc
     TRecord ctor args => tagApply cc ctor (convArgs cc args) acc
@@ -287,46 +296,55 @@ convLeaf cc t acc =
     -- （`tele` 已经去掉了 record 的族参数）。
     TProj base ctor tele _ fi =>
       case fieldNameAt cc ctor fi tele of
-        Just field => applyAcc cc (EField (convExpr cc base) field cc.ccSpan) acc
+        Just field => applyAcc cc (EField (convExpr cc base) field (detachedNodeRef cc.ccSpan)) acc
         Nothing => applyAcc cc (convExpr cc base) acc
     TRecUpd base _ _ _ _ => applyAcc cc (convExpr cc base) acc
     -- 记录更新在递归定义里不参与下降关系：只保留被更新的基值。
-    TCase scrut alts => applyAcc cc (ECase (convExpr cc scrut) (convAlts cc alts) cc.ccSpan) acc
-    TIf c a b => applyAcc cc (EIf (convExpr cc c) (convExpr cc a) (convExpr cc b) cc.ccSpan) acc
-    TInt n => applyAcc cc (EInt n cc.ccSpan) acc
-    TBool b => applyAcc cc (EInt (if b then 1 else 0) cc.ccSpan) acc
-    TStr s => applyAcc cc (EStr s cc.ccSpan) acc
-    TFloat raw => applyAcc cc (EStr raw cc.ccSpan) acc
+    TCase scrut alts =>
+      applyAcc cc (ECase (convExpr cc scrut) (convAlts cc alts) (detachedNodeRef cc.ccSpan)) acc
+    TIf c a b =>
+      applyAcc
+        cc
+        (EIf (convExpr cc c) (convExpr cc a) (convExpr cc b) (detachedNodeRef cc.ccSpan))
+        acc
+    TInt n => applyAcc cc (EInt n (detachedNodeRef cc.ccSpan)) acc
+    TBool b => applyAcc cc (EInt (if b then 1 else 0) (detachedNodeRef cc.ccSpan)) acc
+    TStr s => applyAcc cc (EStr s (detachedNodeRef cc.ccSpan)) acc
+    TFloat raw => applyAcc cc (EStr raw (detachedNodeRef cc.ccSpan)) acc
     -- 类型 / 元变量 / 布尔字面量：分析视角下是惰性常量。
-    _ => applyAcc cc (EInt 0 cc.ccSpan) acc
+    _ => applyAcc cc (EInt 0 (detachedNodeRef cc.ccSpan)) acc
 
 convArgs : ConvCtx -> List (Term, Rig) -> List Expr
 convArgs cc [] = []
 convArgs cc ((arg, rig) :: rest) =
   if rigIsErased rig then convArgs cc rest else convExpr cc arg :: convArgs cc rest
 
-convAlts : ConvCtx -> List CaseAlt -> List (Pat, Expr)
+convAlts : ConvCtx -> List CaseAlt -> List Alt
 convAlts cc [] = []
 convAlts cc ((CaseAlt name binders body) :: rest) =
-  (altPattern name binders, convExpr cc body) :: convAlts cc rest
+  Alt (altPattern name binders) (convExpr cc body) (detachedNodeRef cc.ccSpan) :: convAlts cc rest
 
 altPattern : String -> List Binder -> Pat
-altPattern "" binders = PWild spanEmpty
-altPattern ctor binders = PCon (classifyName ctor) (convBinders binders) spanEmpty
+altPattern "" binders = PWild (detachedNodeRef spanEmpty)
+altPattern ctor binders = PCon (ctor) (convBinders binders) (detachedNodeRef spanEmpty)
 
 -- 擦除 binder（族参数等）不占运行时位置：分析里同样跳过，路径下标才与**值实参**
 -- 一致（`y :: more` 的值字段是 0/1，不是 1/2）。
 convBinders : List Binder -> List Pat
 convBinders [] = []
 convBinders ((Binder name rig _) :: rest) =
-  if rigIsErased rig then convBinders rest else PVar name spanEmpty :: convBinders rest
+  if rigIsErased rig then
+    convBinders rest
+  else
+    PVar name (detachedNodeRef spanEmpty) :: convBinders rest
 
 applyAcc : ConvCtx -> Expr -> List Expr -> Expr
 applyAcc cc e [] = e
-applyAcc cc e args = EApp e args cc.ccSpan
+applyAcc cc e args = EApp e args (detachedNodeRef cc.ccSpan)
 
 tagApply : ConvCtx -> String -> List Expr -> List Expr -> Expr
-tagApply cc ctor vals acc = applyAcc cc (applyAcc cc (EVar (classifyName ctor) cc.ccSpan) vals) acc
+tagApply cc ctor vals acc =
+  applyAcc cc (applyAcc cc (EVar (ctor) (detachedNodeRef cc.ccSpan)) vals) acc
 
 appGlobal : ConvCtx -> String -> List Expr -> Expr
 appGlobal cc name args =
@@ -337,7 +355,7 @@ appGlobal cc name args =
         dictExpr :: rest =>
           case dictExpr of
             EVar rname _ =>
-              case lookupDictClass cc (rnameKey rname) of
+              case lookupDictClass cc (rname) of
                 Just cls =>
                   case lookupClassByName cc.ccClasses cls of
                     Just classTerm =>
@@ -345,7 +363,7 @@ appGlobal cc name args =
                         Just (method, _) =>
                           applyAcc
                             cc
-                            (EVar (RLocal (dictGroupKey (rnameKey rname) method)) cc.ccSpan)
+                            (EVar ((dictGroupKey (rname) method)) (detachedNodeRef cc.ccSpan))
                             rest
                         Nothing => applyNamed cc name args
                     Nothing => applyNamed cc name args
@@ -361,19 +379,19 @@ applyNamed cc name args =
     Just shape =>
       let
         valueArgs = dropCount shape.dsPrefix args
-        head = EVar (classifyName name) cc.ccSpan
+        head = EVar (name) (detachedNodeRef cc.ccSpan)
       in case valueArgs of
         [] => head
         _ =>
           nestApp
             cc
-            (EApp head (takeCount shape.dsArity valueArgs) cc.ccSpan)
+            (EApp head (takeCount shape.dsArity valueArgs) (detachedNodeRef cc.ccSpan))
             (dropCount shape.dsArity valueArgs)
-    Nothing => applyAcc cc (EVar (classifyName name) cc.ccSpan) args
+    Nothing => applyAcc cc (EVar (name) (detachedNodeRef cc.ccSpan)) args
 
 nestApp : ConvCtx -> Expr -> List Expr -> Expr
 nestApp cc base [] = base
-nestApp cc base (arg :: rest) = nestApp cc (EApp base [arg] cc.ccSpan) rest
+nestApp cc base (arg :: rest) = nestApp cc (EApp base [arg] (detachedNodeRef cc.ccSpan)) rest
 
 -- ---------------------------------------------------------------
 -- 记录字段名

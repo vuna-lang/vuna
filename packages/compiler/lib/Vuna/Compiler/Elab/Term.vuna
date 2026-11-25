@@ -14,8 +14,9 @@ import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Types
 export import Vuna.Compiler.Elab.Term.Impl (checkTypeAtKind)
 import Vuna.Compiler.Elab.Term.Support
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
+import Vuna.Compiler.Frontend.AstQuery
 
 export deferDictBinder : List (String, Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Check (List (Term, Rig), Value, Ec)
 deferDictBinder globals ctx ec dom clo args sp =
@@ -39,7 +40,7 @@ inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetIgnoredFuel 256 a1 a2 a3 a4
 export inferLetBound : List (String, Term) -> Ctx -> Ec -> String -> Expr -> List (Pat, Expr) -> Expr -> Bool -> Span -> Span -> Check (Term, Value, Ec)
 inferLetBound a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = inferLetBoundFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export inferLet : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Span -> Check (Term, Value, Ec)
+export inferLet : List (String, Term) -> Ctx -> Ec -> List Binding -> Expr -> Bool -> Span -> Check (Term, Value, Ec)
 inferLet a1 a2 a3 a4 a5 a6 a7 = inferLetFuel 256 a1 a2 a3 a4 a5 a6 a7
 
 export inferLetGo : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Span -> Check (Term, Value, Ec)
@@ -69,7 +70,7 @@ checkLam a1 a2 a3 a4 a5 a6 a7 = checkLamFuel 256 a1 a2 a3 a4 a5 a6 a7
 export checkLetOne : List (String, Term) -> Ctx -> Ec -> (Pat, Expr) -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLetOne a1 a2 a3 a4 a5 a6 a7 a8 a9 = checkLetOneFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
-export checkLet : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
+export checkLet : List (String, Term) -> Ctx -> Ec -> List Binding -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)
 checkLet a1 a2 a3 a4 a5 a6 a7 a8 = checkLetFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
 export checkLetGo : List (String, Term) -> Ctx -> Ec -> List (Pat, Expr) -> Expr -> Bool -> Value -> Span -> Check (Term, Ec)

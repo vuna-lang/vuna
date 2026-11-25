@@ -16,7 +16,6 @@ import Vuna.Compiler.Base.Intrinsics
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Driver
-import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.InstName
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
@@ -68,7 +67,7 @@ headClassName _ = Nothing
 splitInstanceOwnerOf : String -> Decl -> List (String, String)
 splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) =
   case headClassName headExpr of
-    Just c => [(instanceSymbol c (toRastExpr headExpr), owner)]
+    Just c => [(instanceSymbol c (headExpr), owner)]
     Nothing => []
 splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField repr lin sp) =
   splitDerivedOwners owner dname params derivings
@@ -101,7 +100,7 @@ hasFieldOwnerOf owner dname params f =
         (EVar hasFieldTraitName (detachedNodeRef splitNoSpan))
         [label, hasFieldRecordTypeExpr dname params, fty]
         (detachedNodeRef splitNoSpan)
-  in (instanceSymbol hasFieldTraitName (toRastExpr head), owner)
+  in (instanceSymbol hasFieldTraitName (head), owner)
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (String, String)
 splitHasFieldOwners owner dname params [] = []
@@ -111,7 +110,7 @@ splitHasFieldOwners owner dname params (f :: rest) =
 splitDerivedOwners : String -> String -> List String -> List String -> List (String, String)
 splitDerivedOwners owner dname params [] = []
 splitDerivedOwners owner dname params (t :: rest) =
-  (instanceSymbol t (instHead t dname params splitNoSpan), owner)
+  (instanceSymbol t (instHead t dname params (detachedNodeRef splitNoSpan)), owner)
     :: splitDerivedOwners owner dname params rest
 
 -- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，

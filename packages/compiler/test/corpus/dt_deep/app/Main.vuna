@@ -4,7 +4,7 @@
 -- * `chain`：长算子链（每层应用脊椎经若干层包装器，约 5 步/层）；
 -- * `lets`：长 `let` 链（每层绑定至少 1 步）。
 --
--- 精化入口的预算按表达式规模派生（`Rast.exprBudget`），所以这些深度都能通过；
+-- 精化入口的预算按表达式规模派生（`AstQuery.exprBudget`），所以这些深度都能通过；
 -- 门禁见 `checks.ir-boundary` 与 `103_ir_lowering.steps`。
 step : Int -> Int
 step a = a + 1

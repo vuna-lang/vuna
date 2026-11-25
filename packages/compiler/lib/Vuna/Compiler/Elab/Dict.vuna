@@ -18,8 +18,8 @@ import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 
 export isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)

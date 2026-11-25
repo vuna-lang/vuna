@@ -20,8 +20,8 @@ import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Intrinsics
 
 -- ---------------------------------------------------------------
@@ -301,7 +301,7 @@ branchReachable ctx ec idxs ctor =
   Vuna.Compiler.Base.Common.bind (branchVerdict ctx ec idxs ctor) (\v => OkC (branchIsReachable v))
 
 export wildArgs : Int -> List Pat
-wildArgs n = if n <= 0 then [] else (::) (PWild (Span "" 0 0 0 0 0 0)) (wildArgs (n - 1))
+wildArgs n = if n <= 0 then [] else (::) (PWild noNodeRef) (wildArgs (n - 1))
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
 export ctorExplicitArity : Term -> Int
@@ -388,8 +388,8 @@ bindCtorGo ctx ty subpats acc =
           [] => ErrC (tcMsg CaseBranchTooFewArgs [])
           p :: rest =>
             case p of
-              PVar pname psp => bindCtorField ctx rig domVal cod pname (spanAtName pname psp) rest acc
-              PWild psp => bindCtorField ctx rig domVal cod "_" psp rest acc
+              PVar pname psp => bindCtorField ctx rig domVal cod pname (spanAtName pname (nodeRefSpan psp)) rest acc
+              PWild psp => bindCtorField ctx rig domVal cod "_" (nodeRefSpan psp) rest acc
               _ => tcErr0 (patSpan p) NestedPatterns
     _ => OkC (ctx, reverse acc, subpats)
 
@@ -476,8 +476,7 @@ ctorHeadCovered : String -> List (Pat, Expr) -> Bool
 ctorHeadCovered cname [] = False
 ctorHeadCovered cname ((pat, body) :: rest) =
   case pat of
-    PCon cn subps psp =>
-      rnameKey cn == cname && patsAllIrrefutable subps || ctorHeadCovered cname rest
+    PCon cn subps psp => cn == cname && patsAllIrrefutable subps || ctorHeadCovered cname rest
     _ => ctorHeadCovered cname rest
 
 litHeadCovered : Pat -> List (Pat, Expr) -> Bool
@@ -524,9 +523,9 @@ checkCaseAltsGo ec prevs alts =
     (pat, body) :: rest =>
       case pat of
         PCon cname args psp =>
-          if ctorHeadCovered (rnameKey cname) prevs then
+          if ctorHeadCovered (cname) prevs then
             let
-              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant constructor branch" psp body) psp (WarnRedundantCtorBranch (rnameKey cname)) (rnameKey cname)
+              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant constructor branch" (nodeRefSpan psp) body) (nodeRefSpan psp) (WarnRedundantCtorBranch (cname)) (cname)
             in checkCaseAltsGo ec1 ((pat, body) :: prevs) rest
           else
             checkCaseAltsGo ec ((pat, body) :: prevs) rest
@@ -534,20 +533,20 @@ checkCaseAltsGo ec prevs alts =
         PInt n psp =>
           if litHeadCovered pat prevs then
             let
-              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" psp body) psp (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
+              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" (nodeRefSpan psp) body) (nodeRefSpan psp) (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
             in checkCaseAltsGo ec1 ((pat, body) :: prevs) rest
           else
             checkCaseAltsGo ec ((pat, body) :: prevs) rest
         PStr s psp =>
           if litHeadCovered pat prevs then
             let
-              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" psp body) psp (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
+              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant literal branch" (nodeRefSpan psp) body) (nodeRefSpan psp) (WarnRedundantLiteralBranch (litLabel pat)) (litLabel pat)
             in checkCaseAltsGo ec1 ((pat, body) :: prevs) rest
           else
             checkCaseAltsGo ec ((pat, body) :: prevs) rest
         PAs name inner psp => checkCaseAltsGo ec ((pat, body) :: prevs) rest
-        PVar pname psp => checkCatchAll ec prevs (pat, body) rest psp
-        PWild psp => checkCatchAll ec prevs (pat, body) rest psp
+        PVar pname psp => checkCatchAll ec prevs (pat, body) rest (nodeRefSpan psp)
+        PWild psp => checkCatchAll ec prevs (pat, body) rest (nodeRefSpan psp)
         PRecord rn fields psp => checkCaseAltsGo ec ((pat, body) :: prevs) rest
 
 -- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`，
@@ -577,7 +576,7 @@ export altNames : List (Pat, Expr) -> List String
 altNames [] = []
 altNames ((pat, body) :: rest) =
   case pat of
-    PCon cname args psp => rnameKey cname :: altNames rest
+    PCon cname args psp => cname :: altNames rest
     _ => altNames rest
 
 export hasCatchAll : List (Pat, Expr) -> Bool

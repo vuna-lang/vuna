@@ -1,0 +1,149 @@
+-- | 语法树的规模查询：节点计数与精化入口的步数预算。
+--
+-- 精化 / 降级的入口用固定步数预算时，合法的大表达式（长算子链、长 `let` 链）会被误报成
+-- `IC_FuelExhausted`；各阶段的递归深度不会超过节点数，所以入口按节点数派生、递归位置仍按
+-- `fuel - 1` 递减。纯遍历（不做结构下降证明）也用同一口径作显式燃料。
+--
+-- 权重本身按 `weightCap` 截断：它只服务预算派生，语法树规模远低于这个上界；用固定燃料让
+-- 终止性证明与树的形状无关（record 字段上的互递归不构成 SCT 的下降关系）。
+module Vuna.Compiler.Frontend.AstQuery where
+
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+
+weightCap : Int
+weightCap = 1000000
+
+export patWeight : Pat -> Int
+patWeight p = patWeightF weightCap p
+
+patWeightF : Int -> Pat -> Int
+patWeightF fuel p =
+  if fuel <= 0 then
+    1
+  else
+    case p of
+      PVar _ _ => 1
+      PAs _ inner _ => 1 + patWeightF (fuel - 1) inner
+      PWild _ => 1
+      PCon _ pats _ => 1 + patWeightListF (fuel - 1) pats
+      PInt _ _ => 1
+      PStr _ _ => 1
+      PRecord _ fields _ => 1 + patWeightFieldsF (fuel - 1) fields
+
+patWeightListF : Int -> List Pat -> Int
+patWeightListF fuel [] = 0
+patWeightListF fuel (p :: rest) =
+  if fuel <= 0 then 1 else patWeightF (fuel - 1) p + patWeightListF (fuel - 1) rest
+
+patWeightFieldsF : Int -> List (String, Pat) -> Int
+patWeightFieldsF fuel [] = 0
+patWeightFieldsF fuel (f :: rest) =
+  if fuel <= 0 then 1 else patWeightF (fuel - 1) (secondOf f) + patWeightFieldsF (fuel - 1) rest
+
+-- | 表达式节点数（含模式、绑定、局部函数子句、do 语句、record 字段）。
+--   每访问一个节点至少消耗 1 单位 fuel，因此 `exprBudget` 的上界成立；不要退回固定常数。
+export exprWeight : Expr -> Int
+exprWeight e = exprWeightF weightCap e
+
+exprWeightF : Int -> Expr -> Int
+exprWeightF fuel e =
+  if fuel <= 0 then
+    1
+  else
+    case e of
+      EVar _ _ => 1
+      EInt _ _ => 1
+      EStr _ _ => 1
+      EFloat _ _ => 1
+      ELam _ body _ => 1 + exprWeightF (fuel - 1) body
+      EApp fn args _ => 1 + exprWeightF (fuel - 1) fn + exprWeightListF (fuel - 1) args
+      EPi _ _ _ dom cod _ => 1 + exprWeightF (fuel - 1) dom + exprWeightF (fuel - 1) cod
+      ELet binds body _ _ => 1 + bindingWeightsF (fuel - 1) binds + exprWeightF (fuel - 1) body
+      ECase scrut alts _ => 1 + exprWeightF (fuel - 1) scrut + altWeightsF (fuel - 1) alts
+      EIf c t e _ => 1 + exprWeightF (fuel - 1) c + exprWeightF (fuel - 1) t + exprWeightF (fuel - 1) e
+      EField base _ _ => 1 + exprWeightF (fuel - 1) base
+      ERecord _ fields _ => 1 + exprWeightFieldsF (fuel - 1) fields
+      ERecUpdate base fields _ => 1 + exprWeightF (fuel - 1) base + exprWeightFieldsF (fuel - 1) fields
+      EDo stmts _ => 1 + doStmtWeightF (fuel - 1) stmts
+      EInterp parts _ => 1 + interpWeightF (fuel - 1) parts
+
+exprWeightListF : Int -> List Expr -> Int
+exprWeightListF fuel [] = 0
+exprWeightListF fuel (e :: rest) =
+  if fuel <= 0 then 1 else exprWeightF (fuel - 1) e + exprWeightListF (fuel - 1) rest
+
+bindingWeightsF : Int -> List Binding -> Int
+bindingWeightsF fuel [] = 0
+bindingWeightsF fuel (b :: rest) =
+  if fuel <= 0 then 1 else bindingWeightF (fuel - 1) b + bindingWeightsF (fuel - 1) rest
+
+bindingWeightF : Int -> Binding -> Int
+bindingWeightF fuel (Binding pat value sig ref) =
+  if fuel <= 0 then
+    1
+  else
+    let
+      valueWeight =
+        case value of
+          BVal e => exprWeightF (fuel - 1) e
+          BClauses clauses => 1 + clauseWeightsF (fuel - 1) clauses
+      sigWeight =
+        case sig of
+          Just s => exprWeightF (fuel - 1) s.sigType
+          Nothing => 0
+    in 1 + patWeightF (fuel - 1) pat + valueWeight + sigWeight
+
+clauseWeightsF : Int -> List LocalClause -> Int
+clauseWeightsF fuel [] = 0
+clauseWeightsF fuel (c :: rest) =
+  if fuel <= 0 then
+    1
+  else
+    1
+      + patWeightListF (fuel - 1) c.lcPats
+      + exprWeightF (fuel - 1) c.lcBody + clauseWeightsF (fuel - 1) rest
+
+altWeightsF : Int -> List Alt -> Int
+altWeightsF fuel [] = 0
+altWeightsF fuel (a :: rest) =
+  if fuel <= 0 then
+    1
+  else
+    1
+      + patWeightF (fuel - 1) a.altPat
+      + exprWeightF (fuel - 1) a.altBody + altWeightsF (fuel - 1) rest
+
+exprWeightFieldsF : Int -> List (String, Expr) -> Int
+exprWeightFieldsF fuel [] = 0
+exprWeightFieldsF fuel (f :: rest) =
+  if fuel <= 0 then 1 else exprWeightF (fuel - 1) (secondOf f) + exprWeightFieldsF (fuel - 1) rest
+
+doStmtWeightF : Int -> List DoStmt -> Int
+doStmtWeightF fuel [] = 0
+doStmtWeightF fuel (s :: rest) =
+  if fuel <= 0 then 1 else oneDoStmtWeightF (fuel - 1) s + doStmtWeightF (fuel - 1) rest
+
+oneDoStmtWeightF : Int -> DoStmt -> Int
+oneDoStmtWeightF fuel (DBind pat expr _) =
+  if fuel <= 0 then 1 else 1 + patWeightF (fuel - 1) pat + exprWeightF (fuel - 1) expr
+oneDoStmtWeightF fuel (DExpr expr _) = if fuel <= 0 then 1 else 1 + exprWeightF (fuel - 1) expr
+oneDoStmtWeightF fuel (DLet binds _) = if fuel <= 0 then 1 else 1 + bindingWeightsF (fuel - 1) binds
+
+interpWeightF : Int -> List InterpPart -> Int
+interpWeightF fuel [] = 0
+interpWeightF fuel (p :: rest) =
+  if fuel <= 0 then 1 else oneInterpWeightF (fuel - 1) p + interpWeightF (fuel - 1) rest
+
+oneInterpWeightF : Int -> InterpPart -> Int
+oneInterpWeightF fuel (IPText _) = 1
+oneInterpWeightF fuel (IPHole e) = if fuel <= 0 then 1 else 1 + exprWeightF (fuel - 1) e
+
+-- | 表达式入口预算：`base` 是旧的固定值（小表达式行为不变），随节点数线性增长。
+export exprBudget : Int -> Expr -> Int
+exprBudget base e = base + 8 * exprWeight e
+
+-- | 模式入口预算（同上；模式比表达式廉价，调用方给更小的 `base`）。
+export patBudget : Int -> Pat -> Int
+patBudget base p = base + 8 * patWeight p

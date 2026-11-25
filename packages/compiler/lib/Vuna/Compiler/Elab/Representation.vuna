@@ -10,8 +10,8 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Rast
-import Vuna.Compiler.Frontend.Rast.Name
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Intrinsics
 
 -- | 自动去装箱候选：族名、唯一保留字段所在的构造子，以及该字段在完整 telescope 中的下标。

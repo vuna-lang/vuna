@@ -238,7 +238,6 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 | `vuna.elab` | 2.20 s | 100% | 整段精化 |
 | `vuna.elab.bodies` | 1.49 s | 68% | 逐定义精化（`vuna.def.elab` 6326 次；其子跨度 `vuna.elab.term` 正文检查 ~1.3 s） |
 | `vuna.elab.tail` | 0.32 s | 15% | 收尾：`vuna.term` 0.24 s、`usage` 0.049 s、`rezonk` 0.008 s、`extra`/`main.show` ~0.004 s |
-| `vuna.elab.rast` | 0.149 s | 7% | `toRastDecls`（AST → RAST） |
 | `vuna.elab.sigs` | 0.099 s | 4.5% | 签名精化 |
 | `vuna.elab.collectsigs` | 0.037 s | 1.7% | 签名收集 |
 | `vuna.elab.instbodies` | 0.037 s | 1.7% | 实例体 |

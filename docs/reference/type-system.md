@@ -240,7 +240,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 
 终止性判据之外，前端与加载器的状态机（词法、语法、TOML / JSON、目录遍历）用输入规模
 线性放大的显式 fuel 或可证明的结构递归；精化 / 降级的入口同理：预算按
-`Rast.exprWeight`（节点数）派生，递归位置仍按 `fuel - 1` 递减，所以合法的大表达式
+`AstQuery.exprWeight`（节点数）派生，递归位置仍按 `fuel - 1` 递减，所以合法的大表达式
 （长算子链、长 `let` 链）不会因嵌套深度报 `IC_FuelExhausted`。下表是各站点的真实上界。
 编译器、前端与加载器的站点耗尽守卫时报明确的 internal 错误；工具链站点（Fmt / Files /
 Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。深层 / 长输入夹具锁定合法规模

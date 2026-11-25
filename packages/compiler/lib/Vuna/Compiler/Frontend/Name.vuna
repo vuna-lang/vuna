@@ -1,5 +1,5 @@
--- | RAst 的名字身份：局部 / 全局 / 内建 / 宏 / 洞，以及唯一的字符串分类入口。
-module Vuna.Compiler.Frontend.Rast.Name where
+-- | 名字身份：局部 / 全局 / 内建 / 宏 / 洞，以及唯一的字符串分类入口。
+module Vuna.Compiler.Frontend.Name where
 
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common

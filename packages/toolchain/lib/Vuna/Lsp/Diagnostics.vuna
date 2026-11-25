@@ -52,7 +52,6 @@ import Base.Effect.Exit as EffExit
 import Base.Effect.Process as EffProcess
 import Obs as Obs
 import Vuna.Compiler.Elab.Driver
-import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.Term
 
 -- | 错误级 severity 的 LSP 数值（`DiagnosticSeverity` 1）。
@@ -824,7 +823,7 @@ localGoalsAt ctx label text =
                     case reorderProgram (tableOfKeepOpsCst parsed.parsedCst (append programFixities fx)) decls0 of
                       ErrC e => []
                       OkC decls =>
-                        case goalsOfProgramTolerant (toRastDecls decls) of
+                        case goalsOfProgramTolerant (decls) of
                           ErrC e => []
                           OkC gs => gs
               )

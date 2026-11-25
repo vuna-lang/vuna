@@ -51,7 +51,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | FE-12 · D | `Cst.vuna` 的 `scanStringEnd` / `scanDigitsEnd`：为还原原文二次扫描，规则与 lexer 手工一致 | `Frontend/Cst.vuna` | 后续 |
 | FE-14 · A | `Parser.vuna` 的 `parseDoStmt`：任何模式错误都被吞掉、改按表达式重试 | `Frontend/Parser.vuna` | 后续 |
 | FE-15 · C | `Parser/Support.vuna` 的 `stateFuel`：估算上界 + 手写「零 token 链 ≤16」证明，不在门禁里 | `Frontend/Parser/Support.vuna` | 后续 |
-| FE-16 · D | `Rast.vuna` + `Rast/Bridge.vuna`：多份同构 AST + 手写双向搬运，漏改不报错 | `Frontend/{Ast,Rast,Rast/Bridge,Canonical/Ast}.vuna` | 后续 |
 | FE-17 · C | `Canonical/Ast.vuna` 的 tag 编码：tag = 构造子声明顺序，中间插一个即整体位移且解码仍成功 | `Frontend/Canonical/Ast.vuna` | 后续 |
 | FE-19 · D | `Packages/Source.vuna` 的 `skipSourceDir`：跳过名单在工具链另有 `Files.skipGenerated` / `Clean.skipCleanDir` / `Index.Scan` 三份，且不一致 | `Frontend/Packages/Source.vuna` | 后续 |
 | FE-20 · C | `Pkg.vuna` 的 `DepGit` url/rev：store 查找只用 `hash`，url/rev 只进 `depSourceText`，不校验仓库出处 | `Frontend/Packages/Pkg.vuna` | 后续 |
@@ -61,7 +60,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | FE-24 · D | offside 布局没有 layout 栈：`canContinue` 只有「同行 or 列 > 调用方手里的 blockCol」，括号内部不重置；`blockCol = 0` 当「关掉布局」的哨兵；`sameLineState` 伪造 `Pos line 0 0 0` | `Frontend/Parser/Support.vuna`、`Frontend/Parser.vuna` | 后续 |
 | FE-26 · C | token 宽度 / 原文仍有三个来源（lexer 的 `posEndOffset`、Cst 组装时的贪心重扫、`?`/`-`/`!` 的列相邻判定）。AST 与 CST 的 span 约定已统一为「覆盖到最后一个 token 之后」，但 `TTmpl` 的 `endP` 仍是结束引号起点，多行字面量的 span 比 CST 少一个字节；列的単位仍是 UTF-8 字节（LSP 需要 UTF-16 由消费方换算） | `Frontend/Lexer.vuna`、`Frontend/Cst.vuna`、`Frontend/Parser/Support.vuna`、`Vuna.Lsp.Semantic` | 后续 |
 | FE-27 · C | `.` 一个语法被切在 lexer / parser / loader 三层：`a.b` 先合成单 token，parser 的字段后缀只处理独立点，loader 再拆；字段访问没有单一产生点，两条路径的 span / 诊断不同 | `Frontend/Lexer.vuna`（`collectIdent`）、`Frontend/Parser.vuna`（`parseFieldSuffix`）、`Loader/Resolve.vuna` | 后续 |
-| FE-28 · D | `Rast` 是 `Ast` 的整份复制：约 250 行名字分类 / 访问器工具各两份，`ExportItem`/`Import`/`FixityDecl` 又直接 re-export `Ast`；同模块里共享类型与影子类型混用，改一份不会让另一份编译失败 | `Frontend/Rast.vuna`、`Frontend/Ast.vuna` | 后续 |
 | FE-29 · D | `Canonical/Ast` 的 `Import` / `FixityDecl` 有两份编码器（为绕 import 环，靠一条断言保持逐字节一致）；`ExportItem` 的 tag 已违反本模块「tag = 构造子声明顺序」的规则 | `Frontend/Canonical/Ast.vuna`（`encImportLike` / `encFixityLike` / `encExportItem`） | 后续 |
 | FE-30 · D | 依赖路径归一化两个口径：`Pkg.joinPath` 走 `normalizeDir`，`Manifest.resolveManifestPath` 只拼字符串；`./`、`a/../b`、尾 `/` 会产生两个字符串，而 store / 缓存键 / 循环检测都按字符串比较 | `Frontend/Manifest.vuna`、`Frontend/Packages/Pkg.vuna` | 后续 |
 | FE-31 · A | `exportMarkerFollows` 的 `TIdent` 分支两种结果都是 `True`（死分支）：手写 token lookahead 没有测试覆盖 | `Frontend/Parser.vuna` | 后续 |
@@ -214,7 +212,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 ## 跨层根因
 
-1. **名字即身份 / 名字即接口**：`RName` 是字符串、`Rast.Bridge` 用空作用域重分类、
+1. **名字即身份 / 名字即接口**：名字是字符串、
    `bindShapeOf` 的索引模式匹配、`__anf`/`__cps` 编号借 fuel、`showTerm`/`showValueAt 6` 当相等判据
    （仅剩诊断展示 EC-35），以及把元数据编进名字（表面标记的载荷是 `Reserved` 构造子字段，
    只剩线上字符串编解码本身；`#…` 合成名已集中到 `Frontend.Reserved`，编号只用于定义内
