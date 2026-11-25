@@ -11,6 +11,8 @@ module Vuna.Lint where
 
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
+import Base.Data.Result
+import Base.Data.Sort as Sort
 import Base.Data.String as String
 import Base.Effect.Fs as EffFs
 import Base.Effect.Console as EffConsole
@@ -18,6 +20,8 @@ import Base.Effect.Types as EffTypes
 import Base.Effect.Env as EffEnv
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
+import Base.Thread as Thread
+import Base.Thread.Par as Par
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast
@@ -77,6 +81,8 @@ record FileOutcome where
   fileOutcomeFindings : List Finding
   fileOutcomeFixed : Int
   fileOutcomeError : Maybe String
+  -- | `--fix --diff` 的（原文, 修复后）；由父线程按文件顺序打印。
+  fileOutcomeDiff : Maybe (String, String)
 
 -- | 一次 lint 运行内跨文件复用的上下文：fixity 模块图与配置缓存。
 record LintRunEnv where
@@ -291,59 +297,240 @@ readStdinGo fuel acc =
         Just s => if s == "" then pure (join "" (reverse acc)) else readStdinGo (fuel - 1) (s :: acc)
 
 -- ---------------------------------------------------------------
+-- 调度：目标 / 分组 / 装箱
+-- ---------------------------------------------------------------
+-- | 内部：一个 lint 目标。`index` 是它在输入里的位置，父线程按它恢复输出顺序。
+record LintTarget where
+  lintTargetIndex : Int
+  lintTargetPath : String
+  -- | 分组键：Ok 上下文用 `contextDir`，Err 用文件所在目录。
+  lintTargetGroup : String
+  -- | 目录级预解析结果；在 fixity 阶段才收口，被 exclude / 解析失败的文件不碰它。
+  lintTargetContext : Check PackageContext
+  -- | 源字节数；装箱权重（大文件近似更贵）。
+  lintTargetSize : Int
+
+-- | 内部：同一分组键下的一组目标。
+record LintGroup where
+  lintGroupKey : String
+  lintGroupTargets : List LintTarget
+
+-- | 内部：一个 worker 顺序处理的一块文件（同一包上下文）。
+record LintUnit where
+  lintUnitContext : Check PackageContext
+  lintUnitTargets : List LintTarget
+
+-- | 内部：一个 worker 的装载（若干 unit 顺序执行）。
+record LintBin where
+  lintBinWeight : Int
+  lintBinUnits : List LintUnit
+
+-- | 内部：每单元文件数上限。单包过大时切开，避免一个包钉住一个 worker；切块各自加载
+-- 一次模块图，所以上限远大于常见包大小。
+lintUnitFiles : Int
+lintUnitFiles = 128
+
+-- | 内部：worker 数上限。并行度再高时每个 worker 重载自己的上下文模块图、GC 并行开销
+-- 会抵消收益。
+lintMaxWorkers : Int
+lintMaxWorkers = 8
+
+-- | 内部：按输入位置枚举目标。
+enumerateTargets : List String -> List (Int, String)
+enumerateTargets paths = enumerateTargetsGo 0 paths
+
+enumerateTargetsGo : Int -> List String -> List (Int, String)
+enumerateTargetsGo _ [] = []
+enumerateTargetsGo i (path :: rest) = (i, path) :: enumerateTargetsGo (i + 1) rest
+
+isStdinTarget : (Int, String) -> Bool
+isStdinTarget t = secondOf t == "-"
+
+-- | 内部：按目录缓存 `contextForFile`（键与 `FixityEnv` 的 `dirKey` 一致）。
+resolveTargets : Member nFs FsOp r, Member nEnv EnvOp r => List (Int, String) -> Eff r (List LintTarget)
+resolveTargets targets = resolveTargetsGo targets [] []
+
+resolveTargetsGo : Member nFs FsOp r, Member nEnv EnvOp r => List (Int, String) -> List (String, Check PackageContext) -> List LintTarget -> Eff r (List LintTarget)
+resolveTargetsGo [] _ acc = pure (reverse acc)
+resolveTargetsGo (t :: rest) cache acc =
+  let
+    path = secondOf t
+    dir = parentOf path
+  in case lookupContext dir cache of
+    Just ctxR =>
+      do
+        size <- targetSize path
+        resolveTargetsGo rest cache (mkTarget t dir ctxR size :: acc)
+    Nothing =>
+      do
+        ctxR <- contextForFile path
+        size <- targetSize path
+        resolveTargetsGo rest ((dir, ctxR) :: cache) (mkTarget t dir ctxR size :: acc)
+
+-- | 内部：源字节数（缺失按 0 计；只影响装箱权重）。
+targetSize : Member nFs FsOp r => String -> Eff r Int
+targetSize path =
+  do
+    sizeR <- fsFileSize path
+    pure (
+        case sizeR of
+          Just n => natToInt n
+          Nothing => 0
+      )
+
+lookupContext : String -> List (String, Check PackageContext) -> Maybe (Check PackageContext)
+lookupContext _ [] = Nothing
+lookupContext key ((k, v) :: rest) = if k == key then Just v else lookupContext key rest
+
+mkTarget : (Int, String) -> String -> Check PackageContext -> Int -> LintTarget
+mkTarget t dir ctxR size =
+  let
+    key =
+      case ctxR of
+        OkC ctx => "ctx:${contextDir ctx}"
+        ErrC _ => "dir:${dir}"
+  in LintTarget (firstOf t) (secondOf t) key ctxR size
+
+-- | 内部：按分组键聚合（保持首次出现顺序与组内输入顺序）。
+groupTargets : List LintTarget -> List LintGroup
+groupTargets targets = foldl addGroup [] targets
+
+addGroup : List LintGroup -> LintTarget -> List LintGroup
+addGroup [] t = [LintGroup t.lintTargetGroup [t]]
+addGroup (g :: rest) t =
+  if g.lintGroupKey == t.lintTargetGroup then
+    LintGroup g.lintGroupKey (append g.lintGroupTargets [t]) :: rest
+  else
+    g :: addGroup rest t
+
+-- | 内部：切块（每块 ≤ `size`，保持输入顺序）；`fuel` 是剩余块数上界。
+chunkTargets : Int -> List LintTarget -> List (List LintTarget)
+chunkTargets size xs =
+  let
+    width = if size < 1 then 1 else size
+  in chunkTargetsGo width (natToInt (length xs)) xs
+
+chunkTargetsGo : Int -> Int -> List LintTarget -> List (List LintTarget)
+chunkTargetsGo size fuel xs =
+  if fuel <= 0 || length xs == 0 then
+    []
+  else
+    take size xs :: chunkTargetsGo size (fuel - 1) (drop size xs)
+
+-- | 内部：组 → 单元。
+groupUnits : LintGroup -> List LintUnit
+groupUnits g =
+  case g.lintGroupTargets of
+    [] => []
+    first :: _ =>
+      map
+        (\chunk => LintUnit first.lintTargetContext chunk)
+        (chunkTargets lintUnitFiles g.lintGroupTargets)
+
+-- | 内部：每个单元加载一次模块图的固定开销（折算成字节，参与装箱）。
+lintContextWeight : Int
+lintContextWeight = 200000
+
+targetWeight : LintTarget -> Int
+targetWeight t = t.lintTargetSize
+
+-- | 内部：装箱权重 = 源字节数 + 每个上下文的固定开销。大文件 / 大包近似更贵。
+unitWeight : LintUnit -> Int
+unitWeight u = foldl (\n, t => n + targetWeight t) 0 u.lintUnitTargets + lintContextWeight
+
+emptyBins : Int -> List LintBin
+emptyBins n = if n <= 0 then [] else LintBin 0 [] :: emptyBins (n - 1)
+
+minBinWeight : List LintBin -> Int
+minBinWeight [] = 0
+minBinWeight (b :: rest) = minBinWeightGo b.lintBinWeight rest
+
+minBinWeightGo : Int -> List LintBin -> Int
+minBinWeightGo m [] = m
+minBinWeightGo m (b :: rest) =
+  minBinWeightGo (if b.lintBinWeight < m then b.lintBinWeight else m) rest
+
+placeUnitAt : Int -> Int -> LintUnit -> List LintBin -> List LintBin
+placeUnitAt _ _ _ [] = []
+placeUnitAt target weight u (b :: rest) =
+  if b.lintBinWeight == target then
+    LintBin (b.lintBinWeight + weight) (append b.lintBinUnits [u]) :: rest
+  else
+    b :: placeUnitAt target weight u rest
+
+placeUnit : LintUnit -> List LintBin -> List LintBin
+placeUnit u bins = placeUnitAt (minBinWeight bins) (unitWeight u) u bins
+
+hasUnits : LintBin -> Bool
+hasUnits b =
+  case b.lintBinUnits of
+    [] => False
+    _ => True
+
+-- | 内部：LPT 装箱：大块优先，放进当前最轻的 bin。
+assignUnits : Int -> List LintUnit -> List LintBin
+assignUnits jobs units =
+  let
+    sorted = Sort.sortBy (\a, b => unitWeight a >= unitWeight b) units
+    bins = foldl (\bs, u => placeUnit u bs) (emptyBins jobs) sorted
+  in filter hasUnits bins
+
+-- ---------------------------------------------------------------
 -- 单文件
 -- ---------------------------------------------------------------
--- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
-lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintRunEnv -> String -> String -> String -> Eff r (LintRunEnv, FileOutcome)
-lintText opts env displayPath configPath source =
+-- | 内部：对一份已知源码做 lint；上下文由调用方按目录预解析，fixity 阶段才收口。
+lintText : Member nFs FsOp r => LintOpts -> LintRunEnv -> Check PackageContext -> String -> String -> String -> Eff r (LintRunEnv, FileOutcome)
+lintText opts env ctxR displayPath configPath source =
   do
     cfgR <- configForFile opts env.lintRunConfig configPath
     let env1 = { env | lintRunConfig = firstOf cfgR }
     case secondOf cfgR of
-      ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
+      ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
       OkC cfg0 =>
         case applyOpts opts cfg0 of
-          ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
+          ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
           OkC cfg =>
             if lintExcluded displayPath cfg then
-              pure (env1, FileOutcome displayPath [] 0 Nothing)
+              pure (env1, FileOutcome displayPath [] 0 Nothing Nothing)
             else
               case parseSourceDetailed configPath source of
-                ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)))
+                ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
                 OkC parsed =>
-                  do
-                    looked <- fixitiesForParsed env1.lintRunFixity configPath parsed.parsedFile
-                    let env2 = { env1 | lintRunFixity = firstOf looked }
-                    case secondOf looked of
-                      ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                      OkC programFixities =>
-                        case lintParsedWithConfig cfg programFixities source parsed of
-                          ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                          OkC findings =>
-                            do
-                              fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0))
-                              pure (
-                                  case fixedR of
-                                    ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)))
-                                    OkC (remaining, fixed) => (env2, FileOutcome displayPath remaining fixed Nothing)
-                                )
+                  case ctxR of
+                    ErrC e => pure (env1, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
+                    OkC ctx =>
+                      do
+                        looked <- fixitiesForCtx env1.lintRunFixity ctx configPath parsed.parsedFile
+                        let env2 = { env1 | lintRunFixity = firstOf looked }
+                        case secondOf looked of
+                          ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
+                          OkC programFixities =>
+                            case lintParsedWithConfig cfg programFixities source parsed of
+                              ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
+                              OkC findings =>
+                                do
+                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0, Nothing))
+                                  pure (
+                                      case fixedR of
+                                        ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
+                                        OkC (remaining, fixed, diff) => (env2, FileOutcome displayPath remaining fixed Nothing diff)
+                                    )
 
--- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
-lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> LintRunEnv -> String -> Eff r (LintRunEnv, FileOutcome)
-lintOne opts env path =
-  if path == "-" then
-    if opts.lintOptFix then
-      pure (env, FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin"))
-    else
-      do
-        source <- readStdinAll
-        lintText opts env "<stdin>" "stdin.vuna" source
-  else
-    do
-      textR <- readText path
-      case textR of
-        ErrC e => pure (env, FileOutcome path [] 0 (Just (diagText e)))
-        OkC source => lintText opts env path path source
+-- | 内部：lint 一个文件目标（上下文已预解析）。
+lintTargetFile : Member nFs FsOp r => LintOpts -> LintRunEnv -> LintTarget -> Eff r (LintRunEnv, FileOutcome)
+lintTargetFile opts env t =
+  do
+    textR <- readText t.lintTargetPath
+    case textR of
+      ErrC e => pure (env, FileOutcome t.lintTargetPath [] 0 (Just (diagText e)) Nothing)
+      OkC source => lintText opts env t.lintTargetContext t.lintTargetPath t.lintTargetPath source
+
+-- | 内部：lint stdin（配置路径按 `stdin.vuna` 解析）。
+lintStdinTarget : Member nStdin StdinOp r, Member nFs FsOp r => LintOpts -> LintRunEnv -> Check PackageContext -> Eff r (LintRunEnv, FileOutcome)
+lintStdinTarget opts env ctxR =
+  do
+    source <- readStdinAll
+    lintText opts env ctxR "<stdin>" "stdin.vuna" source
 
 -- | 内部：打印 `--diff`（外部 `diff -u`；只用于人读，不影响退出码）。
 printDiff : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r Int
@@ -368,39 +555,100 @@ printDiff path oldSource newSource =
     _ <- if exists then fsRemoveFile outPath else pure 0
     pure 0
 
--- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
-fixFileWith : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (List Finding, Int))
+-- | 内部：fix 单文件（dry-run / 原子写 / 重新 lint 聚在一处）。`--diff` 只带回修复前后的
+-- 文本，打印由父线程按文件顺序完成。
+fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (List Finding, Int, Maybe (String, String)))
 fixFileWith opts cfg path programFixities source findings =
   case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
     ErrC e => pure (ErrC e)
     OkC (count, newSource) =>
       if count == 0 then
-        pure (OkC (findings, 0))
+        pure (OkC (findings, 0, Nothing))
       else if opts.lintOptDiff then
-        do
-          _ <- printDiff path source newSource
-          pure (OkC (findings, count))
+        pure (OkC (findings, count, Just (source, newSource)))
       else if opts.lintOptDry then
-        pure (OkC (findings, count))
+        pure (OkC (findings, count, Nothing))
       else
         do
           _ <- fsWriteFileAtomic path newSource
           pure (
               case lintSourceWithConfig cfg programFixities newSource of
                 ErrC e => ErrC e
-                OkC remaining => OkC (remaining, count)
+                OkC remaining => OkC (remaining, count, Nothing)
             )
 
 -- ---------------------------------------------------------------
 -- 多文件 / 输出
 -- ---------------------------------------------------------------
--- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
-lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> LintRunEnv -> List String -> List FileOutcome -> Eff r (LintRunEnv, List FileOutcome)
-lintFiles opts env [] acc = pure (env, reverse acc)
-lintFiles opts env (path :: rest) acc =
+-- | 内部：worker 里按单元顺序 lint，返回（输入位置, 结果）；env 在单元间复用。
+lintUnitRun : Member nFs FsOp r => LintOpts -> LintRunEnv -> LintUnit -> Eff r (LintRunEnv, List (Int, FileOutcome))
+lintUnitRun opts env u = lintUnitGo opts env u.lintUnitTargets []
+
+lintUnitGo : Member nFs FsOp r => LintOpts -> LintRunEnv -> List LintTarget -> List (Int, FileOutcome) -> Eff r (LintRunEnv, List (Int, FileOutcome))
+lintUnitGo _ env [] acc = pure (env, reverse acc)
+lintUnitGo opts env (t :: rest) acc =
   do
-    stepped <- lintOne opts env path
-    lintFiles opts (firstOf stepped) rest (secondOf stepped :: acc)
+    stepped <- lintTargetFile opts env t
+    lintUnitGo opts (firstOf stepped) rest ((t.lintTargetIndex, secondOf stepped) :: acc)
+
+-- | 内部：worker 里 lint 一个 bin（unit 间共享 fixity 模块图 / 配置缓存）。
+lintBin : Member nFs FsOp r => LintOpts -> LintBin -> Eff r (List (Int, FileOutcome))
+lintBin opts b = lintBinGo opts emptyLintRunEnv b.lintBinUnits []
+
+lintBinGo : Member nFs FsOp r => LintOpts -> LintRunEnv -> List LintUnit -> List (Int, FileOutcome) -> Eff r (List (Int, FileOutcome))
+lintBinGo _ _ [] acc = pure (reverse acc)
+lintBinGo opts env (u :: rest) acc =
+  do
+    stepped <- lintUnitRun opts env u
+    lintBinGo opts (firstOf stepped) rest (append (secondOf stepped) acc)
+
+-- | 内部：父线程处理 stdin（`-`；`--fix` 直接拒绝）。
+lintStdinMaybe : Member nStdin StdinOp r, Member nFs FsOp r, Member nEnv EnvOp r => LintOpts -> List (Int, String) -> Eff r (List (Int, FileOutcome))
+lintStdinMaybe _ [] = pure []
+lintStdinMaybe opts (t :: _) =
+  if opts.lintOptFix then
+    pure [(firstOf t, FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin") Nothing)]
+  else
+    do
+      ctxR <- contextForFile "stdin.vuna"
+      stepped <- lintStdinTarget opts emptyLintRunEnv ctxR
+      pure [(firstOf t, secondOf stepped)]
+
+-- | 内部：收集 worker 结果；chunk 级宿主失败（写盘等）汇总成工具错误。
+collectBins : List (Result (List (Int, FileOutcome))) -> List (Int, FileOutcome) -> List String -> (List (Int, FileOutcome), List String)
+collectBins [] acc errs = (acc, reverse errs)
+collectBins (r :: rest) acc errs =
+  case r of
+    Ok xs => collectBins rest (append acc xs) errs
+    Err msg => collectBins rest acc (msg :: errs)
+
+-- | 内部：按输入位置恢复输出顺序。
+orderOutcomes : List (Int, FileOutcome) -> List FileOutcome
+orderOutcomes pairs = map secondOf (Sort.sortBy (\a, b => firstOf a <= firstOf b) pairs)
+
+-- | 内部：并行 lint——父线程解析上下文、按包分组并装箱，worker 只装 fs 行。
+-- 返回（按输入顺序的结果, worker 级宿主错误）。
+lintFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nStdin StdinOp r => LintOpts -> List String -> Eff r (List FileOutcome, List String)
+lintFiles opts paths =
+  do
+    par <- Thread.parallelism
+    let
+      jobsCap = if par > lintMaxWorkers then lintMaxWorkers else par
+      indexed = enumerateTargets paths
+      files = filter (\t => not (isStdinTarget t)) indexed
+      stdinTargets = filter isStdinTarget indexed
+    stdinOutcomes <- lintStdinMaybe opts stdinTargets
+    resolved <- resolveTargets files
+    let
+      groups = groupTargets resolved
+      units = concatMap groupUnits groups
+      jobs = jobsCap
+      unitCount = natToInt (length units)
+      jobCount = if jobs > unitCount then unitCount else jobs
+      bins = assignUnits jobCount units
+    ran <- Par.parMapEffWith jobs runFsResult (lintBin opts) bins
+    let collected = collectBins ran stdinOutcomes []
+    pure (orderOutcomes (firstOf collected), secondOf collected)
 
 -- | 内部：文本/注解输出。
 printOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
@@ -545,11 +793,31 @@ warningLimitCode opts outcomes =
 anyError : List FileOutcome -> Bool
 anyError outcomes = length (filter (\o => fileError o /= Nothing) outcomes) > 0
 
+-- | 内部：按文件顺序打印 `--diff` 载荷（父线程；worker 不碰进程级 cwd）。
+printDiffs : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List FileOutcome -> Eff r Int
+printDiffs [] = pure 0
+printDiffs (o :: rest) =
+  do
+    _ <-
+      case o.fileOutcomeDiff of
+        Nothing => pure 0
+        Just pair => printDiff o.fileOutcomePath (firstOf pair) (secondOf pair)
+    printDiffs rest
+
+-- | 内部：worker 级宿主失败（写盘 / 读盘竞态）按工具错误报告。
+printToolErrors : Member nConsole ConsoleOp r => List String -> Eff r Int
+printToolErrors [] = pure 0
+printToolErrors (msg :: rest) =
+  do
+    _ <- consoleEprint "error: ${msg}\n"
+    printToolErrors rest
+
 -- | 内部：输出全部结果并给出退出码。阈值取整次运行的配置（`configForRun`），不随
 -- 第一个文件所在包变化。
-finishLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintRunEnv -> List FileOutcome -> Eff r Int
-finishLint opts env outcomes =
+finishLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> List FileOutcome -> Eff r Int
+finishLint opts outcomes =
   do
+    _ <- printDiffs outcomes
     _ <-
       case opts.lintOptFormat of
         LintJson => printJsonOutcomes opts outcomes
@@ -559,7 +827,7 @@ finishLint opts env outcomes =
       [] => pure 0
       _ =>
         do
-          cfgR <- configForRun opts env.lintRunConfig
+          cfgR <- configForRun opts emptyLintConfigEnv
           case secondOf cfgR of
             ErrC e =>
               do
@@ -716,5 +984,7 @@ runLint args =
                           pure 2
                       else
                         do
-                          ran <- lintFiles opts emptyLintRunEnv (dedupePaths targets) []
-                          finishLint opts (firstOf ran) (secondOf ran)
+                          ran <- lintFiles opts (dedupePaths targets)
+                          _ <- printToolErrors (secondOf ran)
+                          code <- finishLint opts (firstOf ran)
+                          pure (if length (secondOf ran) > 0 then 2 else code)

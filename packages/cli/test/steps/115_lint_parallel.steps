@@ -1,0 +1,56 @@
+# 115) lint：父线程解析上下文、按包分组并行；输出顺序与输入一致，坏文件不阻断其它文件，
+# 重复路径只处理一次，--fix / --fix --diff 覆盖全部文件，stdin 与文件混用时顺序不变。
+run: sh -c 'p="$TMPDIR/lint-par"; mkdir -p "$p/lib" "$p/fix" "$p/diff"; printf "[package]\nname = \"lint-par\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\n" "$VUNA_BASE" > "$p/vuna.toml"; for n in 1 2 3 4 5 6; do printf "%s\n" "module F$n where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$p/lib/F$n.vuna"; done; for n in 1 2 3 4 5 6 7 8; do printf "%s\n" "module G$n where" "" "probe : Int -> Int" "probe x = if True then 1 else 2" > "$p/fix/G$n.vuna"; done; for n in 1 2; do printf "%s\n" "module H$n where" "" "probe : Int -> Int" "probe x = if True then 1 else 2" > "$p/diff/H$n.vuna"; done; q="$TMPDIR/lint-par2"; mkdir -p "$q/lib"; printf "[package]\nname = \"lint-par2\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\n" "$VUNA_BASE" > "$q/vuna.toml"; for n in 1 2 3; do printf "%s\n" "module K$n where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$q/lib/K$n.vuna"; done'
+exit: 0
+run: sh -c 'r="$TMPDIR/lint-many"; mkdir -p "$r"; for n in $(seq 1 24); do d="$r/p$n"; mkdir -p "$d/lib"; printf "[package]\nname = \"many%s\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\n" "$n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "module M$n where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$d/lib/M$n.vuna"; done'
+exit: 0
+run: sh -c 'printf "%s\n" "module Bad where" "" "probe : Int -> Int" "probe x = " > "$TMPDIR/lint-par/lib/Bad.vuna"'
+exit: 0
+
+# 单元数多于 worker 数时不能丢文件（24 个包 > 16 个 worker）。
+run: sh -c '"$VUNA" lint --format json "$TMPDIR/lint-many" > "$TMPDIR/lint-par/many.json" 2>&1 || true'
+run: sh -c 'grep -o "\"files\":[0-9]*" "$TMPDIR/lint-par/many.json"'
+out-equals: "files":24
+run: sh -c 'grep -o "LN_LiteralIfChain" "$TMPDIR/lint-par/many.json" | wc -l | tr -d " "'
+out-equals: 24
+
+# 输出顺序 = 输入顺序（并行装箱后再按位置恢复）。
+run: sh -c '"$VUNA" lint --max-warnings 0 "$TMPDIR/lint-par/lib/F2.vuna" "$TMPDIR/lint-par/lib/F1.vuna" "$TMPDIR/lint-par/lib/F3.vuna" > "$TMPDIR/lint-par/order.txt" 2>&1 || true'
+run: sh -c '"$VUNA" lint --max-warnings 0 "$TMPDIR/lint-par/lib/F2.vuna" "$TMPDIR/lint-par/lib/F1.vuna" "$TMPDIR/lint-par/lib/F3.vuna" >/dev/null 2>&1'
+exit: 1
+run: sh -c 'cut -d: -f1 "$TMPDIR/lint-par/order.txt" | xargs -n1 basename | paste -sd, -'
+out-equals: F2.vuna,F1.vuna,F3.vuna
+
+# 跨包（不同 contextDir）装箱后仍按输入顺序输出。
+run: sh -c '"$VUNA" lint --max-warnings 0 "$TMPDIR/lint-par/lib/F1.vuna" "$TMPDIR/lint-par2/lib/K1.vuna" "$TMPDIR/lint-par/lib/F2.vuna" "$TMPDIR/lint-par2/lib/K2.vuna" > "$TMPDIR/lint-par/two.txt" 2>&1 || true'
+run: sh -c 'cut -d: -f1 "$TMPDIR/lint-par/two.txt" | xargs -n1 basename | paste -sd, -'
+out-equals: F1.vuna,K1.vuna,F2.vuna,K2.vuna
+
+# 重复路径只处理一次。
+run: sh -c '"$VUNA" lint "$TMPDIR/lint-par/lib/F1.vuna" "$TMPDIR/lint-par/lib/F1.vuna" 2>&1 | grep -c "F1.vuna:"'
+out-equals: 1
+
+# 一个坏文件不阻断同批与其它文件（解析错误是文件级错误，收口为 exit 2）。
+run: "$VUNA" lint "$TMPDIR/lint-par/lib/F1.vuna" "$TMPDIR/lint-par/lib/Bad.vuna" "$TMPDIR/lint-par/lib/F3.vuna" 2>&1
+exit: 2
+out-contains: F1.vuna:4:11
+out-contains: Bad.vuna
+out-contains: F3.vuna:4:11
+
+# --fix 并行写全部文件。
+run: "$VUNA" lint --fix --select redundant-if "$TMPDIR/lint-par/fix" 2>&1
+exit: 0
+run: sh -c 'grep -l "probe x = 1" "$TMPDIR/lint-par/fix/"*.vuna | wc -l | tr -d " "'
+out-equals: 8
+
+# --fix --diff 由父线程按文件顺序打印 diff，且不写盘。
+run: "$VUNA" lint --fix --diff --select redundant-if "$TMPDIR/lint-par/diff" 2>&1
+exit: 1
+out-contains: ---
+out-contains: +++
+file-contains: $TMPDIR/lint-par/diff/H1.vuna probe x = if True then 1 else 2
+file-contains: $TMPDIR/lint-par/diff/H2.vuna probe x = if True then 1 else 2
+
+# stdin 与文件混用：顺序仍是输入顺序。
+run: sh -c 'printf "%s\n" "module S where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" | "$VUNA" lint --max-warnings 0 - "$TMPDIR/lint-par/lib/F1.vuna" 2>&1 | cut -d: -f1 | xargs -n1 basename | paste -sd, -'
+out-equals: <stdin>,F1.vuna

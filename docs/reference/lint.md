@@ -78,9 +78,25 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 
 ## 1.3 不做结果缓存
 
-`vuna lint` 每次都重新跑规则：单文件 lint 的生产耗时与读回一份 finding 载荷是同一量级
-（workspace 整体 ~0.7 s），缓存是净损失且要多冻结一份 schema。finding 不落对象库，
-`--fix` 的每轮复验也直接重算。
+`vuna lint` 每次都重新跑规则：单文件 lint 的生产耗时与读回一份 finding 载荷是同一量级，
+缓存是净损失且要多冻结一份 schema。finding 不落对象库，`--fix` 的每轮复验也直接重算。
+workspace 整体读数见 [performance.md](performance.md)。
+
+## 1.4 并行
+
+父线程先按文件所在目录解析一次 `PackageContext`（最近的 `vuna.toml`，目录级缓存），再按
+`contextDir` 把文件归到包组；每组按 `lintUnitFiles`（128）切块，块按源字节数（每个上下文
+再加一份固定开销）用 LPT 装进 `min(parallelism, 8)` 个 worker。worker 内顺序处理自己那些块，
+块间共享 fixity 模块图与配置缓存；模块图仍按 `contextDir` 缓存，fixity 声明表逐文件重算。
+包被切成多块时每块各自加载一次模块图——块上限远大于常见包大小，只有超大包才会切开。
+
+输出顺序按目标在输入里的位置恢复，与串行一致；重复路径先保序去重。`--fix` 的原子写按文件
+独立；`--fix --diff` 只把修复前后文本带回父线程，由父线程按顺序调用 `diff -u`（不在 worker
+里改进程级 cwd）。`-`（stdin）由父线程读一次后与其它结果按位置合并。worker 级宿主失败
+（写盘 / 读盘竞态）汇总为工具错误（exit 2）。
+
+`max-warnings` 仍是整次运行的阈值；每个文件的配置只决定该文件的规则严重度与 exclude。
+静态分块的长尾保留（`Base.Thread.Par` 没有动态任务队列，见 [debt](debt.md) D136）。
 
 ## 2. 实现模型
 
@@ -90,7 +106,8 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 模式）。需要源码原文（字面量、表达式体）时按 `Span` / token 的字节偏移直接切片
 （`exprText` / `spanText`），**不重新渲染 / 转义字符串字面量**；模式文本在 parser pattern
 span 偏移不完整时回落到行/列路径（`patText`）。程序级 fixity 也吃同一次解析的
-`SourceFile`（`lintParsedWithConfig` + `FixityEnv.fixitiesForParsed`），不再为它二次语法分析。
+`SourceFile`（`lintParsedWithConfig` + `FixityEnv.fixitiesForParsed`；并行路径的上下文由父线程
+预解析，worker 用 `FixityEnv.fixitiesForCtx`），不再为它二次语法分析。
 
 切片右边界按「源码序严格在 span end 之后」找 token：普通 token 的 span end 是最后一个
 token 的起点，模板字面量（`TTmpl`）的 span end 是字面量结束后的位置，两种都能取到正确的

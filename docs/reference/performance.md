@@ -26,7 +26,7 @@
 | `fmt --check`（各包 + examples） | ~1.4 s |
 | `map`（热缓存命中） | ~0.13 s |
 | `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256） |
-| `lint`（workspace） | ~1.9 s（本机；无结果缓存；4000 条合成 finding ~5 s） |
+| `lint`（workspace，365 文件） | ~1.8–2.0 s（8 worker；无结果缓存） |
 | `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（cli 包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
@@ -39,6 +39,12 @@
 
 `fmt --check` 省略 PATH 会扫 `test/suite/fixtures` 并因夹具缺 manifest 退出 2（不是格式
 漂移）；CI 的 `nix/checks/vuna-fmt.sh` 只查各包 + `examples`。
+
+`lint` 的并行口径：父线程按目录解析包上下文、按 `contextDir` 分组，按源字节数（每上下文
+再加固定开销）装箱到最多 8 个 worker，输出顺序按输入位置恢复（见 [lint.md](lint.md) §1.4）。
+同机 5 轮配对（load ~5，热 store）：workspace 365 文件墙钟 4.1–4.4 s → 1.8–2.0 s，
+user 3.7–4.4 s → 5.7–6.2 s；`lint .`（467 文件）3.7–4.2 s → 1.8–1.9 s。user 上升来自
+每个 worker 的模块图上下文加载与并行 GC；worker 超过 8 路后收益被这些开销抵消。
 
 更早的读数在 git 历史；当前读数须与
 [`bench/baselines/compiler.txt`](../../bench/baselines/compiler.txt) 的

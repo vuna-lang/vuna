@@ -25,7 +25,6 @@ import Vuna.Compiler.Frontend.Parser
 import Base.Effect.Types as EffTypes
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
-import Base.Effect.Process as EffProcess
 
 -- | per-file fixity 解析的缓存。表示抽象：只有 [Vuna.FixityEnv.emptyFixityEnv] 与
 -- [Vuna.FixityEnv.fixitiesForFile] 能构造与推进它。
@@ -66,7 +65,7 @@ cachePut key value entries = (key, value) :: cacheForget key entries
 --
 -- `env'` 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。上下文解析与模块图
 -- 加载是宿主动作，显式在 `Eff r` 里；缓存推进仍是纯数据。
-export fixitiesForFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, Check (List FixityDecl))
+export fixitiesForFile : Member nFs FsOp r, Member nEnv EnvOp r => FixityEnv -> String -> String -> Eff r (FixityEnv, Check (List FixityDecl))
 fixitiesForFile env path source =
   case parseSourceWithComments path source of
     ErrC e => pure (env, ErrC e)
@@ -76,7 +75,7 @@ fixitiesForFile env path source =
 --
 -- 工具（lint / index / doc）本来就要为规则或 docstring 解析一遍；再为 fixity 解析一遍是
 -- 同一份源码的第二次完整语法分析。
-export fixitiesForParsed : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> SourceFile -> Eff r (FixityEnv, Check (List FixityDecl))
+export fixitiesForParsed : Member nFs FsOp r, Member nEnv EnvOp r => FixityEnv -> String -> SourceFile -> Eff r (FixityEnv, Check (List FixityDecl))
 fixitiesForParsed (FixityEnv ctxCache modCache) path sf =
   let
     dir = dirKey path
@@ -102,3 +101,21 @@ fixitiesForParsed (FixityEnv ctxCache modCache) path sf =
                 ErrC e => (FixityEnv ctxCache2 modCache, ErrC e)
                 OkC (mods2, fx) => (FixityEnv ctxCache2 (cachePut modKey mods2 modCache), OkC fx)
             )
+
+-- | 已解析上下文的 fixity：调用方（lint worker）按目录预先解析 `PackageContext`，这里只推进
+-- 模块图缓存；上下文解析的失败由调用方在 fixity 阶段收口。
+export fixitiesForCtx : Member nFs FsOp r => FixityEnv -> PackageContext -> String -> SourceFile -> Eff r (FixityEnv, Check (List FixityDecl))
+fixitiesForCtx (FixityEnv ctxCache modCache) ctx path sf =
+  let
+    modKey = contextDir ctx
+    mods =
+      case cacheLookup modKey modCache of
+        Just ms => ms
+        Nothing => []
+  in do
+    fxR <- fixitiesFromParsed ctx mods path sf
+    pure (
+        case fxR of
+          ErrC e => (FixityEnv ctxCache modCache, ErrC e)
+          OkC (mods2, fx) => (FixityEnv ctxCache (cachePut modKey mods2 modCache), OkC fx)
+      )
