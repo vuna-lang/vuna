@@ -250,7 +250,7 @@ let v_exportSelective = (fun (modules : Loader_dModules.t_Module B_dData_dList.t
 
 # 441 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_hasImportOf = (fun (mc0 : Frontend_dAst.t_Import B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__181, dtb__182) -> (if ((Loader_dModules.v_importModuleName dtb__181) = mc1) then true else ((v_hasImportOf dtb__182) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__181, dtb__182) -> (if ((Frontend_dAst.v_importName dtb__181) = mc1) then true else ((v_hasImportOf dtb__182) mc1))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -506,7 +506,7 @@ let rec v_loadAll = (fun (nFs : string) (nEnv : string) (nProcess : string) (fue
   | _ -> failwith "DT: impossible branch"
 )))
 # 656 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_loadModule = (fun (nFs : string) (nEnv : string) (nProcess : string) (fuel : int) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (stack : string B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (let name = (Loader_dModules.v_importModuleName imp) in (if (fuel <= 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.v_icFuel "loader")) else (match ((Loader_dModules.v_findModule modules) name) with
+and v_loadModule = (fun (nFs : string) (nEnv : string) (nProcess : string) (fuel : int) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (stack : string B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (let name = (Frontend_dAst.v_importName imp) in (if (fuel <= 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.v_icFuel "loader")) else (match ((Loader_dModules.v_findModule modules) name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__265) -> (if (((Loader_dModules.v_moduleVisibleTo roots) importerPkg) dtb__265) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (modules))) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (v_withImportSpan imp)) (((Base_dDiagnostics_dLoader.v_ldErr2 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleNotExported (name, (Loader_dModules.v_modulePackageOf dtb__265)))) name) (Loader_dModules.v_modulePackageOf dtb__265)))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if ((B_dData_dList.v_memName name) stack) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (v_withImportSpan imp)) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ImportCycle (((v_showCycle name) stack)))) ((v_showCycle name) stack)))) else (if (Loader_dModules.v_validModuleName name) then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dModules.v_findModuleFile nFs) roots) name) importerPkg) (Frontend_dAst.v_importSpan imp))) (fun foundR -> (match foundR with
   | Base_dDiag.C_Check_ErrC (dtb__266) -> (match (imp).Frontend_dAst.f_Import_importAlias with
@@ -742,7 +742,7 @@ let rec v_fixityOpsOf = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData_dList.t_L
 ))
 
 # 1097 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_visibleFixityOps = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Loader_dModules.v_importModuleName imp)) with
+let v_visibleFixityOps = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__381) -> (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__381))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -790,7 +790,7 @@ let rec v_definedNamesOf = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List
 ))
 
 # 1143 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_importProvidesDeclaredFixity = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Loader_dModules.v_importModuleName imp)) with
+let v_importProvidesDeclaredFixity = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__431) -> ((v_anyOpDeclared (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__431))) (v_definedNamesOf decls))
   | _ -> failwith "DT: impossible branch"
@@ -804,7 +804,7 @@ let rec v_anyNameIn = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap
 ))
 
 # 1131 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_importProvidesUsedFixity = (fun (sourceNames : (string, bool) B_dContainer_dHashMap.t_HashMap) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Loader_dModules.v_importModuleName imp)) with
+let v_importProvidesUsedFixity = (fun (sourceNames : (string, bool) B_dContainer_dHashMap.t_HashMap) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__434) -> ((v_anyNameIn sourceNames) (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__434)))
   | _ -> failwith "DT: impossible branch"
@@ -821,7 +821,7 @@ let rec v_anyInstanceDecl = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_Lis
 ))
 
 # 1184 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_moduleDeclaresInstance = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Loader_dModules.v_importModuleName imp)) with
+let v_moduleDeclaresInstance = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | B_dData_dMaybe.C_Maybe_Just (dtb__441) -> (v_anyInstanceDecl (Loader_dModules.v_moduleDeclsOf dtb__441))
   | _ -> failwith "DT: impossible branch"
@@ -883,7 +883,7 @@ let rec v_anyTargetIn = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashM
 
 # 1106 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_unusedImportWarningsGo = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc3 : Frontend_dAst.t_Import B_dData_dList.t_List) (mc4 : Frontend_dAst.t_Decl B_dData_dList.t_List) (mc5 : string B_dData_dList.t_List) (mc6 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc6 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__456, dtb__457) -> ((Base_dCommon.v_bind ((Loader_dModules.v_exportsOf mc0) (Loader_dModules.v_importModuleName dtb__456))) (fun (es : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (let used = (if (if (if (if ((B_dData_dList.v_memName (Loader_dModules.v_importModuleName dtb__456)) mc5) then true else ((v_anyTargetIn mc1) ((B_dData_dList.v_map v_exportTargetOf) es))) then true else (((v_importProvidesUsedFixity mc2) mc0) dtb__456)) then true else (((v_importProvidesDeclaredFixity mc4) mc0) dtb__456)) then true else ((v_moduleDeclaresInstance mc0) dtb__456)) in ((Base_dCommon.v_bind (((((((v_unusedImportWarningsGo mc0) mc1) mc2) mc3) mc4) mc5) dtb__457)) (fun (more : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((if used then more else (B_dData_dList.C_List__x58__x58_ ((((v_unusedImportDiag mc3) mc4) dtb__456), more))))))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__456, dtb__457) -> ((Base_dCommon.v_bind ((Loader_dModules.v_exportsOf mc0) (Frontend_dAst.v_importName dtb__456))) (fun (es : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (let used = (if (if (if (if ((B_dData_dList.v_memName (Frontend_dAst.v_importName dtb__456)) mc5) then true else ((v_anyTargetIn mc1) ((B_dData_dList.v_map v_exportTargetOf) es))) then true else (((v_importProvidesUsedFixity mc2) mc0) dtb__456)) then true else (((v_importProvidesDeclaredFixity mc4) mc0) dtb__456)) then true else ((v_moduleDeclaresInstance mc0) dtb__456)) in ((Base_dCommon.v_bind (((((((v_unusedImportWarningsGo mc0) mc1) mc2) mc3) mc4) mc5) dtb__457)) (fun (more : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((if used then more else (B_dData_dList.C_List__x58__x58_ ((((v_unusedImportDiag mc3) mc4) dtb__456), more))))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))

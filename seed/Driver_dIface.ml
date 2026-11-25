@@ -354,7 +354,7 @@ let rec v_sourceOf = (fun (mc0 : (string, t_SourceInfo) B_dData_dPair.t_Pair B_d
 ))
 
 # 607 "Vuna/Compiler/Driver/Iface.vuna"
-let v_importNameOf = Loader_dModules.v_importModuleName
+let v_importNameOf = (fun (imp : Frontend_dAst.t_Import) -> (imp).Frontend_dAst.f_Import_importName)
 
 # 610 "Vuna/Compiler/Driver/Iface.vuna"
 let v_importNamesOfModule = (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_map v_importNameOf) ((B_dData_dList.v_append (m).Loader_dModules.f_Module_moduleImportsOf) (m).Loader_dModules.f_Module_moduleImplicitImportsOf)))

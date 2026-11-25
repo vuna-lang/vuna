@@ -249,7 +249,7 @@ let v_fastSameSols = (fun (mc0 : Core_dTerm.t_Sols) (mc1 : Core_dTerm.t_Value) (
 let v_mismatchAt = (fun (depth : int) (a : Core_dTerm.t_Value) (b : Core_dTerm.t_Value) -> (let _u = (((Base_dObs.v_obsCountAt 3) "vuna.counter.conv.mismatch") 1) in (let sa = ((Core_dEval.v_showValueAt depth) a) in (let sb = ((Core_dEval.v_showValueAt depth) b) in ((Base_dDiagnostics_dTc.v_tcTypeMismatchNoLoc sa) sb)))))
 
 # 542 "Vuna/Compiler/Core/Conv.vuna"
-let v_metaCreatedDepth = (fun (sols : Core_dTerm.t_Sols) (depth : int) (m : int) -> (match ((Core_dTerm.v_solsDepth m) sols) with
+let v_metaCreatedDepth = (fun (sols : Core_dTerm.t_Sols) (depth : int) (m : int) -> (match ((Core_dTerm.v_solsDepthAt m) sols) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__105) -> dtb__105
   | B_dData_dMaybe.C_Maybe_Nothing -> depth
   | _ -> failwith "DT: impossible branch"
