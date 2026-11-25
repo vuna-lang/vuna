@@ -101,7 +101,8 @@ LSP 细节（帧格式、已实现方法、模块解析、诊断来源、编辑�
 - 默认输出 `DIR/docs/api.html`（`DIR=.` 时 `docs/api.html`）；父目录逐级创建；
 - workspace 根渲染所有成员包，单包目录只渲染该包；尊重每包的 `[export].modules`；
 - `--check` 报告缺失 docstring 的顶层导出项（exit 1，不写文件）；
-- 生成每次都重新解析 + 渲染（单页 HTML 的生产成本在 ms 级，不落对象库）；
+- 生成每次都重新解析 + 渲染（不落对象库）：解析按包分块并行（父线程解析上下文，worker 只读文件），
+  整仓 `doc --check` ~1.6–1.8 s、写 10 MB HTML ~4 s（12 核）；渲染是单遍拼接，不做平方级累加；
 - docstring 语法、HTML 搜索框、类型检索与边界见 [api-docs.md](api-docs.md)。
 
 ```console

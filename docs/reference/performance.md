@@ -25,9 +25,11 @@
 | `build .`（含链接；单元缓存默认开） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
 | `fmt --check`（各包 + examples） | ~1.4 s |
 | `map`（热缓存命中） | ~0.13 s |
-| `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256） |
+| `map` 冷启动全量重建 | 空 store 整仓 5.1–5.3 s → 2.9–3.2 s（索引按包分块并行；12 核） |
 | `lint`（workspace，365 文件） | ~1.8–2.0 s（8 worker；无结果缓存） |
-| `doc` / `api` / `gen-errors` | 均 <1 s |
+| `doc --check`（整仓） | 3.5–3.9 s → 1.6–1.8 s（模块按包分块并行） |
+| `doc`（整仓写 HTML） | ~4 s（349 模块 / 10 MB；渲染此前是平方级开销，15 分钟级不可用） |
+| `api` / `gen-errors` | <1 s（`gen-errors` ~0.1 s） |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（cli 包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
 | LSP hover 非洞行（`bench/lsp-probe.py`，cli 包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–2.5 s） |

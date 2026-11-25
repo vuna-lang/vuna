@@ -385,3 +385,20 @@ import 调 `exportIndexOfModule` → `resolvedName` → `resolveModuleName` → 
 调用方都按集合消费）后 **1.7/2.1/3.1 ms**，门禁 `checks.vuna-resolve-chain-growth`。
 真实源码受 100 列格式化约束、链很短，这一项在整包里只占 ~60–70 ms，因此本轮的收益是
 复杂度（长链/生成代码），不是常数。
+12. **工具侧全量扫描**（读数见 [performance.md](performance.md) §1；12 核，load ~30）：
+    - `gen-errors`：277 个码 × 2 遍（md / json）× 递归扫 4 个 corpus（2582 文件 / 380 个
+      `.diag.json` 逐个读全文匹配）。改成单遍遍历建 `code → path` 表（`Vuna.Files.exampleIndex`）
+      后实测 **9.1 s → 0.09 s**，产物逐字节一致。
+    - `doc` / `Index` 的逐文件解析串行：改成按包分块（128 文件/单元）LPT 装箱、父线程解析包
+      上下文、worker 只读文件（`runFsResult`），`FixityEnv` 在单元内串接。整仓 `doc --check`
+      **3.5–3.9 s → 1.6–1.8 s**；空 store 的 `search parMap`（= 冷建整仓索引）
+      **5.1–5.3 s → 2.9–3.2 s**。用户时间 +40–60%，是并行 GC 的代价（每 Domain 独立 2 MB
+      minor heap，见 [primitives.md](primitives.md) §6.2）。索引对象字节不变：同一批源码的
+      tool-context 地址在旧 / 新实现下一致。
+    - `Doc.Html` 的 `htmlEscape` / `renderInline` / `scriptSafe` 曾按字符 `acc ++ piece` 累加
+      （输出长度平方级；`scriptSafe` 作用在整段内嵌 JSON 上），`linkMap` 还按模块重算一次。
+      改单遍拼接后 `doc packages/toolchain`（74 模块 / 2.2 MB）**60.6 s → 0.9 s**（user），
+      整仓 `doc .`（349 模块 / 10 MB）从 15 分钟级降到 **~4 s**；book 不变时产物逐字节一致。
+    - 残留：`store gc` 的根集查找是 `Clean.gcCandidates` 对每个对象在全部 roots 里线性
+      `memName`（46 GB store ≈ 31,682 条 roots × 28 万对象），`sizesOf` 还对同一批文件再
+      stat 一次；`store gc --dry-run` 实测 **116 s user**（`sortByAge` 的插入排序另在处置）。
