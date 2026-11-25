@@ -446,7 +446,8 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
 - `corpus/stdlib/`：`Base.*` 与 do/动作正例、错误例；效果夹具 `03_do_io`、`09_io`、
   `10_package` 与 `strUnpack`/`strPack` 的 `07_string` 用 `.run.out`；另有
   `corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、模块头导出列表排序、
-  `where` 签名行与幂等；
+  `where` 签名行与幂等；`run/`、`typed/` 另比对「格式化前后运行输出一致」与「格式化前后
+  lowering 的 IR 逐字节一致」（锁住可解析但换了树的语义漂移）；
 - `corpus/packages/`：`build` / `test` 的 workspace 正例与缺依赖、依赖环、隐藏模块错误例；
   包构建走 DT，`vuna test` 走 DT 核心求值；`03_reexport` 覆盖 facade 重导出；
   `05_entry_data` 覆盖「入口文件里声明 data」的 codegen 回归（并直接断言 `Main.ml` 含入口

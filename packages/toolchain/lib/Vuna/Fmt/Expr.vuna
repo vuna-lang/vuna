@@ -1223,7 +1223,26 @@ inlineInfixTail fuel env at ops elems =
                   Nothing => Nothing
                   Just tail => Just (" ${op} ${s}${tail}")
 
--- | 内部：按源码顺序打印中缀链（不查 fixity、不补括号）。
+-- | 内部：链上是否还有后续链步。
+chainHasTail : List Expr -> Bool
+chainHasTail [] = False
+chainHasTail _ = True
+
+-- | 内部：链上除最后一项外是否有块结构操作数（这类链不能按「运算符续行」排版）。
+chainHasBlockBeforeLast : List Expr -> Bool
+chainHasBlockBeforeLast [] = False
+chainHasBlockBeforeLast ([_]) = False
+chainHasBlockBeforeLast (e :: rest) = multilineExpr e || chainHasBlockBeforeLast rest
+
+-- | 内部：链操作数。后面还有链步时块结构必须加括号：块的最后一行（`case` 的最后一条
+-- 分支体、`let` 的 `in` 行）之后直接跟运算符时，链余项会被重新解析成那一行的内容。
+-- 加括号后链步落在闭合括号之后，块内部的 offside 列也由括号终止，与缩进无关。
+chainOperandDoc : Bool -> Int -> List FixityDecl -> FmtCtx -> Expr -> Doc
+chainOperandDoc hasTail fuel env at e =
+  if hasTail && multilineExpr e then blockWrapDoc fuel env at e else exprDoc fuel env at e
+
+-- | 内部：按源码顺序打印中缀链（不查 fixity、不按优先级补括号；块结构操作数在链中间时
+-- 加布局括号）。链上存在块结构操作数时运算符强制各占一行：块的末行之后不能续写链余项。
 sourceInfixDoc : Int -> List FixityDecl -> FmtCtx -> Expr -> Doc
 sourceInfixDoc fuel env at e =
   if fuel <= 0 then
@@ -1231,11 +1250,14 @@ sourceInfixDoc fuel env at e =
   else
     case sourceInfixParts at e of
       ([], ops) => empty
-      (first :: rest, ops) => group (appendDoc (exprDoc (fuel - 1) env at first) (nest 2 (sourceInfixTailDoc (fuel - 1) env at ops rest)))
+      (first :: rest, ops) =>
+        let
+          sep = if chainHasBlockBeforeLast (first :: rest) then hard else line
+        in group (appendDoc (chainOperandDoc (chainHasTail rest) (fuel - 1) env at first) (nest 2 (sourceInfixTailDoc sep (fuel - 1) env at ops rest)))
 
--- | 内部：中缀链余项的文档（每个运算符另起一行，缩进 2）。
-sourceInfixTailDoc : Int -> List FixityDecl -> FmtCtx -> List String -> List Expr -> Doc
-sourceInfixTailDoc fuel env at ops elems =
+-- | 内部：中缀链余项的文档（`sep` 决定运算符是否另起一行）。
+sourceInfixTailDoc : Doc -> Int -> List FixityDecl -> FmtCtx -> List String -> List Expr -> Doc
+sourceInfixTailDoc sep fuel env at ops elems =
   if fuel <= 0 then
     empty
   else
@@ -1244,7 +1266,7 @@ sourceInfixTailDoc fuel env at ops elems =
       op :: restOps =>
         case elems of
           [] => empty
-          x :: restElems => group (appendDoc line (appendDoc (text (op ++ " ")) (appendDoc (exprDoc (fuel - 1) env at x) (sourceInfixTailDoc (fuel - 1) env at restOps restElems))))
+          x :: restElems => group (appendDoc sep (appendDoc (text (op ++ " ")) (appendDoc (chainOperandDoc (chainHasTail restElems) (fuel - 1) env at x) (sourceInfixTailDoc sep (fuel - 1) env at restOps restElems))))
 
 -- | 内部：中缀；断行时运算符在续行行首。
 infixDoc : Int -> List FixityDecl -> FmtCtx -> Int -> Int -> String -> Expr -> Expr -> Doc

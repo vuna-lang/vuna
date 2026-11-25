@@ -7,6 +7,8 @@
 #   run/*.vuna + *.out      —— 纯程序：格式化前后 compile（目录式 + build.sh）产物运行输出一致且等于 golden。
 #   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归，定义都在顶层）：
 #                              格式化前后 compile（目录式 + build.sh）产物运行输出一致且等于 golden。
+#   第 4 节另把 run/ 与 typed/ 的 lowering 产物（`vuna dev ir dump`）在格式化前后逐字节比对，
+#   锁住「输出可解析但换了一棵树」这类语义漂移（golden 与 `fmt --check` 都看不到）。
 #
 # 环境变量：
 #   VUNA       验证编译器，默认 <repo>/.local/m11/vuna
@@ -203,6 +205,41 @@ for file in "$HERE"/typed/*.vuna; do
   fi
   after=$("$tmp/t2.exe" 2>&1)
   check_eq "$name (typed run after format)" "$before" "$after"
+done
+
+# ---- 4) 语义形状：格式化前后 lowering 产物（IR dump）逐字节一致 ----
+# golden 与 `fmt --check` 只锁字节和幂等，锁不住「输出可解析但换了一棵树」；frontend
+# AST 没有结构等价 / 摘要（且模块头本来就会被 fmt 规范化），所以用「检查 + lowering」
+# 后的确定性 IR 文本当语义形状指纹：格式化不得改变程序的 IR。
+ir_pkg="$tmp/ir-pkg"
+mkdir -p "$ir_pkg/app"
+printf '[package]\nname = "fmt-ir"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$ir_pkg/vuna.toml"
+for file in "$HERE"/run/*.vuna "$HERE"/typed/*.vuna; do
+  [ -f "$file" ] || continue
+  name=${file#"$HERE"/}
+  cp "$file" "$ir_pkg/app/Main.vuna" || continue
+  if ! "$VUNA" dev ir dump "$ir_pkg" >"$tmp/ir.before" 2>&1; then
+    bad "$name (ir dump)"
+    head -10 "$tmp/ir.before"
+    continue
+  fi
+  if ! fmt_write "$ir_pkg/app/Main.vuna" "$tmp/ir.src" >"$tmp/write.log" 2>&1; then
+    bad "$name (format)"
+    cat "$tmp/write.log"
+    continue
+  fi
+  cp "$tmp/ir.src" "$ir_pkg/app/Main.vuna"
+  if ! "$VUNA" dev ir dump "$ir_pkg" >"$tmp/ir.after" 2>&1; then
+    bad "$name (ir dump after format)"
+    head -10 "$tmp/ir.after"
+    continue
+  fi
+  if cmp -s "$tmp/ir.before" "$tmp/ir.after"; then
+    ok
+  else
+    bad "$name (ir after format)"
+    diff -u "$tmp/ir.before" "$tmp/ir.after" | head -40
+  fi
 done
 
 printf 'fmt: %d passed, %d failed\n' "$pass" "$fail"

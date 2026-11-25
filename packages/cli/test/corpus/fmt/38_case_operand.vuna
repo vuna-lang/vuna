@@ -1,0 +1,28 @@
+-- `case` 作中缀链的非末尾操作数：块结构的末行之后不能续写链余项，
+-- 格式化时给块结构加一层布局括号，链步落在闭合括号之后。
+prefixed : Int -> String
+prefixed n = case n of
+    0 => "zero"
+    _ => "other"
+  ++ "!"
+
+nested : String
+nested =
+  let
+    s = case 1 of
+          1 => "b"
+          _ => "c"
+        ++ "!"
+  in s
+
+-- 对照：操作数都不是块结构时，链仍然按运算符续行排版，不加括号。
+plain : String
+plain = "a" ++ "b" ++ "c"
+
+-- 源码已带括号时原样保留（块内部的分支列由闭合括号终止）。
+inDo : String
+inDo = do
+  (case 1 of
+     1 => "b"
+     _ => "c")
+    ++ "!"
