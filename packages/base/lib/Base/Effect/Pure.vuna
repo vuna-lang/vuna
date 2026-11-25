@@ -1,4 +1,4 @@
--- | 纯效应表示门面（无运行时 handler）：State / Reader / Error / IORef。
+-- | 纯效应表示门面（无运行时 handler）：State / Reader / Error。
 --
 -- 与 `Base.Effect` 下的运行时效应模块成对：`Base.Effect.Pure.State` 是 `s -> Pair a s`
 -- 的纯表示，`Base.Effect.State` 是走 `Eff` handler 的版本。
@@ -7,4 +7,3 @@ module Base.Effect.Pure where
 export module Base.Effect.Pure.State as State
 export module Base.Effect.Pure.Reader as Reader
 export module Base.Effect.Pure.Error as Error
-export module Base.Effect.Pure.IORef as IORef

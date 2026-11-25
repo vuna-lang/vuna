@@ -444,7 +444,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）在块头上打 `leaf` 标志。变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
-- 效应叶子：`prim_eff_newRef` / `readRef` / `writeRef`（`IORef`，单槽对象）、
+- 效应叶子：`@vuna@prim_eff_newRef` / `readRef` / `writeRef`（`@vuna@Ref`，单槽对象）、
   `prim_eff_print` / `eprint`（写 fd 后返回字节数）、`prim_eff_exit`；预装宿主 handler
   用到的 `@vuna@host@*` / `prim_eff_*_host` 名字映射到同一批叶子。
 - 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`getArgs`

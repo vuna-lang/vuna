@@ -14,7 +14,7 @@
 -- `EvalSample`，`Check` 的构造与解构只发生在 [Vuna.Test.InProc]。
 module Vuna.Test.Session where
 
-import Base.Effect.Pure.IORef as IORef
+import Vuna.Test.Ref as IORef
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
@@ -93,7 +93,7 @@ readBaseIfaces baseDir =
 
 -- | 内部：会话可用性——缓存目录命中就直接用，否则读一次接口并写回（读失败或为空
 -- 给 `Nothing`）。
-ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => IORef Session -> String -> Eff r (Maybe (List ModuleIface))
+ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => @vuna@Ref Session -> String -> Eff r (Maybe (List ModuleIface))
 ensureSession ref baseDir =
   do
     s <- readRef ref
@@ -113,7 +113,7 @@ ensureSession ref baseDir =
                 pure (Just ifaces)
 
 -- | check 样本：会话不可用返回 `Nothing`（调用方改走全量 `checkFile`）。
-export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe CheckSample)
+export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Maybe CheckSample)
 sessionCheckSample ref baseDir source =
   do
     ses <- ensureSession ref baseDir
@@ -133,7 +133,7 @@ sessionCheckSample ref baseDir source =
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
+applyCheckResult : {r : Row} -> @vuna@Ref Session -> Session -> String -> List ModuleIface -> Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache) -> Eff r (Maybe CheckSample)
 applyCheckResult ref s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (CheckSample (Just e) []))
@@ -146,7 +146,7 @@ applyCheckResult ref s baseDir ifaces result =
           pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
 -- | interp 样本：会话不可用返回 `Nothing`（调用方改走全量 `dtEvalFile`）。
-export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe EvalSample)
+export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => @vuna@Ref Session -> String -> String -> Eff r (Maybe EvalSample)
 sessionEvalSample ref baseDir source =
   do
     ses <- ensureSession ref baseDir
@@ -166,7 +166,7 @@ sessionEvalSample ref baseDir source =
 
 -- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
-applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
+applyEvalResult : {r : Row} -> @vuna@Ref Session -> Session -> String -> List ModuleIface -> Check (Bool, String, Maybe AuxCache) -> Eff r (Maybe EvalSample)
 applyEvalResult ref s baseDir ifaces result =
   case result of
     ErrC e => pure (Just (EvalSample (Just e) ""))

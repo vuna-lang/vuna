@@ -1,0 +1,27 @@
+-- | 测试运行器内部的逃逸引用：隐藏原语（`@vuna@Ref` + `@vuna@prim_eff_*Ref`）的薄包装。
+--
+-- 用户面只有 `Base.Effect.MutRef`（不可逃逸）；runner 自己需要「存进会话状态、跨步骤可变」
+-- 的引用，所以放在这里（`Vuna.*` 可以引用隐藏名，用户包不行）。
+module Vuna.Test.Ref where
+
+import Base.Effect.Core
+import Base.Trait.Monad
+
+-- | 创建初值为 `x` 的新引用。
+export newRef : {r : Row} -> a -> Eff r (@vuna@Ref a)
+newRef x = raise (@vuna@prim_eff_newRef x)
+
+-- | 读取引用当前值。
+export readRef : {r : Row} -> @vuna@Ref a -> Eff r a
+readRef r = raise (@vuna@prim_eff_readRef r)
+
+-- | 写入新值，返回底层原语的 `Int` 结果（通常忽略）。
+export writeRef : {r : Row} -> @vuna@Ref a -> a -> Eff r Int
+writeRef r v = raise (@vuna@prim_eff_writeRef r v)
+
+-- | 读-改-写一次完成，返回写入原语的 `Int` 结果。
+export modifyRef : {r : Row} -> @vuna@Ref a -> (a -> a) -> Eff r Int
+modifyRef r f =
+  do
+    x <- readRef r
+    writeRef r (f x)

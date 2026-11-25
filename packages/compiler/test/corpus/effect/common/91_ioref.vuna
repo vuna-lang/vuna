@@ -1,10 +1,13 @@
--- `Eff []` 内的 IORef（newRef / writeRef / readRef）。
-import Base.Effect.Pure.IORef as IORef
+-- `Eff []` 内的局部可变单元（MutRef）：withMutRef 引入、write/read 原地读写。
 import Base.Effect.Core as Eff
+import Base.Effect.MutRef as MutRef
+import Base.Trait.Monad
 
 main : Eff [] Int
-main = do
-  r <- newRef 10
-  _ <- writeRef r 32
-  x <- readRef r
-  pure (x + 1)
+main =
+  MutRef.withMutRef "r" 10 (
+      do
+        MutRef.write 32
+        x <- MutRef.read
+        pure (x + 1)
+    )

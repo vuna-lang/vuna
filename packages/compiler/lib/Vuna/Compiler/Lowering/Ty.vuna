@@ -76,7 +76,7 @@ renderTyGlobal fuel levels table dataTbl g sp =
 -- 数据族每层嵌套就重复渲染一次（`renderFamilyArgs` 之后还会再渲染）。
 renderTyIntrinsicWith : (Value -> IrTy) -> String -> List Value -> Maybe IrTy
 renderTyIntrinsicWith render "Array" ([a]) = Just (IrTyArray (render a))
-renderTyIntrinsicWith render "IORef" ([a]) = Just (IrTyRef (render a))
+renderTyIntrinsicWith render "@vuna@Ref" ([a]) = Just (IrTyRef (render a))
 renderTyIntrinsicWith render "@vuna@Cell" ([a]) = Just (IrTyRef (render a))
 renderTyIntrinsicWith render "@vuna@MArray" ([a]) = Just (IrTyArray (render a))
 renderTyIntrinsicWith render "@vuna@MDynArray" ([a]) = Just (IrTyRef IrTyOpaque)
@@ -312,7 +312,7 @@ annotHeadTy fuel dflt env binders g args =
           Nothing => Nothing
           Just t => Just (IrTyArray t)
       _ => dflt
-  else if g == "IORef" then
+  else if g == "@vuna@Ref" then
     case args of
       [a] =>
         case annotTyOfFuel (fuel - 1) dflt env binders a of

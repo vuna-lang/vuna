@@ -31,7 +31,6 @@
 | `Base.Data.Sha1` | SHA-1（RFC 3174）：`sha1` 给 40 字符小写十六进制摘要，`sha1Raw` 给 20 字节；输入按 UTF-8 字节串处理 |
 | `Base.Data.Base64` | Base64（RFC 4648 标准字母表、带 padding）：`base64Encode` / `base64EncodeString` / `base64Decode`；解码严格（长度、字母表、padding 位置），失败是 `Nothing` |
 | `Base.Container.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
-| `Base.Effect.Pure.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
 | `Base.Effect.Cursor` | 有界消费的**持久游标**（`Cursor r a` = 初始状态 + 一步函数 `s -> Eff r (Maybe a, s)`，状态类型对调用方隐藏）：`next` 返回「前进后的游标」，`mapC` / `ofList` / `takeC` / `foldC` 都返回剩余游标；状态是纯数据（没有内部 IORef），只有带 `Int` 上界的消费者，库内无无界递归 |
 | `Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Effect.Core`（[effects.md](effects.md) §8） |
 | `Base.Data.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` / `Convert Nat Int` / `ConvertMaybe Int Nat` 实例 |
@@ -80,7 +79,7 @@
 | `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString` / `Convert`（含 `ConvertMaybe`）；也可写路径（`import Base.Trait.Monad as Monad`） |
 | `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...TreeMap` / `...TreeSet` / `...Queue` / `...PriorityQueue` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
-| `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` / `IORef` |
+| `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Data.Nat` / `Base.Trait.Num` / `Base.Data.Unit` / `Base.Trait.Applicative`(经 Monad) / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`；不含 `Vec` / `Fin` 与哈希容器；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
 
@@ -102,7 +101,7 @@ packages/base/lib/
   Base/Container/{Map,HashMap,HashSet,TreeMap,TreeSet,Queue,PriorityQueue,Array}.vuna
   Base/Effect/{Core,Types,State,Reader,Error,Exn,Ref,Fs,Console,Clock,
                Env,Args,Stdin,Exit,Net,Process}.vuna
-  Base/Effect/Pure.vuna      Base/Effect/Pure/{State,Reader,Error,IORef}.vuna
+  Base/Effect/Pure.vuna      Base/Effect/Pure/{State,Reader,Error}.vuna
   Base/Internal/Operator.vuna
 ```
 

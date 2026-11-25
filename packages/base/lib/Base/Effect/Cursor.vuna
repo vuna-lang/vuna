@@ -2,7 +2,7 @@
 -- 不共享状态（要续读就把返回的新游标接住）。
 --
 -- 游标就是一台纯状态机 `Cursor r s a`：状态 `s` 是普通值，由游标自己带着，没有内部
--- `IORef`，所以游标可以存进数据结构、跨作用域传。只提供**有界**消费者
+-- 可变存储，所以游标可以存进数据结构、跨作用域传。只提供**有界**消费者
 -- （`takeC` / `foldC`），循环由 `Int` 上界守卫，库内没有无界递归。
 -- 源由调用方给：`stdinReadLine` / `stdinReadBytes`、`List`、按块读文件的 `fsFileCursor`。
 module Base.Effect.Cursor where

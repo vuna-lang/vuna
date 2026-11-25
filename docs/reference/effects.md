@@ -59,7 +59,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Effect.Types` 只重导出
   类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
-  `List` 的 `(::)` 重载；`Base.Effect.Pure.IORef` 是行多态的本地可变存储（调用方不需要额外的行约束）。
+  `List` 的 `(::)` 重载；局部可变走 `Base.Effect.MutRef`（命名单元 + 编译期名字绑定，见 §8.8）。
 - **宿主原语**：`@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
   源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 
@@ -115,7 +115,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
 类型头不可表示：
-- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `IORef`
+- 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `@vuna@Ref`
   （即类型族定义 / axiom / 未知全局；`resIdx`、`sigOf` 属于这一类）；
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`m : Type -> Type` 这类普通类型构造子
   参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
@@ -150,8 +150,9 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 2. **handler 是解释器**：`runPure` 是唯一的执行入口；`runConsole` / `runFs` 等是
    handler（answer 为 `Eff []`，由 `joinEff` 组装），本身不执行动作；没有「隐式生效的
    handler 栈」。
-3. **可变数据边界**：`IORef` 的公开操作与实现都是 `Eff []`；没有局部可变的 region 形式
-   （重建约束见 [debt.md](debt.md) D63）。
+3. **可变数据边界**：用户面局部可变是 `Base.Effect.MutRef`（不可逃逸，§8.8）；可逃逸的引用只剩
+   隐藏类型 `@vuna@Ref` + 隐藏原语（base / 工具链内部），用户包写不出类型名。没有 region 形式
+   （见 [debt.md](debt.md) D63）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerformId` / `prim_effectHandleId` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。

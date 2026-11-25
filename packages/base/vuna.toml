@@ -61,7 +61,6 @@ modules = [
   "Base.Effect.Process",
   "Base.Effect.Pure",
   "Base.Effect.Pure.Error",
-  "Base.Effect.Pure.IORef",
   "Base.Effect.Pure.Reader",
   "Base.Effect.Pure.State",
   "Base.Effect.Reader",

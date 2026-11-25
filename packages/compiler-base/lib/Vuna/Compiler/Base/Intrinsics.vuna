@@ -92,7 +92,7 @@ export typeIntrinsicArities : List TypeIntrinsic
 typeIntrinsicArities =
   [
     TypeIntrinsic "Array" 1,
-    TypeIntrinsic "IORef" 1,
+    TypeIntrinsic "@vuna@Ref" 1,
     TypeIntrinsic "@vuna@Cell" 1,
     TypeIntrinsic "@vuna@MArray" 1,
     TypeIntrinsic "@vuna@MDynArray" 1,
@@ -983,23 +983,16 @@ effIntrinsics =
     Intrinsic "effTimeUs" (IEff IInt) OpNone True,
     Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone False,
-    Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone True,
     Intrinsic
       "@vuna@prim_eff_newRef"
       (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a")))))
       OpNone
       False,
-    Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone True,
     Intrinsic
       "@vuna@prim_eff_readRef"
       (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a"))))
       OpNone
       False,
-    Intrinsic
-      "prim_eff_writeRef"
-      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
-      OpNone
-      True,
     Intrinsic
       "@vuna@prim_eff_writeRef"
       (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))

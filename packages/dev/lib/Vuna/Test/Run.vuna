@@ -34,7 +34,7 @@ import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
 import Vuna.Lint
-import Base.Effect.Pure.IORef as IORef
+import Vuna.Test.Ref as IORef
 import Base.Effect.Types as EffTypes
 import Base.Effect.Fs as EffFs
 import Base.Effect.Console as EffConsole
@@ -81,7 +81,7 @@ record Env where
   envBuildDir : String
   -- | 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
   -- 命中时 golden 的 check/interp 不再 spawn CLI（~200ms → ~10ms），未命中回退子进程。
-  envSession : IORef Session
+  envSession : @vuna@Ref Session
   -- | 本次 run 选中的后端（`--backend`；空 = 只跑 ocaml）。
   envBackends : List String
 

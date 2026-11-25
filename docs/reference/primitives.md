@@ -193,7 +193,7 @@
 | 类型 | kind | OCaml 表示 |
 | --- | --- | --- |
 | `Array a` | `Type -> Type` | `'a array`（不可变语义：不暴露原地写） |
-| `IORef a` | `Type -> Type` | `'a ref` |
+| `@vuna@Ref a` | `Type -> Type` | `'a ref`（隐藏类型构造子：源码写不出，只有 base 内部与隐藏原语用它） |
 
 这些是**类型层构造子**，不是 `data` 声明：没有构造子可模式匹配，只能经原语 / 库 API 使用。
 类型参数在签名里用隐式 `{a : Type}` 绑定（`Elab.Prelude.ityToTerm` 生成 de Bruijn）。
@@ -209,11 +209,13 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.Effect.Pure.IORef` 的公开操作返回 `Eff []`）：
+**可变数据原语**（`Eff []`；不触碰外部世界）：用户面的局部可变是 `Base.Effect.MutRef`
+（命名单元 + 编译期绑定 + 三端 `@vuna@prim_mref*`）。可逃逸的引用只剩隐藏原语，供 base /
+工具链内部使用：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
-| `prim_eff_newRef` / `prim_eff_readRef` / `prim_eff_writeRef` | `a -> Eff [] (IORef a)` / `IORef a -> Eff [] a` / `IORef a -> a -> Eff [] Int` | `ref` / `!` / `:=` |
+| `@vuna@prim_eff_newRef` / `@vuna@prim_eff_readRef` / `@vuna@prim_eff_writeRef` | `a -> Eff [] (@vuna@Ref a)` / `@vuna@Ref a -> Eff [] a` / `@vuna@Ref a -> a -> Eff [] Int` | `ref` / `!` / `:=` |
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。

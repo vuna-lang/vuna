@@ -35,6 +35,7 @@ modules = [
   "Vuna.Obs.Symbols",
   "Vuna.Obs.Types",
   "Vuna.Obs.Validate",
+  "Vuna.Test.Ref",
   "Vuna.Test.Run",
   "Vuna.Test.Suite",
 ]
