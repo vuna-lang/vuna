@@ -87,14 +87,13 @@ let
             # 单一 store 根：不再按 worktree 分 `.local/store`（默认 `~/.vuna/store`）。
             # 测试用独立根（`nix/build/run-tests.nix`），因为 suite 会故意破坏对象。
             shellHook = ''
-              export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
               # 仓库内（含副 worktree）把 hooks 路径指向 .githooks：pre-commit 跑全仓库 fmt/lint/check。
               if git rev-parse --git-dir >/dev/null 2>&1 && [ "$(git config --get core.hooksPath || true)" != ".githooks" ]; then
                 git config core.hooksPath .githooks
               fi
               # 横幅只在交互式终端出现：`nix develop --command` 之类调用（含 NIX_DEVSHELL_QUIET=1）保持静默。
               if [ -t 1 ] && [ -z "''${NIX_DEVSHELL_QUIET:-}" ]; then
-                echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=''${VUNA_STORE:-默认根 ~/.vuna/store}；VUNA_OCAML_ID=$VUNA_OCAML_ID）"
+                echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=''${VUNA_STORE:-默认根 ~/.vuna/store}）"
               fi
             '';
           };

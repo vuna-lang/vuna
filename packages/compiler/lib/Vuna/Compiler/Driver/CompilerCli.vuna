@@ -1391,11 +1391,7 @@ buildOne noCompile multiOut outM pkg o =
         else
           case outM of
             Just out => buildExplicit out multiOut pkg ctx entry o
-            Nothing =>
-              do
-                inputs <- splitInputsOf ctx entry True
-                viewDigest <- buildViewAddrOf inputs
-                buildDefaultView inputs ctx pkg name entry viewDigest o
+            Nothing => buildDefault pkg ctx entry name o
       else
         do
           r <- checkPackage o.optRelease False pkg
@@ -1405,6 +1401,27 @@ buildOne noCompile multiOut outM pkg o =
               do
                 _ <- consolePrint "skipped (library): ${name}\n"
                 pure (0, o)
+
+-- 默认输出：`<pkg>/.output` 真目录；没有 store 视图，也不做跨目录复用。
+-- 旧版本留下的 `.output` 符号链接在未命中时先删掉，保证写进当前包目录。
+buildDefault : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> PackageContext -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
+buildDefault pkg ctx entry name o =
+  let
+    outDir = "${packageDir pkg}/.output"
+    binPath = "${outDir}/bin/${name}"
+  in do
+    fresh <- metaUpToDate outDir ctx entry binPath
+    if fresh then
+      do
+        _ <- consolePrint "up to date: ${binPath}\n"
+        pure (0, o)
+    else
+      do
+        _ <- fsRemoveTree outDir
+        r <- compileToDir ctx entry True outDir
+        case r of
+          ErrC e => printDiag o e
+          OkC _ => buildLinked ctx entry outDir name o
 
 -- 显式 `--out`：外部消费者要求真目录，保持直写；不发布 store 视图。
 buildExplicit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Package -> PackageContext -> String -> CliOpts -> Eff r (Int, CliOpts)
@@ -1425,102 +1442,6 @@ buildExplicit out multiOut pkg ctx entry o =
         case r of
           ErrC e => printDiag o e
           OkC _ => buildLinked ctx entry outDir name o
-
--- 默认输出：`$VUNA_STORE/views/bin/<splitIn>`；`<pkg>/.output` 只是符号链接。
--- 同一 digest 用 mkdir 锁串行化；在**最终 view 路径**构建，保证 codegen 路径稳定。
-buildDefaultView : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> Package -> String -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
-buildDefaultView inputs ctx pkg name entry viewDigest o =
-  do
-    view <- storeViewPathEff "bin" viewDigest
-    let
-      binPath = "${view}/bin/${name}"
-    in do
-      valid <- storeViewValidEff "bin" viewDigest
-      fresh <- if valid then metaUpToDate view ctx entry binPath else pure False
-      if fresh then
-        do
-          _ <- linkDefaultOutput Nothing pkg view viewDigest
-          _ <- consolePrint "up to date: ${binPath}\n"
-          pure (0, o)
-      else
-        do
-          state <- waitView "bin" viewDigest 600
-          if state == "locked" then
-            do
-              valid2 <- storeViewValidEff "bin" viewDigest
-              fresh2 <- if valid2 then metaUpToDate view ctx entry binPath else pure False
-              if fresh2 then
-                do
-                  _ <- linkDefaultOutput Nothing pkg view viewDigest
-                  _ <- storeViewUnlockEff "bin" viewDigest
-                  _ <- consolePrint "up to date: ${binPath}\n"
-                  pure (0, o)
-              else
-                do
-                  r <- compileToDirGiven inputs ctx entry True view
-                  case r of
-                    ErrC e =>
-                      do
-                        _ <- fsRemoveTree view
-                        _ <- storeViewUnlockEff "bin" viewDigest
-                        printDiag o e
-                    OkC _ =>
-                      do
-                        br <- buildLinked ctx entry view name o
-                        if firstOf br == 0 then
-                          do
-                            _ <- markViewComplete view viewDigest
-                            _ <- linkDefaultOutput Nothing pkg view viewDigest
-                            _ <- storeViewUnlockEff "bin" viewDigest
-                            pure br
-                        else
-                          do
-                            _ <- storeViewUnlockEff "bin" viewDigest
-                            pure br
-          else if state == "ready" then
-            do
-              _ <- linkDefaultOutput Nothing pkg view viewDigest
-              _ <- consolePrint "up to date: ${binPath}\n"
-              pure (0, o)
-          else
-            do
-              _ <- consolePrint "error: timed out waiting for view ${viewDigest}\n"
-              pure (1, o)
-
--- 等同一 view 的构建：拿到锁 => "locked"；别人已发布 => "ready"；超时 => "timeout"。
-waitView : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Int -> Eff r String
-waitView kind digest fuel =
-  do
-    ok <- storeViewLockEff kind digest
-    if ok then
-      pure "locked"
-    else
-      do
-        valid <- storeViewValidEff kind digest
-        if valid then
-          pure "ready"
-        else if fuel <= 0 then
-          pure "timeout"
-        else
-          do
-            _ <- clockSleepMicros 100000
-            waitView kind digest (fuel - 1)
-
-markViewComplete : Member nFs FsOp r => String -> String -> Eff r Int
-markViewComplete dir digest = fsWriteFileAtomic "${dir}/.complete" digest
-
--- 默认输出时把 `<pkg>/.output` 指向视图；`--out` 时不动磁盘布局。
--- `.complete` 由持锁者在构建成功后写（`markViewComplete`），不在这里写，
--- 避免“链接失败但视图已被标记完成”。
-linkDefaultOutput : Member nFs FsOp r => Maybe String -> Package -> String -> String -> Eff r Int
-linkDefaultOutput (Just _) _ _ _ = pure 0
-linkDefaultOutput Nothing pkg outDir _viewDigest =
-  do
-    let
-      link = "${packageDir pkg}/.output"
-    in do
-      _ <- fsRemoveTree link
-      fsSymlink outDir link
 
 compileCodegen : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 compileCodegen ctx entry outDir o =

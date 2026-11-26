@@ -222,11 +222,6 @@ done
 base_dir=$ROOT/packages/base
 [ -f "$base_dir/vuna.toml" ] || die "找不到 base: $base_dir"
 
-ocaml_id=${VUNA_OCAML_ID:-}
-if [ -z "$ocaml_id" ] && command -v ocamlopt >/dev/null 2>&1; then
-  ocaml_id=$(ocamlopt -version 2>/dev/null || true)
-fi
-
 wasm_runner=${VUNA_WASM_RUNNER:-}
 if [ -z "$wasm_runner" ] && [ -f "$ROOT/wasm-host/run.mjs" ]; then
   wasm_runner=$ROOT/wasm-host/run.mjs
@@ -235,9 +230,6 @@ fi
 if [ "$print_env" -eq 1 ]; then
   printf 'export VUNA_BASE=%q\n' "$base_dir"
   printf 'export VUNA_EXEC_PATH=%q\n' "$exec_path"
-  if [ -n "$ocaml_id" ]; then
-    printf 'export VUNA_OCAML_ID=%q\n' "$ocaml_id"
-  fi
   if [ -n "$wasm_runner" ]; then
     printf 'export VUNA_WASM_RUNNER=%q\n' "$wasm_runner"
   fi
@@ -247,9 +239,6 @@ fi
 [ -x "$ENTRY" ] || die "找不到工作树入口 $ENTRY_REL；去掉 --no-build，或先 -p cli"
 
 env_args=("VUNA_BASE=$base_dir" "VUNA_EXEC_PATH=$exec_path")
-if [ -n "$ocaml_id" ]; then
-  env_args+=("VUNA_OCAML_ID=$ocaml_id")
-fi
 if [ -n "$wasm_runner" ]; then
   env_args+=("VUNA_WASM_RUNNER=$wasm_runner")
 fi

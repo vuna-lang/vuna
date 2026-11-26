@@ -1,11 +1,7 @@
--- | 效果程序的唯一执行入口：把「带 main 的完整入口源码」编译进 store 视图再运行。
+-- | 效果程序的唯一执行入口：把「带 main 的完整入口源码」编译到私有临时目录再运行。
 --
--- 与 `vuna build` 同一条链路：`compileToDir` 产出 `.ml` + `build.sh`（内部已按源码 / 依赖
--- 摘要进对象库），链接后把产物发布成 `views/effectbin/<digest>`；digest 覆盖编译器指纹、
--- 工具链标识、包根内容、入口源码与 `printResult`。命中视图直接运行，不再重编译。
---
--- 合成包只存在于 store scratch 的输入目录（`<scratch>/pkg/{vuna.toml,app/Main.vuna}`）：
--- 内容按 digest 寻址、可重复写，不落 `$TMPDIR`，也不向对象库登记会被 GC 裁剪的临时项目根。
+-- 与 `vuna build` 同一条链路：`compileToDir` 产出 `.ml` + `build.sh`，链接后直接执行；
+-- 不发布 store 视图，也不做跨进程复用。合成包写在临时目录（`<dir>/src/pkg/...`）。
 module Vuna.EffectRun where
 
 import Vuna.Compiler.Base.Common
@@ -21,14 +17,6 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Types as EffTypes
-
--- | 产物视图种类：`$VUNA_STORE/views/effectbin/<digest>/bin/vuna-effect`。
-export effectBinKind : String
-effectBinKind = "effectbin"
-
--- | 合成包输入目录的 scratch 种类（只存 manifest 与入口源码，不发布）。
-effectSrcKind : String
-effectSrcKind = "effectbin-src"
 
 -- | 合成包的固定包名（manifest 的 `[package] name`）。
 effectPackageName : String
@@ -59,49 +47,21 @@ runEffectOn "native" ctx source printResult = runNativeEffect ctx source printRe
 runEffectOn target _ _ _ =
   pure (err "VUNA_EFFECT_TARGET: unsupported target `${target}` (ocaml | native)")
 
--- | 内部：OCaml 目标——产物按 digest 发布成视图（命中直接跑）。
+-- | 内部：OCaml 目标——编到私有目录再链接。
 runOcamlEffect : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
 runOcamlEffect ctx source printResult =
   do
-    digest <- effectSourceDigest ctx source printResult
-    pid <- projectIdOf ctx
-    proj <- absolutePath (contextDir ctx)
-    _ <- storeRootAppendEff pid proj [digest]
-    view <- storeViewPathEff effectBinKind digest
-    cached <- storeViewValidEff effectBinKind digest
-    if cached then
-      runEffectIn view
-    else
-      do
-        claimed <- storeScratchClaimEff effectBinKind digest
-        if claimed then
-          do
-            out <- storeScratchPathOfClaim effectBinKind digest
-            srcRoot <- effectSrcDirOf digest
-            res <- buildEffectSource ctx source printResult srcRoot out
-            case res of
-              ErrC e =>
-                do
-                  _ <- storeScratchDropEff effectBinKind digest
-                  pure (ErrC e)
-              OkC _ =>
-                do
-                  _ <- storeViewPublishEff effectBinKind digest
-                  runEffectIn view
-        else
-          do
-            -- 并发构建者占用同一 digest：不等待，退回私有目录构建（不发布）。
-            base <- tempBase 0
-            now <- clockNow
-            dir <- freshTempDir 1000 "${base}/vuna-effectbin-${strFromInt now}"
-            _ <- fsMakeDir dir
-            res <- buildEffectSource ctx source printResult "${dir}/src" dir
-            case res of
-              ErrC e => cleanupDir dir (ErrC e)
-              OkC _ =>
-                do
-                  code <- runEffectIn dir
-                  cleanupDir dir code
+    base <- tempBase 0
+    now <- clockNow
+    dir <- freshTempDir 1000 "${base}/vuna-effect-${strFromInt now}"
+    _ <- fsMakeDir dir
+    res <- buildEffectSource ctx source printResult "${dir}/src" dir
+    case res of
+      ErrC e => cleanupDir dir (ErrC e)
+      OkC _ =>
+        do
+          code <- runEffectIn dir
+          cleanupDir dir code
 
 -- | 内部：native 目标——编到私有目录再链接（不发布视图）。
 -- 不做视图缓存：`target-out` 只缓存插件写出的文本，链接在驱动层；要把插件身份与 `cc`
@@ -132,10 +92,6 @@ runEffectIn dir =
   do
     code <- processRunIn dir ["bin/${effectBinaryName}"]
     pure (OkC code)
-
--- | 内部：合成包输入目录（内容按入口源码 digest 寻址，重复写是幂等的）。
-effectSrcDirOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
-effectSrcDirOf digest = storeScratchPathEff effectSrcKind digest
 
 -- | 内部：把合成包写到 `srcRoot`（`pkg/vuna.toml` + `pkg/app/Main.vuna`）并加载上下文。
 prepareEffectPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check PackageContext)
@@ -181,47 +137,6 @@ cleanupDir dir result =
   do
     _ <- processRunIn "/" ["rm", "-rf", dir]
     pure result
-
--- | 入口源码的缓存 key：编译器指纹 + 工具链标识 + 包根内容 + 源码 + 打印策略。
-effectSourceDigest : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r String
-effectSourceDigest ctx source printResult =
-  do
-    fp <- toolCompilerFingerprint
-    roots <- hashRoots (map (\r => rootDir r) (contextRoots ctx))
-    tool <- toolchainIdEff
-    let
-      input = "effectbin 1|${strOfInt fp}|${strOfInt roots}|${strOfInt (absInt (textHashOf source))}|${if printResult then "1" else "0"}|${tool}"
-    in pure (strOfInt (absInt (textHashOf input)))
-
--- | 内部：整数绝对值。
-absInt : Int -> Int
-absInt n = if n < 0 then 0 - n else n
-
--- | 内部：`Int` → 十进制文本。
-strOfInt : Int -> String
-strOfInt n = strFromInt n
-
--- | 包根内容摘要：对每个目录先收集源码文件再混哈希（调用方顺序稳定）。
-export hashRoots : Member nFs FsOp r => List String -> Eff r Int
-hashRoots dirs = hashRootsGo 0 dirs
-
-hashRootsGo : Member nFs FsOp r => Int -> List String -> Eff r Int
-hashRootsGo acc [] = pure acc
-hashRootsGo acc (d :: rest) =
-  do
-    files <- collectSourceFiles d
-    h <- hashFilesContent files
-    hashRootsGo (acc * 1000003 + h) rest
-
-hashFilesContent : Member nFs FsOp r => List String -> Eff r Int
-hashFilesContent files = hashFilesGo 0 files
-
-hashFilesGo : Member nFs FsOp r => Int -> List String -> Eff r Int
-hashFilesGo acc [] = pure acc
-hashFilesGo acc (f :: rest) =
-  do
-    text <- fsReadFile f
-    hashFilesGo (acc * 1000003 + absInt (textHashOf text)) rest
 
 -- ---------------------------------------------------------------
 -- 合成包：从调用方上下文继承依赖（manifest 的 `[dependencies]`）

@@ -28,7 +28,6 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   export VUNA_OBS_PKG="$repo/packages/obs"
   export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
   export VUNA_WEB_CLI="${vuna-web-cli}/bin/vuna-web-cli"
-  export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
   # suite 用**独立**对象库：`52_cache_framing` 会故意截断 store 里的 blob/lex 对象，
   # 与开发缓存共用会把所有 worktree 的重建成本一次性打回冷态。持久根保证
   # `--only <owner/family>` 反复跑仍有命中；`VUNA_STORE` 已设置时尊重调用方。
