@@ -132,6 +132,17 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    口径：接口载荷里的**依赖表值是模块对象地址 `cmAddr`（含编译器标签）**，不是 iface
    哈希——跨编译器比较 payload 会看到依赖项整体变化，那不代表哈希漂移；判定哈希是否变了
    要比 `miIfaceHash` 本身，或用 `checks.vuna-iface-selftest`。
+   **列表构造走 TMC**：`Base.Data.List` / `Vec` / `Sort` 里的 cons 构造过去是「非尾递归
+   cons」或「accumulator + reverse」，前者把栈压到与列表同阶（每次 minor GC 都要扫整条
+   栈：`caml_scan_stack` + `caml_find_frame_descr`），后者多分配一整份列表并把它推进
+   major heap（`do_some_marking` / `pool_sweep`）。OCaml 后端的 `Ir.Tail.tmcCandidate`
+   对「自引用只在结果位置或构造子**末字段**」的单递归定义加 `[@tail_mod_cons]`（stdlib
+   的 `List.map` / `List.init` 同一机制），单遍原地构造、浅栈。`closures`（20 万元素
+   `range` + fold）**10.1 → 5.8 ms**（手写对照 6.0 ms，指令数本来就与对照相同，
+   差的全是 GC）；`append` / `map` / `filter` / `zip` / `take` / `rangeFrom` / `mapMaybe`
+   / `nubNames` 都命中。判定必须保守：自引用出现在非末字段或实参里就**不能**加
+   （否则 ocamlopt 报 `may be TMC-transformed in several different ways`）。
+
 9. **导出面落在入口闭包外（已修，同一类的第二个实例）**：`Driver.IrDump` / `Ir.Render` 被列进
    compiler 的 `[export]`，但入口 `app/Main.vuna` 没 import ⇒ `iface-skip partial`（covered=118/120）
    ⇒ 每轮补一遍 lib check、包接口写不出去（依赖方只能回退全量）。冷 `check packages/compiler`
