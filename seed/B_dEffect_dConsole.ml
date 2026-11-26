@@ -29,3 +29,6 @@ let v_handleConsoleHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v
 
 # 64 "Base/Effect/Console.vuna"
 let v_runConsoleHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleConsoleHostHost "default") comp)))
+
+# 68 "Base/Effect/Console.vuna"
+let v_runConsoleEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runConsoleHost comp)))

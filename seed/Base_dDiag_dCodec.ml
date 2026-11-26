@@ -1,6 +1,4 @@
 open Vuna_runtime
-type t_CheckOutcome = C_CheckOutcome_CheckPassed of (Base_dDiag.t_Diagnostic B_dData_dList.t_List) | C_CheckOutcome_CheckFailed of (Base_dDiag.t_Diagnostic B_dData_dList.t_List)
-
 # 20 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_diagCodec = "diagnostics 2"
 
@@ -301,35 +299,6 @@ let v_encDiagnostics = (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) 
 let v_decDiagnostics = (fun (payload : string) -> (let fuel = ((bi_strLength payload) + 1) in (let nd_uscrut2 = ((v_decDiagList fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match dtb__64 with
   | { B_dData_dPair.f_Pair_first = dtb__65; B_dData_dPair.f_Pair_second = dtb__66 } -> (if (Base_dBytes.v_curAtEnd dtb__66) then (B_dData_dMaybe.C_Maybe_Just (dtb__65)) else B_dData_dMaybe.C_Maybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))))
-
-# 469 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_checkOutcomeCodec = "check-result 1"
-
-# 472 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_encOutcome = (fun (mc0 : t_CheckOutcome) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | C_CheckOutcome_CheckFailed (dtb__67) -> ((Base_dBytes.v_encTag 1) ((v_encDiagList dtb__67) mc1))
-  | C_CheckOutcome_CheckPassed (dtb__68) -> ((Base_dBytes.v_encTag 0) ((v_encDiagList dtb__68) mc1))
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 476 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decOutcome = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) c)) (fun (tg : int) (b1 : Base_dBytes.t_Cur) -> ((v_thenPair ((v_decDiagList (fuel - 1)) b1)) (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> (if (tg = 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (C_CheckOutcome_CheckPassed (ds)); B_dData_dPair.f_Pair_second = b2 })) else (if (tg = 1) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (C_CheckOutcome_CheckFailed (ds)); B_dData_dPair.f_Pair_second = b2 })) else B_dData_dMaybe.C_Maybe_Nothing)))))))
-
-# 490 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_checkResultCodec = v_checkOutcomeCodec
-
-# 493 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_encCheckOutcome = (fun (o : t_CheckOutcome) -> (Base_dBytes.v_encConcat ((v_encOutcome o) B_dData_dList.C_List_Nil)))
-
-# 496 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decCheckOutcome = (fun (payload : string) -> (let fuel = ((bi_strLength payload) + 1) in (let nd_uscrut2 = ((v_decOutcome fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__69) -> (match dtb__69 with
-  | { B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = dtb__71 } -> (if (Base_dBytes.v_curAtEnd dtb__71) then (B_dData_dMaybe.C_Maybe_Just (dtb__70)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing

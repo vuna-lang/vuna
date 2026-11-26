@@ -22,3 +22,6 @@ let v_handleClockHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_h
 
 # 53 "Base/Effect/Clock.vuna"
 let v_runClockHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleClockHostHost "default") comp)))
+
+# 57 "Base/Effect/Clock.vuna"
+let v_runClockEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runClockHost comp)))

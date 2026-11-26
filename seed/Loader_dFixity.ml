@@ -62,7 +62,7 @@ let v_lookupFixity = (fun (t : t_FixityTable) (op : string) -> (match ((v_lookup
 ))
 
 # 107 "Vuna/Compiler/Loader/Fixity.vuna"
-let v_unknownFixityMsg = (fun (op : string) -> ((Base_dDiagnostics_dRn.v_rnMsg (Base_dDiagnostics_dRn.C_RnErr_UnknownFixity (op))) (B_dData_dVec.C_Vec_VCons (op, B_dData_dVec.C_Vec_Nil))))
+let v_unknownFixityMsg = (fun (op : string) -> ((Base_dDiagnostics_dRn.v_rnMsg (Base_dDiagnostics_dRn.C_RnErr_UnknownFixity (op))) (B_dData_dVec.C_Vec__x58__x58_ (op, B_dData_dVec.C_Vec_Nil))))
 
 # 112 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_fixityOf = (fun (t : t_FixityTable) (c : t_ChainOp) -> (match ((v_lookupFixity t) (c).f_ChainOp_chainOp) with
@@ -343,7 +343,7 @@ let v_reorderTraitMethod = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Tra
 let v_reorderInstanceMethodDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (match mc1 with
   | Frontend_dAst.C_Decl_DFun (dtb__168, dtb__169, dtb__170, dtb__171) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (p : Frontend_dAst.t_Pat) -> ((v_reorderPattern mc0) p))) dtb__169)) (fun (pats2 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__170)) (fun (b2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DFun (dtb__168, pats2, b2, dtb__171))))))))
   | Frontend_dAst.C_Decl_DSig (dtb__172, dtb__173, dtb__174, dtb__175) -> ((Base_dCommon.v_bind ((Base_dCommon.v_traverse (fun (e : Frontend_dAst.t_Expr) -> ((v_reorderExpr mc0) e))) dtb__173)) (fun (ctx2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((v_reorderExpr mc0) dtb__174)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DSig (dtb__172, ctx2, ty2, dtb__175))))))))
-  | _ -> (Base_dDiag.C_Check_OkC (mc1))
+  | _ -> ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_declSpan mc1))) (Base_dDiag.v_icInternal "instance body has a declaration that is neither a signature nor a function"))
 ))
 
 # 414 "Vuna/Compiler/Loader/Fixity.vuna"
@@ -359,7 +359,7 @@ let v_reorderDecl = (fun (mc0 : t_FixityTable) (mc1 : Frontend_dAst.t_Decl) -> (
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 477 "Vuna/Compiler/Loader/Fixity.vuna"
+# 482 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_reorderProgram = (fun (t : t_FixityTable) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_traverse (fun (v : Frontend_dAst.t_Decl) -> ((v_reorderDecl t) v))) decls))
 
 # 30 "Vuna/Compiler/Loader/Fixity.vuna"

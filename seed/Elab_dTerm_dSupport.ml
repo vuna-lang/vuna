@@ -114,27 +114,28 @@ let v_inferVarRef = (fun (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_
 )))
 
 # 156 "Vuna/Compiler/Elab/Term/Support.vuna"
-let v_whereBindingName = (fun (mc0 : Frontend_dRast.t_Pat) -> (match mc0 with
-  | Frontend_dRast.C_Pat_PVar (dtb__43, dtb__44) -> dtb__43
+let v_whereBindingName = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
+  | Frontend_dAst.C_Pat_PVar (dtb__43, dtb__44) -> dtb__43
   | _ -> "_"
 ))
 
 # 146 "Vuna/Compiler/Elab/Term/Support.vuna"
-let rec v_checkWhereSigs = (fun (mc0 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> (match (B_dData_dPair.v_secondOf dtb__45) with
-  | Frontend_dRast.C_Expr_EAnn (dtb__47, dtb__48, dtb__49) -> (v_checkWhereSigs dtb__46)
-  | _ -> (let name = (v_whereBindingName (B_dData_dPair.v_firstOf dtb__45)) in ((((Base_dDiagnostics_dTc.v_tcErr2 (Frontend_dRast.v_patSpan (B_dData_dPair.v_firstOf dtb__45))) (Base_dDiagnostics_dTc.C_TcErr_WhereNeedsSig (name, name))) name) name))
+let rec v_checkWhereSigs = (fun (mc0 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> (match (dtb__45).Frontend_dAst.f_Binding_bindSig with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__47) -> (v_checkWhereSigs dtb__46)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (let name = (v_whereBindingName (dtb__45).Frontend_dAst.f_Binding_bindPat) in ((((Base_dDiagnostics_dTc.v_tcErr2 (Frontend_dAst.v_patSpan (dtb__45).Frontend_dAst.f_Binding_bindPat)) (Base_dDiagnostics_dTc.C_TcErr_WhereNeedsSig (name, name))) name) name))
+  | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 142 "Vuna/Compiler/Elab/Term/Support.vuna"
-let v_checkBindingSigs = (fun (mc0 : bool) (mc1 : (Frontend_dRast.t_Pat, Frontend_dRast.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if mc0 then (v_checkWhereSigs mc1) else (Base_dDiag.C_Check_OkC (0))))
+let v_checkBindingSigs = (fun (mc0 : bool) (mc1 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (if mc0 then (v_checkWhereSigs mc1) else (Base_dDiag.C_Check_OkC (0))))
 
 # 161 "Vuna/Compiler/Elab/Term/Support.vuna"
 let rec v_withEffectLabels = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dDiag.t_Diagnostic) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__50, dtb__51) -> ((v_withEffectLabels dtb__51) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldEffect (("unhandled: " ^ dtb__50)))) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__48, dtb__49) -> ((v_withEffectLabels dtb__49) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldEffect (("unhandled: " ^ dtb__48)))) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))

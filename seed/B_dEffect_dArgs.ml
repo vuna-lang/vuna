@@ -18,3 +18,6 @@ let v_handleArgsHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_ha
 
 # 40 "Base/Effect/Args.vuna"
 let v_runArgsHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleArgsHostHost "default") comp)))
+
+# 44 "Base/Effect/Args.vuna"
+let v_runArgsEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runArgsHost comp)))
