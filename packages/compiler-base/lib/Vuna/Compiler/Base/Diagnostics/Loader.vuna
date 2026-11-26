@@ -58,7 +58,7 @@ export data LdDiag(..) : Nat -> Type where
   ModuleNotFound : String -> String -> LdDiag 2
   ModuleNotExported : String -> String -> LdDiag 2
   -- arity 4
-  LayerViolation : String -> String -> String -> String -> LdDiag 4
+  LayerViolation : LdDiag 4
 
 export ldCode : {n : Nat} -> LdDiag n -> String
 ldCode (EntryFileNotFound _) = "LD_EntryFileNotFound"
@@ -68,7 +68,7 @@ ldCode (ModuleHeaderInEntryFile _) = "LD_ModuleHeaderInEntryFile"
 ldCode (ModuleHeaderInEntrySource _) = "LD_ModuleHeaderInEntrySource"
 ldCode (ModuleNotFound _ _) = "LD_ModuleNotFound"
 ldCode (ModuleNotExported _ _) = "LD_ModuleNotExported"
-ldCode (LayerViolation _ _ _ _) = "LD_LayerViolation"
+ldCode LayerViolation = "LD_LayerViolation"
 
 export ldTemplate : {n : Nat} -> LdDiag n -> String
 ldTemplate (EntryFileNotFound _) = "entry file not found: <0>"
@@ -79,7 +79,7 @@ ldTemplate (ModuleHeaderInEntrySource _) =
   "module header is not supported in the entry source (<0>)"
 ldTemplate (ModuleNotFound _ _) = "cannot find module <0> (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
-ldTemplate (LayerViolation _ _ _ _) = "module <0> (layer <2>) cannot import <1> (layer <3>)"
+ldTemplate LayerViolation = "module <0> (layer <2>) cannot import <1> (layer <3>)"
 
 export record LdEntry(..) where
   ldEntryCode : String
@@ -108,10 +108,7 @@ ldAll =
       (ldCode (ModuleNotExported "" ""))
       (ldTemplate (ModuleNotExported "" ""))
       "模块未被包导出",
-    LdEntry
-      (ldCode (LayerViolation "" "" "" ""))
-      (ldTemplate (LayerViolation "" "" "" ""))
-      "跨层导入"
+    LdEntry (ldCode LayerViolation) (ldTemplate LayerViolation) "跨层导入"
   ]
 
 export ldMsg : {n : Nat} -> LdDiag n -> Vec.Vec n String -> Diagnostic

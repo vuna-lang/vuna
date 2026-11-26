@@ -23,6 +23,7 @@ import Base.Data.List as List
 import Base.Data.Maybe
 import Base.Data.Pair
 import Base.Data.String as String
+import Base.Data.Unit
 
 isLayerPrefix : String -> String -> Bool
 isLayerPrefix prefix name = name == prefix || startsWith "${prefix}." name
@@ -31,13 +32,13 @@ usesOfLayer : List Layer -> String -> List String
 usesOfLayer [] name = []
 usesOfLayer (l :: rest) name = if l.layerName == name then l.layerUses else usesOfLayer rest name
 
-closureGo : Int -> List Layer -> Queue String -> List String -> List String
+closureGo : Int -> List Layer -> Queue String -> List String -> Check (List String)
 closureGo fuel layers todo acc =
   if fuel <= 0 then
-    acc
+    icInternal "layer closure fuel exhausted"
   else
     case Queue.pop todo of
-      Nothing => acc
+      Nothing => OkC acc
       Just (n, rest) => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (Queue.pushAll (usesOfLayer layers n) rest) (n :: acc)
 
 -- 队列里每个层名最多被弹出一次；重复边会让同一名字重复入队，因此上界是
@@ -50,7 +51,7 @@ usesTotal [] = 0
 usesTotal (l :: rest) = length l.layerUses + usesTotal rest
 
 -- | 一行的许可集：自身层 + uses 的传递闭包。
-allowedByRow : List Layer -> Layer -> List String
+allowedByRow : List Layer -> Layer -> Check (List String)
 allowedByRow layers l =
   closureGo (closureBound layers) layers (Queue.fromList l.layerUses) [l.layerName]
 
@@ -59,10 +60,12 @@ covered [] name = False
 covered (p :: rest) name = isLayerPrefix p name || covered rest name
 
 -- | 匹配的所有层取交集：每个匹配行都必须允许 `target` 落在它的许可子树里。
-importAllowed : List Layer -> List Layer -> String -> Bool
-importAllowed layers [] target = True
+importAllowed : List Layer -> List Layer -> String -> Check Bool
+importAllowed layers [] target = OkC True
 importAllowed layers (r :: rest) target =
-  covered (allowedByRow layers r) target && importAllowed layers rest target
+  Vuna.Compiler.Base.Common.bind
+    (allowedByRow layers r)
+    (\allowed => if covered allowed target then importAllowed layers rest target else OkC False)
 
 layerMatches : String -> Layer -> Bool
 layerMatches name l = isLayerPrefix l.layerName name
@@ -90,31 +93,29 @@ withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
   if spanFile (importSpan imp) == "" then e else withFallbackSpan (importSpan imp) e
 
-checkImports : List Layer -> List Layer -> String -> String -> String -> List Module -> List Import -> Check Int
-checkImports allRules matched srcName srcPkg checkedPkg modules [] = OkC 0
+checkImports : List Layer -> List Layer -> String -> String -> String -> List Module -> List Import -> Check Unit
+checkImports allRules matched srcName srcPkg checkedPkg modules [] = OkC MkUnit
 checkImports allRules matched srcName srcPkg checkedPkg modules (imp :: rest) =
   case findModule modules (importName imp) of
     -- 目标不在表里（preloaded 装配下依赖模块未被装入）：只有目标名落在本包声明的层里
     -- 才可能判定（跨包/无层目标无法从名字推归属），此时仍按名字判定，不能跳过。
     Nothing =>
-      if srcPkg == checkedPkg && length (matchingLayers allRules (importName imp)) > 0 && not (importAllowed allRules matched (importName imp)) then
-        onErrDiag
-          (withImportSpan imp)
-          (ldErr4 (LayerViolation "" "" "" "") srcName (importName imp) (labelOf allRules srcName) (labelOf allRules (importName imp)))
+      if srcPkg == checkedPkg && length (matchingLayers allRules (importName imp)) > 0 then
+        Vuna.Compiler.Base.Common.bind
+          (importAllowed allRules matched (importName imp))
+          (\ok => if ok then checkImports allRules matched srcName srcPkg checkedPkg modules rest else onErrDiag (withImportSpan imp) (ldErr4 LayerViolation srcName (importName imp) (labelOf allRules srcName) (labelOf allRules (importName imp))))
       else
         checkImports allRules matched srcName srcPkg checkedPkg modules rest
     Just t =>
       if modulePackageOf t /= srcPkg then
         checkImports allRules matched srcName srcPkg checkedPkg modules rest
-      else if importAllowed allRules matched (moduleNameOf t) then
-        checkImports allRules matched srcName srcPkg checkedPkg modules rest
       else
-        onErrDiag
-          (withImportSpan imp)
-          (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
+        Vuna.Compiler.Base.Common.bind
+          (importAllowed allRules matched (moduleNameOf t))
+          (\ok => if ok then checkImports allRules matched srcName srcPkg checkedPkg modules rest else onErrDiag (withImportSpan imp) (ldErr4 LayerViolation srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t))))
 
-checkModules : List Root -> String -> List Module -> List Module -> Check Int
-checkModules roots checkedPkg all [] = OkC 0
+checkModules : List Root -> String -> List Module -> List Module -> Check Unit
+checkModules roots checkedPkg all [] = OkC MkUnit
 checkModules roots checkedPkg all (m :: rest) =
   let
     rules = layersOfRoot roots (modulePackageOf m)
@@ -127,6 +128,6 @@ checkModules roots checkedPkg all (m :: rest) =
       OkC _ => checkModules roots checkedPkg all rest
 
 -- | 项目级层检查：逐个模块检查直接 import 边是否越过层边界。
-export checkProjectLayers : List Root -> Project -> Check Int
+export checkProjectLayers : List Root -> Project -> Check Unit
 checkProjectLayers roots project =
   checkModules roots project.projectEntryPkg project.projectModules project.projectModules
