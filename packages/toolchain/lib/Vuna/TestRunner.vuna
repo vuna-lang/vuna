@@ -8,7 +8,7 @@
 -- 单测失败不中断其余测试。
 --
 -- 效果测试有单测超时：默认 120s，`VUNA_TEST_TIMEOUT` 覆盖（0 = 关闭，非数字回落
--- 默认）。实现是在 store scratch 目录里 `compileToDir` 测试入口；`compileToDir` 是进程内
+-- 默认）。实现是在私有临时目录里 `compileToDir` 测试入口；`compileToDir` 是进程内
 -- 调用、不受外部超时，随后用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
 -- 产物」两步，任一步超时记 FAIL 并清理。没有 `timeout` 命令时同一路径不加外部超时。
 -- 纯测试走 `interpretFile`，终止性由核心求值器的 fuel 守卫保证。
@@ -474,45 +474,6 @@ runTimedCmd dir argv secs =
       code <- processRunIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
       pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
--- | effect 测试二进制的缓存对象种类：产物落在
--- `$VUNA_STORE/views/testbin/<digest>/bin/vuna-test`，命中直接运行，跳过 compile 与
--- `build.sh`。只缓存 effect 测试（pure 仍走 `interpretFile`）。
-testBinKind : String
-testBinKind = "testbin"
-
--- | 内部：整数绝对值。
-absInt : Int -> Int
-absInt n = if n < 0 then 0 - n else n
-
--- | 内部：`Int` → 十进制文本。
-strOfInt : Int -> String
-strOfInt n = strFromInt n
-
--- | 内部：effect 测试二进制的缓存 key——编译器指纹 + 包源码闭包内容 + 测试源码内容
--- + 工具链标识。
-testBinDigest : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
-testBinDigest ctx path =
-  do
-    fp <- toolCompilerFingerprint
-    src <- fsReadFile path
-    rootsHash <- hashRoots (map (\r => rootDir r) (contextRoots ctx))
-    tool <- toolchainIdEff
-    let
-      input = "testbin 4|${strOfInt fp}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}|${tool}"
-    in pure (strOfInt (absInt (textHashOf input)))
-
--- | 内部：运行已缓存的测试二进制，按退出码给结果（超时记 FAIL）。
-runCachedTestBin : Member nProcess ProcessOp r => String -> Int -> Eff r TestOutcome
-runCachedTestBin view secs =
-  do
-    runRes <- runTimedCmd view ["bin/vuna-test"] secs
-    pure (
-        case runRes of
-          CmdTimedOut => TestFailed "timed out after ${secs}s"
-          CmdDone 0 => TestPassed
-          CmdDone code => TestFailed "effect program exited with code ${code}"
-      )
-
 -- | 内部：在 `dir` 里编译测试入口（`printResult = False`，只看退出码），再跑
 -- `sh build.sh bin/vuna-test`；`compileToDir` 在进程内执行（不受外部超时），
 -- `sh build.sh` 由 `timeout` 保护，失败 / 超时都给出 FAIL。
@@ -533,59 +494,26 @@ buildTestBin ctx path name dir secs =
                 CmdDone code => TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})"
             )
 
--- | 内部：有超时的效果测试——缓存命中直接运行；未命中先占 scratch 构建，构建成功发布
--- 到 view 再运行；scratch 被并发构建者占用时不等待，退回私有临时构建（不发布）。
---
--- 私有临时目录名含测试文件名，`--jobs` 并行时同一包的多个子进程即使时间戳相同也不会
--- 撞名（同包文件名唯一）。失败 / 超时都清理临时目录。
+-- | 内部：有超时的效果测试——在私有临时目录编译并运行；失败 / 超时都清理。
 runIOTestTimed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Int -> Eff r TestOutcome
 runIOTestTimed ctx path name secs =
   do
-    digest <- testBinDigest ctx path
-    -- 与 bin 视图同口径：testbin 也登记进项目 roots，否则宽限期后会被 store gc 整目录淘汰
-    -- （淘汰只影响命中率，但每次重编测试二进制是可见成本）。
-    pid <- projectIdOf ctx
-    proj <- absolutePath (contextDir ctx)
-    _ <- storeRootAppendEff pid proj [digest]
-    view <- storeViewPathEff testBinKind digest
-    cached <- storeViewValidEff testBinKind digest
-    if cached then
-      runCachedTestBin view secs
-    else
-      do
-        claimed <- storeScratchClaimEff testBinKind digest
-        if claimed then
-          do
-            scratch <- storeScratchPathOfClaim testBinKind digest
-            built <- buildTestBin ctx path name scratch secs
-            case built of
-              TestPassed =>
-                do
-                  _ <- storeViewPublishEff testBinKind digest
-                  runCachedTestBin view secs
-              _ =>
-                do
-                  _ <- storeScratchDropEff testBinKind digest
-                  pure built
-        else
-          do
-            -- 并发构建者占用：不等待，退回私有临时构建（不发布）。
-            base <- tempBase 0
-            now <- clockNow
-            dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
-            built <- buildTestBin ctx path name dir secs
-            case built of
-              TestPassed =>
-                do
-                  runRes <- runTimedCmd dir ["bin/vuna-test"] secs
-                  _ <- ioCleanup dir built
-                  pure (
-                      case runRes of
-                        CmdTimedOut => TestFailed "timed out after ${secs}s"
-                        CmdDone 0 => TestPassed
-                        CmdDone code => TestFailed "effect program exited with code ${code}"
-                    )
-              _ => ioCleanup dir built
+    base <- tempBase 0
+    now <- clockNow
+    dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
+    built <- buildTestBin ctx path name dir secs
+    case built of
+      TestPassed =>
+        do
+          runRes <- runTimedCmd dir ["bin/vuna-test"] secs
+          _ <- ioCleanup dir built
+          pure (
+              case runRes of
+                CmdTimedOut => TestFailed "timed out after ${secs}s"
+                CmdDone 0 => TestPassed
+                CmdDone code => TestFailed "effect program exited with code ${code}"
+            )
+      _ => ioCleanup dir built
 
 -- | 内部：删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
 ioCleanup : Member nProcess ProcessOp r => String -> TestOutcome -> Eff r TestOutcome

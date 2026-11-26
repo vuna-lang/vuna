@@ -85,7 +85,7 @@ cacheScopesOf : String -> List String
 cacheScopesOf root =
   append
     (map (\k => "${root}/objects/${k}") (append cacheKindNames identityKindNames))
-    ["${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
+    ["${root}/views", "${root}/.tmp"]
 
 -- | 内部：清缓存族（`--store`）：作用域见 [Vuna.Clean.cacheScopesOf]，`dry` 时只统计不删。
 cleanStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
@@ -341,8 +341,7 @@ runStoreGc args =
         in do
           pruned <- pruneProjectRoots dry
           _ <- if pruned == 0 then pure 0 else fmap natToInt (consolePrint "store-gc: ${storeVerb dry} ${strFromInt pruned} dead project root(s)\n")
-          keep <- allRootDigests
-          gcSweep root keep graceSec maxBytes dry
+          gcSweep root graceSec maxBytes dry
 
 -- | 十进制非负整数解析：解析失败或负值返回默认值 `d`
 -- （`--older-than` / `--max-size` 都是非负整数）。
@@ -402,79 +401,19 @@ gcFilesOf root =
       excluded = ["${root}/objects/pkg/", "${root}/objects/module-order/", "${root}/objects/pkg-iface/"]
     in pure (filter (\p => not (anyLine (\pre => startsWith pre p) excluded)) objs)
 
--- | 内部：目录下的直接子目录（不存在或不是目录给空列表）。
-subDirsOf : Member nFs FsOp r => String -> Eff r (List String)
-subDirsOf dir =
-  do
-    exists <- fsFileExists dir
-    isDir <- if exists then fsIsDirectory dir else pure False
-    if exists && isDir then
-      do
-        names <- fsReadDir dir
-        concatMapEff (
-            \n =>
-              do
-                let
-                  p = "${dir}/${n}"
-                in do
-                  isDirEntry <- fsIsDirectory p
-                  pure (if isDirEntry then [p] else [])
-          ) names
-    else
-      pure []
-
--- | 内部：目录下所有文件的大小之和（字节）。
-dirSizeOf : Member nFs FsOp r => String -> Eff r Int
-dirSizeOf path =
-  do
-    files <- walkFiles 1048576 path
-    xs <- sizesOf files
-    pure (sumSizes xs)
-
--- | 内部：视图候选：整目录按 roots 名保护、按目录 mtime 判旧，给出
--- `(mtime, (字节数, 路径))`。视图只能整目录删：`.complete` 还在时删单个文件会让读侧
--- 把半截视图当完整的。
-gcViewCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Int, Int, String))
-gcViewCandidates _ _ _ [] = pure []
-gcViewCandidates now keep grace (d :: rest) =
-  do
-    more <- gcViewCandidates now keep grace rest
-    if memName (fileNameOf d) keep then
-      pure more
-    else
-      do
-        mtime <- fmap (fromMaybe 0) (fsFileMtime d)
-        if mtime + grace < now then
-          do
-            size <- dirSizeOf d
-            pure ((mtime, size, d) :: more)
-        else
-          pure more
-
--- | 内部：路径的最后一段（`split "/"` 后取尾）。
-fileNameOf : String -> String
-fileNameOf path =
-  case reverse (split "/" path) of
-    [] => ""
-    x :: _ => x
-
 -- | 内部：文件候选：名字（对象摘要）不在 roots 里，且 mtime 早于宽限窗口；带 size 便于容量判定。
-gcCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Int, Int, String))
-gcCandidates _ _ _ [] = pure []
-gcCandidates now keep grace (p :: rest) =
+gcCandidates : Member nFs FsOp r => Int -> Int -> List String -> Eff r (List (Int, Int, String))
+gcCandidates _ _ [] = pure []
+gcCandidates now grace (p :: rest) =
   do
-    more <- gcCandidates now keep grace rest
-    if memName (fileNameOf p) keep then
-      pure more
-    else
+    more <- gcCandidates now grace rest
+    mtime <- fmap (fromMaybe 0) (fsFileMtime p)
+    if mtime + grace < now then
       do
-        mtime <- fmap (fromMaybe 0) (fsFileMtime p)
-        if mtime + grace < now then
-          do
-            size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize p)
-            pure ((mtime, size, p) :: more)
-        else
-          pure more
+        size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize p)
+        pure ((mtime, size, p) :: more)
+    else
+      pure more
 
 -- | 内部：按 mtime（外层 `Int`）升序排序，最旧的在前。
 sortByAge : List (Int, Int, String) -> List (Int, Int, String)
@@ -511,30 +450,23 @@ sizesOf (p :: rest) =
     size <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize p)
     pure ((p, size) :: more)
 
--- | 内部：一轮淘汰：文件与视图目录各自求候选（roots 名保护 + 宽限窗口），合并后按年龄挑出
--- 要删的目标（容量上限用），`dry` 时只报告。
-gcSweep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> List String -> Int -> Int -> Bool -> Eff r Int
-gcSweep root keep grace maxBytes dry =
+-- | 内部：一轮淘汰：按宽限窗口挑旧文件，容量上限只用于决定删多少；`dry` 时只报告。
+gcSweep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> Int -> Int -> Bool -> Eff r Int
+gcSweep root grace maxBytes dry =
   do
     now <- currentSec
     files <- gcFilesOf root
-    fileCands <- gcCandidates now keep grace files
-    binDirs <- subDirsOf "${root}/views/bin"
-    testDirs <- subDirsOf "${root}/views/testbin"
-    viewDirs <- pure (append binDirs testDirs)
-    viewCands <- gcViewCandidates now keep grace viewDirs
-    viewFiles <- concatMapEff (\d => walkFiles 1048576 d) viewDirs
-    sizes <- sizesOf (append files viewFiles)
+    cands <- gcCandidates now grace files
+    sizes <- sizesOf files
     let
       total = sumSizes sizes
-      cands = append fileCands viewCands
       targets = pickGo total maxBytes (sortByAge cands) []
       paths = map (\q => secondOf (secondOf q)) targets
       n = length paths
       _ = log! "debug" "store-gc candidates=${length cands} delete=${strFromInt n} total=${strFromInt total}"
     in do
       _ <- if dry then pure 0 else removeEachPath paths
-      _ <- consolePrint "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
+      _ <- consolePrint "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (grace ${strFromInt grace}s)\n"
       pure 0
 
 -- | 内部：当前 Unix 秒（GC 的宽限窗口判据）。

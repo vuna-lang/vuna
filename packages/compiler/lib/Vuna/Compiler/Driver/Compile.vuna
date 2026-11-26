@@ -160,7 +160,7 @@ ensureDirPathFuel fuel path =
 export compileToDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 compileToDir ctx entry printResult outDir =
   do
-    inputs <- splitInputsOf ctx entry printResult
+    inputs <- splitInputsOf ctx
     compileToDirGiven inputs ctx entry printResult outDir
 
 -- | 同上，复用调用方已经算好的 split 输入：`build` 的 view 地址与 codegen 判定共用同一次
@@ -618,25 +618,6 @@ runBuildScript dir out name =
     pure
       (if code == 0 then OkC 0 else err "build: ${name}: sh build.sh ${out} failed in ${dir} (exit ${code})")
 
-hashText : Int -> String
-hashText n = strFromInt n
-
--- | 构建/视图 key 的输入摘要（纯数据；键由 `buildViewKeyOf` 换算成对象地址）。
-export record CheckMods(..) where
-  cmPkg : String
-  cmKind : String
-  cmManifest : String
-  cmSources : String
-  cmDeps : String
-  cmVer : String
-  -- 语义开关（当前：release/debug）。多一段 ⇒ 不同 flags 得到不同地址。
-  cmFlags : String
-
--- | 拼 `CheckMods`（纯构造；摘要由调用方算好传入）。
-checkModsOf : String -> String -> String -> String -> String -> String -> String -> CheckMods
-checkModsOf pkg kind manifest sources deps ver flags =
-  CheckMods pkg kind manifest sources deps ver flags
-
 -- 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录，项目只追加自己关心的摘要。
 export projectIdOf : Member nEnv EnvOp r => PackageContext -> Eff r String
 projectIdOf ctx =
@@ -677,10 +658,6 @@ manifestSemanticText (Just pkg) =
   in join
     "\n"
     ((::) "name:${maybeSemanticText man.manifestName}" ((::) "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
-
--- | 语义开关：release 会拒绝 debug-only 构造（诊断集合不同），必须进输入摘要。
-releaseFlagOf : PackageContext -> String
-releaseFlagOf ctx = if contextRelease ctx then "release" else "debug"
 
 -- 依赖优先的 DFS 后序 + 按包名去重（与 `Packages.Pkg.dependencyRoots` 同规则）。
 -- 直接依赖经单 clause 投影 `depPackagesOf` 取（SCT 认作结构子项），遍历本身是结构递归，
@@ -2173,77 +2150,14 @@ auditCheckLib wantWarnings ctx mods names =
         ErrC e => pure (ErrC e)
         OkC _ => checkAndShadow ctx (pure summary)
 
--- | build 视图 key 的 schema（结构变化必须 bump；旧视图自然失效）。
-buildViewSchema : String
-buildViewSchema = "vuna-build-view 1"
-
--- | 一次 build 命令共用的 split 输入：闭包扫描 / 依赖接口 / 输入摘要。
---
--- 三者由同一次 `ifaceModsEff`（整包源扫描 + 逐模块头解析 + 地址分配）派生。`build` 的
--- view 地址与 codegen 判定以前各算一遍，于是同一份源码在一个命令里被扫两到三次。
+-- | 一次 build 命令共用的输入：闭包扫描 + 依赖接口。
 export record SplitInputs(..) where
   siClosure : List ClosureMod
   siDepIfaces : Maybe (List ModuleIface)
-  siMods : CheckMods
 
-export splitInputsOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r SplitInputs
-splitInputsOf ctx entry printResult =
+export splitInputsOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r SplitInputs
+splitInputsOf ctx =
   do
     closure <- ifaceModsEff ctx
     depIfaces <- depIfacesOfWith ctx closure
-    sources <- contextSources ctx entry
-    deps <- depIdentitiesEff ctx
-    fp <- compilerFingerprint
-    let
-      srcHash = closureHashOf sources 0
-      verHash = textHash (buildViewSchema ++ vunaVersion) + fp
-      prHash = if printResult then 1 else 0
-      -- **产物口径**必须进视图 key：摘要路径（依赖接口齐全）与全量路径产出的代码
-      -- 仍不完全相同——接口载荷的 canonical 编码丢掉 `TLam` 的 slot（binder 类型注解），
-      -- 依赖单元的 lambda 少注解。`#line` / defloc 路径已统一（见 Iface.restoreDefLocsSpans）。
-      mode =
-        case depIfaces of
-          Just _ => "s"
-          Nothing => "f"
-      kind = "${mode}:${if printResult then "pr1" else "pr0"}"
-    in pure (SplitInputs closure depIfaces (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)) (releaseFlagOf ctx)))
-
--- | build 视图的输入摘要：包 + kind + 三个闭包摘要 + 编译器指纹（与 check 判定同口径）。
-buildViewKeyOf : CheckMods -> String
-buildViewKeyOf m =
-  addrOf ["build-view", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
-
--- | 链接工具链身份：视图里放的是**链接产物**，它由生成的 .ml 与链接工具链共同决定。
--- `views/bin` 的 key 因此 = 产物输入摘要 + 工具链身份；统一 store 下不会把别的工具链
--- 链出来的二进制当成同一次构建。优先 `VUNA_OCAML_ID`（构建图注入，免一次子进程），
--- 否则现跑 `ocamlopt -version`（只发生在 `build` 路径，`check` / `--no-compile` 不付）。
--- 取不到 ⇒ `none`（仍可构建，只是不同工具链的视图不区分）。
-export toolchainIdEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
-toolchainIdEff =
-  do
-    override <- envGetEnv "VUNA_OCAML_ID"
-    if override /= "" then
-      pure override
-    else
-      do
-        base <- cacheBase
-        _ <- storeEnsureDirEff "${base}/.tmp"
-        let
-          path = "${base}/.tmp/ocamlopt-version"
-        in do
-          _ <- processRunIn "." ["sh", "-c", "ocamlopt -version > \"${path}\" 2>/dev/null || true"]
-          exists <- fsFileExists path
-          if exists then
-            do
-              text <- fsReadFile path
-              pure (if trim text == "" then "none" else trim text)
-          else
-            pure "none"
-
--- | build 视图的地址：产物输入摘要 + 链接工具链身份。默认输出目录就是
--- `$VUNA_STORE/views/bin/<该摘要>`，`.output` 只是指向它的符号链接。
-export buildViewAddrOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> Eff r String
-buildViewAddrOf inputs =
-  do
-    tool <- toolchainIdEff
-    pure (addrOf ["view-bin", buildViewKeyOf inputs.siMods, tool])
+    pure (SplitInputs closure depIfaces)
