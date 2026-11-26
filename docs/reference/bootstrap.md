@@ -31,7 +31,7 @@ runtime 模块、`Main.ml`、`build.sh` 与 `build-id`（编译器身份）；**
 没有第二套输出模型或 `--split` 开关。
 
 Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler` 分别构建 stage 0 / stage 1；
-产品侧先由 `packages.vuna-store` 预热依赖包的接口 / 模块顺序 / 包身份，再让每个插件派生
+产品侧先由 `packages.vuna-store` 预热依赖包的接口 / 已写接口的模块面 / 包身份，再让每个插件派生
 （`vuna-cli` / `vuna-toolchain` / `vuna-target-*` / `vuna-plugin-web` / `vuna-dev`）只构建
 自己的包，`packages.vuna` 把产物拷进同一个 `bin/`；`checks.seed-selfhost` 守整条链。
 

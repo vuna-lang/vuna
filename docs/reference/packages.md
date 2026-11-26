@@ -6,15 +6,21 @@
 
 ## 包管理与工具链
 
-- 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
+- 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（`name`，可选 `implicit-prelude`）、`[workspace]`（members）、
   `[export]`（modules）、`[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
   `[dependencies]`（依赖声明，见下节）、`[layers]`（包内模块的依赖方向，见「层约束」）、
   `[lint]`（lint 配置；编译器只做 TOML 结构放行，schema 由 `vuna lint` 消费时校验，
   见 [lint.md](lint.md) §1.1）。
   TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
   点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
-  不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略
+  不静默近似）。未知 section / key、以及 `[package]` 里出现 `name` / `implicit-prelude`
+  之外的 key 都是错误，不静默忽略
   （`[capabilities]` / `[trust]` / `[privileged]` 均不存在，出现即未知 section/key）。
+- **`[package]` 的 `implicit-prelude`**（布尔，默认 `true`）：本包模块（含入口文件 `app/Main.vuna`）
+  是否自动注入 `Prelude`。`false` 关闭本包全部模块的自动注入，显式 `import Prelude` 仍然
+  可用；它不影响本包的顶层 `Prelude` 被依赖方注入——依赖本包的包照常自动导入它。无
+  manifest 的 ad-hoc 单文件恒注入。`packages/base/vuna.toml` 设为 `false`（base 模块不注入
+  自己的 `Prelude`）。注入规则见 [stdlib.md](stdlib.md)「Prelude 自动导入」。
 - **workspace 根有两种形态**：根包（Cargo 风格，根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`）与虚拟根（只有 `[workspace]`，没有 `[package]`）。成员是子目录，各自有自己的
   `vuna.toml`。虚拟根只允许 `[workspace]` 与工具配置段（`[lint]` / `[diagnostics]` /
@@ -35,9 +41,9 @@
   每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
   + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报
   `is not exported by package ...`。无 manifest 的文件只有 base 上下文（`VUNA_BASE` 覆盖，
-  否则按可执行文件相对布局探测），且这类 ad-hoc 单文件与包内模块一样**自动注入
-  `Prelude`**（见 [stdlib.md](stdlib.md)）。**目录入口**（`check/build <dir>`）只认该目录
-  自己的 manifest，不向上找。
+  否则按可执行文件相对布局探测），这类 ad-hoc 单文件恒**自动注入 `Prelude`**；包内模块的
+  注入可由该包 `[package]` 的 `implicit-prelude = false` 关闭（见 [stdlib.md](stdlib.md)）。
+  **目录入口**（`check/build <dir>`）只认该目录自己的 manifest，不向上找。
 - **依赖图内包名唯一**：包名参与「同包永远可见」判定，因此同名不同目录是配置错误。同名同
   目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
 - 编译器 CLI（`packages/compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
@@ -110,7 +116,7 @@
 ## 效应边界（无 manifest 门控）
 
 - 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 没有 `[capabilities]`、`[trust]`、
-  `[privileged]`；`[package]` 只接受 `name`。
+  `[privileged]`；`[package]` 只接受 `name` 与可选 `implicit-prelude`。
 - 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*`（纯原语）。效果原语是隐藏名
   （`@vuna@prim_eff_*` / `@vuna@host@*`，源码写不出），只由 base 的 Eff handler 与
   编译器/工具链内部使用。编译器没有包级原语白名单、宿主模块 import 门控、`unsafe` 的
@@ -175,16 +181,19 @@ vuna-base = "base"
 # 成员包（库包）：用 [export] 列出跨包可见的模块
 [package]
 name = "my-lib"
+implicit-prelude = false   # 可选，默认 true；false = 本包模块不自动注入 Prelude
 
 [export]
 modules = ["My.Lib", "My.Lib.Internal"]
 ```
 
 （`vuna-base` 的名单同样列出全部 `Base.*` 模块——标准库叶子模块也是公开面；见
-[stdlib.md](stdlib.md)「模块」一节。）
+[stdlib.md](stdlib.md)「模块」一节。`packages/base/vuna.toml` 另设
+`implicit-prelude = false`：base 模块不注入自己的 `Prelude`，依赖方仍照常注入它。）
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
-成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
+成员包 manifest 以 `[package]` + `[export]` 为核心（`[package]` 里 `name` 之外只允许
+可选 `implicit-prelude`；其余可选段见上文清单）：
 没有能力 / 特权 / 信任 section。宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`
 （源码写不出，只由 base 的 handler 与编译器/工具链内部使用）；`Base.Effect` 只是效应模块的
 命名空间门面，不包原语。）

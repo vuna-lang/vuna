@@ -84,7 +84,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
  → Frontend.Lexer.lexSource      （token + Pos/Span；lexSourceWithComments 一次给 token + 注释）
  → Frontend.Parser.parseSource   （offside layout → AST + imports；工具用 parseSourceWithComments）
  → Frontend.Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
- → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
+ → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；Prelude 自动注入：ad-hoc 恒注入、包内模块受 `[package]` 的 `implicit-prelude` 控制；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （只读 Ast；Records/Derive 展开 → 精化）
  → Lowering.Erased                （运行时 TVar 下标归一化 + 校验；类型面保留）
  → Lowering.Program               （Core → Ir：表示/形态/入口分类，程序级检查）
@@ -207,8 +207,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 **约束**：Toml/Manifest 不碰 I/O，Pkg 只做 lexical 规范化；**每个源文件唯一包上下文**，
 目录入口 `check/build <dir>` 直接 `loadPackage` 只认该目录 manifest（不向上找）；跨包只认
-依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name`
-（本仓库没有 `[capabilities]` / `[trust]` / `[privileged]` 段）。
+依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name` 与可选
+`implicit-prelude`（默认 `true`；本仓库没有 `[capabilities]` / `[trust]` / `[privileged]` 段）。
 **依赖定位**：`path` 依赖 = 工作树目录（可变输入）；`git`/`url` 依赖 = 持久 store 的物化视图
 `$VUNA_STORE/pkgs/<内容摘要>`（`vuna deps fetch` 写入，check/build 只读）。摘要规则与 store
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。

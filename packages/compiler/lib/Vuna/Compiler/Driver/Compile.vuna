@@ -39,6 +39,7 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Version
 import Vuna.Compiler.Base.Obs
 import Base.Data.List as List
+import Base.Data.Sort as Sort
 import Base.Data.Nat as Nat
 import Base.Effect.Args as EffArgs
 import Base.Effect.Clock as EffClock
@@ -106,13 +107,13 @@ checkPackage release wantWarnings pkg =
               Just names =>
                 do
                   -- 入口闭包已经覆盖全部导出模块时（典型：Main import 了库模块），入口那遍
-                  -- 已经写全 order + iface 对象，再补一遍 lib check 只会重复精化整包
-                  -- （4000 定义探针上约 +0.9 s，且放大增长比）。order 只在「完整模块面」
-                  -- 写成功后才存在，所以「order 覆盖 names」等价于 iface 也已写全。
+                  -- 已经写全覆盖集 + iface 对象，再补一遍 lib check 只会重复精化整包
+                  -- （4000 定义探针上约 +0.9 s，且放大增长比）。覆盖集只在「完整模块面」
+                  -- 写成功后才存在，所以「覆盖集包含 names」等价于 iface 也已写全。
                   -- `VUNA_ELAB_FULL=1` 的语义是「每条路径都全量」，必须照跑第二遍（也会重新
                   -- 读写 lex 对象；截断恢复的用例依赖它）。
                   full <- elabFullRequested
-                  covered <- if full then pure False else orderCoversEff ctx names
+                  covered <- if full then pure False else coveredCoversEff ctx names
                   if covered then
                     do
                       let
@@ -480,10 +481,11 @@ buildIdForEff ctx =
       compilerTagEff
 
 -- ---------------------------------------------------------------
--- 依赖身份：依赖方只消费依赖包的**接口身份**，不是源字节闭包。
+-- 包身份与已写模块面：依赖方消费依赖包的**接口身份**，不是源字节闭包。
 --
--- 依赖包 check/build 成功后写一个稳定对象 `objects/pkg-iface/<key>`，key = 包名 + 该包
--- lib 根源闭包摘要 + 编译器 tag，载荷 = `pkgIfaceHashOfModules`。依赖方按同样的 key 读取：
+-- 依赖包 check/build 成功后写一个稳定对象 `objects/pkg-summary/<key>`，key = 包名 +
+-- 根源闭包摘要 + `implicit-prelude` 开关 + 编译器 tag；载荷 = `pkgIfaceHashOfModules`
+-- 与本次写全接口的模块名集合（按名字排序）。依赖方按同样的 key 读取：
 --   * 命中 ⇒ `iface:<pkgIfaceHash>`（注释 / 诊断配置 / opaque 体变化不脏依赖方）；
 --   * 缺失（依赖还没 check、或源码变了还没重跑）⇒
 --     `manifest:<toml 内容摘要>:<该根源闭包摘要>` 回退。
@@ -495,15 +497,15 @@ pkgSummaryKind : String
 pkgSummaryKind = "pkg-summary"
 
 pkgSummaryCodec : String
-pkgSummaryCodec = "pkg-summary 1"
+pkgSummaryCodec = "pkg-summary 2"
 
--- | 包摘要：模块顺序 + 依赖方消费的接口身份。
+-- | 包摘要：已写接口的模块覆盖集 + 依赖方消费的接口身份。
 export record PkgSummary(..) where
-  psOrder : List String
+  psCovered : List String
   psIfaceHash : String
 
 encPkgSummary : PkgSummary -> String
-encPkgSummary s = encTop (encList encStr) (s.psIfaceHash :: s.psOrder)
+encPkgSummary s = encTop (encList encStr) (s.psIfaceHash :: s.psCovered)
 
 decPkgSummary : String -> Maybe PkgSummary
 decPkgSummary payload =
@@ -571,7 +573,7 @@ depIdentitiesHash pairs = addrOf ("dep-identities" :: map pairText pairs)
 pairText : (String, String) -> String
 pairText p = "${firstOf p}=${secondOf p}"
 
--- | 写本包的模块顺序 + 接口身份（供依赖方读；失败/缺根不影响正确性）。
+-- | 写本包已写接口的模块覆盖集 + 接口身份（供依赖方读；失败/缺根不影响正确性）。
 writePkgSummaryEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ModuleIface -> Eff r Int
 writePkgSummaryEff ctx modules =
   case filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx) of
@@ -581,9 +583,12 @@ writePkgSummaryEff ctx modules =
         h <- rootHash r
         tag <- cacheTagEff
         let
-          summary = PkgSummary (map miNameOf modules) (pkgIfaceHashOfModules (contextPackageName ctx) modules)
+          summary = PkgSummary (Sort.sortBy nameTextLess (map miNameOf modules)) (pkgIfaceHashOfModules (contextPackageName ctx) modules)
           key = pkgSummaryKeyOf (contextPackageName ctx) (strFromInt h) r.rootImplicitPrelude tag
         in storeObjectWriteEff pkgSummaryKind pkgSummaryCodec key (encPkgSummary summary)
+
+nameTextLess : String -> String -> Bool
+nameTextLess a b = a <= b
 
 metaPairText : (String, Int) -> String
 metaPairText (name, hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
@@ -870,9 +875,6 @@ appendPrelude preludeByPkg hasPrelude m =
   else
     m
 
-modGraphEntry : ClosureMod -> (String, List String)
-modGraphEntry m = (m.cmName, m.cmImports)
-
 modNameOf : ClosureMod -> String
 modNameOf m = m.cmName
 
@@ -882,14 +884,11 @@ isDepModOf ctx m = m.cmPkg /= contextPackageName ctx
 isSelfModOf : PackageContext -> ClosureMod -> Bool
 isSelfModOf ctx m = m.cmPkg == contextPackageName ctx
 
-moduleGraphOf : List ClosureMod -> List (String, List String)
-moduleGraphOf mods = map modGraphEntry mods
-
 -- 依赖身份：直接用**依赖的源摘要**（不是已分配地址、也不是排序位置）。
 --
--- 这里不能用「按模块名排序逐个赋值、未赋值的依赖取 ext:」：compiler 的 import 图有环，
--- 环内边必须停在一个稳定哨兵上；但按名字排序时，**无环**的前向边（依赖名排在依赖方之后，
--- 例如 `Base.Common` → `Base.Source`）也会落在 `ext:` 上。那样依赖内容变化时依赖方的
+-- 这里不能用「按模块名排序逐个赋值、未赋值的依赖取 ext:」：按名字排序时，**无环**的
+-- 前向边（依赖名排在依赖方之后，例如 `Base.Common` → `Base.Source`）也会落在 `ext:` 上。
+-- 那样依赖内容变化时依赖方的
 -- 接口地址不变，`ownCleanModules` 会按旧地址读到陈旧接口（跨 worktree 共享对象库时尤其
 -- 容易踩到）。改把每个 import 的 `pkgKey|源摘要` 编进地址：与遍历顺序/图规模无关，
 -- 依赖内容一变地址就变。传递变化（依赖的依赖改了导出面）由 `ownCleanInfo` 的
@@ -1080,7 +1079,7 @@ depIfacesOfWith ctx mods =
     Nothing => pure Nothing
     Just _ =>
       do
-        ordered <- depModsByOrderEff ctx mods
+        ordered <- depModsByCoveredEff ctx mods
         case ordered of
           Nothing =>
             do
@@ -1091,20 +1090,21 @@ depIfacesOfWith ctx mods =
           Just depMods => readIfaceListEff depMods
 
 -- ---------------------------------------------------------------
--- 模块顺序对象
+-- 依赖模块面
 --
--- 下游 codegen 的 split 串接要求模块顺序与**精化顺序**一致（否则 `canonicalTopo` 报
--- "split dependency is not in topological order"）。对象库只按输入摘要寻址、没有顺序；
--- 用依赖图重新拓扑排序也不行——base/compiler 的 import 图**有环**，环内顺序任意。
--- 所以写侧把「这次写全的模块名顺序」单独存一个极小对象，读侧照它排列；缺失 ⇒ 回退全量。
+-- `pkg-summary` 只记录「哪些模块的接口已写」与包身份。读依赖接口时必须限制在这个
+-- 覆盖集内：闭包枚举包含未从入口/导出面到达的内部模块，它们没有 module-iface 对象，
+-- 放宽到整个闭包会让读侧永久回退全量。
+-- 接口的读出顺序不影响语义；这里按 (内容键, 名字) 做确定性排序，保证同一模块集合在
+-- 任何缓存状态下得到同一份顺序（dtAuxKey 等缓存键稳定）。
 -- ---------------------------------------------------------------
 rootOfName : String -> List Root -> Maybe Root
 rootOfName _ [] = Nothing
 rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
 
--- | 读某包的模块顺序；缺失/损坏 ⇒ Nothing（调用方回退全量，宁可慢，不产错序）。
-readOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Maybe (List String))
-readOrderEff ctx pkg =
+-- | 读某包已写接口的模块覆盖集；缺失/损坏 ⇒ Nothing（调用方回退全量）。
+readCoveredEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Maybe (List String))
+readCoveredEff ctx pkg =
   case rootOfName pkg (contextRoots ctx) of
     Nothing => pure Nothing
     Just root =>
@@ -1113,26 +1113,40 @@ readOrderEff ctx pkg =
         pure (
             case summary of
               Nothing => Nothing
-              Just s => Just s.psOrder
+              Just s => Just s.psCovered
           )
 
--- | 已写的模块顺序是否覆盖这些导出模块（覆盖 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
-orderCoversEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Bool
-orderCoversEff ctx names =
+-- | 已写覆盖集是否包含这些导出模块（包含 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
+coveredCoversEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Bool
+coveredCoversEff ctx names =
   do
-    ord <- readOrderEff ctx (contextPackageName ctx)
+    written <- readCoveredEff ctx (contextPackageName ctx)
     pure (
-        case ord of
-          Just written => allNamesIn names written
+        case written of
+          Just covered => allNamesIn names covered
           Nothing => False
       )
 
-pickByOrder : List ClosureMod -> List String -> List ClosureMod
-pickByOrder _ [] = []
-pickByOrder mods (n :: rest) =
+pickByCovered : List ClosureMod -> List String -> List ClosureMod
+pickByCovered _ [] = []
+pickByCovered mods (n :: rest) =
   case findClosureMod n mods of
-    Just m => m :: pickByOrder mods rest
-    Nothing => pickByOrder mods rest
+    Just m => m :: pickByCovered mods rest
+    Nothing => pickByCovered mods rest
+
+closureName : ClosureMod -> String
+closureName m = m.cmName
+
+closureOrderLess : ClosureMod -> ClosureMod -> Bool
+closureOrderLess a b =
+  let
+    ka = contentKey (closureName a)
+    kb = contentKey (closureName b)
+  in if ka /= kb then ka < kb else closureName a <= closureName b
+
+-- | 依赖模块接口的确定性顺序；不依赖加载/缓存路径。
+orderClosureMods : List ClosureMod -> List ClosureMod
+orderClosureMods mods = Sort.sortBy closureOrderLess mods
 
 pkgEq : String -> ClosureMod -> Bool
 pkgEq p m = m.cmPkg == p
@@ -1146,20 +1160,20 @@ goPkgs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => 
 goPkgs _ _ [] acc = pure (Just acc)
 goPkgs ctx mods (p :: rest) acc =
   do
-    ord <- readOrderEff ctx p
-    case ord of
+    written <- readCoveredEff ctx p
+    case written of
       Nothing => pure Nothing
-      Just names =>
+      Just covered =>
         let
-          -- 顺序对象是按「包源闭包 + 编译器 tag」寻址的；这里再挡一次名集不相容
-          -- （手改/残留对象）：顺序里出现闭包中不存在的模块 ⇒ 当缺失处理。
+          -- 覆盖集按「包源闭包 + implicit-prelude + 编译器 tag」寻址；这里再挡一次名集
+          -- 不相容（手改/残留对象）：覆盖集里出现闭包中不存在的模块 ⇒ 当缺失处理。
           current = map modNameOf (filter (pkgEq p) mods)
-          namesCurrent = allNamesIn names current
-          picked = pickByOrder mods names
+          namesCurrent = allNamesIn covered current
+          picked = pickByCovered mods covered
           -- 该依赖包**对外承诺**的模块面（`[export].modules`；根不限制导出 ⇒ 全部模块）。
-          -- 完整性判据 = 「导出面 ⊆ 写侧顺序」——与写侧 `writeIfaceShadow` 的判据同口径。
+          -- 完整性判据 = 「导出面 ⊆ 已写覆盖集」——与写侧 `writeIfaceShadow` 的判据同口径。
           required = exportedDepModsOf ctx p mods
-        in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc picked) else pure Nothing
+        in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc (orderClosureMods picked)) else pure Nothing
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
 exportedDepModsOf : PackageContext -> String -> List ClosureMod -> List ClosureMod
@@ -1175,22 +1189,9 @@ rootExportsOf : String -> List Root -> Maybe (List String)
 rootExportsOf _ [] = Nothing
 rootExportsOf p (r :: rest) = if rootName r == p then r.rootExports else rootExportsOf p rest
 
--- | 依赖模块接口按**写侧模块顺序**排列；任一步不可得 ⇒ Nothing。
-depModsByOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ClosureMod))
-depModsByOrderEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) []) []
-
--- 依赖模块接口按**拓扑序**（依赖在前）返回：下游 `Dt`/split 期望模块串接顺序与 import
--- 依赖一致（否则 `canonicalTopo` 报 "split dependency is not in topological order"）。
--- 对象库按输入摘要寻址、没有顺序，所以这里显式排序。
-pickDepMods : PackageContext -> List ClosureMod -> List String -> List String -> List ClosureMod
-pickDepMods _ _ [] _ = []
-pickDepMods ctx mods (n :: rest) seen =
-  if memName n seen then
-    pickDepMods ctx mods rest seen
-  else
-    case findClosureMod n mods of
-      Just m => if m.cmPkg /= contextPackageName ctx then m :: pickDepMods ctx mods rest (n :: seen) else pickDepMods ctx mods rest (n :: seen)
-      Nothing => pickDepMods ctx mods rest seen
+-- | 依赖模块接口按覆盖集挑选并做确定性排序；任一步不可得 ⇒ Nothing。
+depModsByCoveredEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ClosureMod))
+depModsByCoveredEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) []) []
 
 -- 把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
 -- 无包上下文/依赖接口不全时返回 Nothing，调用方退回全量。
@@ -2011,7 +2012,7 @@ writeIfaceShadowGo ctx checked pre clean =
                           -- 阶段拆分靠文本行，结构化只报「写发生了」。
                           _ <- obsMarkEff "vuna.iface.write"
                           n <- writeIfaceObjects own toWrite
-                          -- 模块顺序 + 依赖身份摘要：依赖方按源闭包摘要 + 编译器 tag 读。
+                          -- 已写模块覆盖集 + 依赖身份摘要：依赖方按源闭包摘要 + implicit-prelude + 编译器 tag 读。
                           _ <- writePkgSummaryEff ctx modules
                           t4 <- clockNow
                           let
@@ -2066,7 +2067,7 @@ writeIfaceObjects mods (mi :: rest) =
         pure (if bytes > 0 then n + 1 else n)
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让
--- 消费者读到 invalid 接口）。每模块按地址只写内容变化的接口对象，模块顺序最后提交。
+-- 消费者读到 invalid 接口）。每模块按地址只写内容变化的接口对象，覆盖集最后提交。
 -- 目标存储不可写（Nix store / 只读 store）时读侧没有接口就回退全量。
 -- 写侧自证（`VUNA_IFACE_SELFTEST=1`）：写前逐个模块重算 `hashOfIface` 并与记录值比对
 -- （`ifaceSelfCheckEff`），不一致就不写并留 `iface-hash-mismatch`。

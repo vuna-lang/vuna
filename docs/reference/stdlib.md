@@ -1,9 +1,4 @@
-- **只有 `HashMap` 移除了 `empty`**：空表统一写 `fromList []`。原因是空表在 OCaml 侧用
-  `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时会被固定；`fromList []` 走
-  `HashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化。`HashSet.empty` 仍在；- **只有 `HashMap` 移除了 `empty`**：空表统一写 `fromList []`。原因是空表在 OCaml 侧用
-  `Array.make` 构造会引入弱类型变量（`'_weak`），跨模块使用时会被固定；`fromList []` 走
-  `HashMap arrayEmpty`（`[||]` 字面量，non-expansive）可正常泛化。`HashSet.empty` 仍在
-  （`HashSet` 本身是泛型，但 `empty` 有签名约束、调用点总带具体类型）；# 标准库（vuna-base）
+# 标准库（vuna-base）
 
 标准库是独立成员包 `vuna-base`（模块 `Base.*`，模块根 `packages/base/lib/`）。编译器是它的第一个
 用户：`packages/compiler/lib/Vuna/Compiler/Base/Common.vuna` 只是门面（整模块重导出 `Base.Data.Pair` /
@@ -83,7 +78,7 @@
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
 | `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Data.Nat` / `Base.Trait.Num` / `Base.Data.Unit` / `Base.Trait.Applicative`(经 Monad) / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`；不含 `Vec` / `Fin` 与哈希容器；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
+| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」；`[package]` 的 `implicit-prelude = false` 可关闭本包模块的注入）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
 
 推荐入口层：应用默认依赖自动 `Prelude`（或显式 `import Base`）；数据用 `Base.Data.X`、
 trait 用 `Base.Trait.X`、容器用 `Base.Container.X`、效应用 `Base.Effect.X`，统一写
@@ -151,12 +146,17 @@ packages/base/lib/
 `Prelude` 是唯一自动注入的模块（`Loader.Flatten.implicitPrelude`），注入范围由**包上下文**
 决定（最近的 `vuna.toml` + 它的依赖闭包；无 manifest 的文件是 base-only 上下文）：
 
-- **注入**：依赖闭包里含 `vuna-base` 的包内所有源文件，以及无 manifest 的 ad-hoc 单文件。
-  `Show` / `Eq` / `Ord` 及其实例、`Bool` / `List` / `Maybe` / `Result` / `String` 等开箱
-  可用，`==` 等运算符的 fixity 也随同一注入可见。
-- **不注入**：`base` 自身模块（注入方就是 `vuna-base`）、`Prelude` 自身（避免环），以及
-  **没有 base 依赖的包**。后者连 `==` 的 fixity 都没有，会先报
-  `unknown fixity for operator ==`（fixity 的唯一来源是库模块里的 `infixl` / `infixr` 声明）。
+- **注入**：依赖闭包里含 `vuna-base` 的包内所有源文件（含入口文件 `app/Main.vuna`），以及
+  无 manifest 的 ad-hoc 单文件。`Show` / `Eq` / `Ord` 及其实例、`Bool` / `List` / `Maybe` /
+  `Result` / `String` 等开箱可用，`==` 等运算符的 fixity 也随同一注入可见。
+- **按包开关**：`[package]` 的 `implicit-prelude`（布尔，默认 `true`）控制**本包模块**是否自动
+  注入；`false` 时本包全部模块（入口文件同上）都不注入，显式 `import Prelude` 仍然可用。
+  开关只作用于本包模块，不影响本包的顶层 `Prelude` 被依赖方注入——依赖本包的包照常自动
+  导入它。`packages/base/vuna.toml` 设 `implicit-prelude = false`。
+- **不注入**：`base` 自身模块（`packages/base/vuna.toml` 显式关闭，且它的依赖闭包里没有
+  `Prelude` 来源）、`Prelude` 自身（避免环），以及**没有 base 依赖的包**。后者连 `==` 的
+  fixity 都没有，会先报 `unknown fixity for operator ==`（fixity 的唯一来源是库模块里的
+  `infixl` / `infixr` 声明）。
 - 显式 `import Prelude` 时不再重复注入；同一上下文出现多个候选 `Prelude` 报 ambiguous。
 - `Base.Data.Nat` **不在** `Prelude`：用 `Nat` 类型，或 `Eq` / `Ord` / `Show Nat` 实例，都要显式
   `import Base.Data.Nat as Nat`（或经 `Base` 门面，它重导出 `Base.Data.Nat`）。
@@ -164,7 +164,8 @@ packages/base/lib/
 ## 标准库与自举的关系
 
 - `packages/base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
-- 自动注入只看包上下文（有 base 依赖才注入 `Prelude`），矩阵见上节；没有第二套加载模式；
+- 自动注入只看包上下文（有 base 依赖才注入 `Prelude`，且该包未关闭 `implicit-prelude`），
+  矩阵见上节；没有第二套加载模式；
 - `Base.Effect.Core` 刻意不重导出到 `Prelude`：动作类型与 handler 需要显式 `import Base.Effect.Core as Eff`（`Prelude` 只
   `import Base.Effect.Core` 以加载类型/原语闭包，不进自动导出面），效果面不随自动注入进入每个源文件；
 - `packages/base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
@@ -216,8 +217,9 @@ packages/base/lib/
   `prim_*`（纯原语）对任何包可见，没有 manifest 能力/特权声明。
   动作只在 `main` 执行（钩子 `dtp_sched_main (fun () -> runPure v_main)`）；`runPure` 是
   唯一 main 执行入口。Int/Nat 归一化只在 handler 的 result 族。
-- **ad-hoc 单文件与包内模块一致**：`Prelude` 自动注入，`Show` / `Eq` / `Ord` 及其实例开箱
-  可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件同样没有能力门控：
+- **ad-hoc 单文件与默认包内模块一致**：`Prelude` 自动注入（ad-hoc 文件没有 manifest，恒注入），
+  `Show` / `Eq` / `Ord` 及其实例开箱可用；诊断在缺少显式 import 时仍会提示加对应 import。
+  ad-hoc 文件同样没有能力门控：
   效果经 `Base.Effect.Core` + handler，纯原语 `prim_*` 可直接调用（效果原语是隐藏名，源码写不出）。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
   `Main`；文件集以 `seed/` 与 `nix/seed/files.txt` 为准。

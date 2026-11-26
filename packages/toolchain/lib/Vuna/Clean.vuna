@@ -4,7 +4,7 @@
 -- 一个 store 根、两类生命周期：
 --
 -- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface，
---   以及身份记录 module-order / pkg-iface）、`views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
+--   以及身份记录 pkg-summary）、`views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
 -- - `--gc`：与 `--packages` 连用，只删包对象族里**未被引用**的对象；引用集是当前包与
@@ -74,8 +74,8 @@ cleanTargets wantStore wantPackages wantGc dry dir =
 cacheKindNames : List String
 cacheKindNames = ["module-iface"]
 
--- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让模块顺序
--- 或依赖身份漂移），只有显式 `clean --store` 才清理。
+-- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让依赖身份
+-- 漂移），只有显式 `clean --store` 才清理。
 identityKindNames : List String
 identityKindNames = ["pkg-summary"]
 
