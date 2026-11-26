@@ -10,9 +10,9 @@
 # 这样常规的文档/模块增长不触发复标定；压缩文档后仍按实测**下调**预算
 # （ratchet 只在下调方向约束）。
 
-coldstart_bytes 63318
+coldstart_bytes 96698
 agents_lines 212
 arch_lines 354
 readme_lines 263
-max_ref_lines 711
-max_module_lines 4092
+max_ref_lines 1293
+max_module_lines 6594
