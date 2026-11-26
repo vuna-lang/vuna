@@ -58,6 +58,9 @@ one = 1
 -- | second doc line
 two : Int
 two = 2
+
+data Alpha : Type where
+  MkAlpha : Alpha
 EOF
 cat >"$ws/lib/Demo/B.vuna" <<'EOF'
 module Demo.B where
@@ -69,6 +72,23 @@ infixl 6 +
 
 export two : Int
 two = one + one
+EOF
+cat >"$ws/lib/Demo/C.vuna" <<'EOF'
+module Demo.C where
+
+import Demo.A
+
+-- Alpha 只出现在签名里
+onlySig : Alpha -> Int
+onlySig _ = 0
+EOF
+cat >"$ws/lib/Demo/D.vuna" <<'EOF'
+module Demo.D where
+
+import Demo.A
+
+-- Alpha 只出现在 axiom 的类型里
+axiom ax : Alpha
 EOF
 
 # 1) 首次构建：建索引并输出模块/文档。
@@ -105,6 +125,16 @@ else
   ok
 fi
 check_contains "index map outside workspace readable error" "$(cat "$tmp/map.err" 2>/dev/null)" "vuna.toml"
+
+# 5) impact 收集签名与 axiom 里的类型引用（doc comment 之外的声明面）。
+impact_a=$( cd "$ws" && "$VUNA" map impact Demo.A.Alpha 2>&1 )
+check_eq "impact Alpha exit" "0" "$?"
+check_contains "impact lists signature reader" "$impact_a" "Demo.C"
+check_contains "impact lists axiom reader" "$impact_a" "Demo.D"
+case "$impact_a" in
+  *"Demo.B"*) bad "impact Alpha should not list Demo.B" ;;
+  *) ok ;;
+esac
 
 if [ "$fail" -ne 0 ]; then
   printf 'index check: %s passed, %s failed\n' "$pass" "$fail"

@@ -357,19 +357,29 @@ refsInDeclsGo : String -> List Decl -> List Ref -> List Ref
 refsInDeclsGo sMod [] acc = acc
 refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d acc)
 
--- | 内部：一条声明里的引用，覆盖函数体、构造子类型、字段类型、trait 父约束与方法类型
--- 以及实例头与方法体。
+-- | 内部：一条声明里的引用，覆盖函数体、签名与约束、axiom / extern 类型、族 kind、
+-- 构造子类型、字段类型、trait 参数 kind 与父约束 / 方法类型，以及实例头与方法体。
 refsInDecl : String -> Decl -> List Ref -> List Ref
 refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
+refsInDecl sMod (DSig name ctx ty sp) acc = refsInExprGo sMod ty (refsInExprs sMod ctx acc)
+refsInDecl sMod (DAxiom name ty sp) acc = refsInExprGo sMod ty acc
+refsInDecl sMod (DExtern cname name ty sp) acc = refsInExprGo sMod ty acc
 refsInDecl sMod (DData name params kind ctors derivings viaField repr lin sp) acc =
-  refsInCtors sMod ctors acc
+  refsInCtors sMod ctors (refsInExprGo sMod kind acc)
 refsInDecl sMod (DRecord name params fields derivings viaField repr lin sp) acc =
   refsInFieldTypes sMod fields acc
 refsInDecl sMod (DTrait name params supers methods sp) acc =
-  refsInMethods sMod methods (refsInExprs sMod supers acc)
+  refsInMethods sMod methods (refsInExprs sMod supers (refsInParamKinds sMod params acc))
 refsInDecl sMod (DInstance ctxE head methods sp) acc =
   refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
-refsInDecl sMod _ acc = acc
+
+-- | 内部：trait 参数 kind 里的引用。
+refsInParamKinds : String -> List TraitParam -> List Ref -> List Ref
+refsInParamKinds sMod [] acc = acc
+refsInParamKinds sMod (p :: rest) acc =
+  case p.traitParamKind of
+    Nothing => refsInParamKinds sMod rest acc
+    Just k => refsInParamKinds sMod rest (refsInExprGo sMod k acc)
 
 -- | 内部：构造子类型里的引用。
 refsInCtors : String -> List Ctor -> List Ref -> List Ref
