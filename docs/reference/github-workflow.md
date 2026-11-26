@@ -180,6 +180,16 @@ GitHub 只在 required checks 全绿、分支满足 strict up-to-date 时执行 
 所以 main push 的 `gate` 只覆盖人工 / break-glass 推送。配 `AUTOMERGE_TOKEN` 后合并会触发
 push 门禁；否则 main 的完整基线由定时 `suite` 组（gate + e2e）承担。
 
+`AUTOMERGE_TOKEN` 用**细粒度 PAT**（仓库 secret，不是 org secret）：
+
+1. <https://github.com/settings/personal-access-tokens/new> → 只授权 `vuna-lang/vuna`；
+2. 权限：Contents = Read and write、Pull requests = Read and write、Workflows = Read and write
+   （Metadata 自动只读）；
+3. `gh secret set AUTOMERGE_TOKEN --repo vuna-lang/vuna`（交互输入，不进 shell history）。
+
+缺 `workflow` 权限时，包含 `.github/workflows/*` 改动的 PR 会合并不了；OAuth（`gho_`）会话
+token 不适合当长期 secret。
+
 `main` 的 ruleset 由 [nix/tools/github-branch-protection.sh](../../nix/tools/github-branch-protection.sh)
 管理，required checks 是 `pr / run` 与 `gates / run`。没有 bypass；break-glass 流程见
 CONTRIBUTING.md。
