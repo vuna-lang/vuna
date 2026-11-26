@@ -64,3 +64,14 @@ RN_DuplicateImport
 RN_DuplicateModuleAlias
 RN_ModuleAliasConflict
 TC_EffResFamilyMissing
+
+# 记录字段选择器的冲突诊断（a530de1）还没有结构化夹具；补夹具后删除。
+RN_SelectorConflict
+RN_SelectorNameTaken
+RN_SelectorNotRecord
+RN_SelectorShared
+
+# 分析预算耗尽：夹具要构造超限输入（实例搜索 17 层 ctx 链 / SCT >512 张图），
+# 暂按缺口记录；TC_CannotProveTermination 的既有夹具覆盖同一代码路径。
+TC_InstanceSearchExhausted
+TC_TerminationBudgetExhausted
