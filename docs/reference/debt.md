@@ -69,7 +69,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | --- | --- | --- | --- |
 | LD-10 · C | `Resolve.vuna` 的解析特判：`Nil/Cons/::` 特判、`>>=`→`bind` 双名回落、`Type` 头不解析实参、隐式 binder 只认 String 域 | `Loader/Resolve.vuna` | 后续 |
 | LD-11 · B | `Resolve.vuna` 的内部名旁路：`@vuna@…` 按 `classify` 认出的形态 + `isParserSurface` 白名单放行（重载候选 / 宏 / do 标记只在编译器包内可见），编译器包整包放行 | `Loader/Resolve.vuna` | 后续 |
-| LD-12 · C | `Fixity.vuna` 的 `reorderDecl`：实例体里非 `DSig`/`DFun` 声明原样放行 → 延后成 internal error | `Loader/Fixity.vuna` | 后续 |
 | LD-15 · C | `Addr.vuna` 的模块摘要：无条件并入 Prelude 摘要（过近似） | `Loader/Addr.vuna` | 后续 |
 | LD-16 · C | `Fingerprint.vuna`：无 build-id 时身份退化为「路径+大小+mtime」 | `Loader/Fingerprint.vuna` | 后续 |
 | LD-17 · B | `Expand.vuna` 的宏入口：只在表达式位置、只认裸 `EVar` 应用头 | `Loader/Expand.vuna` | 后续 |

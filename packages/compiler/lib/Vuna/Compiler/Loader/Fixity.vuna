@@ -471,7 +471,12 @@ reorderInstanceMethodDecl t (DFun name pats body sp) =
   Vuna.Compiler.Base.Common.bind
     (Vuna.Compiler.Base.Common.traverse (\p => reorderPattern t p) pats)
     (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
-reorderInstanceMethodDecl t other = OkC other
+-- | instance 体只允许方法签名与方法子句（parser 用 `ExpectedInstanceMethod` 挡其它形状）。
+-- 走到这里说明 AST 被别的路径改成了非法形状，按内部错误报出，不静默放行成后续 ICE。
+reorderInstanceMethodDecl t other =
+  onErrDiag
+    (withFallbackSpan (declSpan other))
+    (icInternal "instance body has a declaration that is neither a signature nor a function")
 
 export reorderProgram : FixityTable -> List Decl -> Check (List Decl)
 reorderProgram t decls = Vuna.Compiler.Base.Common.traverse (\v => reorderDecl t v) decls
