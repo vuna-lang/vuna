@@ -1,0 +1,93 @@
+-- pass 表不变量：名字唯一、事件名唯一且带 `vuna.pass.` 前缀、`findPass` 可反查。
+import Base
+import Base.Effect.Core
+import Base.Data.List as List
+import Base.Data.String as String
+import Vuna.Ir.Passes
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("ir passes failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "names-nonempty" (length allPassNames > 0),
+    Pair "names-unique" (unique allPassNames),
+    Pair "events-prefixed" (allOf (\n => startsWith "vuna.pass." (passEventName n)) allPassNames),
+    Pair "events-unique" (unique (map passEventName allPassNames)),
+    Pair "layers-known" (allOf knownLayer allPassSpecs),
+    Pair "find-roundtrip" (allOf findRoundtrip allPassSpecs),
+    Pair "find-miss" findMiss,
+    Pair "native-order" (map psNameOf nativePasses == expectedNativeOrder),
+    Pair "ir-order" (map psNameOf irPasses == expectedIrOrder)
+  ]
+
+allPassSpecs : List PassSpec
+allPassSpecs = append irPasses (append nativePasses wasmPasses)
+
+findRoundtrip : PassSpec -> Bool
+findRoundtrip spec =
+  case findPass spec.psName allPassSpecs of
+    Just q => q.psName == spec.psName
+    Nothing => False
+
+findMiss : Bool
+findMiss =
+  case findPass "no.such.pass" allPassSpecs of
+    Nothing => True
+    Just _ => False
+
+psNameOf : PassSpec -> String
+psNameOf spec = spec.psName
+
+knownLayer : PassSpec -> Bool
+knownLayer spec = spec.psLayer == "ir" || spec.psLayer == "native" || spec.psLayer == "wasm"
+
+allOf : {a : Type} -> (a -> Bool) -> List a -> Bool
+allOf pred [] = True
+allOf pred (x :: rest) = pred x && allOf pred rest
+
+unique : List String -> Bool
+unique [] = True
+unique (x :: rest) = not (memName x rest) && unique rest
+
+expectedIrOrder : List String
+expectedIrOrder =
+  [
+    "ir.cps",
+    "ir.machine.handlers",
+    "ir.machine.mark",
+    "ir.machine.apply",
+    "ir.machine.steps",
+    "ir.tail.annotate"
+  ]
+
+expectedNativeOrder : List String
+expectedNativeOrder =
+  [
+    "native.cps",
+    "native.specialize",
+    "native.lsr",
+    "native.inline",
+    "native.inline.again",
+    "native.let-float",
+    "native.cse",
+    "native.inline.tail",
+    "native.simplify",
+    "native.merge-tail-if",
+    "native.alias",
+    "native.fold-nat-sums",
+    "native.fold-affine",
+    "native.prune",
+    "native.alias.again",
+    "native.float-lets"
+  ]

@@ -22,6 +22,7 @@ modules = [
   "Vuna.Ir.Kinds",
   "Vuna.Ir.Layout",
   "Vuna.Ir.Model",
+  "Vuna.Ir.Passes",
   "Vuna.Ir.Represent",
   "Vuna.Ir.Runtime",
   "Vuna.Ir.Synthetic",

@@ -27,6 +27,7 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Kinds as Kinds
+import Vuna.Ir.Passes
 import Vuna.Ir.Cps
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
@@ -4315,39 +4316,39 @@ build program printResult =
                   reach0 = reachableDefs seeds0 defs
                   seeds = if usesMachineLoop reach0 then "Base.Effect.Core.machineRun" :: seeds0 else seeds0
                   ordered = if usesMachineLoop reach0 then reachableDefs seeds defs else reach0
-                in case cpsDefsMachine ordered of
+                in case Passes.passSpan Passes.nativeCps (\_ => cpsDefsMachine ordered) of
                   Err msg => NativeRejected (NativeUnsupported msg)
                   Ok cps0 =>
                     let
                       -- 高阶参数特化：已知的闭合函数实参把被调定义的形参替换成直调，
                       -- 克隆按（被调名、形参序号、实参指纹）去重。
-                      cpsSpecialized = Specialize.specializeDefs cps0
+                      cpsSpecialized = Passes.passSpan Passes.nativeSpecialize (\_ => Specialize.specializeDefs cps0)
                       -- 循环归纳变量消去：`n - K` 与 `n` 同步递减时只保留 `n - K`。
-                      cpsLsr = Inline.lsrDefs cpsSpecialized
+                      cpsLsr = Passes.passSpan Passes.nativeLsr (\_ => Inline.lsrDefs cpsSpecialized)
                       recNames = Specialize.recursiveNamesWithClones (recursiveDefNames unit) cpsLsr
                       -- 小函数内联：体够小、非递归、实参平凡的调用点直接代进去。
                       -- 两遍：第一遍的 β 归约 / 内联会让更多小定义变成可内联形状。
-                      inlinedOnce = Inline.inlineDefs recNames cpsLsr
-                      inlined = Inline.inlineDefs recNames (firstOf inlinedOnce)
+                      inlinedOnce = Passes.passSpan Passes.nativeInline (\_ => Inline.inlineDefs recNames cpsLsr)
+                      inlined = Passes.passSpan Passes.nativeInlineAgain (\_ => Inline.inlineDefs recNames (firstOf inlinedOnce))
                       -- 内联/β 归约留下的 let 回到语句位置，标量选择才能继续内联。
-                      cpsFloated = Inline.floatDefs (firstOf inlined)
+                      cpsFloated = Passes.passSpan Passes.nativeLetFloat (\_ => Inline.floatDefs (firstOf inlined))
                       -- 循环体内的标量公共子表达式：同一次迭代里重复的纯标量树只算一次。
-                      cpsCse = Inline.cseDefs cpsFloated
+                      cpsCse = Passes.passSpan Passes.nativeCse (\_ => Inline.cseDefs cpsFloated)
                       -- 尾位置内联：把互递归 SCC 沿定义序单向展开成自递归。
-                      tailInlined = Inline.inlineTailDefs recNames cpsCse
-                      cps1 = Inline.simplifyDefs (firstOf tailInlined)
+                      tailInlined = Passes.passSpan Passes.nativeInlineTail (\_ => Inline.inlineTailDefs recNames cpsCse)
+                      cps1 = Passes.passSpan Passes.nativeSimplify (\_ => Inline.simplifyDefs (firstOf tailInlined))
                       -- 尾位置 if 合并：同目标的两个尾调用只差标量常量的实参，合成一次
                       -- 调用 + 值选择（`tco_unrotated` 的 flag 分派不再每轮条件分支）。
-                      cpsMerged = Inline.mergeTailIfs cps1
+                      cpsMerged = Passes.passSpan Passes.nativeMergeTailIf (\_ => Inline.mergeTailIfs cps1)
                       -- 零参别名（`Nat.plus = natAdd`）先展开成 `IrRtApp`：循环变换要看到
                       -- 运行时叶子（饱和求和识别 `natAdd`）。
-                      cpsAlias0 = map (resolveDefAliases cpsMerged) cpsMerged
+                      cpsAlias0 = Passes.passSpan Passes.nativeAlias (\_ => map (resolveDefAliases cpsMerged) cpsMerged)
                       -- 循环仿射累加折叠：退出表达式是形参的仿射式时，用一个累加器
                       -- 替掉其余形参（`tco_wide` / `tco_arity6`）。
                       -- 饱和求和循环：入口计数有界时用普通 `+`（`tco_nat`）；快路径
                       -- 写成 Int 仿射循环，交给紧跟着的仿射折叠。
-                      sumP = Affine.foldNatSums cpsAlias0
-                      accP = Affine.foldAffineDefs (firstOf sumP)
+                      sumP = Passes.passSpan Passes.nativeFoldNatSums (\_ => Affine.foldNatSums cpsAlias0)
+                      accP = Passes.passSpan Passes.nativeFoldAffine (\_ => Affine.foldAffineDefs (firstOf sumP))
                       cpsAcc = firstOf accP
                       accNames = append (secondOf accP) (secondOf sumP)
                       recNamesAll = append accNames recNames
@@ -4355,10 +4356,10 @@ build program printResult =
                       -- 内联后会留下一批没人引用的定义：按「体里真正出现的 `IrGlobal`」重算
                       -- 可达性再丢掉（不跟 `irDefDeps`：那是源码级 term-use 依赖，含已擦除
                       -- 的引用，会把刚内联掉的被调重新钉住）。
-                      cpsOrdered = if changed then reachableDefsByRefs (\_ => False) 0 (append accNames seeds) cpsAcc else cpsAcc
-                      cpsAliased = map (resolveDefAliases cpsOrdered) cpsOrdered
+                      cpsOrdered = Passes.passSpan Passes.nativePrune (\_ => if changed then reachableDefsByRefs (\_ => False) 0 (append accNames seeds) cpsAcc else cpsAcc)
+                      cpsAliased = Passes.passSpan Passes.nativeAliasAgain (\_ => map (resolveDefAliases cpsOrdered) cpsOrdered)
                       -- Float `let` 代进唯一使用点，让浮点表达式树跨过绑定、只装盒一次。
-                      cpsFloatLets = Inline.inlineFloatLetsDefs cpsAliased
+                      cpsFloatLets = Passes.passSpan Passes.nativeFloatLets (\_ => Inline.inlineFloatLetsDefs cpsAliased)
                       pools = modulePools cpsOrdered
                       fpools = moduleFloatPools cpsOrdered
                       allocs = allocatingDefNames cpsAliased
