@@ -51,8 +51,10 @@ gh pr create --base main --title "<type(scope): 中文描述>" \
 
 PR 的必需检查是 `pr / run` 与 `gates / run`。`pr-triage` 会根据标题、路径与关联 issue
 自动维护 `type:*`、`pkg:*`、`area:*`；`gates.yml` 用这些标签选出检查子集（suite 侧是
-`nix/checks/slices.nix` 的 area 切片），不需要手工加 `deep` / `suite`。main push 会额外跑
-完整 `gate`（fast+integration），完整 suite 仍由 nightly 的 `suite` 组兜底。
+`nix/checks/slices.nix` 的 area 切片；计划里的完整 gate / e2e 换成 `gate-shard-*` /
+`e2e-shard-*` 由 `suite` matrix 并行，`gates / run` 收齐结论），不需要手工加
+`deep` / `suite`。main push 会额外跑完整 `gate`（fast+integration），完整 suite 仍由
+nightly 的 `suite` 组兜底。
 
 ```console
 nix run .#ci -- plan type:bug pkg:compiler   # 本地预览将跑哪些检查

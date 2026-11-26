@@ -68,7 +68,8 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 ## 5. PR 门禁
 
 必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` / `area`
-自动选择检查）。`pr-triage` 会自动维护 type / pkg / area 标签，不需要手工加
+自动选择检查；计划里的完整 gate / e2e 会按 shard 并行成 `suite` matrix job，`gates / run`
+收齐结论）。`pr-triage` 会自动维护 type / pkg / area 标签，不需要手工加
 `deep` / `suite`：
 
 ```console

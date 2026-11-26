@@ -161,14 +161,19 @@ nix run .#ci -- plan type:bug pkg:compiler
 nix run .#ci -- run-plan type:docs area:docs
 ```
 
-`gates.yml` 在 PR 上做两件事：
+`gates.yml` 在 PR 上做三件事：
 
-1. `detect`：从 diff 和 issue/PR 标签得到 type + pkg/area，并检查 issue 关联；
-2. `gates`：调用 `nix run .#ci -- run-plan <labels>`，结果汇总成 `gates / run`。
+1. `detect`：从 diff 和 issue/PR 标签得到 type + pkg/area、检查 issue 关联，并用
+   `nix run .#ci -- plan-json <labels>` 算出门禁计划；
+2. `suite`：计划里含完整 gate / e2e 时，按 `gate-shard-*` / `e2e-shard-*` 组起 4+4 的
+   matrix job 并行跑（与 main 基线同一批 check，每片仍是完整 case 集合的一部分）；
+   计划里没有时整个 job 跳过，不占 runner；
+3. `gates`：跑计划里剩下的检查（`nix run .#ci -- run-plan --without-suite <labels>`），
+   结果汇总成 `gates / run`。
 
-`gates / run` 是 required check。`detect` 失败时 precondition 会让 `gates / run` 保持失败，
-不会因为 job 跳过而卡在 Expected。`pr / run` 与 `gates / run` 都绿且分支与 main 同步后，
-PR 才能合并。
+`gates / run` 是 required check，它同时把 `suite` 的结论收进来：`detect` 失败或任一 shard
+失败都会让它失败，不会因为 job 跳过而卡在 Expected。`pr / run` 与 `gates / run` 都绿且
+分支与 main 同步后，PR 才能合并。
 
 ## 自动合并
 

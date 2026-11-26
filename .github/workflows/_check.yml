@@ -41,6 +41,12 @@ on:
         required: false
         type: string
         default: ""
+      # 计划里的 gate / e2e 已由调用方按 shard 矩阵跑过时置 true：
+      # 本 job 只构建剩余检查（`run-plan --without-suite`）。
+      plan-exclude-suite:
+        required: false
+        type: boolean
+        default: false
       # detect / policy job 的结果；失败时让必需检查保持失败，而不是跳过。
       precondition:
         required: false
@@ -88,18 +94,24 @@ jobs:
         if: inputs.gate-labels != ''
         env:
           GATE_LABELS: ${{ inputs.gate-labels }}
+          PLAN_EXCLUDE_SUITE: ${{ inputs.plan-exclude-suite }}
         run: |
+          extra=()
+          if [ "$PLAN_EXCLUDE_SUITE" = "true" ]; then extra+=(--without-suite); fi
           read -r -a labels <<< "$GATE_LABELS"
-          nix run .#ci -- plan "${labels[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          nix run .#ci -- plan "${extra[@]}" "${labels[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: ${{ inputs.group }}
         env:
           CI_JOBS: ${{ inputs.jobs }}
           GATE_LABELS: ${{ inputs.gate-labels }}
+          PLAN_EXCLUDE_SUITE: ${{ inputs.plan-exclude-suite }}
         run: |
           if [ -n "${GATE_LABELS:-}" ]; then
+            extra=()
+            if [ "$PLAN_EXCLUDE_SUITE" = "true" ]; then extra+=(--without-suite); fi
             read -r -a labels <<< "$GATE_LABELS"
-            nix run .#ci -- run-plan "${labels[@]}"
+            nix run .#ci -- run-plan "${extra[@]}" "${labels[@]}"
           else
             nix run .#ci -- ${{ inputs.group }}
           fi

@@ -33,8 +33,8 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `slices` | 7 个 `vuna-tests-*` area 切片 | PR 计划器按 area 选；本地 `nix run .#ci -- slices` |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
 | `suite` | `vuna-tests-gate` + `vuna-tests-units` + `vuna-tests-e2e`（未分片） | 本地全量；CI 定时/手动改跑下面 3 组分片 |
-| `gate-shard-0..3` | `vuna-tests-gate-shard-i`（`--shard i/4`） | CI main push / 定时 / 手动（matrix 并行） |
-| `e2e-shard-0..3` | `vuna-tests-e2e-shard-i`（`--shard i/4`） | CI 定时 / 手动（matrix 并行） |
+| `gate-shard-0..3` | `vuna-tests-gate-shard-i`（`--shard i/4`） | CI main push / 定时 / 手动，以及 PR 计划里含完整 gate 时（matrix 并行） |
+| `e2e-shard-0..3` | `vuna-tests-e2e-shard-i`（`--shard i/4`） | CI 定时 / 手动，以及 PR 计划里含完整 e2e 时（matrix 并行） |
 | `units` | `vuna-tests-units`（各包 `vuna test`） | CI main push / 定时 / 手动 |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
 | `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | **本地手动**（GitHub CI 暂不跑） |
@@ -48,9 +48,11 @@ case；每片带 `VUNA_TEST_MIN_CASES` 下限（gate 150、e2e 12）挡住分片
 独立成 `units` job，不随 shard 重复。
 
 PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` 从 PR 的
-`type:*` + `pkg:*` / `area:*` 计算检查子集，`gates` 只跑这些检查；`deep` / `suite` /
-`browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub job，只在本地
-`nix run .#ci -- backends|native`（见 [github-workflow.md](github-workflow.md)）。
+`type:*` + `pkg:*` / `area:*` 计算检查子集；计划里出现完整 gate / e2e 时，`detect` 把它们
+换成同一批 `gate-shard-*` / `e2e-shard-*`（`nix run .#ci -- plan-json` 的结果再切分），由
+`suite` 矩阵并行跑，`gates / run` 只跑计划里剩下的检查并把 shard 结论一并收成 required
+check。`deep` / `suite` / `browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub
+job，只在本地 `nix run .#ci -- backends|native`（见 [github-workflow.md](github-workflow.md)）。
 
 ### PR 的 area 切片
 
