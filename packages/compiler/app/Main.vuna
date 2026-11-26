@@ -24,6 +24,7 @@ import Vuna.Compiler.Elab.Canonical
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Macro
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
