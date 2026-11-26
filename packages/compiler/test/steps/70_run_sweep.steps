@@ -5,7 +5,7 @@
 # 收掉旧 run 根里的进程并删掉目录。
 run: sh -c 'rm -rf "$TMPDIR/sweep" "$TMPDIR/sweep-base"; mkdir -p "$TMPDIR/sweep/case" "$TMPDIR/sweep-base"'
 run: sh -c 'printf "%s\n" "[workspace]" > "$TMPDIR/sweep/vuna.toml"'
-run: sh -c 'printf "%s\n" "[suite]" "name = \"sweep\"" "owner = \"sweep\"" "timeout = 300" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" > "$TMPDIR/sweep/suite.toml"'
+run: sh -c 'printf "%s\n" "[suite]" "name = \"sweep\"" "owner = \"sweep\"" "timeout = 300" "" "[family.steps]" "dir = \"case\"" "kind = \"steps\"" "areas = [\"toolchain\"]" > "$TMPDIR/sweep/suite.toml"'
 run: sh -c 'printf "%s\n" "#!/bin/sh" "sleep 300 &" "echo \$! > \"\$1\"" "wait" > "$TMPDIR/sweep/worker.sh"'
 run: sh -c 'printf "%s\n" "run: sh $TMPDIR/sweep/worker.sh $TMPDIR/sweep/child.pid" > "$TMPDIR/sweep/case/a.steps"'
 # 后台起嵌套 runner（步骤立刻返回）；TMPDIR 指到 manifest-free 目录 ⇒ run 根就在它下面。
