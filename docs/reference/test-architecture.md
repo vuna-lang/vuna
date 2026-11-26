@@ -23,7 +23,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 ```text
                     ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
-   objects/module-iface   objects/pkg-summary   roots/<project>/<digest>
+   objects/module-iface   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
         │ test scheduler：父进程解析 store、预热一次  │
@@ -48,7 +48,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 ### 2.2 为什么可以共用
 
-- 单文件对象（`objects/module-iface` / `objects/pkg-summary`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节；日常 `check`/`build` 与测试并发写不会互相覆盖。
 - 编译器身份在 `ver` 输入里：身份取自产物 `build-id` 的内容，同源同身份——日常 CLI 与测试
   用**不同源码**构建的二进制地址不同，不会读错；同源的不同副本则共享对象。
@@ -122,8 +122,8 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 ## 4. 结果判定：没有 verdict 对象
 
 - golden / error / steps 每次都真正执行；不写 `objects/test`，也不登记 roots。
-- 判定的可复用性靠输入寻址的**模块接口**对象（`objects/module-iface`）与包身份
-  （`objects/pkg-summary`），不是"上次这个 case 过了"。
+- 判定的可复用性靠输入寻址的**模块接口**对象（`objects/module-iface`），
+  不是"上次这个 case 过了"。
 
 ## 5. 产物：写包目录
 

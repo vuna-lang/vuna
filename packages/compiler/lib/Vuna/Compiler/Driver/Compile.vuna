@@ -97,7 +97,7 @@ checkPackage release wantWarnings pkg =
         exeR <- checkUncachedExe wantWarnings ctx (packageEntry pkg)
         case exeR of
           ErrC e => pure (ErrC e)
-          OkC ds =>
+          OkC (ds, written) =>
             case packageExports pkg of
               -- 纯可执行包：入口闭包就是全部模块面。
               Nothing => pure (OkC ds)
@@ -113,8 +113,9 @@ checkPackage release wantWarnings pkg =
                   -- `VUNA_ELAB_FULL=1` 的语义是「每条路径都全量」，必须照跑第二遍（也会重新
                   -- 读写 lex 对象；截断恢复的用例依赖它）。
                   full <- elabFullRequested
-                  covered <- if full then pure False else coveredCoversEff ctx names
-                  if covered then
+                  let
+                    covered = allNamesIn names (map miNameOf written)
+                  in if not full && covered then
                     do
                       let
                         _ = log! "debug" "check-lib-skip covered=${length names}"
@@ -124,11 +125,16 @@ checkPackage release wantWarnings pkg =
                       libR <- checkUncachedLib False ctx names
                       case libR of
                         ErrC e => pure (ErrC e)
-                        OkC ds2 => pure (OkC (append ds ds2))
+                        OkC (ds2, _) => pure (OkC (append ds ds2))
     else
       case packageExports pkg of
         Nothing => pure (pkgAt1 "${packageDir pkg}/vuna.toml" 1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
-        Just names => checkUncachedLib wantWarnings ctx names
+        Just names =>
+          do
+            libR <- checkUncachedLib wantWarnings ctx names
+            case libR of
+              ErrC e => pure (ErrC e)
+              OkC (ds, _) => pure (OkC ds)
 
 -- 逐级创建目录（`--out a/b` 的父目录可能不存在）。
 --
@@ -487,60 +493,16 @@ buildIdForEff ctx =
       compilerTagEff
 
 -- ---------------------------------------------------------------
--- 包身份与已写模块面：依赖方消费依赖包的**接口身份**，不是源字节闭包。
+-- 依赖身份：源闭包 + manifest（没有独立的身份对象）
 --
--- 依赖包 check/build 成功后写一个稳定对象 `objects/pkg-summary/<key>`，key = 包名 +
--- 根源闭包摘要 + `implicit-prelude` 开关 + 编译器 tag；载荷 = `pkgIfaceHashOfModules`
--- 与本次写全接口的模块名集合（按名字排序）。依赖方按同样的 key 读取：
---   * 命中 ⇒ `iface:<pkgIfaceHash>`（注释 / 诊断配置 / opaque 体变化不脏依赖方）；
---   * 缺失（依赖还没 check、或源码变了还没重跑）⇒
---     `manifest:<toml 内容摘要>:<该根源闭包摘要>` 回退。
---     源闭包在回退里：依赖源码变了而依赖方先跑，也必然换地址，不会复用旧判定；
---     依赖重跑后同一个接口身份回到 `iface:`，注释不敏感的增量性质恢复。
--- 没有读依赖接口对象，因此不会回到 `ifaceModsEff`（env）形成环。
+-- 依赖模块的接口地址已经把「本包源摘要 + 包环境 + 每个直接 import 的源摘要」编进去；
+-- 包环境里的依赖段用依赖根的**源闭包摘要 + manifest 内容摘要**，不再读一份预先写入的
+-- `ifaceHash` 快照。地址只由源码与 manifest 决定，任何消费者都能现场算，不需要「依赖方先
+-- 写摘要对象」的前置条件。
+--
+-- 取舍：依赖源码里的注释变化也会换依赖方地址（多一次未命中）；这换来对象库只保留
+-- `module-iface` 与取包对象两个域，不再维护一套身份/覆盖记录。
 -- ---------------------------------------------------------------
-pkgSummaryKind : String
-pkgSummaryKind = "pkg-summary"
-
-pkgSummaryCodec : String
-pkgSummaryCodec = "pkg-summary 2"
-
--- | 包摘要：已写接口的模块覆盖集 + 依赖方消费的接口身份。
-export record PkgSummary(..) where
-  psCovered : List String
-  psIfaceHash : String
-
-encPkgSummary : PkgSummary -> String
-encPkgSummary s = encTop (encList encStr) (s.psIfaceHash :: s.psCovered)
-
-decPkgSummary : String -> Maybe PkgSummary
-decPkgSummary payload =
-  case decList decStr (strLength payload) (curOf payload) of
-    Nothing => Nothing
-    Just (h :: names, rest) => if curAtEnd rest then Just (PkgSummary names h) else Nothing
-    Just ([], _) => Nothing
-
-pkgSummaryKeyOf : String -> String -> Bool -> String -> String
-pkgSummaryKeyOf pkg srcClosure implicitPrelude tag =
-  addrOf
-    ["pkg-summary", pkg, srcClosure, (if implicitPrelude then "prelude:1" else "prelude:0"), tag]
-
-readPkgSummaryAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (Maybe PkgSummary)
-readPkgSummaryAt root =
-  do
-    h <- rootHash root
-    tag <- cacheTagEff
-    payload <-
-      storeObjectReadEff
-        pkgSummaryKind
-        pkgSummaryCodec
-        (pkgSummaryKeyOf (rootName root) (strFromInt h) (rootImplicitPrelude root) tag)
-    pure (
-        case payload of
-          Nothing => Nothing
-          Just bytes => decPkgSummary bytes
-      )
-
 manifestIdentityOf : Member nFs FsOp r => Root -> Int -> Eff r (String, String)
 manifestIdentityOf root h =
   do
@@ -551,21 +513,14 @@ manifestIdentityOf root h =
       toml <- if exists then fsReadFile tomlPath else pure ""
       pure (rootName root, "manifest:${textHash toml}:${strFromInt h}")
 
--- | 依赖根的接口身份（或 manifest 回退）。
+-- | 依赖根的源身份。
 depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (String, String)
 depRootIdentityEff root =
   do
     h <- rootHash root
-    saved <- readPkgSummaryAt root
     let
-      verdict =
-        case saved of
-          Just _ => "iface"
-          Nothing => "manifest"
-      _ = log! "debug" "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
-    in case saved of
-      Just summary => pure (rootName root, "iface:${summary.psIfaceHash}")
-      Nothing => manifestIdentityOf root h
+      _ = log! "debug" "dep-identity=${rootName root} verdict=manifest src=${strFromInt h}"
+    in manifestIdentityOf root h
 
 depIdentitiesEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (String, String))
 depIdentitiesEff ctx =
@@ -578,23 +533,6 @@ depIdentitiesHash pairs = addrOf ("dep-identities" :: map pairText pairs)
 
 pairText : (String, String) -> String
 pairText p = "${firstOf p}=${secondOf p}"
-
--- | 写本包已写接口的模块覆盖集 + 接口身份（供依赖方读；失败/缺根不影响正确性）。
-writePkgSummaryEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ModuleIface -> Eff r Int
-writePkgSummaryEff ctx modules =
-  case filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx) of
-    [] => pure 0
-    r :: _ =>
-      do
-        h <- rootHash r
-        tag <- cacheTagEff
-        let
-          summary = PkgSummary (Sort.sortBy nameTextLess (map miNameOf modules)) (pkgIfaceHashOfModules (contextPackageName ctx) modules)
-          key = pkgSummaryKeyOf (contextPackageName ctx) (strFromInt h) r.rootImplicitPrelude tag
-        in storeObjectWriteEff pkgSummaryKind pkgSummaryCodec key (encPkgSummary summary)
-
-nameTextLess : String -> String -> Bool
-nameTextLess a b = a <= b
 
 metaPairText : (String, Int) -> String
 metaPairText (name, hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
@@ -1089,60 +1027,15 @@ depIfacesOfWith ctx mods =
     Nothing => pure Nothing
     Just _ =>
       do
-        ordered <- depModsByCoveredEff ctx mods
-        case ordered of
+        pairs <- depIfacePairsEff ctx mods
+        case pairs of
           Nothing =>
             do
               let
-                _ = log! "debug" "iface-reject=pkg-summary"
+                _ = log! "debug" "iface-reject=dep-iface-missing"
               in do
                 pure Nothing
-          Just depMods => readIfaceListEff depMods
-
--- ---------------------------------------------------------------
--- 依赖模块面
---
--- `pkg-summary` 只记录「哪些模块的接口已写」与包身份。读依赖接口时必须限制在这个
--- 覆盖集内：闭包枚举包含未从入口/导出面到达的内部模块，它们没有 module-iface 对象，
--- 放宽到整个闭包会让读侧永久回退全量。
--- 接口的读出顺序不影响语义；这里按 (内容键, 名字) 做确定性排序，保证同一模块集合在
--- 任何缓存状态下得到同一份顺序（dtAuxKey 等缓存键稳定）。
--- ---------------------------------------------------------------
-rootOfName : String -> List Root -> Maybe Root
-rootOfName _ [] = Nothing
-rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
-
--- | 读某包已写接口的模块覆盖集；缺失/损坏 ⇒ Nothing（调用方回退全量）。
-readCoveredEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Maybe (List String))
-readCoveredEff ctx pkg =
-  case rootOfName pkg (contextRoots ctx) of
-    Nothing => pure Nothing
-    Just root =>
-      do
-        summary <- readPkgSummaryAt root
-        pure (
-            case summary of
-              Nothing => Nothing
-              Just s => Just s.psCovered
-          )
-
--- | 已写覆盖集是否包含这些导出模块（包含 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
-coveredCoversEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Bool
-coveredCoversEff ctx names =
-  do
-    written <- readCoveredEff ctx (contextPackageName ctx)
-    pure (
-        case written of
-          Just covered => allNamesIn names covered
-          Nothing => False
-      )
-
-pickByCovered : List ClosureMod -> List String -> List ClosureMod
-pickByCovered _ [] = []
-pickByCovered mods (n :: rest) =
-  case findClosureMod n mods of
-    Just m => m :: pickByCovered mods rest
-    Nothing => pickByCovered mods rest
+          Just ps => pure (Just (map secondOf ps))
 
 closureName : ClosureMod -> String
 closureName m = m.cmName
@@ -1158,6 +1051,12 @@ closureOrderLess a b =
 orderClosureMods : List ClosureMod -> List ClosureMod
 orderClosureMods mods = Sort.sortBy closureOrderLess mods
 
+closurePairLess : (ClosureMod, ModuleIface) -> (ClosureMod, ModuleIface) -> Bool
+closurePairLess a b = closureOrderLess (firstOf a) (firstOf b)
+
+orderClosurePairs : List (ClosureMod, ModuleIface) -> List (ClosureMod, ModuleIface)
+orderClosurePairs pairs = Sort.sortBy closurePairLess pairs
+
 pkgEq : String -> ClosureMod -> Bool
 pkgEq p m = m.cmPkg == p
 
@@ -1166,24 +1065,41 @@ distinctPkgs [] acc = reverse acc
 distinctPkgs (m :: rest) acc =
   if memName m.cmPkg acc then distinctPkgs rest acc else distinctPkgs rest (m.cmPkg :: acc)
 
-goPkgs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> List String -> List ClosureMod -> Eff r (Maybe (List ClosureMod))
+-- | 按地址探测一个包的模块接口：存在的读出，缺失的跳过（内部模块可能没有接口）。
+probePairs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (List (ClosureMod, ModuleIface))
+probePairs [] = pure []
+probePairs (m :: rest) =
+  do
+    mi <- readIfaceAtEff m.cmAddr
+    xs <- probePairs rest
+    case mi of
+      Nothing =>
+        do
+          _ <- obsCountEff "vuna.counter.cache.miss" 1
+          pure xs
+      Just x =>
+        do
+          _ <- obsCountEff "vuna.counter.cache.hit" 1
+          pure ((m, x) :: xs)
+
+-- | 依赖包 p 的已写接口模块；导出面必须齐全，否则 `Nothing`（调用方回退全量）。
+depPairsOfPkg : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+depPairsOfPkg ctx mods p =
+  do
+    pairs <- probePairs (filter (pkgEq p) mods)
+    let
+      present = map (\pair => modNameOf (firstOf pair)) pairs
+      required = map modNameOf (exportedDepModsOf ctx p mods)
+    in pure (if allNamesIn required present then Just (orderClosurePairs pairs) else Nothing)
+
+goPkgs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> List String -> List (ClosureMod, ModuleIface) -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
 goPkgs _ _ [] acc = pure (Just acc)
 goPkgs ctx mods (p :: rest) acc =
   do
-    written <- readCoveredEff ctx p
-    case written of
+    pairs <- depPairsOfPkg ctx mods p
+    case pairs of
       Nothing => pure Nothing
-      Just covered =>
-        let
-          -- 覆盖集按「包源闭包 + implicit-prelude + 编译器 tag」寻址；这里再挡一次名集
-          -- 不相容（手改/残留对象）：覆盖集里出现闭包中不存在的模块 ⇒ 当缺失处理。
-          current = map modNameOf (filter (pkgEq p) mods)
-          namesCurrent = allNamesIn covered current
-          picked = pickByCovered mods covered
-          -- 该依赖包**对外承诺**的模块面（`[export].modules`；根不限制导出 ⇒ 全部模块）。
-          -- 完整性判据 = 「导出面 ⊆ 已写覆盖集」——与写侧 `writeIfaceShadow` 的判据同口径。
-          required = exportedDepModsOf ctx p mods
-        in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc (orderClosureMods picked)) else pure Nothing
+      Just ps => goPkgs ctx mods rest (append acc ps)
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
 exportedDepModsOf : PackageContext -> String -> List ClosureMod -> List ClosureMod
@@ -1199,9 +1115,9 @@ rootExportsOf : String -> List Root -> Maybe (List String)
 rootExportsOf _ [] = Nothing
 rootExportsOf p (r :: rest) = if rootName r == p then r.rootExports else rootExportsOf p rest
 
--- | 依赖模块接口按覆盖集挑选并做确定性排序；任一步不可得 ⇒ Nothing。
-depModsByCoveredEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ClosureMod))
-depModsByCoveredEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) []) []
+-- | 依赖模块接口按地址探测并排序；导出面不全 ⇒ Nothing。
+depIfacePairsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+depIfacePairsEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) []) []
 
 -- 把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
 -- 无包上下文/依赖接口不全时返回 Nothing，调用方退回全量。
@@ -1584,7 +1500,7 @@ export toolCompilerFingerprint : Member nFs FsOp r, Member nEnv EnvOp r => Eff r
 toolCompilerFingerprint = compilerFingerprint
 
 -- | 包级 check 入口：直接精化；`VUNA_ELAB_FULL=1` 强制全量。
-checkUncachedExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> String -> Eff r (Check (List Diagnostic))
+checkUncachedExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
 checkUncachedExe wantWarnings ctx entry =
   do
     full <- elabFullRequested
@@ -1635,7 +1551,7 @@ summaryCheckExeParts wantWarnings ctx mods entry =
                 in do
                   dtCheckPackageWithIfacesParts ctx entry ifaces
 
-fullCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic))
+fullCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
 fullCheckExe ctx entry =
   let
     _ = log! "debug" "cache-path=full"
@@ -1645,7 +1561,7 @@ fullCheckExe ctx entry =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic))
+auditCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
 auditCheckExe wantWarnings ctx mods entry =
   do
     summary <- summaryCheckExeParts wantWarnings ctx mods entry
@@ -1857,7 +1773,7 @@ cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
 
 -- 接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
--- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/` + `objects/pkg-summary/`（依赖侧的
+-- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
 ifaceCompilerTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
@@ -2024,8 +1940,6 @@ writeIfaceShadowGo ctx checked pre clean =
                           -- 阶段拆分靠文本行，结构化只报「写发生了」。
                           _ <- obsMarkEff "vuna.iface.write"
                           n <- writeIfaceObjects own toWrite
-                          -- 已写模块覆盖集 + 依赖身份摘要：依赖方按源闭包摘要 + implicit-prelude + 编译器 tag 读。
-                          _ <- writePkgSummaryEff ctx modules
                           t4 <- clockNow
                           let
                             _ = log! "info" "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
@@ -2093,10 +2007,10 @@ ifaceSelfTestRequested =
     pure (v == "1")
 
 -- 成功收尾：写接口影子。
-checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic))
+checkAndShadow : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic, List ModuleIface))
 checkAndShadow ctx checked = checkAndShadowWith ctx Nothing checked
 
-checkAndShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ClosureMod) -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic))
+checkAndShadowWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ClosureMod) -> Eff r (Check (List Diagnostic, CheckedPackage)) -> Eff r (Check (List Diagnostic, List ModuleIface))
 checkAndShadowWith ctx pre checked =
   do
     checkedR <- checked
@@ -2107,9 +2021,9 @@ checkAndShadowWith ctx pre checked =
           shadow <- writeIfaceShadowWith ctx (secondOf pr) pre
           case shadow of
             ErrC e => pure (ErrC e)
-            OkC _ => pure (OkC (firstOf pr))
+            OkC modules => pure (OkC (firstOf pr, modules))
 
-checkUncachedLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List String -> Eff r (Check (List Diagnostic))
+checkUncachedLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
 checkUncachedLib wantWarnings ctx names =
   do
     full <- elabFullRequested
@@ -2157,7 +2071,7 @@ summaryCheckLibParts wantWarnings ctx mods names =
                 in do
                   dtCheckLibraryPackageWithIfacesParts ctx names ifaces
 
-fullCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check (List Diagnostic))
+fullCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
 fullCheckLib ctx names =
   let
     _ = log! "debug" "cache-path=full"
@@ -2165,7 +2079,7 @@ fullCheckLib ctx names =
     mods <- shadowClosureMods ctx
     checkAndShadowWith ctx mods (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic))
+auditCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
 auditCheckLib wantWarnings ctx mods names =
   do
     summary <- summaryCheckLibParts wantWarnings ctx mods names
