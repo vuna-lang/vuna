@@ -33,13 +33,20 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Loader.Addr`，SHA-256）。
 
+包目录里还有两类按包存放的状态：
+
+- `<pkg>/.output/`：构建产物（见 [packages.md](packages.md)）；
+- `<pkg>/.vuna/`：包状态（接口等中间产物的默认位置）。`VUNA_PKG_STATE=<dir>` 整体重定向；
+  只读源码树（Nix store / 共享只读快照）拿不到可写目录时显式报错，不回退共享 store。
+  该目录已进包内容 / 工具遍历的跳过名单，不进入 `contentHash` 与包摘要。
+
 ## 命中判定
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
 | 包级 `check` | 按地址读依赖与同包模块的 `objects/module-iface/<addr>` | 精化脏模块；缺任一依赖模块 ⇒ 回退全量 |
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
-| 同树重复 `build` | `<pkg>/.output` 的 `meta` 与当前输入一致 | 重跑 codegen + `ocamlopt` |
+| 同树重复 `build` | `<pkg>/.output/build-meta.json` 与当前输入一致（含二进制身份 `cache-tag`） | 重跑 codegen + `ocamlopt` |
 | 依赖身份 | `objects/pkg-summary/<键>` 命中 ⇒ `iface:<pkgIfaceHash>` | 回退 `manifest:<toml 摘要>:<根源闭包摘要>` |
 | 依赖模块顺序 | 不读缓存：按（内容键, 模块名）确定性排序 | —（同一输入恒得同一顺序） |
 
@@ -54,7 +61,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   按名排序）+ 依赖身份摘要 + `vuna-compiler-id 1`（`Fingerprint.compilerIdOf`）；
 - 其他包的身份 = 构建它的编译器的身份（继承）。
 
-`vuna build` / `vuna compile` 把身份写进产物目录的 `build-id`（与 `build.sh` 同级），
+`vuna build` / `vuna compile` 把身份写进产物目录的 `build-id`（与 `build.sh` 同级）；
+`build-meta.json` 的 `compiler` 段记录的是**二进制身份** `cache-tag`（不是 `vunaVersion`），
+所以同版本不同二进制不会命中旧产物。
 `nix/build/packages.nix` 装到 `$out/build-id`；`seed/build-id` 由 rotation 一起生成、随信任锚点
 入库。运行时读取顺序：`VUNA_COMPILER_TAG`（排障/测试）→ `$out/build-id`（回退
 `$out/bin/build-id`；构建布局读 `DIR/build-id`）→ 路径 + 大小 + mtime 兜底（未安装的临时产物）。
@@ -185,6 +194,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   复用 `ToolContext`。
 - `VUNA_ELAB_FULL=1` 强制全量精化（排障 / A-B 对拍）；`VUNA_IFACE_AUDIT=1` 在同一进程跑
   摘要与全量两条路径并逐字节比较诊断与产物；`VUNA_COMPILER_TAG=<tag>` 覆盖编译器身份。
-- `VUNA_IFACE_WRITE=0` 跳过接口影子写（计算 + 落盘）：只在「这个 store 写完就丢」的一次性
-  构建里用（自举 / CI 的每级全新对象库，脚本已默认设置）；常驻 store 上关掉会让下一次
-  构建失去接口复用，只能回退全量。
+- `VUNA_IFACE_WRITE=0` 跳过接口影子写（计算 + 落盘），同时跳过包状态目录的创建：只在
+  「这个 store 写完就丢」的一次性构建里用（自举 / CI 的每级全新对象库，脚本已默认设置）；
+  常驻 store 上关掉会让下一次构建失去接口复用，只能回退全量。
+- `VUNA_PKG_STATE=<dir>` 把包状态目录整体重定向到可写位置（只读源码树的显式降级）；
+  不设置且默认 `<pkg>/.vuna` 建不出来时报错，不静默回退。

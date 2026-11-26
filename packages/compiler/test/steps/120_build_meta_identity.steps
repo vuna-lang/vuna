@@ -1,0 +1,12 @@
+# store-isolated: 断言 build-meta 需要私有 .output，使用 case 私有 store。
+# areas: compiler-core, compiler-frontend
+# 120) build-meta：源的闭包列表按名排序；compiler 段是二进制身份（安装布局的 cache-tag）；
+#      同一二进制换缓存身份不得判「新鲜」。
+run: sh -c 'P="$TMPDIR/meta-pkg"; mkdir -p "$P/lib" "$P/app"; printf "[package]\nname = \"meta-pkg\"\n" > "$P/vuna.toml"; printf "module Z where\n\nexport z : Int\nz = 1\n" > "$P/lib/Z.vuna"; printf "module A where\n\nexport a : Int\na = 1\n" > "$P/lib/A.vuna"; printf "import A\n\nmain : Int\nmain = a\n" > "$P/app/Main.vuna"; "$VUNA" build "$P"'
+exit: 0
+run: sh -c 'M="$TMPDIR/meta-pkg/.output/build-meta.json"; H=$(dirname "$(dirname "$VUNA")"); tag=$(cat "$H/cache-tag"); grep -q "\"schema\":2" "$M"; grep -q "\"compiler\":\"$tag\"" "$M"; grep -q "{\"name\":\"A\",\"hash\":[0-9]*},{\"name\":\"Z\",\"hash\":[0-9]*}" "$M"'
+exit: 0
+run: sh -c 'P="$TMPDIR/meta-pkg"; out=$(VUNA_CACHE_TAG=probe-tag "$VUNA" build "$P" 2>&1); echo "$out"; case "$out" in *"up to date"*) echo "FAIL: stale build-meta accepted under new cache tag"; exit 1;; esac'
+exit: 0
+run: sh -c 'grep -q "\"compiler\":\"probe-tag\"" "$TMPDIR/meta-pkg/.output/build-meta.json"'
+exit: 0

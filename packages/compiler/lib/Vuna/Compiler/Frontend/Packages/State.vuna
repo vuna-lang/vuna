@@ -1,0 +1,69 @@
+-- | 包状态目录：默认 `<包目录>/.vuna`，`VUNA_PKG_STATE` 非空时整体重定向。
+module Vuna.Compiler.Frontend.Packages.State where
+
+-- 只读源码树（Nix store / 共享只读快照）不能默认写进包目录：必须显式用
+-- `VUNA_PKG_STATE` 指向可写目录。建不出来就直接报错，不回退到共享 store——静默回退会让
+-- 「这份状态写在哪、下一次从哪读」重新变成隐式约定。
+--
+-- 目录名已进三处遍历跳过名单（`Packages.Source.skipSourceDir`、`Files.skipGenerated`、
+-- `Clean.skipCleanDir`），因此状态产物不会进入包内容摘要。
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Vuna.Compiler.Base.Common
+
+-- | 状态目录名（与 `.output` 同级）。
+export pkgStateDirName : String
+pkgStateDirName = ".vuna"
+
+-- | 状态目录重定向的环境变量（值为目录；相对值按进程 cwd 解析）。
+export pkgStateEnv : String
+pkgStateEnv = "VUNA_PKG_STATE"
+
+-- | 纯解析：包目录 + 环境变量值 → 状态目录。
+export pkgStateDirOf : String -> String -> String
+pkgStateDirOf pkgDir override = if override == "" then "${pkgDir}/${pkgStateDirName}" else override
+
+-- | 解析当前包的状态目录（不创建）。
+export pkgStateDirEff : Member nEnv EnvOp r => String -> Eff r String
+pkgStateDirEff pkgDir =
+  do
+    override <- envGetEnv pkgStateEnv
+    pure (pkgStateDirOf pkgDir override)
+
+-- | 解析并确保状态目录存在；建不出来时让 `FsErrorOp` 直接冒泡（不静默回退）。
+export ensurePkgStateDirEff : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r String
+ensurePkgStateDirEff pkgDir =
+  do
+    dir <- pkgStateDirEff pkgDir
+    _ <- ensureDirEff (strLength dir + 2) dir
+    pure dir
+
+-- | 接口 CAS 目录（模块接口按地址平铺在这里）。
+export ifaceDirOf : String -> String
+ifaceDirOf stateDir = "${stateDir}/iface"
+
+-- 内部：递归建目录（`fsMakeDir` 只建一层）；fuel 用路径长度上界守卫。
+ensureDirEff : Member nFs FsOp r => Int -> String -> Eff r Int
+ensureDirEff fuel path =
+  if fuel <= 0 then
+    pure 1
+  else if path == "" || path == "." || path == "/" then
+    pure 0
+  else
+    do
+      here <- pathIsDir path
+      if here then
+        pure 0
+      else
+        do
+          _ <- ensureDirEff (fuel - 1) (parentOfPath path)
+          stillMissing <- pathIsDir path
+          if stillMissing then pure 0 else fsMakeDir path
+
+-- 内部：路径存在且是目录（不存在返回 `False`，不触碰 `fsIsDirectory` 的前置守卫）。
+pathIsDir : Member nFs FsOp r => String -> Eff r Bool
+pathIsDir path =
+  do
+    exists <- fsFileExists path
+    if exists then fsIsDirectory path else pure False

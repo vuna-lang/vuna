@@ -35,8 +35,9 @@
   `[workspace].members` 加一行。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
-  DAG（循环依赖报错）。包内容收集（`check` / 内容摘要 / 语义身份）遵守 `.gitignore`：
-  被忽略的源文件不进入包内容，生成物不会改变包摘要。
+  DAG（循环依赖报错）。包内容收集（`check` / 内容摘要 / 语义身份）遵守 `.gitignore`，
+  并跳过生成物目录（`.output`、`.vuna`、`node_modules` 等）：被忽略的源文件不进入包内容，
+  生成物与包状态不会改变包摘要。
 - **包名 ≠ 模块命名空间**：模块名仍由路径决定（`packages/base/lib/Base/List.vuna` ⇔ `Base.Data.List`）；
   每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
   + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报
@@ -240,8 +241,10 @@ modules = ["My.Lib", "My.Lib.Internal"]
 - **build meta**：`build` 链接成功后写 `<out>/build-meta.json`（`compile` 与
   `build --no-compile` 不写，避免污染 seed rotation 与快照）。字段：`schema`、`compiler`、
   `package`、`entry`、`linked`、`closure`、`manifest`、`sources`（模块名 → 内容哈希）、
-  `dependencies`（依赖包名 → 闭包哈希）。同哈希 + 二进制存在时 `build` 直接打印
-  `up to date:` 跳过。
+  `dependencies`（依赖包名 → 闭包哈希）。`compiler` 是**二进制身份**（`cache-tag`，见
+  [cache.md](cache.md#编译器身份)），同版本不同二进制不会判新鲜；`sources` / `dependencies`
+  按模块名 / 包名排序，闭包摘要与 JSON 不依赖宿主目录枚举顺序。同哈希 + 二进制存在时
+  `build` 直接打印 `up to date:` 跳过。
 - **按模块内容哈希增量**：生成的 `build.sh` 按**直接依赖**分层（`depth(u) = 1 + max(depth(dep))`，
   层内单元互不依赖、层间串行），每个模块写 `<module>.stamp`——内容 = 自身 `.ml`/`.mli` 与
   **直接依赖的 `.stamp`** 的哈希（Merkle 式，不读 `.cmi`），命中则跳过重编。判据不用

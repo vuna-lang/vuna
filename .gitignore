@@ -59,9 +59,12 @@ examples/**/Main.ml
 examples/**/main
 /Main.ml
 
-# vuna 包级 compile 输出（`.output` 是 vuna 建的软链，指向 store view），不入库。
+# vuna 包级 compile 输出（真目录：文本 / build.sh / 二进制 / build-meta.json），不入库。
 .output
 .output/
+# vuna 包状态（接口等中间产物；默认 <pkg>/.vuna，`VUNA_PKG_STATE` 可重定向）。
+.vuna
+.vuna/
 # vuna-web-cli 的构建目录（生成的适配包 + 产物）
 .vuna-web
 .vuna-web/
