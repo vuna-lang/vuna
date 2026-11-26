@@ -1,0 +1,43 @@
+name: Bug
+description: 报告一个可复现的缺陷或回归
+title: "[bug] "
+labels: ["type:bug", "status:backlog"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 现象
+      description: 实际发生了什么，期望是什么。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现
+      description: 最小命令、输入或测试用例。
+      placeholder: |
+        nix run .#vuna -- ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 分支 / commit、后端（ocaml / wasm / native）、平台。
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 诊断
+      description: 错误码、堆栈、相关文件与行号。
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: 影响面
+      description: 涉及的 pkg / area；不确定可以留空，triage 时补。
+    validations:
+      required: false

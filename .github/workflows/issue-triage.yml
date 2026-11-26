@@ -1,0 +1,27 @@
+name: issue-triage
+
+# issue 侧状态机：opened 补 backlog / needs-refinement，assigned/milestoned 进 todo，
+# closed 清掉状态标签，epic 的任务列表同步为 sub-issue。
+on:
+  issues:
+    types: [opened, edited, assigned, unassigned, closed, reopened, labeled, unlabeled, milestoned, demilestoned]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: triage issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          ACTION: ${{ github.event.action }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+        run: |
+          nix/tools/issue-triage.sh "$REPO" "$ISSUE" "$ACTION" "${EVENT_LABEL:-}"

@@ -1,0 +1,36 @@
+name: Epic
+description: 一个方向或多任务集合
+title: "[epic] "
+labels: ["type:epic", "status:backlog"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+      description: 这个方向完成后，仓库/语言/工具链会变成什么样。
+    validations:
+      required: true
+  - type: textarea
+    id: exit
+    attributes:
+      label: 退出条件
+      description: 哪些可验证的条件全部满足后可以关闭这个 epic。
+    validations:
+      required: true
+  - type: textarea
+    id: children
+    attributes:
+      label: 子任务
+      description: 用 `- [ ] #123` 列出；issue-triage 会同步为 sub-issue。
+      placeholder: |
+        - [ ] #
+        - [ ] #
+    validations:
+      required: false
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: 非目标
+      description: 明确不在这个方向里的内容。
+    validations:
+      required: false

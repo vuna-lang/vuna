@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 开发与 issue/PR 流程
+    url: https://github.com/vuna-lang/vuna/blob/main/docs/reference/github-workflow.md
+    about: 状态机、标签、门禁与自动合并的说明
+  - name: 贡献指南
+    url: https://github.com/vuna-lang/vuna/blob/main/CONTRIBUTING.md
+    about: 分支、提交整理与 PR 门禁

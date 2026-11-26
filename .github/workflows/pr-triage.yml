@@ -1,0 +1,33 @@
+name: pr-triage
+
+# PR 打开/更新时同步 type/pkg/area、从关联 issue 继承元信息，并推进 issue 状态。
+# 使用 pull_request_target 是为了在 fork PR 上也能写标签；脚本不 checkout PR 代码，
+# 只通过 gh API 读 PR 元数据。
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft, closed]
+
+concurrency:
+  group: pr-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: triage PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          nix/tools/pr-triage.sh "$REPO" "$PR" "$ACTION" "${MERGED:-false}"
