@@ -68,15 +68,20 @@ nix run .#vuna-run-tests -- --only <owner/family>   # 按 owner/family 跑原生
 - 原语登记点：`Base/Intrinsics.vuna`、`Ir/Runtime.vuna`、`Wasm/Runtime.vuna`
   （`rtImplOf`）、`Native/Runtime.vuna`（`nativeRtTargetBase` / `nativeRtValueArityBase`）。
 
-## CI 口径（合并前/Lead）
+## CI 口径（PR）
 
 ```console
+nix run .#ci -- pr                   # PR 必需检查：fmt + lint + 自检
 nix run .#ci -- deep                 # 与 CI 的 deep 同一条命令（静态 / 诊断 / 增长 / seed-selfhost）
 nix run .#ci -- suite                # ocaml suite（fast + integration + e2e）
 nix run .#vuna-run-tests             # 全量 suite（本地 runner）
 nix run .#ci -- --list               # 查看每组包含的 check
 ```
 
-push / PR 的 CI 只跑 `pr` 档（fmt + lint + 自检）。清单、分组与各组触发条件见
-[`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
-性能问题不要用 CI 全量做定位——按技能 `perf-debug` 的增长率规程走。
+- GitHub 上 PR 的**必需检查只有 `pr / run`**；`deep` / `suite` / `backends` / `native`
+  由 PR 标签触发，不是 required，但改了对应面就必须加标签并等绿再合并（技能 `vuna-pr`）。
+- `deep` / `suite` / `backends` / `native` / `browser` 另由 nightly 与手动 dispatch 兜底；
+  清单、分组与触发条件见
+  [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
+- push 到 `main` 只跑 `pr`；完整门禁在 PR（标签）与 nightly。
+- 性能问题不要用 CI 全量做定位——按技能 `perf-debug` 的增长率规程走。

@@ -9,7 +9,7 @@
 
 | 文件 | 何时读 |
 | --- | --- |
-| [rules/workflow.md](rules/workflow.md) | 开工 / 提交 / 收尾的固定流程：rebase、线性历史、格式化、生成物 |
+| [rules/workflow.md](rules/workflow.md) | 开工切分支 / `rebase -i` 整理 / PR / rebase merge / seed 轮换 |
 | [rules/verification.md](rules/verification.md) | 改完跑什么：本地口径 vs CI 口径、按改动面选测试、seed/effect 门禁 |
 | [rules/docs.md](rules/docs.md) | 写完或探索完：文档落点、导航同步、哪些是生成物不能读/写 |
 | [rules/comments.md](rules/comments.md) | 写/改注释与说明文字：只写当下成立的事实，不写阶段编号、实现史与未来计划 |
@@ -21,9 +21,9 @@
 | [repo-navigation](skills/repo-navigation/SKILL.md) | 动手前摸仓库：要改的模块整篇读，只引用的查 `vuna map` / `vuna api` |
 | [lint-rule](skills/lint-rule/SKILL.md) | 新增/修改 `vuna lint` 规则（含自动修复），或把规则提升进 recommended 并迁移仓库 |
 | [perf-debug](skills/perf-debug/SKILL.md) | 命令/阶段变慢、超时、怀疑复杂度回退 |
-| [vuna-worktree-dev](skills/vuna-worktree-dev/SKILL.md) | 在副 worktree 里开发（构建产物、测试、seed、提交的隔离） |
-| [vuna-worktree-finish](skills/vuna-worktree-finish/SKILL.md) | 副 worktree 收尾：commit → cherry-pick 回主仓 → 校验 → remove |
+| [vuna-pr](skills/vuna-pr/SKILL.md) | 开 PR：提交整理、标签门禁、rebase merge、worktree 收尾、break-glass |
 | [vuna-commits](skills/vuna-commits/SKILL.md) | 写或校验提交信息（Conventional Commits 的 vuna 口径） |
+| `worktree`（全局） | 副 worktree 隔离与 teardown；口径在 `~/.config/opencode/skills/worktree/SKILL.md` |
 
 ## 维护约定
 

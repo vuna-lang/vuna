@@ -69,6 +69,10 @@ nix run .#vuna -- doc                          # 生成 docs/api.html（gitignor
 `git config core.hooksPath .githooks` 启用。确需跳过用 `git commit --no-verify`，或设
 `VUNA_SKIP_HOOKS=1`（例如 `chore(seed):` 轮换提交）。
 
+贡献流程走 GitHub PR：从 `origin/main` 切 `<type>/<slug>` 分支，开 PR 前用
+`git rebase -i origin/main` 整理提交；`main` 只接受 rebase merge。完整口径见
+[CONTRIBUTING.md](CONTRIBUTING.md) 与技能 `vuna-pr`。
+
 ## 工具与自举链
 
 | 工具 | 作用 |
@@ -166,7 +170,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | 文档 | 内容 |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | AI agent 唯一固定入口：阅读顺序、不变量、纪律红线、命令速查 |
-| [.agents/README.md](.agents/README.md) | AI 规则与场景技能索引（worktree、提交、探索、性能调试） |
+| [.agents/README.md](.agents/README.md) | AI 规则与场景技能索引（worktree、PR、提交、探索、性能调试） |
 | [docs/architecture.md](docs/architecture.md) | 子系统地图：五条链路、入口符号、连带改动、测试标签 |
 | [docs/architecture-target.md](docs/architecture-target.md) | 终态架构：大方向、不变量、已决决策与非目标 |
 | [docs/reference/language.md](docs/reference/language.md) | core-v0 语义、模块系统、import 与导出规则 |

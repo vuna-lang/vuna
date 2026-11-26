@@ -69,6 +69,9 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 仍保证当前编译器自洽；发布前由 rotation 收敛。滞后程度由 CI 报告与
 `nix/seed/rotation.txt` 元数据可见。
 
+走 PR 流程时，含 `seed/` 的轮换 PR 加 `seed` 标签并优先合并；其他打开的 PR 在它合并后
+rebase。`seed/` 冲突不手选两侧：abort 后先 rebase 非 seed 提交，再重新 rotation。
+
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
   在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
   `nix/seed/rotation.txt`（`nix/seed/rotate.sh`，失败不破坏工作树）；
