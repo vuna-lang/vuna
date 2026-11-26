@@ -1942,6 +1942,14 @@ inlineText "bitXor" [a, b] = Just "(${a} lxor ${b})"
 inlineText "bitNot" [a] = Just "(lnot ${a})"
 inlineText "bitShl" [a, b] = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsl ${b})"
 inlineText "bitShr" [a, b] = Just "(if ${b} < 0 || ${b} >= 63 then 0 else ${a} lsr ${b})"
+-- 字符串读取/转换：内联到 OCaml 原语，避免热循环里每字节一次 runtime 调用
+-- （`strAt` 的越界返回 -1 语义与 `dtp_strAt` 一致）。IR 里的运行时名是 `bi_*` /
+-- `dtp_*` 形式，按契约名匹配（`irInlineArity` 列出可内联的名字）。
+inlineText "strLength" [s] = Just "(String.length ${s})"
+inlineText "strAt" [s, i] =
+  Just
+    "(let b = ${s} in let k = ${i} in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k))"
+inlineText "strFromInt" [n] = Just "(string_of_int ${n})"
 inlineText "effectId" [a] = Just "(dtp_effectId ${a})"
 inlineText "++" [a, b] = Just "(${a} ^ ${b})"
 inlineText "bi_eq_int" [a, b] = Just "(${a} = ${b})"
@@ -2024,7 +2032,18 @@ let dtp_ocamlOf xs =
   let rec go l = match l with ${nilMl} -> [] | ${consMl} (x, rest) -> x :: go rest in
   go xs
 
-let dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)
+let dtp_concatMany xs =
+  let rec len acc l = match l with ${nilMl} -> acc | ${consMl} (x, rest) -> len (acc + String.length x) rest in
+  let n = len 0 xs in
+  let buf = Bytes.create n in
+  let rec put off l = match l with
+    | ${nilMl} -> ()
+    | ${consMl} (x, rest) ->
+      let k = String.length x in
+      Bytes.blit_string x 0 buf off k;
+      put (off + k) rest
+  in
+  (put 0 xs; Bytes.unsafe_to_string buf)
 
 let dtp_substTemplate tmpl xs =
   let args = Array.of_list (dtp_ocamlOf xs) in
