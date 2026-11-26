@@ -374,10 +374,6 @@ nativeGcRequestedLabel = "rt_gc_requested"
 export nativeGcEpochLabel : String
 nativeGcEpochLabel = "rt_gc_epoch"
 
--- | 线程运行时是否已启用（`init_threads` 置 1；GC 用它选择单线程 / STW 路径）。
-export nativeThreadedLabel : String
-nativeThreadedLabel = "rt_threaded"
-
 -- | 零参顶层定义的缓存区（CAF）：`[caf_begin, caf_end)` 是连续的 8 字节槽，
 --   每个零参定义一格，`_start` 求值一次后写入；GC 按这段区间扫根。
 export nativeCafBeginLabel : String

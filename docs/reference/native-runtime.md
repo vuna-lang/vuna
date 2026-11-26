@@ -158,7 +158,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
      候选指针保守判断；入口 `rbp = 0` 终止。GC 自己的帧也按整帧扫，入口先把通用寄存器
      （含 `r15`）溢进自己的帧。
   2. `.bss`：cleanup 链头 `rt_cleanups` 与 CAF 求值区 `[rt_caf_begin, rt_caf_end)`。
-  3. **线程模式**（程序用了线程原语，`rt_threaded = 1`）：根集改为 STW——置 `rt_gc_requested`
+  3. **线程模式**（`rt_live_threads > 1`）：根集改为 STW——置 `rt_gc_requested`
      等全部 live 线程在 safepoint / `block_begin` 停车，扫本线程 `[rsp, stack_top)`，再按线程表
      逐个扫未结束线程的 `[saved_rsp, stack_top)`（见 [primitives.md](primitives.md) §6.2）。
   handler 帧与续延是 `Base.Effect.Core` 的普通堆对象，随上面的根可达。
@@ -225,8 +225,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - `Native.Gc`：两代标记-清扫 GC——块头判据、段索引（二分定位）、根集扫描（逐帧保守 /
   脏卡片）、写屏障与卡片表、年轻代 / 整堆回收的决定、标记栈（倍增 mmap）、
   清扫与尺寸类回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
-  线程程序（`rt_threaded = 1`）回收时置 `rt_gc_requested`，等非自身 live 线程离开 running
-  后按线程表扫根；没有启用线程运行时的程序走单线程 `rbp` 链。
+  线程程序（`rt_live_threads > 1`）回收时置 `rt_gc_requested`，等非自身 live 线程离开 running
+  后按线程表扫根；单线程段（spawn 前 / join 后）走单线程 `rbp` 链。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity；线程/同步原语（`clone` + futex）也在这里。
 - `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、**按模块切分的
