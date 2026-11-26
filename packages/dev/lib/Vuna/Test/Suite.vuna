@@ -70,6 +70,8 @@ export record SuiteOpts(..) where
   suiteMatrices : List String
   -- | 可重复的 `--backend`；空 = 只跑声明里的默认目标（ocaml）。
   suiteBackends : List String
+  -- | 可重复的 `--area`：按 case 的 `area:<名>` tag **精确**筛选（空 = 全部）。
+  suiteAreas : List String
 
 -- | 一个 family：目录约定 + 各阶段的上限开关（后缀决定实际参与；family 旗标是上限，关掉即不跑，但 `.interp.out` 分支例外——它强制 interp）。
 export record Family(..) where
@@ -105,6 +107,8 @@ export record Family(..) where
   -- | 后端矩阵分类（`matrix` 键）：`tool`（缺省，不产生目标代码）/ `pure` /
   -- `pure-cross` / `effect-common` / `effect-native` / `effect-wasm`。
   familyMatrix : String
+  -- | 影响 area（`areas` 键）：该族能检出哪一类改动；每个 case 派生 `area:<名>` tag。
+  familyAreas : List String
 
 -- | suite 全局配置与解析出的 family 列表。
 export record Suite(..) where
@@ -306,7 +310,8 @@ familyKeys =
     "timeout",
     "exclude",
     "include",
-    "matrix"
+    "matrix",
+    "areas"
   ]
 
 -- | 矩阵分类的合法取值（第一个是缺省值）。
@@ -335,6 +340,14 @@ matrixTargets _ = ["ocaml"]
 -- | 派生 tag：`layer:<层次>` 与 `matrix:<分类>`，让 `--filter` 也能按分层筛选。
 export matrixTags : String -> List String
 matrixTags matrix = ["layer:${matrixLayer matrix}", "matrix:${matrix}"]
+
+-- | 派生 tag：`area:<名>`，让 `--area` 精确筛选（`--filter` 仍是子串）。
+export areaTags : List String -> List String
+areaTags areas = map (\a => "area:${a}") areas
+
+-- | 去掉已有的 `area:` tag（steps 文件覆盖 family 的 areas 时用）。
+withoutAreaTags : List String -> List String
+withoutAreaTags tags = filter (\t => not (startsWith "area:" t)) tags
 
 -- | 内部：校验 family 段落的键都在 `familyKeys` 里（其它段落的条目忽略）。
 checkFamilyKeys : List String -> List TomlEntry -> Check Int
@@ -449,28 +462,35 @@ buildFamily suite entries name =
                   case readFamilyFlags section entries of
                     ErrC e => ErrC e
                     OkC flags =>
-                      let
-                        excludeList =
-                          case lookupEntry section "exclude" entries of
-                            Just (TArray xs) => fromMaybe [] (arrayStrings xs)
-                            _ => []
-                        includeList =
-                          case lookupEntry section "include" entries of
-                            Just (TArray xs) => fromMaybe [] (arrayStrings xs)
-                            _ => []
-                        kind = strOr "auto" opts.familyOptKind
-                        matrix = strOr "tool" opts.familyOptMatrix
-                        tags = append (listOr [] flags.familyFlagTags) (matrixTags matrix)
-                      in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then
-                        if memName matrix matrixClasses then
-                          OkC
-                            (Family name suite.suiteOwner dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix)
-                        else
-                          err
-                            (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
-                      else
-                        err
-                          (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
+                      case getList section "areas" entries of
+                        ErrC e => ErrC e
+                        OkC areasOpt =>
+                          let
+                            excludeList =
+                              case lookupEntry section "exclude" entries of
+                                Just (TArray xs) => fromMaybe [] (arrayStrings xs)
+                                _ => []
+                            includeList =
+                              case lookupEntry section "include" entries of
+                                Just (TArray xs) => fromMaybe [] (arrayStrings xs)
+                                _ => []
+                            kind = strOr "auto" opts.familyOptKind
+                            matrix = strOr "tool" opts.familyOptMatrix
+                            areas = listOr [] areasOpt
+                            tags =
+                              append
+                                (append (listOr [] flags.familyFlagTags) (matrixTags matrix))
+                                (areaTags areas)
+                          in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then
+                            if memName matrix matrixClasses then
+                              OkC
+                                (Family name suite.suiteOwner dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix areas)
+                            else
+                              err
+                                (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
+                          else
+                            err
+                              (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
 
 -- | 内部：从 entries 收集 family 名（保持首次出现顺序）。
 familyNames : List TomlEntry -> List String
@@ -839,7 +859,25 @@ stepCaseOf family dir name =
       let
         rel = substring 0 (byteLength name - 6) name
         id = "${family.familyOwner}/${family.familyName}/${rel}"
-      in pure [Case id family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text) (stepsMatrixOf family.familyMatrix text)]
+      in pure [Case id (append (withoutAreaTags family.familyTags) (areaTags (stepsAreasOf family.familyAreas text))) (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text) (stepsMatrixOf family.familyMatrix text)]
+
+-- | steps 文件的 `# areas: a, b` 覆盖 family 的 `areas`；没有声明时沿用 family 的。
+stepsAreasOf : List String -> String -> List String
+stepsAreasOf familyAreas text =
+  case firstAreaLine (lines text) of
+    Nothing => familyAreas
+    Just raw => filter (\a => a /= "") (map trim (split "," raw))
+
+-- | 内部：找到第一个以 `# areas:` 开头的行，返回冒号后的文本。
+firstAreaLine : List String -> Maybe String
+firstAreaLine [] = Nothing
+firstAreaLine (line :: rest) =
+  let
+    text = trim line
+  in if startsWith "# areas:" text then
+    Just (trim (substring 8 (byteLength text - 8) text))
+  else
+    firstAreaLine rest
 
 -- | steps 文件任意位置出现 `# tier: tools|integration|fast` 即覆盖默认 tier；没有声明则归 `e2e`。
 stepsTierOf : String -> String
@@ -913,7 +951,7 @@ discoverCases suite =
       [
         Case
           "${suite.suiteOwner}/seed"
-          ["seed"]
+          ["seed", "area:seed"]
           (CSeed seedPath "${suite.suiteRoot}/corpus/run/12_fact.out")
           900
           "integration"

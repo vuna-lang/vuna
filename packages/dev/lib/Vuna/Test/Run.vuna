@@ -2052,7 +2052,11 @@ caseMatches opts c =
       case opts.suiteBackends of
         [] => True
         wanted => backendSelected wanted c.caseMatrix
-  in onlyOk && filterOk && tierOk && matrixOk && backendOk
+    areaOk =
+      case opts.suiteAreas of
+        [] => True
+        pats => areaSelected pats c
+  in onlyOk && filterOk && tierOk && matrixOk && backendOk && areaOk
 
 -- | 内部：矩阵模式匹配——`layer:<层次>` 前缀按派生层匹配，其余按分类名精确匹配。
 matchMatrixPattern : String -> String -> Bool
@@ -2068,6 +2072,11 @@ matchAnyMatrix (pat :: rest) matrix =
 -- | 内部：`--backend` 是否选中该矩阵分类——`all` 恒真，其余按 `matrixTargets` 判定。
 backendSelected : List String -> String -> Bool
 backendSelected wanted matrix = anyBackend wanted (matrixTargets matrix)
+
+-- | 内部：`--area` 是**精确**匹配 `area:<名>` tag（`--filter` 仍是子串，容易误命中）。
+areaSelected : List String -> Case -> Bool
+areaSelected [] c = False
+areaSelected (p :: rest) c = if memName "area:${p}" c.caseTags then True else areaSelected rest c
 
 -- | 内部：任一后端命中。
 anyBackend : List String -> List String -> Bool
@@ -2090,6 +2099,55 @@ capCaseTimeout secs c =
   let
     budget = if secs < c.caseTimeout then secs else c.caseTimeout
   in Case c.caseId c.caseTags c.caseKind budget c.caseTier c.caseMatrix
+
+-- ---------------------------------------------------------------
+-- area 覆盖守卫
+-- ---------------------------------------------------------------
+-- | 内部：case 是否带任意 `area:` tag。
+hasAreaTag : Case -> Bool
+hasAreaTag c = any (\t => startsWith "area:" t) c.caseTags
+
+-- | 内部：case 的 area 名（去掉 `area:` 前缀）。
+caseAreaNames : Case -> List String
+caseAreaNames c = map areaNameOf (filter (\t => startsWith "area:" t) c.caseTags)
+
+-- | 内部：`area:<名>` → `<名>`。
+areaNameOf : String -> String
+areaNameOf tag = substring 5 (byteLength tag - 5) tag
+
+-- | 内部：case 里不在词表内的 area（空词表时全部算未知，调用方先判空）。
+strayAreas : List String -> Case -> List String
+strayAreas known c = filter (\a => not (memName a known)) (caseAreaNames c)
+
+-- | 内部：area 覆盖守卫——每个 case 至少一个 `area:` tag，且都在 `VUNA_SUITE_AREAS`
+-- 的词表里（本机未设置时跳过）。作为 `audit/areas` 失败 case 注入，只在全量运行时命中。
+areaAuditCase : List String -> List Case -> List Case
+areaAuditCase known cases =
+  if listLength known == 0 then
+    []
+  else
+    let
+      bare = filter (\c => not (hasAreaTag c)) cases
+      strays = concatMap (strayAreas known) cases
+    in if listLength bare == 0 && listLength strays == 0 then [] else [Case "audit/areas" ["audit"] (CBroken (areaAuditText bare strays)) 0 "e2e" "tool"]
+
+-- | 内部：`audit/areas` 的失败文案（列出缺 tag 的 case 与未知 area）。
+areaAuditText : List Case -> List String -> String
+areaAuditText bare strays =
+  let
+    ids = nubNames (caseIds bare)
+    shown = take 5 ids
+    more = if listLength ids > 5 then " (+${strOfInt (listLength ids - 5)} more)" else ""
+  in "cases without area tags: "
+    ++ join ", " shown ++ more ++ "; unknown areas: " ++ join ", " (nubNames strays)
+
+-- | 内部：case id 列表（显式注解，避免 `map` 的字段选择推断不到记录类型）。
+caseIds : List Case -> List String
+caseIds cases = map caseIdOf cases
+
+-- | 内部：单个 case 的 id。
+caseIdOf : Case -> String
+caseIdOf c = c.caseId
 
 -- ---------------------------------------------------------------
 -- 打印与汇总
@@ -2427,7 +2485,7 @@ spawnWorkers env opts resultsDir jobs fuel index pids =
   else
     let
       workerArg = "${strOfInt index}/${strOfInt jobs}"
-      filters = append (concatMap (\p => ["--only", p]) opts.suiteOnly) (append (concatMap (\p => ["--filter", p]) opts.suiteFilter) (append (concatMap (\p => ["--tier", p]) opts.suiteTiers) (append (concatMap (\p => ["--matrix", p]) opts.suiteMatrices) (concatMap (\p => ["--backend", p]) opts.suiteBackends))))
+      filters = append (concatMap (\p => ["--only", p]) opts.suiteOnly) (append (concatMap (\p => ["--filter", p]) opts.suiteFilter) (append (concatMap (\p => ["--area", p]) opts.suiteAreas) (append (concatMap (\p => ["--tier", p]) opts.suiteTiers) (append (concatMap (\p => ["--matrix", p]) opts.suiteMatrices) (concatMap (\p => ["--backend", p]) opts.suiteBackends)))))
       cacheArgs =
         case opts.suiteCacheDir of
           Just dir => ["--cache-dir", dir]
@@ -3068,14 +3126,17 @@ runSuiteOnce sess opts suite =
     MutRef.write sess (sessionNew "${tmp}/iface-session")
     discovered0 <- discoverCases suite
     orphans <- familyOrphans suite
+    areaText <- envVar "VUNA_SUITE_AREAS"
     let
+      knownAreas = filter (\a => a /= "") (split " " areaText)
       discovered = applyTimeoutOverride opts.suiteTimeout discovered0
       env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir opts.suiteBackends sess
-      -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
+      -- 三层默认护栏（局部 --only/--filter/--area 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
-      --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
+      --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到；
+      --   ③ area 覆盖——每个 case 至少一个 `area:` tag（词表由 VUNA_SUITE_AREAS 注入）。
       minCase = if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [Case "audit/min-cases" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"] else []
-      cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)
+      cases0 = filterCases opts (append (append (append discovered (areaAuditCase knownAreas discovered)) (auditCases orphans)) minCase)
     in do
       -- 预热依赖接口（仅父进程、仅真正跑 case 时）：共享 store 只需预热一次；
       -- worker 直接复用父进程写下的接口/对象。
