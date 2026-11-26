@@ -180,6 +180,7 @@ let
       src.pluginWeb
       src.dev
       src.base
+      src.obs
       src.cli
       src.pluginKit
       src.toolchain
