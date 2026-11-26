@@ -1,0 +1,7 @@
+-- 记录构造子按位置写模式时，子模式个数必须覆盖全部字段；诊断指回模式本身。
+record Point where
+  x : Int
+  y : Int
+
+f : Point -> Int
+f (Point a) = a

@@ -524,8 +524,21 @@ ctorAltListGo table clauses (cname :: rest) pos restParams fbSp fuel =
       freshSubs = subNamesFor pos subpatCount
       subParams = append freshSubs restParams
       branchPats = map (\n => PVar n (detachedNodeRef (Span "" 0 0 0 0 0 0))) freshSubs
+      -- 合成 alt 的构造子 span 指回源模式：alt 上的诊断（参数过多/过少）才能报出位置。
+      headSp = ctorHeadSpan clauses cname fbSp
       expanded = clausesForCtor cname branchPats pos clauses
-    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Alt (PCon (cname) branchPats (detachedNodeRef (Span "" 0 0 0 0 0 0))) bodyExpr (detachedNodeRef (Span "" 0 0 0 0 0 0))) tail)))
+    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1)) (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Alt (PCon (cname) branchPats (detachedNodeRef headSp)) bodyExpr (detachedNodeRef (Span "" 0 0 0 0 0 0))) tail)))
+
+-- | 该构造子第一次出现在源模式里的位置；没有就回落到矩阵的 fallback span。
+ctorHeadSpan : List (List Pat, Expr) -> String -> Span -> Span
+ctorHeadSpan [] cname fb = fb
+ctorHeadSpan (c :: rest) cname fb =
+  case c of
+    (p :: ps, body) =>
+      case p of
+        PCon cn _ psp => if cn == cname then nodeRefSpan psp else ctorHeadSpan rest cname fb
+        _ => ctorHeadSpan rest cname fb
+    ([], body) => ctorHeadSpan rest cname fb
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (List Pat, Expr) -> String -> Int
