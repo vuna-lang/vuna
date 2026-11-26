@@ -604,7 +604,8 @@ let
         echo "groups: $groups" >&2
         echo "       ci --list" >&2
         echo "       ci --plan <type:... pkg:... area:...>" >&2
-        echo "       ci --run-plan <type:... pkg:... area:...>" >&2
+        echo "       ci --plan-json <type:... pkg:... area:...>" >&2
+        echo "       ci --run-plan [--without-suite] <type:... pkg:... area:...>" >&2
       }
 
       attr_of() {
@@ -649,11 +650,19 @@ let
         ' "$@"
       }
 
-      plan() {
-        echo "ci: plan labels=$*" >&2
+      # 未分片的 suite check：PR 上 gate / e2e 由 `gates.yml` 的 shard 矩阵承担，
+      # `gates / run` 只跑计划里其余的部分（`--without-suite`）。
+      drop_suite_refs() {
+        grep -Ev '^check:vuna-tests-(gate|e2e)$' || true
+      }
+
+      # $1 = full | without-suite；其余是标签。输出计划里的引用。
+      select_refs() {
+        mode=$1
+        shift
         refs=$(plan_refs "$@")
-        if [ -z "$refs" ]; then
-          echo "(no extra checks)"
+        if [ "$mode" = "without-suite" ]; then
+          printf '%s\n' "$refs" | drop_suite_refs
         else
           printf '%s\n' "$refs"
         fi
@@ -686,12 +695,39 @@ let
           ;;
         --plan|plan)
           shift
-          plan "$@"
+          mode=full
+          if [ "''${1:-}" = "--without-suite" ]; then
+            mode=without-suite
+            shift
+          fi
+          echo "ci: plan mode=$mode labels=$*" >&2
+          refs=$(select_refs "$mode" "$@")
+          if [ -z "$refs" ]; then
+            echo "(no extra checks)"
+          else
+            printf '%s\n' "$refs"
+          fi
+          exit 0
+          ;;
+        --plan-json|plan-json)
+          shift
+          mode=full
+          if [ "''${1:-}" = "--without-suite" ]; then
+            mode=without-suite
+            shift
+          fi
+          refs=$(select_refs "$mode" "$@")
+          printf '%s\n' "$refs" | jq -R -s -c 'split("\n") | map(select(length > 0)) | {refs: .}'
           exit 0
           ;;
         --run-plan|run-plan)
           shift
-          refs=$(plan_refs "$@")
+          mode=full
+          if [ "''${1:-}" = "--without-suite" ]; then
+            mode=without-suite
+            shift
+          fi
+          refs=$(select_refs "$mode" "$@")
           if [ -z "$refs" ]; then
             echo "ci: no extra checks"
             exit 0
