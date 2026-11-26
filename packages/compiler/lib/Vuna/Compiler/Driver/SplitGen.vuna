@@ -351,13 +351,13 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
             _ = log! "info" "cg-deflocs-done"
             runtimeText =
               dtRuntimeWith
-                locTbl
                 shared.irSharedUsesFloat
                 shared.irSharedUsesTrace
                 shared.irSharedUsesObs
                 shared.irSharedUsesHost
                 (shared.irSharedUsesSched || entryIsAction)
                 (shared.irSharedUsesEff || entryIsAction)
+            deflocsText = dtDefLocsUnit locTbl
             _ = log! "info" "cg-runtimeText-done"
           in splitProgramFiles
             env
@@ -369,9 +369,10 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
             meta
             (splitLocPath roots contextDir)
             runtimeText
+            deflocsText
 
-splitProgramFiles : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff r (Check (List SplitFile))
-splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText =
+splitProgramFiles : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
+splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText deflocsText =
   case checkProgramOf env of
     ErrC e => pure (ErrC e)
     OkC _ =>
@@ -385,9 +386,10 @@ splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta n
         meta
         normPath
         runtimeText
+        deflocsText
 
-splitProgramChecked : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff r (Check (List SplitFile))
-splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText =
+splitProgramChecked : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
+splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText deflocsText =
   case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
     ErrC e => pure (ErrC e)
     OkC _ =>
@@ -407,9 +409,10 @@ splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta
                 dataPairs
                 normPath
                 runtimeText
+                deflocsText
 
-splitWithOwners : {r : Row} -> LwEnv -> List (String, List Decl) -> Bool -> List DtData -> List DtDef -> List (String, String) -> List (String, String) -> (String -> String) -> String -> Eff r (Check (List SplitFile))
-splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText =
+splitWithOwners : {r : Row} -> LwEnv -> List (String, List Decl) -> Bool -> List DtData -> List DtDef -> List (String, String) -> List (String, String) -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
+splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText deflocsText =
   let
     defOwnerT = ownerTblOf defPairs
     dataOwnerT = ownerTblOf dataPairs
@@ -417,7 +420,7 @@ splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs norm
     dataUnitT = unitTblOf (mapToUnit dataPairs)
     ordered =
       append
-        (append [runtimeUnit] (map (\q => splitUnitOfModule (firstOf q)) modules))
+        (append [runtimeUnit, deflocsUnit] (map (\q => splitUnitOfModule (firstOf q)) modules))
         [splitUnitOfModule entryOwner]
     ctx =
       SplitGenCtx
@@ -443,7 +446,7 @@ splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs norm
                 ErrC e => ErrC e
                 OkC mainFile =>
                   let
-                    files = SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile]
+                    files = SplitFile "${runtimeUnit}.ml" runtimeText [] :: SplitFile "${deflocsUnit}.ml" deflocsText [runtimeUnit] :: append moduleFiles [mainFile]
                   in case checkSplitNames files of
                     ErrC e => ErrC e
                     OkC _ =>
@@ -504,7 +507,7 @@ splitMainFile ctx printResult =
                   case genEntryHook (mkGenStWith ctx.sgcNormPath qc (lwEnvShared envU)) entryIr printResult of
                     ErrC e => pure (ErrC e)
                     OkC hook =>
-                      case unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook)) of
+                      case unitDepsOf ctx.sgcOrdered entryUnit (append (append (unitPartsDeps parts) (secondOf hook)) [deflocsUnit]) of
                         ErrC e => pure (ErrC e)
                         OkC deps =>
                           let

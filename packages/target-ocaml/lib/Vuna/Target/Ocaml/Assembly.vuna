@@ -23,6 +23,11 @@ import Vuna.Target.Ocaml.Render
 export runtimeUnit : String
 runtimeUnit = "Vuna_runtime"
 
+-- 程序定义位置表单元（模板在 `Term.dtDefLocsUnit`）：初始化时写进 runtime 的空引用。
+-- 与 runtime 分开，避免每个程序的位置表改变 runtime 的 `.cmx`、连带整棵依赖重编。
+export deflocsUnit : String
+deflocsUnit = "Vuna_deflocs"
+
 -- 装配片段：文件头（open 头）、类型声明、List 桥接、按 SCC 顺序的正文，外加生成状态
 -- 与该单元的直接依赖单元。构造子不导出：调用方只能经 `genUnitText` / `unitPartsDeps`
 -- 读取，避免各处重复实现拼接顺序。
