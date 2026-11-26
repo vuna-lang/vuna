@@ -139,6 +139,23 @@ findOwnFn name (d :: rest) =
     DExtern n c ty sp => if n == name then Just name else findOwnFn name rest
     _ => findOwnFn name rest
 
+-- | 类型级 axiom：kind 以 `Type` 结尾（如 `Eff : Row -> Type -> Type`）。
+-- 这类名字在**类型位置**是类型构造子，导出条目必须记成 `"type"`（与 data/record
+-- 同一条解析路径）；`rowRem : Type -> Row -> Row` 这类返回 `Row` 的仍是值。
+export typeKindAxiom : String -> List Decl -> Bool
+typeKindAxiom name [] = False
+typeKindAxiom name (d :: rest) =
+  case d of
+    DAxiom n ty sp => if n == name then kindEndsInType ty else typeKindAxiom name rest
+    _ => typeKindAxiom name rest
+
+-- | 类型表达式（Pi 链）的最终 codomain 是否是 `Type`。
+kindEndsInType : Expr -> Bool
+kindEndsInType (EPi _ _ _ _ cod _) = kindEndsInType cod
+kindEndsInType (EApp (EVar "->" _) [_, cod] _) = kindEndsInType cod
+kindEndsInType (EVar "Type" _) = True
+kindEndsInType _ = False
+
 findCtorNamed : String -> List Ctor -> Maybe String
 findCtorNamed name [] = Nothing
 findCtorNamed name (c :: rest) =
@@ -285,7 +302,9 @@ ownOrImportedTypeRef modules prefix decls imports name =
 ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedValueRef modules prefix decls imports name =
   case findOwnFn name decls of
-    Just fn => OkC (Just (ExportRef "val" (mangle prefix fn) ""))
+    Just fn =>
+      OkC
+        (Just (ExportRef (if typeKindAxiom name decls then "type" else "val") (mangle prefix fn) ""))
     Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
 -- | 本模块值 / 构造子名字的导出引用（构造子走 `ownCtorEntriesNamed` 的歧义检测）。
