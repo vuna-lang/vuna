@@ -13,6 +13,11 @@ out-equals: 777784
 run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1048576 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1'
 out-contains: gc n=
 out-contains: live=
+out-contains: span=
+out-contains: segs=
+out-contains: mapped=
+out-contains: objs=
+out-contains: gcus=
 
 # 9z) `VUNA_NATIVE_GC_STRESS=1`（每次分配都完整 GC）：续延 + List + 字符串的程序
 #     输出与正常模式一致，说明根集（栈 / handler / 续延记录 / 捕获缓冲）没有漏项。

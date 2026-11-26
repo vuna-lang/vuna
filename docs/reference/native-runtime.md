@@ -109,7 +109,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 | `VUNA_NATIVE_STACK_MB` | `512`（线程栈 `64`） | 自带栈容量（MiB）：启动时 mmap 的私有匿名区，与进程栈的 `RLIMIT_STACK` 无关；`MAP_NORESERVE`，RSS 只随实际递归深度增长。`0` = 不切换、沿用进程栈；mmap 失败也回落进程栈。子线程栈同一口径，下限 1 MiB |
 | `VUNA_NATIVE_MEM_LIMIT` | 自动：`max(1 GiB, 2 × live + 256 MiB)`，每次回收后按 live 抬高 | **live 堆**上限：分配的预留超过它时先做一次整堆回收，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2。缺省只升不降——固定的 1 GiB 在 live 见顶后会让每次分配都触发一次整堆回收（死锁）；显式设置时是硬上限，`0` = 不限 |
 | `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 回收阈值的下限（也是新堆段的最小尺寸）：年轻代回收后阈值 = `max(GC_MIN, live/8, 上次扫到的栈字节数)`，整堆回收后 = `max(GC_MIN, 2 × live, 上次扫到的栈字节数)` |
-| `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> cards=<本次扫过的脏卡片数> gen=<minor 或 full>` |
+| `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节> cards=<本次扫过的脏卡片数> gen=<minor 或 full> span=<本次扫的栈字节> segs=<段数> mapped=<段区总字节> objs=<live 对象数> gcus=<累计回收微秒>`（`objs` 由清扫顺带计数；`segs` / `mapped` 在诊断时遍历段表；`gcus` 含这一次 write） |
 | `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次回收（年轻代 / 整堆按计数轮换；抓漏根与漏屏障的调试开关，不是运行模式） |
 | `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
 | `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩）；到点先收掉在跑的子进程组，再写 `vuna: runtime error: timeout exceeded` + exit 2；`0` = 不限 |
