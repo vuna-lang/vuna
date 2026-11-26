@@ -748,6 +748,23 @@ natZeroCtor = "Base.Data.Nat.Nat.Zero"
 export natSuccCtor : String
 natSuccCtor = "Base.Data.Nat.Nat.Succ"
 
+-- | Fin 的完整符号身份（`Base.Data.Fin.Fin`）；和 Nat 一样运行时表示固定为
+-- OCaml `int`（FZero=0、FSucc n=n+1 饱和），所以**不生成**变体类型。
+export finTypeName : String
+finTypeName = "Base.Data.Fin.Fin"
+
+-- | canonical `FZero` 构造子的完整符号。
+export finZeroCtor : String
+finZeroCtor = "Base.Data.Fin.Fin.FZero"
+
+-- | canonical `FSucc` 构造子的完整符号。
+export finSuccCtor : String
+finSuccCtor = "Base.Data.Fin.Fin.FSucc"
+
+-- | `finToNat`（`Fin n -> Nat`）：Fin 已是 int，运行时就是恒等。
+export finToNatName : String
+finToNatName = "Base.Data.Fin.finToNat"
+
 -- | 类型位置的放行面：primitive 类型名 + 内建类型构造子。
 export isIntrinsicTypeName : String -> Bool
 isIntrinsicTypeName name = memName name preludeTypeNames
@@ -804,6 +821,7 @@ canonicalFamilies =
   [
     CanonicalFamily boolTypeName [boolTrueCtor, boolFalseCtor] FamReprBool,
     CanonicalFamily natTypeName [natZeroCtor, natSuccCtor] FamReprNat,
+    CanonicalFamily finTypeName [finZeroCtor, finSuccCtor] FamReprNat,
     CanonicalFamily listFamilyName [listNilCtor, listConsCtor] FamReprBoxed
   ]
 
