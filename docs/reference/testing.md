@@ -28,6 +28,7 @@ vuna dev suite --all --matrix pure-cross  # 只跑三端差分精选集
 vuna dev suite --all --filter layer:effect  # 按层次 tag 筛选
 vuna dev suite --all --area compiler-frontend  # 只跑前端影响面（PR 切片同口径）
 vuna dev suite --all --jobs 16            # 显式并行度（覆盖 auto）
+vuna dev suite --all --shard 0/4          # 按耗时均衡切 4 份、只跑第 0 份（CI 分片）
 vuna dev suite --all --timeout 240        # 每个 case 预算的上限（秒；更紧的 family 值仍生效）
 vuna dev suite --all --json               # 机器可读汇总（每个 suite 一行）
 ```
@@ -205,6 +206,12 @@ end:
   10s 超时（症状是「随机失败且耗时恒为 ~11s」）。`corpus/repl-server/smoke.sh` 因此把工作
   目录放在尽量短的路径上（`vrs.XXXXXX`，过长时退到 `/tmp`）。新写 socket 用例照此办理。
 - `--fail-fast`：worker 内部失败后不启动新 case。
+- `--shard i/N`：在 worker 分片之前先按耗时把选中的 case 均分成 N 桶（每份 suite 独立
+  分桶，`--all` 逐份调用），只跑第 i 桶。每桶内的 case 仍按 `--worker` 并行；union 覆盖
+  全部 case（分桶数量对不上时注入 `audit/shard` 失败 case）。CI 用它把一个 derivation
+  拆成多个并行 job（见 [testing-checks.md](testing-checks.md)）。
+- 单次 `build.sh` 的并行度由 `VUNA_BUILD_JOBS` 控制（测试环境默认 1）：worker 已经按
+  `--jobs` 并行，单个 case 再按 `NIX_BUILD_CORES` 展开会把核数乘进每一路，造成超订。
 - 失败行带 case id；断言失败给步骤名 / expected / actual 片段。父进程汇总也列出失败
   case id（`N checks, M failed case(s): <id>, ...`）；worker 没写出结果文件时汇总报
   `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
@@ -271,6 +278,7 @@ vuna dev suite --all --bless-diag     # 生成/更新 .diag.json 结构化诊断
 vuna dev suite --all --watch          # 改文件后自动重跑
 vuna dev suite --all --audit          # 孤儿 fixture 审计
 vuna dev suite --all --timings        # 最慢 10 个 case
+vuna dev suite --all --shard 0/4      # 只跑按耗时均衡切出的第 0 片（CI 并行）
 vuna dev suite --all --strict-skips   # fail-fast 产生的 skip 也算失败
 vuna dev suite --all --cache-dir DIR   # 覆盖测试对象库与构建桶根
 ```
@@ -358,12 +366,16 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 `--cache-dir`（默认 `.local/test-cache`）下的
 `build/<worker 作用域>-<编译器身份>-<base 哈希>/`：
 
-- 同 run 内：只有 `Main.ml` 变化 ⇒ `build.sh` 内容哈希 stamp 只重编它 + 链接；
-- **跨 run**：base 的 25 个单元 `.cmx` 直接复用，本地重跑不必付「每 worker 首次
-  整棵 base 冷编译」；
+- 同 run 内：staging 里只有本次生成的 `.ml`/`.mli`；桶里保留上回的 `.cmx`/`.o`/`.stamp`；
+- 增量判据是「本单元 `.ml`/`.mli` + 直接依赖的 `.cmx`」。程序自己的定义位置表在独立的
+  `Vuna_deflocs.ml`（初始化时写进 `Vuna_runtime` 的空引用），同一 helper 集合下
+  `Vuna_runtime` 与 base 各单元的 `.cmx` 因此能跨夹具复用；每个 case 只重编
+  `Vuna_deflocs` + 入口单元（入口依赖的实现变了会连带重编入口，按 `.cmx` 判）；
 - 桶名含编译器身份与 base 哈希，编译器/base 变了自动换桶（不会读到陈旧产物）；
 - 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
+- golden 与 runtime case 都把 `build.sh` 跑在桶目录里（staging 只提供生成物），
+  单次 `build.sh` 的并行度固定为 `VUNA_BUILD_JOBS`（测试环境默认 1）。
 
 实测（本机 16 核）：空 `--cache-dir` 下同一夹具 compile 2.9–5.5s，复用已有桶 7ms；
 `vuna check packages/base` 7.25s → 13ms。

@@ -102,15 +102,22 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 `fast`/`integration` 归属。wasm / native 门禁只跑 `fast integration`——e2e 的
 LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
-调度：LPT 只用于非 e2e tier（gate：`fast integration`）——父/worker 读
-`.local/test-suite/costs.tsv`（上次每 case 的 ms），按成本降序把重 case 放到当前负载最小
-的 worker；worker 确定性重算同一组 bins，再取自己的 bin。全量（空 tier）与 e2e tier 按
-发现顺序，避免冷隔离长 case 同时开跑。worker 协议是 `--worker i/N`。
+调度：LPT 只用于非 e2e tier（gate：`fast integration`）——父/worker 读耗时表（入库基线
+`test/suite/costs.baseline` + 本机 `.local/test-suite/costs.tsv`，后者按 case id 合并覆盖），
+按成本降序把重 case 放到当前负载最小的 worker；worker 确定性重算同一组 bins，再取自己的 bin。
+全量（空 tier）与 e2e tier 按发现顺序，避免冷隔离长 case 同时开跑。worker 协议是 `--worker i/N`。
+耗时表只影响调度、不影响判定；用例集合大改后手动重录一次（跑一轮 `--all`，把
+`.local/test-suite/costs.tsv` 覆盖到 `test/suite/costs.baseline`）。
+
+CI 分片是调度之上的一层：`--shard i/N` 先把**选中 case**按同一套耗时权重均分成 N 桶
+（每个 suite 独立分桶），只跑第 i 桶，桶内再按 `--worker` 并行；union 覆盖全部 case。
+分片不改变 tier / backend / area 语义，也不引入结果缓存——每片仍真正执行自己那部分 case。
+包内单测（`vuna test packages/*`）是独立 check，不随 shard 重复。
 
 **冷隔离长 case 不能只靠排序**：把 e2e 长 case 同时压到多个 worker 会让全量变慢，
-必须先有 tier 与 cold-heavy 并发上限；当前就是静态分片。e2e 采用**专用串行预热**（先
-`check packages/base` / `check packages/compiler` / `check .`，再跑 suite），长 case 的根因是冷编译而不是
-断言数量，所以拆 case 必须共享已预热 store。
+必须先有 tier 与 cold-heavy 并发上限；当前就是静态分片 + 分片前的耗时均衡。e2e 采用
+**专用串行预热**（先 `check packages/base` / `check packages/compiler` / `check .`，再跑
+suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 必须共享已预热 store。
 
 ## 4. 结果判定：没有 verdict 对象
 
@@ -127,15 +134,19 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 ## 6. CI
 
-- build 阶段一次构建 vuna/seed 并预热 store；test 阶段 suite 与 check 共享只读
-  store + 每 check 可写 overlay。
-- 全局 token 池替代每 check 内部 `--jobs auto`；重 check 串行/分批。
+- 每个 check 用私有对象库（`mktemp -d` 的 `VUNA_STORE`），父进程预热一次、worker/case 共享；
+  Nix store cache 只负责工具链与 `vuna` 二进制。
+- gate / e2e 各拆成 4 个 matrix shard（`--shard i/4`，同一个 `nix-suite` cache 前缀）：
+  每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。
+- 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
+- 全局 token 池替代每 check 内部 `--jobs auto`；单次 `build.sh` 固定 1 线程
+  （`VUNA_BUILD_JOBS`），并行度由 worker 数提供。
 - 去掉 suite 与 Nix checks 重叠的 `check .` / fmt / package / lint 重复执行。
 
 ## 7. 验收与测量
 
 - 同一 store 连续 `check packages/compiler`：第二次 `cache-path=summary`、`iface-write=0/N`、< 100 ms。
-- 单 dt golden case：< 2 s；单 suite 的 steps 层：< 60 s；全量：< 2 min。
+- 单 dt golden case：< 2 s；单 suite 的 steps 层：< 60 s；全量 suite（4 分片）：< 2 min。
 - 测量必须在静默树上重录，记录 HEAD、CPU、`VUNA_STORE` 是否为空、`--cache-dir`。
 
 ## 相关阅读

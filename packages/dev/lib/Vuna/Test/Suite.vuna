@@ -42,6 +42,8 @@ export record SuiteOpts(..) where
   suiteTimeout : Int
   -- | `Just (i, n)` 是父进程 spawn 出来的 worker 模式：默认只跑 index mod n == i 的 case；LPT 分桶模式下只跑自己那一桶。
   suiteWorker : Maybe (Int, Int)
+  -- | `Just (i, n)`：把选中的 case 按耗时均衡切成 `n` 份，只跑第 `i` 份（CI 分片；每份仍跑一次完整 case 集合的一部分）。
+  suiteShard : Maybe (Int, Int)
   -- | 结果落盘目录（`--results-dir`）。
   suiteResultsDir : Maybe String
   -- | `--quiet`：抑制逐条结果行。

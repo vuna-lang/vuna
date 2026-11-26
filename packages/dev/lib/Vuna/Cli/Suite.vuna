@@ -62,7 +62,7 @@ runSuites parsed (path :: rest) =
     more <- runSuites parsed rest
     pure (if rc /= 0 then rc else more)
 
--- | 内部：校验 `--jobs` / `--timeout` / `--worker`，再解析 suite 文件并运行。
+-- | 内部：校验 `--jobs` / `--timeout` / `--worker` / `--shard`，再解析 suite 文件并运行。
 suiteRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Eff r Int
 suiteRun parsed suitePath =
   case suiteJobsOf parsed of
@@ -74,15 +74,18 @@ suiteRun parsed suitePath =
           case suiteWorkerOf parsed of
             ErrC e => toolError (diagText e)
             OkC worker =>
-              do
-                loaded <- parseSuiteFile suitePath
-                case loaded of
-                  ErrC e => toolError (diagText e)
-                  OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker suitePath) suite
+              case suiteShardOf parsed of
+                ErrC e => toolError (diagText e)
+                OkC shard =>
+                  do
+                    loaded <- parseSuiteFile suitePath
+                    case loaded of
+                      ErrC e => toolError (diagText e)
+                      OkC suite => runSuite (suiteOptsOf parsed jobs timeout worker shard suitePath) suite
 
 -- | 内部：把解析结果摊平成 suite 运行选项。
-suiteOptsOf : Parsed -> Int -> Int -> Maybe (Int, Int) -> String -> SuiteOpts
-suiteOptsOf parsed jobs timeout worker suitePath =
+suiteOptsOf : Parsed -> Int -> Int -> Maybe (Int, Int) -> Maybe (Int, Int) -> String -> SuiteOpts
+suiteOptsOf parsed jobs timeout worker shard suitePath =
   SuiteOpts
     suitePath
     jobs
@@ -94,6 +97,7 @@ suiteOptsOf parsed jobs timeout worker suitePath =
     (flagValues parsed "filter")
     timeout
     worker
+    shard
     (flagValue parsed "results-dir")
     (flagSet parsed "quiet")
     (flagSet parsed "last-failed")
@@ -137,13 +141,24 @@ suiteWorkerOf : Parsed -> Check (Maybe (Int, Int))
 suiteWorkerOf parsed =
   case flagValue parsed "worker" of
     Nothing => OkC Nothing
-    Just text =>
-      case split "/" text of
-        [iText, nText] =>
-          case parseNonNegInt iText of
-            Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
-            Just i =>
-              case parsePositiveInt nText of
-                Nothing => err "--worker requires i/N with non-negative integers, got `${text}`"
-                Just n => if i < n then OkC (Just (i, n)) else err "--worker index must be < N"
-        _ => err "--worker requires i/N, got `${text}`"
+    Just text => parseShardText "--worker" text
+
+-- | 内部：`--shard i/N`（`i` 从 0 开始且必须小于 `N`）。
+suiteShardOf : Parsed -> Check (Maybe (Int, Int))
+suiteShardOf parsed =
+  case flagValue parsed "shard" of
+    Nothing => OkC Nothing
+    Just text => parseShardText "--shard" text
+
+-- | 内部：`i/N` 的共用解析（`--worker` 与 `--shard` 同格式）。
+parseShardText : String -> String -> Check (Maybe (Int, Int))
+parseShardText flagName text =
+  case split "/" text of
+    [iText, nText] =>
+      case parseNonNegInt iText of
+        Nothing => err "${flagName} requires i/N with non-negative integers, got `${text}`"
+        Just i =>
+          case parsePositiveInt nText of
+            Nothing => err "${flagName} requires i/N with non-negative integers, got `${text}`"
+            Just n => if i < n then OkC (Just (i, n)) else err "${flagName} index must be < N"
+    _ => err "${flagName} requires i/N, got `${text}`"

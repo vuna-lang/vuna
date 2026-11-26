@@ -127,13 +127,16 @@ maxInt a b = if a > b then a else b
 --   * 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）**且 JOBS ≤ 1**：一次 ocamlopt
 --     调用，避免几十次进程启动（单核下分层并行的进程/I/O 开销反而更慢）；
 --   * 其余情况（干净 + 多核，或已有 .cmx 的增量）：按**内容哈希**（.ml/.mli + 直接依赖
---     .stamp）逐单元编译，同层 `&` 并行 + 层间 `wait` 收尾。
+--     的 .cmx）逐单元编译，同层 `&` 并行 + 层间 `wait` 收尾。
 -- 单元表只写一份（`UNIT_TABLE`）：编译、stamp 与链接顺序都从它派生。
 export buildScript : List (String, List String) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
 # 由 vuna 生成：分离编译构建脚本（直接依赖表 + 内容哈希增量 + 分层并行）。用法: ./build.sh [OUT]
 # 单元表在本文件末尾的 `VUNA_UNIT_TABLE` 里：`@` 分隔并行层，其余每行 `单元 直接依赖...`
 # （拓扑序）。干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml；其余按内容哈希逐单元编译。
+# 增量的判据是「本单元 .ml/.mli + 直接依赖的 .cmx」：依赖实现变了就重编下游，依赖
+# 只是重新生成了同样的 .cmx 则跳过。程序自己的定义位置表在独立单元（`Vuna_deflocs`），
+# `Vuna_runtime` 与 base 单元跨程序保持同一份 .cmx。
 set -eu
 cd \"$(dirname \"$0\")\"
 OUT=\${1:-program}
@@ -165,7 +168,7 @@ stamp_want() {
   base=$1
   shift
   deps=\"\"
-  for d in \"$@\"; do deps=\"$deps $d.stamp\"; done
+  for d in \"$@\"; do deps=\"$deps $d.cmx\"; done
   hash_of \"$base.ml\" \"$base.mli\" $deps
 }
 compile_mod() {
