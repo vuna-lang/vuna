@@ -38,9 +38,16 @@ exit: 1
 out-contains: TC_TypeMismatch
 
 # 冷 store：依赖从未 check、依赖方先 check；随后改依赖源码仍必须重算。
-run: sh -c 'S="$TMPDIR/dsc"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
+run: sh -c 'S="$TMPDIR/dsc"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
+out-contains: dep-build=dep
 
-run: sh -c 'S="$TMPDIR/dsc"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/dsc"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check "$S/mid" 2>&1'
 exit: 1
+out-contains: TC_TypeMismatch
+
+# 依赖接口缺件（状态目录被清）⇒ 递归构建依赖后继续，而不是整包回退。
+run: sh -c 'S="$TMPDIR/dsc"; rm -rf "$S/state"; VUNA_LOG=debug VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check "$S/mid" 2>&1'
+exit: 1
+out-contains: dep-build=dep
 out-contains: TC_TypeMismatch

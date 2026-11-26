@@ -1613,7 +1613,7 @@ dtCheckSourceChecked ctx label source =
           _ <- obsMarkEff "vuna.resolve"
           dtCheckPartsWithProgram (contextPackageName ctx) (pure (resolveProjectWith (contextRelease ctx) project))
 
-export dtCheckPackageIncrementalParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff r (Check (List Diagnostic, CheckedPackage))
+export dtCheckPackageIncrementalParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List ModuleIface -> List ModuleIface -> Eff r (Check (List Diagnostic, CheckedPackage))
 dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces =
   do
     partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
@@ -1918,7 +1918,7 @@ dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
               _ <- obsMarkEff "vuna.resolve"
               pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered)
 
-export dtCheckLibraryPackageIncrementalParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff r (Check (List Diagnostic, CheckedPackage))
+export dtCheckLibraryPackageIncrementalParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff r (Check (List Diagnostic, CheckedPackage))
 dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces =
   do
     partsR <- dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces

@@ -86,15 +86,19 @@ mapMaybeEff f (x :: rest) =
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
 -- `wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。干净模块复用会跳过精化、
 -- 丢掉 warning，所以此时强制本包模块重算（依赖仍走接口摘要，不重算依赖包）。
-export checkPackage : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Package -> Eff r (Check (List Diagnostic))
-checkPackage release wantWarnings pkg =
+export checkPackage : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Package -> Eff r (Check (List Diagnostic))
+checkPackage = checkPackageAt 64
+
+-- 依赖递归构建的深度预算：包依赖图是 DAG，正常输入远小于 64；耗尽即停止递归并回退。
+checkPackageAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> Bool -> Package -> Eff r (Check (List Diagnostic))
+checkPackageAt fuel release wantWarnings pkg =
   let
     ctx = contextWithRelease release (packageContext pkg)
   in do
     exists <- fsFileExists (packageEntry pkg)
     if exists then
       do
-        exeR <- checkUncachedExe wantWarnings ctx (packageEntry pkg)
+        exeR <- checkUncachedExeAt fuel wantWarnings ctx (packageEntry pkg)
         case exeR of
           ErrC e => pure (ErrC e)
           OkC (ds, written) =>
@@ -122,7 +126,7 @@ checkPackage release wantWarnings pkg =
                       in pure (OkC ds)
                   else
                     do
-                      libR <- checkUncachedLib False ctx names
+                      libR <- checkUncachedLibAt fuel False ctx names
                       case libR of
                         ErrC e => pure (ErrC e)
                         OkC (ds2, _) => pure (OkC (append ds ds2))
@@ -131,7 +135,7 @@ checkPackage release wantWarnings pkg =
         Nothing => pure (pkgAt1 "${packageDir pkg}/vuna.toml" 1 (LibraryWithoutEntry (packageName pkg)) (packageName pkg))
         Just names =>
           do
-            libR <- checkUncachedLib wantWarnings ctx names
+            libR <- checkUncachedLibAt fuel wantWarnings ctx names
             case libR of
               ErrC e => pure (ErrC e)
               OkC (ds, _) => pure (OkC ds)
@@ -1062,12 +1066,15 @@ depIfacesOf ctx =
 -- | 依赖接口 + 同一次闭包扫描。检查路径把它同时交给写 iface 影子，避免再跑一遍
 -- `ifaceModsEff`（整闭包源扫描 + header 解析）。
 export depIfacesOfWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
-depIfacesOfWith ctx mods =
+depIfacesOfWith = depIfacesOfWithAt 64
+
+depIfacesOfWithAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
+depIfacesOfWithAt fuel ctx mods =
   case ctx.contextPackage of
     Nothing => pure Nothing
     Just _ =>
       do
-        pairs <- depIfacePairsEff ctx mods
+        pairs <- depIfacePairsEffAt fuel ctx mods
         case pairs of
           Nothing =>
             do
@@ -1123,8 +1130,43 @@ probePairs ctx (m :: rest) =
           pure ((m, x) :: xs)
 
 -- | 依赖包 p 的已写接口模块；导出面必须齐全，否则 `Nothing`（调用方回退全量）。
-depPairsOfPkg : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
-depPairsOfPkg ctx mods p =
+findDepPackage : String -> List Package -> Maybe Package
+findDepPackage _ [] = Nothing
+findDepPackage name (pkg :: rest) =
+  if packageName pkg == name then Just pkg else findDepPackage name rest
+
+-- | 依赖导出面缺件时递归 check 该依赖（写它自己的包状态），然后重探一次。
+buildDepEffAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> String -> Eff r Bool
+buildDepEffAt fuel ctx p =
+  if fuel <= 0 then
+    pure False
+  else
+    case findDepPackage p (depPackageList ctx) of
+      Nothing => pure False
+      Just pkg =>
+        do
+          let _ = log! "debug" "dep-build=${p}"
+          _ <- obsMarkEff "vuna.iface.dep-build"
+          r <- checkPackageAt (fuel - 1) False False pkg
+          pure (
+              case r of
+                OkC _ => True
+                ErrC _ => False
+            )
+
+depPairsOfPkgAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> List ClosureMod -> String -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+depPairsOfPkgAt fuel ctx mods p =
+  do
+    attempt <- probeRequired ctx mods p
+    case attempt of
+      Just pairs => pure (Just pairs)
+      Nothing =>
+        do
+          built <- buildDepEffAt fuel ctx p
+          if built then probeRequired ctx mods p else pure Nothing
+
+probeRequired : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> String -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+probeRequired ctx mods p =
   do
     pairs <- probePairs ctx (filter (pkgEq p) mods)
     let
@@ -1132,14 +1174,14 @@ depPairsOfPkg ctx mods p =
       required = map modNameOf (exportedDepModsOf ctx p mods)
     in pure (if allNamesIn required present then Just (orderClosurePairs pairs) else Nothing)
 
-goPkgs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> List String -> List (ClosureMod, ModuleIface) -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
-goPkgs _ _ [] acc = pure (Just acc)
-goPkgs ctx mods (p :: rest) acc =
+goPkgsAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> List ClosureMod -> List String -> List (ClosureMod, ModuleIface) -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+goPkgsAt _ _ _ [] acc = pure (Just acc)
+goPkgsAt fuel ctx mods (p :: rest) acc =
   do
-    pairs <- depPairsOfPkg ctx mods p
+    pairs <- depPairsOfPkgAt fuel ctx mods p
     case pairs of
       Nothing => pure Nothing
-      Just ps => goPkgs ctx mods rest (append acc ps)
+      Just ps => goPkgsAt fuel ctx mods rest (append acc ps)
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
 exportedDepModsOf : PackageContext -> String -> List ClosureMod -> List ClosureMod
@@ -1156,8 +1198,8 @@ rootExportsOf _ [] = Nothing
 rootExportsOf p (r :: rest) = if rootName r == p then r.rootExports else rootExportsOf p rest
 
 -- | 依赖模块接口按地址探测并排序；导出面不全 ⇒ Nothing。
-depIfacePairsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
-depIfacePairsEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) []) []
+depIfacePairsEffAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> List ClosureMod -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
+depIfacePairsEffAt fuel ctx mods = goPkgsAt fuel ctx mods (distinctPkgs (depModsOf ctx mods) []) []
 
 -- 把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
 -- 无包上下文/依赖接口不全时返回 Nothing，调用方退回全量。
@@ -1492,7 +1534,7 @@ ifaceLocNorm ctx = locationPathUnder (map rootDir (contextRoots ctx)) (contextDi
 
 -- 单模块接口写回：LSP 每次成功请求后只写「当前模块」的接口对象。语义与整包 ifaceOfPackage
 -- 一致（见 `Iface.ifaceOfModule`）；有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
-export toolWriteModuleIface : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff r (Check ModuleIface)
+export toolWriteModuleIface : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff r (Check ModuleIface)
 toolWriteModuleIface ctx tool clean checked name si =
   do
     let
@@ -1524,7 +1566,7 @@ writeModuleIfaceGuarded ctx mi =
 
 -- 冷启动（没有工具会话）：依赖哈希从磁盘接口汇总，干净模块按现有判定重算；
 -- 写回尽力而为（LSP-only 会话逐步变热），失败不影响诊断。
-export toolWriteModuleIfaceCold : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> CheckedPackage -> String -> SourceInfo -> Eff r (Check ModuleIface)
+export toolWriteModuleIfaceCold : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> CheckedPackage -> String -> SourceInfo -> Eff r (Check ModuleIface)
 toolWriteModuleIfaceCold ctx checked name si =
   do
     clean <- cleanIfacesOrEmpty ctx
@@ -1544,8 +1586,8 @@ export toolCompilerFingerprint : Member nFs FsOp r, Member nEnv EnvOp r => Eff r
 toolCompilerFingerprint = compilerFingerprint
 
 -- | 包级 check 入口：直接精化；`VUNA_ELAB_FULL=1` 强制全量。
-checkUncachedExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
-checkUncachedExe wantWarnings ctx entry =
+checkUncachedExeAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
+checkUncachedExeAt fuel wantWarnings ctx entry =
   do
     full <- elabFullRequested
     if full then
@@ -1555,18 +1597,18 @@ checkUncachedExe wantWarnings ctx entry =
         mods <- summaryClosureMods ctx
         audit <- ifaceAuditRequested
         if audit then
-          auditCheckExe wantWarnings ctx mods entry
+          auditCheckExeAt fuel wantWarnings ctx mods entry
         else
           do
-            summary <- summaryCheckExeParts wantWarnings ctx mods entry
+            summary <- summaryCheckExePartsAt fuel wantWarnings ctx mods entry
             checkAndShadowWith ctx (Just mods) (pure summary)
 
 -- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（只是不直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
-summaryCheckExeParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, CheckedPackage))
-summaryCheckExeParts wantWarnings ctx mods entry =
+summaryCheckExePartsAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, CheckedPackage))
+summaryCheckExePartsAt fuel wantWarnings ctx mods entry =
   do
-    depIfaces <- depIfacesOfWith ctx mods
+    depIfaces <- depIfacesOfWithAt fuel ctx mods
     case depIfaces of
       Nothing =>
         do
@@ -1605,10 +1647,10 @@ fullCheckExe ctx entry =
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：摘要路径 vs 全量路径的诊断逐字节对拍。一致才按摘要结果
 -- 落盘；不一致报 `iface-audit-mismatch` 并**不写缓存/接口**。
-auditCheckExe : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
-auditCheckExe wantWarnings ctx mods entry =
+auditCheckExeAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> List ClosureMod -> String -> Eff r (Check (List Diagnostic, List ModuleIface))
+auditCheckExeAt fuel wantWarnings ctx mods entry =
   do
-    summary <- summaryCheckExeParts wantWarnings ctx mods entry
+    summary <- summaryCheckExePartsAt fuel wantWarnings ctx mods entry
     full <- dtCheckWithProgramParts ctx entry
     let
       _ = log! "info" "iface-audit subject=check entry=${entry}"
@@ -2072,8 +2114,8 @@ checkAndShadowWith ctx pre checked =
             ErrC e => pure (ErrC e)
             OkC modules => pure (OkC (firstOf pr, modules))
 
-checkUncachedLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
-checkUncachedLib wantWarnings ctx names =
+checkUncachedLibAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
+checkUncachedLibAt fuel wantWarnings ctx names =
   do
     full <- elabFullRequested
     if full then
@@ -2083,16 +2125,16 @@ checkUncachedLib wantWarnings ctx names =
         mods <- summaryClosureMods ctx
         audit <- ifaceAuditRequested
         if audit then
-          auditCheckLib wantWarnings ctx mods names
+          auditCheckLibAt fuel wantWarnings ctx mods names
         else
           do
-            summary <- summaryCheckLibParts wantWarnings ctx mods names
+            summary <- summaryCheckLibPartsAt fuel wantWarnings ctx mods names
             checkAndShadowWith ctx (Just mods) (pure summary)
 
-summaryCheckLibParts : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, CheckedPackage))
-summaryCheckLibParts wantWarnings ctx mods names =
+summaryCheckLibPartsAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, CheckedPackage))
+summaryCheckLibPartsAt fuel wantWarnings ctx mods names =
   do
-    depIfaces <- depIfacesOfWith ctx mods
+    depIfaces <- depIfacesOfWithAt fuel ctx mods
     case depIfaces of
       Nothing =>
         do
@@ -2128,10 +2170,10 @@ fullCheckLib ctx names =
     mods <- shadowClosureMods ctx
     checkAndShadowWith ctx mods (dtCheckLibraryWithProgramParts ctx names)
 
-auditCheckLib : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
-auditCheckLib wantWarnings ctx mods names =
+auditCheckLibAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Bool -> PackageContext -> List ClosureMod -> List String -> Eff r (Check (List Diagnostic, List ModuleIface))
+auditCheckLibAt fuel wantWarnings ctx mods names =
   do
-    summary <- summaryCheckLibParts wantWarnings ctx mods names
+    summary <- summaryCheckLibPartsAt fuel wantWarnings ctx mods names
     full <- dtCheckLibraryWithProgramParts ctx names
     let
       subject = joinLines names
