@@ -619,6 +619,10 @@ withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
   if spanFile (importSpan imp) == "" then e else withFallbackSpan (importSpan imp) e
 
+-- | 入口装载的 fuel 上界：一次 import 图遍历的步数预算，只防环。
+loaderFuel : Int
+loaderFuel = 1048576
+
 loadAll : Member nFs FsOp r => Int -> List Root -> String -> List Module -> List String -> List Import -> Eff r (Check (List Module))
 loadAll fuel roots importerPkg modules stack imports =
   if fuel <= 0 then
@@ -708,10 +712,7 @@ loadModule fuel roots importerPkg modules stack imp =
                         exports = sf.sourceFileExports
                         reexports = sf.sourceFileReexports
                         opacity = sf.sourceFileOpacity
-                        imports1 = imports0
-                        providers = []
-                        modules1 = modules
-                        imports = namespaceImportsOf imports1 reexports
+                        imports = namespaceImportsOf imports0 reexports
                       in case validateModuleHeader name hdr of
                         ErrC e => pure (ErrC e)
                         OkC _ =>
@@ -724,7 +725,7 @@ loadModule fuel roots importerPkg modules stack imp =
                                   ErrC e => pure (ErrC e)
                                   OkC implicit =>
                                     do
-                                      modulesR <- loadAll (fuel - 1) roots (rootName root) modules1 (name :: stack) (append imports implicit)
+                                      modulesR <- loadAll (fuel - 1) roots (rootName root) modules (name :: stack) (append imports implicit)
                                       case modulesR of
                                         ErrC e => pure (ErrC e)
                                         OkC modules2 =>
@@ -740,7 +741,7 @@ loadModule fuel roots importerPkg modules stack imp =
                                                 OkC exports =>
                                                   let
                                                     visible = fixities
-                                                  in pure (OkC ((::) (Module name (rootName root) imports2 implicit declsSel exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface) modules2))
+                                                  in pure (OkC ((::) (Module name (rootName root) imports2 implicit declsSel exports visible (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports) surface) modules2))
         else
           pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
@@ -788,25 +789,22 @@ loadProjectWithPreloaded ctx entry preloaded =
             in case hdr of
               Just (ModDecl dname hasList items _ _ _ sp) => pure (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
               Nothing =>
-                let
-                  imports1 = imports
-                  preloaded1 = preloaded
-                in case validateImports "<entry>" imports1 of
+                case validateImports "<entry>" imports of
                   ErrC e => pure (ErrC e)
                   OkC _ =>
                     do
-                      implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
+                      implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
                       case implicitR of
                         ErrC e => pure (ErrC e)
                         OkC implicit =>
                           do
-                            modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports1 implicit)
+                            modulesR <- loadAll loaderFuel (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)
                             pure (
                                 case modulesR of
                                   ErrC e => ErrC e
                                   OkC modules =>
                                     let
-                                      imports2 = normalizeImports modules imports1
+                                      imports2 = normalizeImports modules imports
                                     in case withSelectors decls of
                                       ErrC e => ErrC e
                                       OkC declsSel => withLayerCheck (contextRoots ctx) (Project declsSel imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) entry) surface)
@@ -824,7 +822,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
     entryImports = map (\n => Import n False Nothing noNodeRef) names
   in do
     modulesR <-
-      loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
+      loadAll loaderFuel (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
     pure (
         case modulesR of
           ErrC e => ErrC e
@@ -857,25 +855,22 @@ loadProjectSourceWithPreloaded ctx label source preloaded =
         in case hdr of
           Just (ModDecl dname hasList items _ _ _ sp) => pure (ldErr1 (ModuleHeaderInEntrySource label) label)
           Nothing =>
-            let
-              imports1 = imports
-              preloaded1 = preloaded
-            in case validateImports "<entry>" imports1 of
+            case validateImports "<entry>" imports of
               ErrC e => pure (ErrC e)
               OkC _ =>
                 do
-                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
+                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
                   case implicitR of
                     ErrC e => pure (ErrC e)
                     OkC implicit =>
                       do
-                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports1 implicit)
+                        modulesR <- loadAll loaderFuel (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)
                         pure (
                             case modulesR of
                               ErrC e => ErrC e
                               OkC modules =>
                                 let
-                                  imports2 = normalizeImports modules imports1
+                                  imports2 = normalizeImports modules imports
                                 in case withSelectors decls of
                                   ErrC e => ErrC e
                                   OkC declsSel => withLayerCheck (contextRoots ctx) (Project declsSel imports2 implicit modules (contextPackageName ctx) fixities (entryScopeOf (contextPackageName ctx) label) surface)
@@ -911,10 +906,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
           Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
           Just (ModDecl name hasList items _ _ _ sp) =>
             let
-              imports1 = imports0
-              providers = []
-              preloaded1 = preloaded
-              imports = namespaceImportsOf imports1 reexports
+              imports = namespaceImportsOf imports0 reexports
             in case validateImports name imports of
               ErrC e => pure (ErrC e)
               OkC _ =>
@@ -924,7 +916,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                     ErrC e => pure (ErrC e)
                     OkC implicit =>
                       do
-                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports implicit)
+                        modulesR <- loadAll loaderFuel (contextRoots ctx) (contextPackageName ctx) preloaded [] (append imports implicit)
                         case modulesR of
                           ErrC e => pure (ErrC e)
                           OkC modules =>
@@ -938,7 +930,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                                   OkC exports =>
                                     let
                                       visible = fixities
-                                    in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit declsSel exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
+                                    in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit declsSel exports visible (reexportedImportNames imports2 (append items reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -964,42 +956,29 @@ fixitiesForSourceIn ctx modules0 label source =
 export fixitiesFromParsed : Member nFs FsOp r => PackageContext -> List Module -> String -> SourceFile -> Eff r (Check (List Module, List FixityDecl))
 fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls exports reexports opacity) =
   let
-    imports1 = imports0
-    modules1 = modules0
-    imports = namespaceImportsOf imports1 reexports
-  in case hdr of
-    Nothing =>
-      case validateImports label imports of
-        ErrC e => pure (ErrC e)
-        OkC _ =>
-          do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
-            case implicitR of
-              ErrC e => pure (ErrC e)
-              OkC implicit =>
-                do
-                  modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
-                  pure (
-                      case modulesR of
-                        ErrC e => ErrC e
-                        OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
-                    )
-    Just (ModDecl name hasList items _ _ _ sp) =>
-      case validateImports name imports of
-        ErrC e => pure (ErrC e)
-        OkC _ =>
-          do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
-            case implicitR of
-              ErrC e => pure (ErrC e)
-              OkC implicit =>
-                do
-                  modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
-                  pure (
-                      case modulesR of
-                        ErrC e => ErrC e
-                        OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
-                    )
+    imports = namespaceImportsOf imports0 reexports
+    -- 模块头存在时以模块名为准（IMPORT 校验与隐式 Prelude 都要它）；无头文件用源标签。
+    headerNames =
+      case hdr of
+        Nothing => (label, "")
+        Just (ModDecl name _ _ _ _ _ _) => (name, name)
+    diagLabel = firstOf headerNames
+    currentName = secondOf headerNames
+  in case validateImports diagLabel imports of
+    ErrC e => pure (ErrC e)
+    OkC _ =>
+      do
+        implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) currentName imports
+        case implicitR of
+          ErrC e => pure (ErrC e)
+          OkC implicit =>
+            do
+              modulesR <- loadAll loaderFuel (contextRoots ctx) (contextPackageName ctx) modules0 [] (append imports implicit)
+              pure (
+                  case modulesR of
+                    ErrC e => ErrC e
+                    OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
+                )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
 export fixitiesForSource : Member nFs FsOp r => PackageContext -> String -> String -> Eff r (Check (List FixityDecl))
