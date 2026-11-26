@@ -10,16 +10,16 @@ let rec v_isTypeFormingFuel = (fun (fuel : int) (v : Core_dTerm.t_Value) -> (if 
 let v_isTypeForming = (fun (v : Core_dTerm.t_Value) -> ((v_isTypeFormingFuel 128) v))
 
 # 46 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_uZeroOf = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (Core_dTerm.C_Rig_Rig0, (v_uZeroOf (n - 1))))))
+let[@tail_mod_cons] rec v_uZeroOf = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (Core_dTerm.C_Rig_Rig0, (v_uZeroOf (n - 1))))))
 
 # 52 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_uVarAtGo = (fun (n : int) (i : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((if (i = 0) then Core_dTerm.C_Rig_Rig1 else Core_dTerm.C_Rig_Rig0), ((v_uVarAtGo (n - 1)) (i - 1))))))
+let[@tail_mod_cons] rec v_uVarAtGo = (fun (n : int) (i : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((if (i = 0) then Core_dTerm.C_Rig_Rig1 else Core_dTerm.C_Rig_Rig0), ((v_uVarAtGo (n - 1)) (i - 1))))))
 
 # 49 "Vuna/Compiler/Elab/Usage.vuna"
 let v_uVarAt = (fun (depth : int) (i : int) -> (if (if (i < 0) then true else (i >= depth)) then (v_uZeroOf depth) else ((v_uVarAtGo depth) i)))
 
 # 56 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_uAdd = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_uAdd = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__6, dtb__7) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (B_dData_dList.C_List__x58__x58_ (((Core_dTerm.v_rigAdd dtb__6) dtb__8), ((v_uAdd dtb__7) dtb__9)))
   | B_dData_dList.C_List_Nil -> mc0
@@ -33,7 +33,7 @@ let rec v_uAdd = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : Core_
 let v_uScale = (fun (rig : Core_dTerm.t_Rig) (us : Core_dTerm.t_Rig B_dData_dList.t_List) -> ((B_dData_dList.v_map (fun (u : Core_dTerm.t_Rig) -> ((Core_dTerm.v_rigScale rig) u))) us))
 
 # 64 "Vuna/Compiler/Elab/Usage.vuna"
-let rec v_uJoin = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_uJoin = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : Core_dTerm.t_Rig B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (B_dData_dList.C_List__x58__x58_ (((Core_dTerm.v_rigJoin dtb__10) dtb__12), ((v_uJoin dtb__11) dtb__13)))
   | B_dData_dList.C_List_Nil -> mc0
@@ -54,7 +54,7 @@ let rec v_uDrop = (fun (n : int) (us : Core_dTerm.t_Rig B_dData_dList.t_List) ->
 let v_resolvedBinderSpan = (fun (binderSp : Base_dSource.t_Span) (fallback : Base_dSource.t_Span) -> (if (Base_dSource.v_isSpanEmpty binderSp) then fallback else binderSp))
 
 # 107 "Vuna/Compiler/Elab/Usage.vuna"
-let v_binderEditSpan = (fun (name : string) (binderSp : Base_dSource.t_Span) -> (let width = ((Base_dSource.v_spanEndOffset binderSp) - (Base_dSource.v_spanStartOffset binderSp)) in (if (if (Base_dSource.v_isSpanEmpty binderSp) then true else (width <> (bi_strLength name))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (binderSp)))))
+let v_binderEditSpan = (fun (name : string) (binderSp : Base_dSource.t_Span) -> (let width = ((Base_dSource.v_spanEndOffset binderSp) - (Base_dSource.v_spanStartOffset binderSp)) in (if (if (Base_dSource.v_isSpanEmpty binderSp) then true else (width <> (String.length name))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (binderSp)))))
 
 # 268 "Vuna/Compiler/Elab/Usage.vuna"
 let v_isRigZero = (fun (mc0 : Core_dTerm.t_Rig) -> (match mc0 with

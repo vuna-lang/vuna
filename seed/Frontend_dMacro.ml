@@ -27,7 +27,7 @@ and v_callsGoList = (fun (mc0 : Frontend_dCst.t_CstNode B_dData_dList.t_List) (m
 ))
 
 # 56 "Vuna/Compiler/Frontend/Macro.vuna"
-let rec v_insertCall = (fun (mc0 : t_MacroCall) (mc1 : t_MacroCall B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_insertCall = (fun (mc0 : t_MacroCall) (mc1 : t_MacroCall B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (if ((Base_dSource.v_spanStartOffset (v_macroCallSpan mc0)) <= (Base_dSource.v_spanStartOffset (v_macroCallSpan dtb__12))) then (B_dData_dList.C_List__x58__x58_ (mc0, (B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13)))) else (B_dData_dList.C_List__x58__x58_ (dtb__12, ((v_insertCall mc0) dtb__13))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"

@@ -96,7 +96,7 @@ let v_isParserSurface = (fun (mc0 : t_Reserved) -> (match mc0 with
 ))
 
 # 237 "Vuna/Compiler/Frontend/Reserved.vuna"
-let rec v_dropEmpty = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_dropEmpty = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__13, dtb__14) -> (if (dtb__13 = "") then (v_dropEmpty dtb__14) else (B_dData_dList.C_List__x58__x58_ (dtb__13, (v_dropEmpty dtb__14))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -116,7 +116,7 @@ let rec v_dropNChars = (fun (n : int) (xs : int B_dData_dList.t_List) -> (if (n 
 )))
 
 # 311 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_dropNamePrefix = (fun (p : string) (name : string) -> (if ((B_dData_dString.v_startsWith p) name) then (B_dData_dList.dtp_pack ((v_dropNChars (bi_strLength p)) (B_dData_dList.dtp_unpack name))) else name))
+let v_dropNamePrefix = (fun (p : string) (name : string) -> (if ((B_dData_dString.v_startsWith p) name) then (B_dData_dList.dtp_pack ((v_dropNChars (String.length p)) (B_dData_dList.dtp_unpack name))) else name))
 
 # 199 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_fieldSelParts = (fun (name : string) -> (let nd_uscrut1 = ((Base_dSource.v_splitOnChar 64) ((v_dropNamePrefix v_rsFieldSelPrefix) name)) in (match nd_uscrut1 with
@@ -275,13 +275,13 @@ let v_handleSigBinderName = "@vuna@handle@sig"
 let v_handleRetBinderName = "@vuna@handle@ret"
 
 # 360 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_recordProjBinderName = (fun (i : int) -> ("@vuna@record@proj" ^ (bi_strFromInt i)))
+let v_recordProjBinderName = (fun (i : int) -> ("@vuna@record@proj" ^ (string_of_int i)))
 
 # 364 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_recordArgBinderName = (fun (i : int) -> ("@vuna@record@arg" ^ (bi_strFromInt i)))
+let v_recordArgBinderName = (fun (i : int) -> ("@vuna@record@arg" ^ (string_of_int i)))
 
 # 368 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_recordHiddenFieldBinderName = (fun (i : int) -> ("@vuna@record@hf" ^ (bi_strFromInt i)))
+let v_recordHiddenFieldBinderName = (fun (i : int) -> ("@vuna@record@hf" ^ (string_of_int i)))
 
 # 380 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_synthNamePrefix = "#"
@@ -293,13 +293,13 @@ let v_isSynthName = (fun (name : string) -> ((B_dData_dString.v_startsWith v_syn
 let v_sectionBinderName = "#section"
 
 # 392 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_dictBinderName = (fun (k : int) -> ("#dict" ^ (bi_strFromInt k)))
+let v_dictBinderName = (fun (k : int) -> ("#dict" ^ (string_of_int k)))
 
 # 396 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_etaBinderName = (fun (i : int) -> ("#eta" ^ (bi_strFromInt i)))
+let v_etaBinderName = (fun (i : int) -> ("#eta" ^ (string_of_int i)))
 
 # 400 "Vuna/Compiler/Frontend/Reserved.vuna"
 let v_teleProbeBinderName = "#tele"
 
 # 404 "Vuna/Compiler/Frontend/Reserved.vuna"
-let v_ovProbeName = (fun (i : int) -> ("#ov" ^ (bi_strFromInt i)))
+let v_ovProbeName = (fun (i : int) -> ("#ov" ^ (string_of_int i)))

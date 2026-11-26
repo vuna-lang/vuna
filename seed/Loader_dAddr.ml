@@ -31,7 +31,7 @@ let v_exportItemDep = (fun (mc0 : Frontend_dAst.t_ExportItem) -> (match mc0 with
 ))
 
 # 77 "Vuna/Compiler/Loader/Addr.vuna"
-let rec v_dedupNames = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_dedupNames = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__9, dtb__10) -> (if ((B_dData_dList.v_memName dtb__9) dtb__10) then (v_dedupNames dtb__10) else (B_dData_dList.C_List__x58__x58_ (dtb__9, (v_dedupNames dtb__10))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"

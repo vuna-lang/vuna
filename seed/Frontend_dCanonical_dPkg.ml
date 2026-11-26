@@ -61,7 +61,7 @@ let v_decContentAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscrut
 )))
 
 # 97 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decPackageContent = (fun (raw : string) -> (let nd_uscrut1 = ((v_decContentAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
+let v_decPackageContent = (fun (raw : string) -> (let nd_uscrut1 = ((v_decContentAt ((2 * (String.length raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__9) -> (match dtb__9 with
   | { B_dData_dPair.f_Pair_first = dtb__10; B_dData_dPair.f_Pair_second = dtb__11 } -> (if (Base_dBytes.v_curAtEnd dtb__11) then (B_dData_dMaybe.C_Maybe_Just (dtb__10)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -112,7 +112,7 @@ let v_decIdentityAt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (let nd_uscru
 )))
 
 # 128 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
-let v_decPackageIdentity = (fun (raw : string) -> (let nd_uscrut1 = ((v_decIdentityAt ((2 * (bi_strLength raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
+let v_decPackageIdentity = (fun (raw : string) -> (let nd_uscrut1 = ((v_decIdentityAt ((2 * (String.length raw)) + 16)) (Base_dBytes.v_curOf raw)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> (match dtb__27 with
   | { B_dData_dPair.f_Pair_first = dtb__28; B_dData_dPair.f_Pair_second = dtb__29 } -> (if (Base_dBytes.v_curAtEnd dtb__29) then (B_dData_dMaybe.C_Maybe_Just (dtb__28)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"

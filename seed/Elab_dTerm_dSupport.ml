@@ -32,7 +32,7 @@ let rec v_recordTypeAppGo = (fun (mc0 : int) (mc1 : int) (mc2 : Core_dTerm.t_Ter
 let v_recordTypeApp = (fun (dd : Elab_dTypes.t_DtData) -> ((((v_recordTypeAppGo 0) (B_dData_dList.v_length (dd).Elab_dTypes.f_DtData_dtDataParams)) (Core_dTerm.C_Term_TGlobal ((dd).Elab_dTypes.f_DtData_dtDataName))) (dd).Elab_dTypes.f_DtData_dtDataParams))
 
 # 87 "Vuna/Compiler/Elab/Term/Support.vuna"
-let rec v_selectorPiTail = (fun (mc0 : Elab_dTypes.t_DtData) (mc1 : Elab_dTypes.t_DtFieldMeta) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
+let[@tail_mod_cons] rec v_selectorPiTail = (fun (mc0 : Elab_dTypes.t_DtData) (mc1 : Elab_dTypes.t_DtFieldMeta) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
   | Core_dTerm.C_Term_TPi (dtb__9, dtb__10, dtb__11, dtb__12, dtb__13) -> (Core_dTerm.C_Term_TPi (dtb__9, true, dtb__11, dtb__12, (((v_selectorPiTail mc0) mc1) dtb__13)))
   | _ -> (Core_dTerm.C_Term_TPi ("p", false, Core_dTerm.C_Rig_RigOmega, (v_recordTypeApp mc0), (((Core_dTerm.v_shift 0) 1) (mc1).Elab_dTypes.f_DtFieldMeta_dtFieldType)))
 ))
@@ -41,7 +41,7 @@ let rec v_selectorPiTail = (fun (mc0 : Elab_dTypes.t_DtData) (mc1 : Elab_dTypes.
 let v_selectorType = (fun (dd : Elab_dTypes.t_DtData) (fm : Elab_dTypes.t_DtFieldMeta) -> (((v_selectorPiTail dd) fm) (Elab_dTypes.v_dtDataKind dd)))
 
 # 109 "Vuna/Compiler/Elab/Term/Support.vuna"
-let rec v_selectorParamLams = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
+let[@tail_mod_cons] rec v_selectorParamLams = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (match dtb__14 with
   | { B_dData_dPair.f_Pair_first = dtb__16; B_dData_dPair.f_Pair_second = dtb__17 } -> (Core_dTerm.C_Term_TLam (dtb__16, dtb__17, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, ((v_selectorParamLams dtb__15) mc1)))
   | _ -> failwith "DT: impossible branch"

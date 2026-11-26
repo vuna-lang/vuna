@@ -1,5 +1,5 @@
 open Vuna_runtime
-type t_UseFlags = { f_UseFlags_useFlagsFloat : bool; f_UseFlags_useFlagsTrace : bool; f_UseFlags_useFlagsObs : bool }
+type t_UseFlags = { f_UseFlags_useFlagsFloat : bool; f_UseFlags_useFlagsTrace : bool; f_UseFlags_useFlagsObs : bool; f_UseFlags_useFlagsHost : bool; f_UseFlags_useFlagsSched : bool; f_UseFlags_useFlagsEff : bool }
 and t_TermUse = { f_TermUse_termUseDeps : string B_dData_dList.t_List; f_TermUse_termUseFlags : t_UseFlags; f_TermUse_termUseFloatLit : bool }
 
 # 47 "Vuna/Compiler/Lowering/Checks.vuna"
@@ -22,7 +22,7 @@ let v_flattenConApp = (fun (t : Core_dTerm.t_Term) -> (match (v_flattenAppSpine 
 ))
 
 # 54 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_defTable = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_defTable = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__9, dtb__10) -> (match (Elab_dTypes.v_dtDefBody dtb__9) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__11) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName dtb__9); B_dData_dPair.f_Pair_second = dtb__11 }, (v_defTable dtb__10)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_defTable dtb__10)
@@ -43,7 +43,7 @@ let rec v_findDtDef = (fun (mc0 : string) (mc1 : Elab_dTypes.t_DtDef B_dData_dLi
 let v_isAxiomDef = (fun (d : Elab_dTypes.t_DtDef) -> (B_dData_dBool.v_not (Elab_dTypes.v_dtDefHasBody d)))
 
 # 70 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_axiomNamesOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_axiomNamesOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (if (v_isAxiomDef dtb__14) then (B_dData_dList.C_List__x58__x58_ ((Elab_dTypes.v_dtDefName dtb__14), (v_axiomNamesOf dtb__15))) else (v_axiomNamesOf dtb__15))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -66,7 +66,7 @@ let v_partitionDefs = (fun (table : (string, Core_dTerm.t_Term) B_dData_dPair.t_
 let v_defLocDiag = (fun (d : Elab_dTypes.t_DtDef) (e : Base_dDiag.t_Diagnostic) -> (((Base_dDiag.v_withContext (Elab_dTypes.v_dtDefSpan d)) (Elab_dTypes.v_dtDefName d)) e))
 
 # 139 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_showMetaHint = (fun (m : int) -> (" ?" ^ (bi_strFromInt m)))
+let v_showMetaHint = (fun (m : int) -> (" ?" ^ (string_of_int m)))
 
 # 200 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_binderAt = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
@@ -78,7 +78,7 @@ let rec v_binderAt = (fun (mc0 : int) (mc1 : (string, Core_dTerm.t_Rig) B_dData_
 # 142 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_checkErasureNode = (fun (fuel : int) (typeNames : string B_dData_dList.t_List) (binders : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "erasure") else (match t with
   | Core_dTerm.C_Term_TVar (dtb__20, dtb__21, dtb__22) -> (let nd_uscrut7 = ((v_binderAt dtb__21) binders) in (match nd_uscrut7 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["unbound runtime variable "; dtb__20; " (index "; (bi_strFromInt dtb__21); ", binders "; (bi_strFromInt (B_dData_dList.v_length binders)); ")"]))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["unbound runtime variable "; dtb__20; " (index "; (string_of_int dtb__21); ", binders "; (string_of_int (B_dData_dList.v_length binders)); ")"]))
   | B_dData_dMaybe.C_Maybe_Just (dtb__23) -> (match dtb__23 with
   | { B_dData_dPair.f_Pair_first = dtb__24; B_dData_dPair.f_Pair_second = dtb__25 } -> (if (Core_dTerm.v_rigIsErased dtb__25) then ((Base_dDiagnostics_dCg.v_cgErr1 (Base_dDiagnostics_dCg.C_CgErr_TypeLevelBindingRuntime (dtb__20))) dtb__20) else (Base_dDiag.C_Check_OkC (0)))
   | _ -> failwith "DT: impossible branch"
@@ -126,7 +126,7 @@ and v_checkAltErasureFuel = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List)
   | B_dData_dList.C_List_Nil -> (if (mc0 <= 0) then (Base_dDiag.v_icFuel "erasure") else (Base_dDiag.C_Check_OkC (0)))
   | _ -> failwith "DT: impossible branch"
 ))
-# 457 "Vuna/Compiler/Lowering/Checks.vuna"
+# 463 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkErasureFuel = (fun (fuel : int) (typeNames : string B_dData_dList.t_List) (binders : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "erasure") else (match (Core_dTerm.v_natChainValue t) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__76) -> (Base_dDiag.C_Check_OkC (0))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_checkErasureNode fuel) typeNames) binders) t)
@@ -134,7 +134,7 @@ and v_checkErasureFuel = (fun (fuel : int) (typeNames : string B_dData_dList.t_L
 )))
 
 # 256 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_addName = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_addName = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__77, dtb__78) -> (if (dtb__77 = mc0) then (B_dData_dList.C_List__x58__x58_ (dtb__77, dtb__78)) else (B_dData_dList.C_List__x58__x58_ (dtb__77, ((v_addName mc0) dtb__78))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
@@ -185,22 +185,22 @@ and v_termDepsAltsFuel = (fun (mc0 : int) (mc1 : (string, bool) B_dContainer_dHa
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 273 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_noUseFlags = { f_UseFlags_useFlagsFloat = false; f_UseFlags_useFlagsTrace = false; f_UseFlags_useFlagsObs = false }
-
 # 276 "Vuna/Compiler/Lowering/Checks.vuna"
-let v_orUseFlags = (fun (a : t_UseFlags) (b : t_UseFlags) -> { f_UseFlags_useFlagsFloat = (if (a).f_UseFlags_useFlagsFloat then true else (b).f_UseFlags_useFlagsFloat); f_UseFlags_useFlagsTrace = (if (a).f_UseFlags_useFlagsTrace then true else (b).f_UseFlags_useFlagsTrace); f_UseFlags_useFlagsObs = (if (a).f_UseFlags_useFlagsObs then true else (b).f_UseFlags_useFlagsObs) })
+let v_noUseFlags = { f_UseFlags_useFlagsFloat = false; f_UseFlags_useFlagsTrace = false; f_UseFlags_useFlagsObs = false; f_UseFlags_useFlagsHost = false; f_UseFlags_useFlagsSched = false; f_UseFlags_useFlagsEff = false }
 
-# 294 "Vuna/Compiler/Lowering/Checks.vuna"
+# 279 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_orUseFlags = (fun (a : t_UseFlags) (b : t_UseFlags) -> { f_UseFlags_useFlagsFloat = (if (a).f_UseFlags_useFlagsFloat then true else (b).f_UseFlags_useFlagsFloat); f_UseFlags_useFlagsTrace = (if (a).f_UseFlags_useFlagsTrace then true else (b).f_UseFlags_useFlagsTrace); f_UseFlags_useFlagsObs = (if (a).f_UseFlags_useFlagsObs then true else (b).f_UseFlags_useFlagsObs); f_UseFlags_useFlagsHost = (if (a).f_UseFlags_useFlagsHost then true else (b).f_UseFlags_useFlagsHost); f_UseFlags_useFlagsSched = (if (a).f_UseFlags_useFlagsSched then true else (b).f_UseFlags_useFlagsSched); f_UseFlags_useFlagsEff = (if (a).f_UseFlags_useFlagsEff then true else (b).f_UseFlags_useFlagsEff) })
+
+# 300 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_useBudgetFor = (fun (size : int) -> (512 + (4 * size)))
 
-# 297 "Vuna/Compiler/Lowering/Checks.vuna"
+# 303 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_addRuntimeDep = (fun (names : (string, bool) B_dContainer_dHashMap.t_HashMap) (live : bool) (n : string) (u : t_TermUse) -> (if (if live then ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) n) names) else false) then { f_TermUse_termUseDeps = ((v_addName n) (u).f_TermUse_termUseDeps); f_TermUse_termUseFlags = (u).f_TermUse_termUseFlags; f_TermUse_termUseFloatLit = (u).f_TermUse_termUseFloatLit } else u))
 
-# 304 "Vuna/Compiler/Lowering/Checks.vuna"
+# 310 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_withFlags = (fun (f : t_UseFlags) (u : t_TermUse) -> { f_TermUse_termUseDeps = (u).f_TermUse_termUseDeps; f_TermUse_termUseFlags = ((v_orUseFlags (u).f_TermUse_termUseFlags) f); f_TermUse_termUseFloatLit = (u).f_TermUse_termUseFloatLit })
 
-# 307 "Vuna/Compiler/Lowering/Checks.vuna"
+# 313 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_termUseFuel = (fun (fuel : int) (names : (string, bool) B_dContainer_dHashMap.t_HashMap) (flagOf : (string) -> t_UseFlags) (live : bool) (acc : t_TermUse) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then acc else (match t with
   | Core_dTerm.C_Term_TGlobal (dtb__132) -> ((v_withFlags (flagOf dtb__132)) ((((v_addRuntimeDep names) live) dtb__132) acc))
   | Core_dTerm.C_Term_TFloat (dtb__133) -> { f_TermUse_termUseDeps = (acc).f_TermUse_termUseDeps; f_TermUse_termUseFlags = (acc).f_TermUse_termUseFlags; f_TermUse_termUseFloatLit = true }
@@ -222,7 +222,7 @@ let rec v_termUseFuel = (fun (fuel : int) (names : (string, bool) B_dContainer_d
   | Core_dTerm.C_Term_TIf (dtb__173, dtb__174, dtb__175) -> ((((((v_termUseFuel (fuel - 1)) names) flagOf) live) ((((((v_termUseFuel (fuel - 1)) names) flagOf) live) ((((((v_termUseFuel (fuel - 1)) names) flagOf) live) acc) dtb__173)) dtb__174)) dtb__175)
   | _ -> failwith "DT: impossible branch"
 )))
-# 332 "Vuna/Compiler/Lowering/Checks.vuna"
+# 338 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_termUseArgsFuel = (fun (mc0 : int) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string) -> t_UseFlags) (mc3 : bool) (mc4 : t_TermUse) (mc5 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__176, dtb__177) -> (match dtb__176 with
   | { B_dData_dPair.f_Pair_first = dtb__178; B_dData_dPair.f_Pair_second = dtb__179 } -> (if (mc0 <= 0) then mc4 else ((((((v_termUseArgsFuel (mc0 - 1)) mc1) mc2) mc3) ((((((v_termUseFuel (mc0 - 1)) mc1) mc2) (if mc3 then (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased dtb__179)) else false)) mc4) dtb__178)) dtb__177))
@@ -231,24 +231,24 @@ and v_termUseArgsFuel = (fun (mc0 : int) (mc1 : (string, bool) B_dContainer_dHas
   | B_dData_dList.C_List_Nil -> mc4
   | _ -> failwith "DT: impossible branch"
 ))
-# 346 "Vuna/Compiler/Lowering/Checks.vuna"
+# 352 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_termUseAltsFuel = (fun (mc0 : int) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string) -> t_UseFlags) (mc3 : bool) (mc4 : t_TermUse) (mc5 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__180, dtb__181) -> (if (mc0 <= 0) then mc4 else ((((((v_termUseAltsFuel (mc0 - 1)) mc1) mc2) mc3) ((((((v_termUseFuel (mc0 - 1)) mc1) mc2) mc3) mc4) (Core_dTerm.v_caseAltBody dtb__180))) dtb__181))
   | B_dData_dList.C_List_Nil -> mc4
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 289 "Vuna/Compiler/Lowering/Checks.vuna"
+# 295 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termUseInto = (fun (runtimeNames : (string, bool) B_dContainer_dHashMap.t_HashMap) (flagOf : (string) -> t_UseFlags) (t : Core_dTerm.t_Term) -> ((((((v_termUseFuel (v_useBudgetFor (Core_dTerm.v_termSize t))) runtimeNames) flagOf) true) { f_TermUse_termUseDeps = B_dData_dList.C_List_Nil; f_TermUse_termUseFlags = v_noUseFlags; f_TermUse_termUseFloatLit = false }) t))
 
-# 360 "Vuna/Compiler/Lowering/Checks.vuna"
-let rec v_runtimeNamesOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
+# 366 "Vuna/Compiler/Lowering/Checks.vuna"
+let[@tail_mod_cons] rec v_runtimeNamesOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__182, dtb__183) -> (B_dData_dList.C_List__x58__x58_ ((Elab_dTypes.v_dtDefName dtb__182), (v_runtimeNamesOf dtb__183)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 369 "Vuna/Compiler/Lowering/Checks.vuna"
+# 375 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_checkTermScopes = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term) -> (match mc1 with
   | Core_dTerm.C_Term_TCase (dtb__184, dtb__185) -> ((Base_dCommon.v_bind ((v_checkTermScopes mc0) dtb__184)) (fun (_u : int) -> ((v_checkAltScopes mc0) dtb__185)))
   | Core_dTerm.C_Term_TRecUpd (dtb__186, dtb__187, dtb__188, dtb__189, dtb__190) -> ((Base_dCommon.v_bind ((v_checkTermScopes mc0) dtb__186)) (fun (_u : int) -> ((v_checkTermScopes (mc0 + (B_dData_dList.v_length dtb__188))) dtb__190)))
@@ -267,22 +267,22 @@ let rec v_checkTermScopes = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term) -> (match
   | Core_dTerm.C_Term_TStr (dtb__222) -> (Base_dDiag.C_Check_OkC (0))
   | Core_dTerm.C_Term_TInt (dtb__223) -> (Base_dDiag.C_Check_OkC (0))
   | Core_dTerm.C_Term_TGlobal (dtb__224) -> (Base_dDiag.C_Check_OkC (0))
-  | Core_dTerm.C_Term_TVar (dtb__225, dtb__226, dtb__227) -> (if (dtb__226 >= 0) then (if (dtb__226 < mc0) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["out-of-scope de Bruijn index "; (bi_strFromInt dtb__226); " (depth "; (bi_strFromInt mc0); ")"]))) else (Base_dDiag.v_icInternal ("negative de Bruijn index " ^ (bi_strFromInt dtb__226))))
+  | Core_dTerm.C_Term_TVar (dtb__225, dtb__226, dtb__227) -> (if (dtb__226 >= 0) then (if (dtb__226 < mc0) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["out-of-scope de Bruijn index "; (string_of_int dtb__226); " (depth "; (string_of_int mc0); ")"]))) else (Base_dDiag.v_icInternal ("negative de Bruijn index " ^ (string_of_int dtb__226))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 407 "Vuna/Compiler/Lowering/Checks.vuna"
+# 413 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkTermScopesMaybe = (fun (mc0 : int) (mc1 : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__228) -> ((v_checkTermScopes mc0) dtb__228)
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
-# 411 "Vuna/Compiler/Lowering/Checks.vuna"
+# 417 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkTermScopesSlot = (fun (mc0 : int) (mc1 : (Core_dTerm.t_LamMark, (Core_dTerm.t_Term B_dData_dMaybe.t_Maybe, Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__229) -> ((Base_dCommon.v_bind ((v_checkTermScopesMaybe mc0) (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__229)))) (fun (_u : int) -> ((v_checkTermScopesMaybe (mc0 + 1)) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__229)))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
-# 418 "Vuna/Compiler/Lowering/Checks.vuna"
+# 424 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkTermScopesArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__230, dtb__231) -> (match dtb__230 with
   | { B_dData_dPair.f_Pair_first = dtb__232; B_dData_dPair.f_Pair_second = dtb__233 } -> ((Base_dCommon.v_bind ((v_checkTermScopes mc0) dtb__232)) (fun (_u : int) -> ((v_checkTermScopesArgs mc0) dtb__231)))
@@ -291,14 +291,14 @@ and v_checkTermScopesArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTe
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
-# 423 "Vuna/Compiler/Lowering/Checks.vuna"
+# 429 "Vuna/Compiler/Lowering/Checks.vuna"
 and v_checkAltScopes = (fun (mc0 : int) (mc1 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__234, dtb__235) -> ((Base_dCommon.v_bind ((v_checkTermScopes (mc0 + (B_dData_dList.v_length (Core_dTerm.v_caseAltBinders dtb__234)))) (Core_dTerm.v_caseAltBody dtb__234))) (fun (_u : int) -> ((v_checkAltScopes mc0) dtb__235)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 430 "Vuna/Compiler/Lowering/Checks.vuna"
+# 436 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_checkAllDefScopes = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__236, dtb__237) -> (match (Elab_dTypes.v_dtDefBody dtb__236) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_checkAllDefScopes dtb__237)
@@ -313,7 +313,7 @@ let rec v_checkAllDefScopes = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_Li
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 442 "Vuna/Compiler/Lowering/Checks.vuna"
+# 448 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termDepsInto = (fun (a1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (a2 : string B_dData_dList.t_List) (a3 : Core_dTerm.t_Term) -> ((((v_termDepsIntoFuel (v_useBudgetFor (Core_dTerm.v_termSize a3))) a1) a2) a3))
 
 # 105 "Vuna/Compiler/Lowering/Checks.vuna"
@@ -334,19 +334,19 @@ let rec v_checkNoAxiomRuntimeGo = (fun (mc0 : (string, bool) B_dContainer_dHashM
 # 102 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkNoAxiomRuntime = (fun (axiomNames : string B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((v_checkNoAxiomRuntimeGo (B_dContainer_dHashMap.v_ofNames axiomNames)) defs))
 
-# 445 "Vuna/Compiler/Lowering/Checks.vuna"
+# 451 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termDepsArgs = (fun (a1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (a2 : string B_dData_dList.t_List) (a3 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((v_termDepsArgsFuel 100000) a1) a2) a3))
 
-# 448 "Vuna/Compiler/Lowering/Checks.vuna"
+# 454 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termDepsAlts = (fun (a1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (a2 : string B_dData_dList.t_List) (a3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> ((((v_termDepsAltsFuel 100000) a1) a2) a3))
 
-# 474 "Vuna/Compiler/Lowering/Checks.vuna"
+# 480 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_erasureFuelMax = 1000000
 
-# 468 "Vuna/Compiler/Lowering/Checks.vuna"
+# 474 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_erasureFuelFor = (fun (size : int) -> (let scaled = (512 + (4 * size)) in (if (scaled > v_erasureFuelMax) then v_erasureFuelMax else scaled)))
 
-# 451 "Vuna/Compiler/Lowering/Checks.vuna"
+# 457 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkErasure = (fun (typeNames : string B_dData_dList.t_List) (binders : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> ((((v_checkErasureFuel (v_erasureFuelFor (Core_dTerm.v_termSize t))) typeNames) binders) t))
 
 # 125 "Vuna/Compiler/Lowering/Checks.vuna"
@@ -371,7 +371,7 @@ let rec v_checkAllErasure = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Elab
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 477 "Vuna/Compiler/Lowering/Checks.vuna"
+# 483 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__252, dtb__253) -> (match dtb__252 with
   | { B_dData_dPair.f_Pair_first = dtb__254; B_dData_dPair.f_Pair_second = dtb__255 } -> (let total = ((Core_dTerm.v_termSize dtb__254) + (v_erasureFuelForArgs dtb__253)) in (if (total > v_erasureFuelMax) then v_erasureFuelMax else total))
@@ -381,51 +381,69 @@ let rec v_erasureFuelForArgs = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 484 "Vuna/Compiler/Lowering/Checks.vuna"
+# 490 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkConArgsErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((((v_checkConArgsErasureFuel (v_erasureFuelFor (v_erasureFuelForArgs a3))) a1) a2) a3))
 
-# 491 "Vuna/Compiler/Lowering/Checks.vuna"
+# 497 "Vuna/Compiler/Lowering/Checks.vuna"
 let rec v_erasureFuelForAlts = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__256, dtb__257) -> (let total = ((Core_dTerm.v_termSize (Core_dTerm.v_caseAltBody dtb__256)) + (v_erasureFuelForAlts dtb__257)) in (if (total > v_erasureFuelMax) then v_erasureFuelMax else total))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 488 "Vuna/Compiler/Lowering/Checks.vuna"
+# 494 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_checkAltErasure = (fun (a1 : string B_dData_dList.t_List) (a2 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (a3 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> ((((v_checkAltErasureFuel (v_erasureFuelFor (v_erasureFuelForAlts a3))) a1) a2) a3))
 
 # 268 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_useFlagsFloat = (fun (p : t_UseFlags) -> (match p with
-  | { f_UseFlags_useFlagsFloat = dtb__258; f_UseFlags_useFlagsTrace = dtb__259; f_UseFlags_useFlagsObs = dtb__260 } -> dtb__258
+  | { f_UseFlags_useFlagsFloat = dtb__258; f_UseFlags_useFlagsTrace = dtb__259; f_UseFlags_useFlagsObs = dtb__260; f_UseFlags_useFlagsHost = dtb__261; f_UseFlags_useFlagsSched = dtb__262; f_UseFlags_useFlagsEff = dtb__263 } -> dtb__258
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 269 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_useFlagsTrace = (fun (p : t_UseFlags) -> (match p with
-  | { f_UseFlags_useFlagsFloat = dtb__261; f_UseFlags_useFlagsTrace = dtb__262; f_UseFlags_useFlagsObs = dtb__263 } -> dtb__262
+  | { f_UseFlags_useFlagsFloat = dtb__264; f_UseFlags_useFlagsTrace = dtb__265; f_UseFlags_useFlagsObs = dtb__266; f_UseFlags_useFlagsHost = dtb__267; f_UseFlags_useFlagsSched = dtb__268; f_UseFlags_useFlagsEff = dtb__269 } -> dtb__265
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 270 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_useFlagsObs = (fun (p : t_UseFlags) -> (match p with
-  | { f_UseFlags_useFlagsFloat = dtb__264; f_UseFlags_useFlagsTrace = dtb__265; f_UseFlags_useFlagsObs = dtb__266 } -> dtb__266
+  | { f_UseFlags_useFlagsFloat = dtb__270; f_UseFlags_useFlagsTrace = dtb__271; f_UseFlags_useFlagsObs = dtb__272; f_UseFlags_useFlagsHost = dtb__273; f_UseFlags_useFlagsSched = dtb__274; f_UseFlags_useFlagsEff = dtb__275 } -> dtb__272
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 284 "Vuna/Compiler/Lowering/Checks.vuna"
+# 271 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsHost = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__276; f_UseFlags_useFlagsTrace = dtb__277; f_UseFlags_useFlagsObs = dtb__278; f_UseFlags_useFlagsHost = dtb__279; f_UseFlags_useFlagsSched = dtb__280; f_UseFlags_useFlagsEff = dtb__281 } -> dtb__279
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 272 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsSched = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__282; f_UseFlags_useFlagsTrace = dtb__283; f_UseFlags_useFlagsObs = dtb__284; f_UseFlags_useFlagsHost = dtb__285; f_UseFlags_useFlagsSched = dtb__286; f_UseFlags_useFlagsEff = dtb__287 } -> dtb__286
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 273 "Vuna/Compiler/Lowering/Checks.vuna"
+let v_useFlagsEff = (fun (p : t_UseFlags) -> (match p with
+  | { f_UseFlags_useFlagsFloat = dtb__288; f_UseFlags_useFlagsTrace = dtb__289; f_UseFlags_useFlagsObs = dtb__290; f_UseFlags_useFlagsHost = dtb__291; f_UseFlags_useFlagsSched = dtb__292; f_UseFlags_useFlagsEff = dtb__293 } -> dtb__293
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 290 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termUseDeps = (fun (p : t_TermUse) -> (match p with
-  | { f_TermUse_termUseDeps = dtb__267; f_TermUse_termUseFlags = dtb__268; f_TermUse_termUseFloatLit = dtb__269 } -> dtb__267
+  | { f_TermUse_termUseDeps = dtb__294; f_TermUse_termUseFlags = dtb__295; f_TermUse_termUseFloatLit = dtb__296 } -> dtb__294
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 285 "Vuna/Compiler/Lowering/Checks.vuna"
+# 291 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termUseFlags = (fun (p : t_TermUse) -> (match p with
-  | { f_TermUse_termUseDeps = dtb__270; f_TermUse_termUseFlags = dtb__271; f_TermUse_termUseFloatLit = dtb__272 } -> dtb__271
+  | { f_TermUse_termUseDeps = dtb__297; f_TermUse_termUseFlags = dtb__298; f_TermUse_termUseFloatLit = dtb__299 } -> dtb__298
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 286 "Vuna/Compiler/Lowering/Checks.vuna"
+# 292 "Vuna/Compiler/Lowering/Checks.vuna"
 let v_termUseFloatLit = (fun (p : t_TermUse) -> (match p with
-  | { f_TermUse_termUseDeps = dtb__273; f_TermUse_termUseFlags = dtb__274; f_TermUse_termUseFloatLit = dtb__275 } -> dtb__275
+  | { f_TermUse_termUseDeps = dtb__300; f_TermUse_termUseFlags = dtb__301; f_TermUse_termUseFloatLit = dtb__302 } -> dtb__302
   | _ -> failwith "DT: impossible branch"
 ))

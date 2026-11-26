@@ -19,6 +19,3 @@ let v_debugShow = (fun _ud x0 -> (match _ud with
   | C_DebugShow_DebugShow (dtb__1) -> (dtb__1 x0)
   | _ -> failwith "DT: impossible branch"
 ))
-
-# 31 "Base/Trait/Show.vuna"
-let v_dbgShow = (fun _uctx0 x -> (let _u = (if ((dtp_log_on 3) "Base.Trait.Show") then (((dtp_log_emit 3) "Base.Trait.Show") ((v_debugShow _uctx0) x)) else 0) in x))

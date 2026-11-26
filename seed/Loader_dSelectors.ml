@@ -12,7 +12,7 @@ let rec v_findSelectorRecord = (fun (mc0 : string) (mc1 : t_SelectorRecord B_dDa
 ))
 
 # 58 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_selectorRecords = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_selectorRecords = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (match dtb__2 with
   | Frontend_dAst.C_Decl_DRecord (dtb__4, dtb__5, dtb__6, dtb__7, dtb__8, dtb__9, dtb__10, dtb__11) -> (B_dData_dList.C_List__x58__x58_ ({ f_SelectorRecord_srName = dtb__4; f_SelectorRecord_srParams = dtb__5; f_SelectorRecord_srFields = dtb__6; f_SelectorRecord_srClaim = ((B_dData_dList.v_memName v_selectorDerivingName) dtb__7); f_SelectorRecord_srLinear = dtb__10; f_SelectorRecord_srRef = dtb__11 }, (v_selectorRecords dtb__3)))
   | _ -> (v_selectorRecords dtb__3)
@@ -32,14 +32,14 @@ let rec v_checkDataSelectors = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_
 ))
 
 # 96 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_traitMethodNames = (fun (mc0 : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_traitMethodNames = (fun (mc0 : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> (B_dData_dList.C_List__x58__x58_ ((dtb__23).Frontend_dAst.f_TraitMethod_traitMethodName, (v_traitMethodNames dtb__24)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 100 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_ctorNames = (fun (mc0 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_ctorNames = (fun (mc0 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (B_dData_dList.C_List__x58__x58_ ((dtb__25).Frontend_dAst.f_Ctor_ctorName, (v_ctorNames dtb__26)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -66,7 +66,7 @@ let rec v_topLevelNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List)
 ))
 
 # 124 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_fieldNamesOf = (fun (mc0 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_fieldNamesOf = (fun (mc0 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__70, dtb__71) -> (B_dData_dList.C_List__x58__x58_ ((dtb__70).Frontend_dAst.f_Field_fieldName, (v_fieldNamesOf dtb__71)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -103,7 +103,7 @@ let rec v_fieldClaimCount = (fun (mc0 : t_SelectorRecord B_dData_dList.t_List) (
 ))
 
 # 131 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_ownersOf = (fun (mc0 : t_SelectorRecord B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
+let[@tail_mod_cons] rec v_ownersOf = (fun (mc0 : t_SelectorRecord B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__77, dtb__78) -> (if ((B_dData_dList.v_memName mc1) (v_recordFieldNames dtb__77)) then (B_dData_dList.C_List__x58__x58_ ((dtb__77).f_SelectorRecord_srName, ((v_ownersOf dtb__78) mc1))) else ((v_ownersOf dtb__78) mc1))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -139,10 +139,10 @@ let v_selectorSigType = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) 
 let v_selectorSigDecl = (fun (r : t_SelectorRecord) (f : Frontend_dAst.t_Field) -> (Frontend_dAst.C_Decl_DSig ((f).Frontend_dAst.f_Field_fieldName, B_dData_dList.C_List_Nil, ((v_selectorSigType r) f), (f).Frontend_dAst.f_Field_fieldRef)))
 
 # 230 "Vuna/Compiler/Loader/Selectors.vuna"
-let v_selectorArgName = (fun (i : int) -> ("s" ^ (bi_strFromInt i)))
+let v_selectorArgName = (fun (i : int) -> ("s" ^ (string_of_int i)))
 
 # 226 "Vuna/Compiler/Loader/Selectors.vuna"
-let rec v_selectorArgPatsRev = (fun (n : int) (ref : Frontend_dAst.t_NodeRef) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ((v_selectorArgName (n - 1)), ref)), ((v_selectorArgPatsRev (n - 1)) ref)))))
+let[@tail_mod_cons] rec v_selectorArgPatsRev = (fun (n : int) (ref : Frontend_dAst.t_NodeRef) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ((v_selectorArgName (n - 1)), ref)), ((v_selectorArgPatsRev (n - 1)) ref)))))
 
 # 223 "Vuna/Compiler/Loader/Selectors.vuna"
 let v_selectorArgPats = (fun (n : int) (ref : Frontend_dAst.t_NodeRef) -> (B_dData_dList.v_reverse ((v_selectorArgPatsRev n) ref)))

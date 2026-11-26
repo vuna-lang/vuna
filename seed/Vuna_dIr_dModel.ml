@@ -9,7 +9,7 @@ and t_IrDef = C_IrDef_IrDef of (string) * (int) * (string B_dData_dList.t_List) 
 and t_IrGroup = { f_IrGroup_irGroupIsRec : bool; f_IrGroup_irGroupDefs : t_IrDef B_dData_dList.t_List }
 and t_IrEntry = { f_IrEntry_irEntryShow : t_Ir; f_IrEntry_irEntryMain : string; f_IrEntry_irEntryIsAction : bool; f_IrEntry_irEntryRunMain : string B_dData_dMaybe.t_Maybe; f_IrEntry_irEntryHandlers : string B_dData_dList.t_List; f_IrEntry_irEntryRowTags : string B_dData_dList.t_List }
 and t_IrListFam = { f_IrListFam_irListFamily : string; f_IrListFam_irListNil : string; f_IrListFam_irListCons : string }
-and t_IrShared = { f_IrShared_irSharedRecordFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedListFam : t_IrListFam B_dData_dMaybe.t_Maybe; f_IrShared_irSharedUsesFloat : bool; f_IrShared_irSharedUsesTrace : bool; f_IrShared_irSharedUsesObs : bool; f_IrShared_irSharedDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedUnboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedCtorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List }
+and t_IrShared = { f_IrShared_irSharedRecordFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedListFam : t_IrListFam B_dData_dMaybe.t_Maybe; f_IrShared_irSharedUsesFloat : bool; f_IrShared_irSharedUsesTrace : bool; f_IrShared_irSharedUsesObs : bool; f_IrShared_irSharedDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedUnboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedCtorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List; f_IrShared_irSharedUsesHost : bool; f_IrShared_irSharedUsesSched : bool; f_IrShared_irSharedUsesEff : bool }
 and t_IrUnit = { f_IrUnit_irUnitTyDecls : t_IrTyDecl B_dData_dList.t_List; f_IrUnit_irUnitGroups : t_IrGroup B_dData_dList.t_List; f_IrUnit_irUnitHasListFamily : bool; f_IrUnit_irUnitTypeRefs : string B_dData_dList.t_List; f_IrUnit_irUnitEntry : t_IrEntry B_dData_dMaybe.t_Maybe }
 and t_IrProgram = { f_IrProgram_irProgShared : t_IrShared; f_IrProgram_irProgUnit : t_IrUnit }
 
@@ -212,81 +212,81 @@ let v_irDefSpan = (fun (mc0 : t_IrDef) -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 423 "Vuna/Ir/Model.vuna"
+# 433 "Vuna/Ir/Model.vuna"
 let rec v_irSharedUnboxedOf = (fun (mc0 : string) (mc1 : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__174, dtb__175) -> (if ((B_dData_dPair.v_firstOf dtb__174) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__174))) else ((v_irSharedUnboxedOf mc0) dtb__175))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 428 "Vuna/Ir/Model.vuna"
+# 438 "Vuna/Ir/Model.vuna"
 let rec v_irSharedCtorShapeOf = (fun (mc0 : string) (mc1 : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__176, dtb__177) -> (if ((B_dData_dPair.v_firstOf dtb__176) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf dtb__176))) else ((v_irSharedCtorShapeOf mc0) dtb__177))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 433 "Vuna/Ir/Model.vuna"
+# 443 "Vuna/Ir/Model.vuna"
 let rec v_irSharedRecordFieldsOf = (fun (mc0 : string) (mc1 : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__178, dtb__179) -> (if ((B_dData_dPair.v_firstOf dtb__178) = mc0) then (B_dData_dPair.v_secondOf dtb__178) else ((v_irSharedRecordFieldsOf mc0) dtb__179))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 460 "Vuna/Ir/Model.vuna"
-let v_irInlineArity = (fun (mc0 : string) -> (if (mc0 = "+") then 2 else (if (mc0 = "-") then 2 else (if (mc0 = "*") then 2 else (if (mc0 = "/") then 2 else (if (mc0 = "&&") then 2 else (if (mc0 = "||") then 2 else (if (mc0 = "bitAnd") then 2 else (if (mc0 = "bitOr") then 2 else (if (mc0 = "bitXor") then 2 else (if (mc0 = "bitNot") then 1 else (if (mc0 = "bitShl") then 2 else (if (mc0 = "bitShr") then 2 else (if (mc0 = "++") then 2 else (if (mc0 = "bi_eq_int") then 2 else (if (mc0 = "bi_neq_int") then 2 else (if (mc0 = "effectId") then 1 else (if (mc0 = "bi_eq_str") then 2 else (if (mc0 = "bi_neq_str") then 2 else (if (mc0 = "bi_lt_int") then 2 else (if (mc0 = "bi_le_int") then 2 else (if (mc0 = "bi_gt_int") then 2 else (if (mc0 = "bi_ge_int") then 2 else (if (mc0 = "bi_lt_str") then 2 else (if (mc0 = "bi_le_str") then 2 else (if (mc0 = "bi_gt_str") then 2 else (if (mc0 = "bi_ge_str") then 2 else (if (mc0 = "bi_lt_bool") then 2 else (if (mc0 = "bi_le_bool") then 2 else (if (mc0 = "bi_gt_bool") then 2 else (if (mc0 = "bi_ge_bool") then 2 else (if (mc0 = "bi_add_float") then 2 else (if (mc0 = "bi_sub_float") then 2 else (if (mc0 = "bi_mul_float") then 2 else (if (mc0 = "bi_div_float") then 2 else (if (mc0 = "bi_eq_float") then 2 else (if (mc0 = "bi_neq_float") then 2 else (if (mc0 = "bi_lt_float") then 2 else (if (mc0 = "bi_le_float") then 2 else (if (mc0 = "bi_gt_float") then 2 else (if (mc0 = "bi_ge_float") then 2 else (if (mc0 = "@ir@m@runEff") then 2 else (if (mc0 = "natToInt") then 1 else (if (mc0 = "natFromInt") then 1 else (if (mc0 = "natAdd") then 2 else (if (mc0 = "natSub") then 2 else (if (mc0 = "natMul") then 2 else (if (mc0 = "natDiv") then 2 else 0))))))))))))))))))))))))))))))))))))))))))))))))
+# 470 "Vuna/Ir/Model.vuna"
+let v_irInlineArity = (fun (mc0 : string) -> (if (mc0 = "+") then 2 else (if (mc0 = "-") then 2 else (if (mc0 = "*") then 2 else (if (mc0 = "/") then 2 else (if (mc0 = "&&") then 2 else (if (mc0 = "||") then 2 else (if (mc0 = "bitAnd") then 2 else (if (mc0 = "bitOr") then 2 else (if (mc0 = "bitXor") then 2 else (if (mc0 = "bitNot") then 1 else (if (mc0 = "bitShl") then 2 else (if (mc0 = "bitShr") then 2 else (if (mc0 = "++") then 2 else (if (mc0 = "strLength") then 1 else (if (mc0 = "strAt") then 2 else (if (mc0 = "strFromInt") then 1 else (if (mc0 = "bi_eq_int") then 2 else (if (mc0 = "bi_neq_int") then 2 else (if (mc0 = "effectId") then 1 else (if (mc0 = "bi_eq_str") then 2 else (if (mc0 = "bi_neq_str") then 2 else (if (mc0 = "bi_lt_int") then 2 else (if (mc0 = "bi_le_int") then 2 else (if (mc0 = "bi_gt_int") then 2 else (if (mc0 = "bi_ge_int") then 2 else (if (mc0 = "bi_lt_str") then 2 else (if (mc0 = "bi_le_str") then 2 else (if (mc0 = "bi_gt_str") then 2 else (if (mc0 = "bi_ge_str") then 2 else (if (mc0 = "bi_lt_bool") then 2 else (if (mc0 = "bi_le_bool") then 2 else (if (mc0 = "bi_gt_bool") then 2 else (if (mc0 = "bi_ge_bool") then 2 else (if (mc0 = "bi_add_float") then 2 else (if (mc0 = "bi_sub_float") then 2 else (if (mc0 = "bi_mul_float") then 2 else (if (mc0 = "bi_div_float") then 2 else (if (mc0 = "bi_eq_float") then 2 else (if (mc0 = "bi_neq_float") then 2 else (if (mc0 = "bi_lt_float") then 2 else (if (mc0 = "bi_le_float") then 2 else (if (mc0 = "bi_gt_float") then 2 else (if (mc0 = "bi_ge_float") then 2 else (if (mc0 = "@ir@m@runEff") then 2 else (if (mc0 = "natToInt") then 1 else (if (mc0 = "natFromInt") then 1 else (if (mc0 = "natAdd") then 2 else (if (mc0 = "natSub") then 2 else (if (mc0 = "natMul") then 2 else (if (mc0 = "natDiv") then 2 else 0)))))))))))))))))))))))))))))))))))))))))))))))))))
 
-# 511 "Vuna/Ir/Model.vuna"
+# 524 "Vuna/Ir/Model.vuna"
 let v_irListFamilyOf = (fun (mc0 : t_IrListFam) -> (match mc0 with
   | { f_IrListFam_irListFamily = dtb__180; f_IrListFam_irListNil = dtb__181; f_IrListFam_irListCons = dtb__182 } -> dtb__180
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 515 "Vuna/Ir/Model.vuna"
+# 528 "Vuna/Ir/Model.vuna"
 let v_irListNilOf = (fun (mc0 : t_IrListFam) -> (match mc0 with
   | { f_IrListFam_irListFamily = dtb__183; f_IrListFam_irListNil = dtb__184; f_IrListFam_irListCons = dtb__185 } -> dtb__184
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 519 "Vuna/Ir/Model.vuna"
+# 532 "Vuna/Ir/Model.vuna"
 let v_irListConsOf = (fun (mc0 : t_IrListFam) -> (match mc0 with
   | { f_IrListFam_irListFamily = dtb__186; f_IrListFam_irListNil = dtb__187; f_IrListFam_irListCons = dtb__188 } -> dtb__188
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 523 "Vuna/Ir/Model.vuna"
+# 536 "Vuna/Ir/Model.vuna"
 let v_irAltCtorOf = (fun (mc0 : t_IrAlt) -> (match mc0 with
   | { f_IrAlt_irAltCtor = dtb__189; f_IrAlt_irAltBinders = dtb__190; f_IrAlt_irAltBody = dtb__191 } -> dtb__189
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 527 "Vuna/Ir/Model.vuna"
+# 540 "Vuna/Ir/Model.vuna"
 let v_irAltBindersOf = (fun (mc0 : t_IrAlt) -> (match mc0 with
   | { f_IrAlt_irAltCtor = dtb__192; f_IrAlt_irAltBinders = dtb__193; f_IrAlt_irAltBody = dtb__194 } -> dtb__193
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 531 "Vuna/Ir/Model.vuna"
+# 544 "Vuna/Ir/Model.vuna"
 let v_irAltBodyOf = (fun (mc0 : t_IrAlt) -> (match mc0 with
   | { f_IrAlt_irAltCtor = dtb__195; f_IrAlt_irAltBinders = dtb__196; f_IrAlt_irAltBody = dtb__197 } -> dtb__197
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 557 "Vuna/Ir/Model.vuna"
-let rec v_altBodies = (fun (mc0 : t_IrAlt B_dData_dList.t_List) -> (match mc0 with
+# 570 "Vuna/Ir/Model.vuna"
+let[@tail_mod_cons] rec v_altBodies = (fun (mc0 : t_IrAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__198, dtb__199) -> (B_dData_dList.C_List__x58__x58_ ((v_irAltBodyOf dtb__198), (v_altBodies dtb__199)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 561 "Vuna/Ir/Model.vuna"
+# 574 "Vuna/Ir/Model.vuna"
 let v_maybeAltBodies = (fun (mc0 : t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__200) -> (B_dData_dList.C_List__x58__x58_ ((v_irAltBodyOf dtb__200), B_dData_dList.C_List_Nil))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 536 "Vuna/Ir/Model.vuna"
+# 549 "Vuna/Ir/Model.vuna"
 let v_irChildren = (fun (mc0 : t_Ir) -> (match mc0 with
   | C_Ir_IrTail (dtb__201) -> (B_dData_dList.C_List__x58__x58_ (dtb__201, B_dData_dList.C_List_Nil))
   | C_Ir_IrEffThunk (dtb__202, dtb__203, dtb__204, dtb__205, dtb__206) -> (B_dData_dList.C_List__x58__x58_ (dtb__206, B_dData_dList.C_List_Nil))
@@ -306,60 +306,60 @@ let v_irChildren = (fun (mc0 : t_Ir) -> (match mc0 with
   | _ -> B_dData_dList.C_List_Nil
 ))
 
-# 566 "Vuna/Ir/Model.vuna"
+# 579 "Vuna/Ir/Model.vuna"
 let v_irEntryShowOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__249; f_IrEntry_irEntryMain = dtb__250; f_IrEntry_irEntryIsAction = dtb__251; f_IrEntry_irEntryRunMain = dtb__252; f_IrEntry_irEntryHandlers = dtb__253; f_IrEntry_irEntryRowTags = dtb__254 } -> dtb__249
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 570 "Vuna/Ir/Model.vuna"
+# 583 "Vuna/Ir/Model.vuna"
 let v_irEntryMainOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__255; f_IrEntry_irEntryMain = dtb__256; f_IrEntry_irEntryIsAction = dtb__257; f_IrEntry_irEntryRunMain = dtb__258; f_IrEntry_irEntryHandlers = dtb__259; f_IrEntry_irEntryRowTags = dtb__260 } -> dtb__256
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 574 "Vuna/Ir/Model.vuna"
+# 587 "Vuna/Ir/Model.vuna"
 let v_irEntryIsActionOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__261; f_IrEntry_irEntryMain = dtb__262; f_IrEntry_irEntryIsAction = dtb__263; f_IrEntry_irEntryRunMain = dtb__264; f_IrEntry_irEntryHandlers = dtb__265; f_IrEntry_irEntryRowTags = dtb__266 } -> dtb__263
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 578 "Vuna/Ir/Model.vuna"
+# 591 "Vuna/Ir/Model.vuna"
 let v_irEntryRunMainOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__267; f_IrEntry_irEntryMain = dtb__268; f_IrEntry_irEntryIsAction = dtb__269; f_IrEntry_irEntryRunMain = dtb__270; f_IrEntry_irEntryHandlers = dtb__271; f_IrEntry_irEntryRowTags = dtb__272 } -> dtb__270
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 582 "Vuna/Ir/Model.vuna"
+# 595 "Vuna/Ir/Model.vuna"
 let v_irEntryHandlersOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__273; f_IrEntry_irEntryMain = dtb__274; f_IrEntry_irEntryIsAction = dtb__275; f_IrEntry_irEntryRunMain = dtb__276; f_IrEntry_irEntryHandlers = dtb__277; f_IrEntry_irEntryRowTags = dtb__278 } -> dtb__277
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 586 "Vuna/Ir/Model.vuna"
+# 599 "Vuna/Ir/Model.vuna"
 let v_irEntryRowTagsOf = (fun (mc0 : t_IrEntry) -> (match mc0 with
   | { f_IrEntry_irEntryShow = dtb__279; f_IrEntry_irEntryMain = dtb__280; f_IrEntry_irEntryIsAction = dtb__281; f_IrEntry_irEntryRunMain = dtb__282; f_IrEntry_irEntryHandlers = dtb__283; f_IrEntry_irEntryRowTags = dtb__284 } -> dtb__284
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 590 "Vuna/Ir/Model.vuna"
+# 603 "Vuna/Ir/Model.vuna"
 let v_irProgSharedOf = (fun (mc0 : t_IrProgram) -> (match mc0 with
   | { f_IrProgram_irProgShared = dtb__285; f_IrProgram_irProgUnit = dtb__286 } -> dtb__285
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 594 "Vuna/Ir/Model.vuna"
+# 607 "Vuna/Ir/Model.vuna"
 let v_irProgUnitOf = (fun (mc0 : t_IrProgram) -> (match mc0 with
   | { f_IrProgram_irProgShared = dtb__287; f_IrProgram_irProgUnit = dtb__288 } -> dtb__288
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 601 "Vuna/Ir/Model.vuna"
+# 614 "Vuna/Ir/Model.vuna"
 let rec v_irSize = (fun (mc0 : t_Ir) -> (match mc0 with
   | C_Ir_IrTail (dtb__289) -> (v_irSize dtb__289)
   | _ -> (1 + (v_irSizeChildren mc0))
 ))
-# 605 "Vuna/Ir/Model.vuna"
+# 618 "Vuna/Ir/Model.vuna"
 and v_irSizeChildren = (fun (mc0 : t_Ir) -> (match mc0 with
   | C_Ir_IrEffThunk (dtb__290, dtb__291, dtb__292, dtb__293, dtb__294) -> (v_irSize dtb__294)
   | C_Ir_IrConcatMany (dtb__295) -> (v_irSizeList dtb__295)
@@ -378,13 +378,13 @@ and v_irSizeChildren = (fun (mc0 : t_Ir) -> (match mc0 with
   | C_Ir_IrCtor (dtb__334, dtb__335, dtb__336, dtb__337) -> (v_irSizeList dtb__337)
   | _ -> 0
 ))
-# 624 "Vuna/Ir/Model.vuna"
+# 637 "Vuna/Ir/Model.vuna"
 and v_irSizeList = (fun (mc0 : t_Ir B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__338, dtb__339) -> ((v_irSize dtb__338) + (v_irSizeList dtb__339))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
-# 628 "Vuna/Ir/Model.vuna"
+# 641 "Vuna/Ir/Model.vuna"
 and v_irSizeFields = (fun (mc0 : (string, t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__340, dtb__341) -> (match dtb__340 with
   | { B_dData_dPair.f_Pair_first = dtb__342; B_dData_dPair.f_Pair_second = dtb__343 } -> ((v_irSize dtb__343) + (v_irSizeFields dtb__341))
@@ -393,13 +393,13 @@ and v_irSizeFields = (fun (mc0 : (string, t_Ir) B_dData_dPair.t_Pair B_dData_dLi
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
-# 632 "Vuna/Ir/Model.vuna"
+# 645 "Vuna/Ir/Model.vuna"
 and v_irSizeAlts = (fun (mc0 : t_IrAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__344, dtb__345) -> ((v_irSize (v_irAltBodyOf dtb__344)) + (v_irSizeAlts dtb__345))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
-# 636 "Vuna/Ir/Model.vuna"
+# 649 "Vuna/Ir/Model.vuna"
 and v_irSizeAlt = (fun (mc0 : t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__346) -> (v_irSize (v_irAltBodyOf dtb__346))
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
@@ -516,90 +516,108 @@ let v_irListCons = (fun (p : t_IrListFam) -> (match p with
 
 # 403 "Vuna/Ir/Model.vuna"
 let v_irSharedRecordFields = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__421; f_IrShared_irSharedListFam = dtb__422; f_IrShared_irSharedUsesFloat = dtb__423; f_IrShared_irSharedUsesTrace = dtb__424; f_IrShared_irSharedUsesObs = dtb__425; f_IrShared_irSharedDefLocs = dtb__426; f_IrShared_irSharedUnboxed = dtb__427; f_IrShared_irSharedCtorShapes = dtb__428 } -> dtb__421
+  | { f_IrShared_irSharedRecordFields = dtb__421; f_IrShared_irSharedListFam = dtb__422; f_IrShared_irSharedUsesFloat = dtb__423; f_IrShared_irSharedUsesTrace = dtb__424; f_IrShared_irSharedUsesObs = dtb__425; f_IrShared_irSharedDefLocs = dtb__426; f_IrShared_irSharedUnboxed = dtb__427; f_IrShared_irSharedCtorShapes = dtb__428; f_IrShared_irSharedUsesHost = dtb__429; f_IrShared_irSharedUsesSched = dtb__430; f_IrShared_irSharedUsesEff = dtb__431 } -> dtb__421
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 405 "Vuna/Ir/Model.vuna"
 let v_irSharedListFam = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__429; f_IrShared_irSharedListFam = dtb__430; f_IrShared_irSharedUsesFloat = dtb__431; f_IrShared_irSharedUsesTrace = dtb__432; f_IrShared_irSharedUsesObs = dtb__433; f_IrShared_irSharedDefLocs = dtb__434; f_IrShared_irSharedUnboxed = dtb__435; f_IrShared_irSharedCtorShapes = dtb__436 } -> dtb__430
+  | { f_IrShared_irSharedRecordFields = dtb__432; f_IrShared_irSharedListFam = dtb__433; f_IrShared_irSharedUsesFloat = dtb__434; f_IrShared_irSharedUsesTrace = dtb__435; f_IrShared_irSharedUsesObs = dtb__436; f_IrShared_irSharedDefLocs = dtb__437; f_IrShared_irSharedUnboxed = dtb__438; f_IrShared_irSharedCtorShapes = dtb__439; f_IrShared_irSharedUsesHost = dtb__440; f_IrShared_irSharedUsesSched = dtb__441; f_IrShared_irSharedUsesEff = dtb__442 } -> dtb__433
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 407 "Vuna/Ir/Model.vuna"
 let v_irSharedUsesFloat = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__437; f_IrShared_irSharedListFam = dtb__438; f_IrShared_irSharedUsesFloat = dtb__439; f_IrShared_irSharedUsesTrace = dtb__440; f_IrShared_irSharedUsesObs = dtb__441; f_IrShared_irSharedDefLocs = dtb__442; f_IrShared_irSharedUnboxed = dtb__443; f_IrShared_irSharedCtorShapes = dtb__444 } -> dtb__439
+  | { f_IrShared_irSharedRecordFields = dtb__443; f_IrShared_irSharedListFam = dtb__444; f_IrShared_irSharedUsesFloat = dtb__445; f_IrShared_irSharedUsesTrace = dtb__446; f_IrShared_irSharedUsesObs = dtb__447; f_IrShared_irSharedDefLocs = dtb__448; f_IrShared_irSharedUnboxed = dtb__449; f_IrShared_irSharedCtorShapes = dtb__450; f_IrShared_irSharedUsesHost = dtb__451; f_IrShared_irSharedUsesSched = dtb__452; f_IrShared_irSharedUsesEff = dtb__453 } -> dtb__445
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 409 "Vuna/Ir/Model.vuna"
 let v_irSharedUsesTrace = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__445; f_IrShared_irSharedListFam = dtb__446; f_IrShared_irSharedUsesFloat = dtb__447; f_IrShared_irSharedUsesTrace = dtb__448; f_IrShared_irSharedUsesObs = dtb__449; f_IrShared_irSharedDefLocs = dtb__450; f_IrShared_irSharedUnboxed = dtb__451; f_IrShared_irSharedCtorShapes = dtb__452 } -> dtb__448
+  | { f_IrShared_irSharedRecordFields = dtb__454; f_IrShared_irSharedListFam = dtb__455; f_IrShared_irSharedUsesFloat = dtb__456; f_IrShared_irSharedUsesTrace = dtb__457; f_IrShared_irSharedUsesObs = dtb__458; f_IrShared_irSharedDefLocs = dtb__459; f_IrShared_irSharedUnboxed = dtb__460; f_IrShared_irSharedCtorShapes = dtb__461; f_IrShared_irSharedUsesHost = dtb__462; f_IrShared_irSharedUsesSched = dtb__463; f_IrShared_irSharedUsesEff = dtb__464 } -> dtb__457
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 412 "Vuna/Ir/Model.vuna"
 let v_irSharedUsesObs = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__453; f_IrShared_irSharedListFam = dtb__454; f_IrShared_irSharedUsesFloat = dtb__455; f_IrShared_irSharedUsesTrace = dtb__456; f_IrShared_irSharedUsesObs = dtb__457; f_IrShared_irSharedDefLocs = dtb__458; f_IrShared_irSharedUnboxed = dtb__459; f_IrShared_irSharedCtorShapes = dtb__460 } -> dtb__457
+  | { f_IrShared_irSharedRecordFields = dtb__465; f_IrShared_irSharedListFam = dtb__466; f_IrShared_irSharedUsesFloat = dtb__467; f_IrShared_irSharedUsesTrace = dtb__468; f_IrShared_irSharedUsesObs = dtb__469; f_IrShared_irSharedDefLocs = dtb__470; f_IrShared_irSharedUnboxed = dtb__471; f_IrShared_irSharedCtorShapes = dtb__472; f_IrShared_irSharedUsesHost = dtb__473; f_IrShared_irSharedUsesSched = dtb__474; f_IrShared_irSharedUsesEff = dtb__475 } -> dtb__469
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 415 "Vuna/Ir/Model.vuna"
 let v_irSharedDefLocs = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__461; f_IrShared_irSharedListFam = dtb__462; f_IrShared_irSharedUsesFloat = dtb__463; f_IrShared_irSharedUsesTrace = dtb__464; f_IrShared_irSharedUsesObs = dtb__465; f_IrShared_irSharedDefLocs = dtb__466; f_IrShared_irSharedUnboxed = dtb__467; f_IrShared_irSharedCtorShapes = dtb__468 } -> dtb__466
+  | { f_IrShared_irSharedRecordFields = dtb__476; f_IrShared_irSharedListFam = dtb__477; f_IrShared_irSharedUsesFloat = dtb__478; f_IrShared_irSharedUsesTrace = dtb__479; f_IrShared_irSharedUsesObs = dtb__480; f_IrShared_irSharedDefLocs = dtb__481; f_IrShared_irSharedUnboxed = dtb__482; f_IrShared_irSharedCtorShapes = dtb__483; f_IrShared_irSharedUsesHost = dtb__484; f_IrShared_irSharedUsesSched = dtb__485; f_IrShared_irSharedUsesEff = dtb__486 } -> dtb__481
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 417 "Vuna/Ir/Model.vuna"
 let v_irSharedUnboxed = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__469; f_IrShared_irSharedListFam = dtb__470; f_IrShared_irSharedUsesFloat = dtb__471; f_IrShared_irSharedUsesTrace = dtb__472; f_IrShared_irSharedUsesObs = dtb__473; f_IrShared_irSharedDefLocs = dtb__474; f_IrShared_irSharedUnboxed = dtb__475; f_IrShared_irSharedCtorShapes = dtb__476 } -> dtb__475
+  | { f_IrShared_irSharedRecordFields = dtb__487; f_IrShared_irSharedListFam = dtb__488; f_IrShared_irSharedUsesFloat = dtb__489; f_IrShared_irSharedUsesTrace = dtb__490; f_IrShared_irSharedUsesObs = dtb__491; f_IrShared_irSharedDefLocs = dtb__492; f_IrShared_irSharedUnboxed = dtb__493; f_IrShared_irSharedCtorShapes = dtb__494; f_IrShared_irSharedUsesHost = dtb__495; f_IrShared_irSharedUsesSched = dtb__496; f_IrShared_irSharedUsesEff = dtb__497 } -> dtb__493
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 420 "Vuna/Ir/Model.vuna"
 let v_irSharedCtorShapes = (fun (p : t_IrShared) -> (match p with
-  | { f_IrShared_irSharedRecordFields = dtb__477; f_IrShared_irSharedListFam = dtb__478; f_IrShared_irSharedUsesFloat = dtb__479; f_IrShared_irSharedUsesTrace = dtb__480; f_IrShared_irSharedUsesObs = dtb__481; f_IrShared_irSharedDefLocs = dtb__482; f_IrShared_irSharedUnboxed = dtb__483; f_IrShared_irSharedCtorShapes = dtb__484 } -> dtb__484
+  | { f_IrShared_irSharedRecordFields = dtb__498; f_IrShared_irSharedListFam = dtb__499; f_IrShared_irSharedUsesFloat = dtb__500; f_IrShared_irSharedUsesTrace = dtb__501; f_IrShared_irSharedUsesObs = dtb__502; f_IrShared_irSharedDefLocs = dtb__503; f_IrShared_irSharedUnboxed = dtb__504; f_IrShared_irSharedCtorShapes = dtb__505; f_IrShared_irSharedUsesHost = dtb__506; f_IrShared_irSharedUsesSched = dtb__507; f_IrShared_irSharedUsesEff = dtb__508 } -> dtb__505
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 440 "Vuna/Ir/Model.vuna"
+# 423 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesHost = (fun (p : t_IrShared) -> (match p with
+  | { f_IrShared_irSharedRecordFields = dtb__509; f_IrShared_irSharedListFam = dtb__510; f_IrShared_irSharedUsesFloat = dtb__511; f_IrShared_irSharedUsesTrace = dtb__512; f_IrShared_irSharedUsesObs = dtb__513; f_IrShared_irSharedDefLocs = dtb__514; f_IrShared_irSharedUnboxed = dtb__515; f_IrShared_irSharedCtorShapes = dtb__516; f_IrShared_irSharedUsesHost = dtb__517; f_IrShared_irSharedUsesSched = dtb__518; f_IrShared_irSharedUsesEff = dtb__519 } -> dtb__517
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 426 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesSched = (fun (p : t_IrShared) -> (match p with
+  | { f_IrShared_irSharedRecordFields = dtb__520; f_IrShared_irSharedListFam = dtb__521; f_IrShared_irSharedUsesFloat = dtb__522; f_IrShared_irSharedUsesTrace = dtb__523; f_IrShared_irSharedUsesObs = dtb__524; f_IrShared_irSharedDefLocs = dtb__525; f_IrShared_irSharedUnboxed = dtb__526; f_IrShared_irSharedCtorShapes = dtb__527; f_IrShared_irSharedUsesHost = dtb__528; f_IrShared_irSharedUsesSched = dtb__529; f_IrShared_irSharedUsesEff = dtb__530 } -> dtb__529
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 430 "Vuna/Ir/Model.vuna"
+let v_irSharedUsesEff = (fun (p : t_IrShared) -> (match p with
+  | { f_IrShared_irSharedRecordFields = dtb__531; f_IrShared_irSharedListFam = dtb__532; f_IrShared_irSharedUsesFloat = dtb__533; f_IrShared_irSharedUsesTrace = dtb__534; f_IrShared_irSharedUsesObs = dtb__535; f_IrShared_irSharedDefLocs = dtb__536; f_IrShared_irSharedUnboxed = dtb__537; f_IrShared_irSharedCtorShapes = dtb__538; f_IrShared_irSharedUsesHost = dtb__539; f_IrShared_irSharedUsesSched = dtb__540; f_IrShared_irSharedUsesEff = dtb__541 } -> dtb__541
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 450 "Vuna/Ir/Model.vuna"
 let v_irUnitTyDecls = (fun (p : t_IrUnit) -> (match p with
-  | { f_IrUnit_irUnitTyDecls = dtb__485; f_IrUnit_irUnitGroups = dtb__486; f_IrUnit_irUnitHasListFamily = dtb__487; f_IrUnit_irUnitTypeRefs = dtb__488; f_IrUnit_irUnitEntry = dtb__489 } -> dtb__485
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 442 "Vuna/Ir/Model.vuna"
-let v_irUnitGroups = (fun (p : t_IrUnit) -> (match p with
-  | { f_IrUnit_irUnitTyDecls = dtb__490; f_IrUnit_irUnitGroups = dtb__491; f_IrUnit_irUnitHasListFamily = dtb__492; f_IrUnit_irUnitTypeRefs = dtb__493; f_IrUnit_irUnitEntry = dtb__494 } -> dtb__491
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 444 "Vuna/Ir/Model.vuna"
-let v_irUnitHasListFamily = (fun (p : t_IrUnit) -> (match p with
-  | { f_IrUnit_irUnitTyDecls = dtb__495; f_IrUnit_irUnitGroups = dtb__496; f_IrUnit_irUnitHasListFamily = dtb__497; f_IrUnit_irUnitTypeRefs = dtb__498; f_IrUnit_irUnitEntry = dtb__499 } -> dtb__497
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 446 "Vuna/Ir/Model.vuna"
-let v_irUnitTypeRefs = (fun (p : t_IrUnit) -> (match p with
-  | { f_IrUnit_irUnitTyDecls = dtb__500; f_IrUnit_irUnitGroups = dtb__501; f_IrUnit_irUnitHasListFamily = dtb__502; f_IrUnit_irUnitTypeRefs = dtb__503; f_IrUnit_irUnitEntry = dtb__504 } -> dtb__503
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 448 "Vuna/Ir/Model.vuna"
-let v_irUnitEntry = (fun (p : t_IrUnit) -> (match p with
-  | { f_IrUnit_irUnitTyDecls = dtb__505; f_IrUnit_irUnitGroups = dtb__506; f_IrUnit_irUnitHasListFamily = dtb__507; f_IrUnit_irUnitTypeRefs = dtb__508; f_IrUnit_irUnitEntry = dtb__509 } -> dtb__509
+  | { f_IrUnit_irUnitTyDecls = dtb__542; f_IrUnit_irUnitGroups = dtb__543; f_IrUnit_irUnitHasListFamily = dtb__544; f_IrUnit_irUnitTypeRefs = dtb__545; f_IrUnit_irUnitEntry = dtb__546 } -> dtb__542
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 452 "Vuna/Ir/Model.vuna"
-let v_irProgShared = (fun (p : t_IrProgram) -> (match p with
-  | { f_IrProgram_irProgShared = dtb__510; f_IrProgram_irProgUnit = dtb__511 } -> dtb__510
+let v_irUnitGroups = (fun (p : t_IrUnit) -> (match p with
+  | { f_IrUnit_irUnitTyDecls = dtb__547; f_IrUnit_irUnitGroups = dtb__548; f_IrUnit_irUnitHasListFamily = dtb__549; f_IrUnit_irUnitTypeRefs = dtb__550; f_IrUnit_irUnitEntry = dtb__551 } -> dtb__548
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 453 "Vuna/Ir/Model.vuna"
+# 454 "Vuna/Ir/Model.vuna"
+let v_irUnitHasListFamily = (fun (p : t_IrUnit) -> (match p with
+  | { f_IrUnit_irUnitTyDecls = dtb__552; f_IrUnit_irUnitGroups = dtb__553; f_IrUnit_irUnitHasListFamily = dtb__554; f_IrUnit_irUnitTypeRefs = dtb__555; f_IrUnit_irUnitEntry = dtb__556 } -> dtb__554
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 456 "Vuna/Ir/Model.vuna"
+let v_irUnitTypeRefs = (fun (p : t_IrUnit) -> (match p with
+  | { f_IrUnit_irUnitTyDecls = dtb__557; f_IrUnit_irUnitGroups = dtb__558; f_IrUnit_irUnitHasListFamily = dtb__559; f_IrUnit_irUnitTypeRefs = dtb__560; f_IrUnit_irUnitEntry = dtb__561 } -> dtb__560
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 458 "Vuna/Ir/Model.vuna"
+let v_irUnitEntry = (fun (p : t_IrUnit) -> (match p with
+  | { f_IrUnit_irUnitTyDecls = dtb__562; f_IrUnit_irUnitGroups = dtb__563; f_IrUnit_irUnitHasListFamily = dtb__564; f_IrUnit_irUnitTypeRefs = dtb__565; f_IrUnit_irUnitEntry = dtb__566 } -> dtb__566
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 462 "Vuna/Ir/Model.vuna"
+let v_irProgShared = (fun (p : t_IrProgram) -> (match p with
+  | { f_IrProgram_irProgShared = dtb__567; f_IrProgram_irProgUnit = dtb__568 } -> dtb__567
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 463 "Vuna/Ir/Model.vuna"
 let v_irProgUnit = (fun (p : t_IrProgram) -> (match p with
-  | { f_IrProgram_irProgShared = dtb__512; f_IrProgram_irProgUnit = dtb__513 } -> dtb__513
+  | { f_IrProgram_irProgShared = dtb__569; f_IrProgram_irProgUnit = dtb__570 } -> dtb__570
   | _ -> failwith "DT: impossible branch"
 ))

@@ -103,7 +103,7 @@ let rec v_addAllNames = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string,
 ))
 
 # 157 "Vuna/Ir/Analysis.vuna"
-let rec v_filterNames = (fun (mc0 : (string) -> bool) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_filterNames = (fun (mc0 : (string) -> bool) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__30, dtb__31) -> (if (mc0 dtb__30) then (B_dData_dList.C_List__x58__x58_ (dtb__30, ((v_filterNames mc0) dtb__31))) else ((v_filterNames mc0) dtb__31))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -119,7 +119,7 @@ let v_groupOf = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_d
 ))
 
 # 139 "Vuna/Ir/Analysis.vuna"
-let rec v_groupsFromCompsGo = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc2 with
+let[@tail_mod_cons] rec v_groupsFromCompsGo = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__34, dtb__35) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__34) mc3) then ((((v_groupsFromCompsGo mc0) mc1) dtb__35) mc3) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__34) mc0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__36) -> (B_dData_dList.C_List__x58__x58_ (((v_groupOf mc1) dtb__36), ((((v_groupsFromCompsGo mc0) mc1) dtb__35) ((v_addAllNames dtb__36) mc3))))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_groupsFromCompsGo mc0) mc1) dtb__35) mc3)
@@ -193,7 +193,7 @@ let v_addReverseEdges = (fun (mc0 : (int, int B_dData_dList.t_List) B_dContainer
 let v_reverseDepTbl = (fun (pairs : (int, int B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dData_dList.v_foldl v_addReverseEdges) (((B_dContainer_dHashMap.v_fromList B_dData_dInt.v_Hashable_ue4b0f10b020a5e82_uInt) B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt) B_dData_dList.C_List_Nil)) pairs))
 
 # 242 "Vuna/Ir/Analysis.vuna"
-let rec v_insertReady = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_insertReady = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (if (mc0 <= dtb__49) then (B_dData_dList.C_List__x58__x58_ (mc0, (B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50)))) else (B_dData_dList.C_List__x58__x58_ (dtb__49, ((v_insertReady mc0) dtb__50))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
@@ -241,7 +241,7 @@ let rec v_findDefByName = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_IrDef B_d
 ))
 
 # 319 "Vuna/Ir/Analysis.vuna"
-let rec v_groupDefsOf = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_groupDefsOf = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__61, dtb__62) -> (match ((v_findDefByName dtb__61) mc0) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_groupDefsOf mc0) dtb__62)
   | B_dData_dMaybe.C_Maybe_Just (dtb__63) -> (B_dData_dList.C_List__x58__x58_ (dtb__63, ((v_groupDefsOf mc0) dtb__62)))

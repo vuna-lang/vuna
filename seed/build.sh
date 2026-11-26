@@ -17,6 +17,10 @@ if [ -z "$JOBS" ]; then
 fi
 C_MODULES=""
 C_OBJS=""
+# 宿主运行时（`dtHostRuntime`）是唯一引用 `Unix.` 的块；不用宿主原语的程序不链接
+# `unix.cmxa`——它的模块初始化在进程启动时值几百微秒。
+UNIX=""
+if grep -q 'Unix\.' Vuna_runtime.ml 2>/dev/null; then UNIX="unix.cmxa"; fi
 if [ -n "$C_MODULES" ]; then
   for c in $C_MODULES; do ocamlopt -I +unix -c "$c"; b=${c##*/}; C_OBJS="$C_OBJS ${b%.c}.o"; done
 fi
@@ -86,7 +90,6 @@ B_dTrait_dNum Vuna_runtime
 B_dEffect_dMut Vuna_runtime
 B_dEffect_dTypes Vuna_runtime
 B_dData_dFunction Vuna_runtime
-B_dData_dLog Vuna_runtime
 B_dTrait_dTraversable Vuna_runtime
 B_dTrait_dShow Vuna_runtime
 B_dTrait_dFromInt Vuna_runtime
@@ -102,6 +105,7 @@ B_dTrait_dMonad Vuna_runtime
 B_dTrait_dNeg Vuna_runtime
 @
 B_dTrait_dInterp B_dTrait_dShow Vuna_runtime
+B_dData_dLog B_dTrait_dShow Vuna_runtime
 B_dData_dBool B_dTrait_dShow Vuna_runtime B_dTrait_dHashable
 B_dTrait_dFoldable B_dTrait_dMonoid Vuna_runtime
 @
@@ -149,6 +153,7 @@ Loader_dAddr Base_dBytes Frontend_dAst Vuna_runtime B_dData_dList Base_dHash
 Base_dDiagnostics_dSink Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dString B_dData_dList Base_dSource B_dData_dMaybe
 Base_dDiag_dCodec Base_dBytes Vuna_runtime Base_dDiag B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
 Vuna_dIr_dRuntime Vuna_dIr_dModel Vuna_runtime B_dData_dList B_dData_dPair B_dData_dMaybe
+Vuna_dIr_dTail Vuna_dIr_dModel Vuna_runtime B_dContainer_dHashMap B_dData_dString B_dData_dResult B_dData_dList B_dData_dPair B_dData_dMaybe
 B_dEffect_dCursor B_dTrait_dFunctor Vuna_runtime B_dData_dList B_dTrait_dApplicative B_dData_dPair B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
 Frontend_dCanonical_dAst Base_dBytes Frontend_dAst Vuna_runtime B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
 B_dContainer_dMutRef Vuna_runtime B_dData_dUnit B_dTrait_dApplicative B_dEffect_dCore B_dTrait_dMonad
@@ -192,7 +197,7 @@ Driver_dSplit B_dData_dInt Base_dBytes Vuna_runtime Base_dDiag B_dContainer_dHas
 Loader_dFingerprint B_dTrait_dFunctor Loader_dAddr Vuna_runtime B_dTrait_dOrd B_dData_dString B_dEffect_dEnv B_dData_dList Base_dHash B_dTrait_dApplicative Base_dVersion B_dData_dPair B_dEffect_dFs Base_dSource B_dEffect_dCore B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
 Frontend_dLexer Vuna_runtime Base_dDiag B_dData_dBool B_dData_dList Base_dDiagnostics_dFrontend B_dData_dPair Base_dSource B_dData_dMaybe
 Elab_dRecords Frontend_dAst Base_dDiagnostics_dTc Vuna_runtime Base_dDiag Base_dIntrinsics Frontend_dAstQuery Frontend_dReserved Base_dCommon B_dData_dList B_dData_dVec B_dData_dPair Base_dSource Base_dDiagnostics_dCommon B_dData_dMaybe
-Vuna_dTarget_dOcaml_dTerm Vuna_dIr_dRuntime Vuna_dIr_dModel Vuna_runtime Base_dDiag B_dTrait_dOrd B_dData_dString Base_dCommon B_dData_dList Vuna_dTarget_dOcaml_dModel Vuna_dTarget_dOcaml_dRuntime Vuna_dTarget_dOcaml_dDecl Vuna_dTarget_dOcaml_dRender B_dData_dPair Base_dSource B_dData_dSort B_dData_dMaybe
+Vuna_dTarget_dOcaml_dTerm Vuna_dIr_dRuntime Vuna_dIr_dModel Vuna_runtime Vuna_dIr_dTail Base_dDiag B_dTrait_dOrd B_dData_dString Base_dCommon B_dData_dList Vuna_dTarget_dOcaml_dModel Vuna_dTarget_dOcaml_dRuntime Vuna_dTarget_dOcaml_dDecl Vuna_dTarget_dOcaml_dRender B_dData_dPair Base_dSource B_dData_dSort B_dData_dMaybe
 Elab_dTypes B_dData_dInt Frontend_dAst Vuna_runtime Base_dDiag Core_dEval B_dContainer_dHashMap Core_dTerm B_dData_dString B_dContainer_dQueue B_dData_dList B_dData_dPair Base_dSource B_dData_dMaybe
 Vuna_dIr_dAnalysis B_dData_dInt Vuna_dIr_dModel Vuna_runtime Base_dDiag B_dContainer_dHashMap B_dData_dBool Base_dDiagnostics_dCg B_dData_dString Base_dCommon B_dData_dList B_dData_dVec B_dData_dPair Base_dSource B_dData_dMaybe
 Base_dDiagnostics Base_dDiagnostics_dTc Vuna_runtime Base_dDiagnostics_dPkg Base_dDiagnostics_dLoader Base_dDiagnostics_dWarning Base_dDiagnostics_dCg B_dData_dString B_dData_dList Base_dDiagnostics_dFrontend Base_dDiagnostics_dIc B_dData_dPair Base_dDiagnostics_dRn B_dData_dMaybe
@@ -259,7 +264,7 @@ Elab_dDriver B_dData_dInt B_dTrait_dInterp Frontend_dAst Elab_dPrelude Elab_dUsa
 @
 Driver_dDt Frontend_dParser Driver_dCache Frontend_dAst Elab_dPrelude Vuna_dIr_dModel Loader_dModules Vuna_runtime Frontend_dCst Base_dDiag Elab_dRecords Driver_dSplitGen Core_dEval B_dContainer_dHashMap B_dData_dBool Lowering_dProgram Base_dIntrinsics Base_dDiagnostics_dWarning Elab_dDerive Lowering_dEnv Base_dObs Elab_dTypes Core_dTerm Base_dDiagnostics_dCg B_dTrait_dOrd B_dData_dString Vuna_dTarget_dOcaml_dAssembly Lowering_dEntry Base_dCommon Elab_dMeta B_dData_dList Frontend_dPackages_dPkg B_dData_dVec Base_dHash B_dTrait_dApplicative Driver_dIface B_dData_dPair B_dEffect_dFs Elab_dDriver B_dTrait_dEq Base_dSource B_dEffect_dCore Loader_dFlatten B_dData_dSort B_dTrait_dMonad B_dData_dMaybe Elab_dTermination_dMeasure
 @
-Driver_dCompile Base_dBytes B_dTrait_dFunctor Loader_dAddr Base_dWalk B_dTrait_dInterp Driver_dCache Frontend_dAst Base_dStore Driver_dSplit Loader_dModules Vuna_runtime Loader_dFingerprint B_dEffect_dClock Base_dDiag Base_dDiagnostics_dPkg Frontend_dPackages_dSource B_dContainer_dHashMap B_dData_dBool Base_dObs B_dEffect_dProcess B_dData_dString B_dEffect_dEnv B_dData_dList Frontend_dPackages_dPkg Frontend_dManifest Base_dHash B_dTrait_dApplicative Driver_dIface Driver_dDt Base_dVersion B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore Loader_dFlatten B_dTrait_dMonad B_dData_dMaybe
+Driver_dCompile Base_dBytes B_dTrait_dFunctor Loader_dAddr Base_dWalk B_dTrait_dInterp Driver_dCache Frontend_dAst Base_dStore Driver_dSplit Loader_dModules Vuna_runtime Loader_dFingerprint B_dEffect_dClock Base_dDiag Base_dDiagnostics_dPkg Frontend_dPackages_dSource B_dContainer_dHashMap B_dData_dBool Base_dObs B_dEffect_dProcess B_dData_dString B_dEffect_dEnv B_dData_dList Frontend_dPackages_dPkg Frontend_dManifest Base_dHash B_dTrait_dApplicative Driver_dIface Driver_dDt Base_dVersion B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore Loader_dFlatten B_dData_dSort B_dTrait_dMonad B_dData_dMaybe
 @
 Driver_dTarget Base_dDiag_dCodec Vuna_dIr_dModel Vuna_runtime Base_dDiag Driver_dCompile B_dData_dBool Lowering_dProgram B_dEffect_dProcess Elab_dTypes B_dData_dString B_dEffect_dEnv B_dData_dList Vuna_dIr_dCodec Frontend_dPackages_dPkg B_dTrait_dApplicative Driver_dDt B_dData_dPair B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
 @
@@ -277,12 +282,12 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   SOURCES=""
   CMXS=""
   each_unit source
-  ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $SOURCES $C_OBJS
+  ocamlopt $FLAGS -I +unix -o "$OUT" $UNIX $SOURCES $C_OBJS
   each_unit stamps
   echo "built $OUT"
   exit 0
 fi
 CMXS=""
 each_unit parallel
-ocamlopt $FLAGS -I +unix -o "$OUT" unix.cmxa $CMXS $C_OBJS
+ocamlopt $FLAGS -I +unix -o "$OUT" $UNIX $CMXS $C_OBJS
 echo "built $OUT"

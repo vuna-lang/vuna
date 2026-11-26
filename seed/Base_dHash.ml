@@ -34,7 +34,7 @@ let v_lenBytes = (fun (n : int) -> (B_dData_dList.C_List__x58__x58_ (((B_dData_d
 let v_padMessage = (fun (bytes : int B_dData_dList.t_List) -> (let n = (v_lenInt bytes) in (let r = ((n + 1) - ((if 64 = 0 then failwith "division by zero" else (n + 1) / 64) * 64)) in (let zerosNeeded = (if (r <= 56) then (56 - r) else (120 - r)) in ((B_dData_dList.v_append ((B_dData_dList.v_append ((B_dData_dList.v_append bytes) (B_dData_dList.C_List__x58__x58_ (128, B_dData_dList.C_List_Nil)))) (v_zeros zerosNeeded))) (v_lenBytes (n * 8)))))))
 
 # 186 "Vuna/Compiler/Base/Hash.vuna"
-let rec v_chunks = (fun (k : int) (bytes : int B_dData_dList.t_List) -> (if (k <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (((B_dData_dList.v_take 64) bytes), ((v_chunks (k - 1)) ((B_dData_dList.v_drop 64) bytes))))))
+let[@tail_mod_cons] rec v_chunks = (fun (k : int) (bytes : int B_dData_dList.t_List) -> (if (k <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (((B_dData_dList.v_take 64) bytes), ((v_chunks (k - 1)) ((B_dData_dList.v_drop 64) bytes))))))
 
 # 182 "Vuna/Compiler/Base/Hash.vuna"
 let v_chunk64 = (fun (bytes : int B_dData_dList.t_List) -> ((v_chunks (if 64 = 0 then failwith "division by zero" else ((v_lenInt bytes) + 63) / 64)) bytes))
@@ -105,7 +105,7 @@ let v_digestOfBytes = (fun (bytes : int B_dData_dList.t_List) -> (v_sha256Bytes 
 let v_paddedLen = (fun (n : int) -> (let r = ((n + 1) - ((if 64 = 0 then failwith "division by zero" else (n + 1) / 64) * 64)) in (let z = (if (r <= 56) then (56 - r) else (120 - r)) in (((n + 1) + z) + 8))))
 
 # 299 "Vuna/Compiler/Base/Hash.vuna"
-let v_paddedByte = (fun (s : string) (n : int) (total : int) (i : int) -> (if (i < n) then ((dtp_strAt s) i) else (if (i = n) then 128 else (if (i < (total - 8)) then 0 else ((B_dData_dBits.v_band ((B_dData_dBits.v_shr (n * 8)) (8 * (7 - (i - (total - 8)))))) 255)))))
+let v_paddedByte = (fun (s : string) (n : int) (total : int) (i : int) -> (if (i < n) then (let b = s in let k = i in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)) else (if (i = n) then 128 else (if (i < (total - 8)) then 0 else ((B_dData_dBits.v_band ((B_dData_dBits.v_shr (n * 8)) (8 * (7 - (i - (total - 8)))))) 255)))))
 
 # 308 "Vuna/Compiler/Base/Hash.vuna"
 let v_wordAtString = (fun (s : string) (n : int) (total : int) (b : int) (j : int) -> (let base = ((b * 64) + (j * 4)) in (let b0 = ((((v_paddedByte s) n) total) base) in (let b1 = ((((v_paddedByte s) n) total) (base + 1)) in (let b2 = ((((v_paddedByte s) n) total) (base + 2)) in (let b3 = ((((v_paddedByte s) n) total) (base + 3)) in ((B_dData_dBits.v_bor ((B_dData_dBits.v_bor ((B_dData_dBits.v_shl32 b0) 24)) ((B_dData_dBits.v_shl32 b1) 16))) ((B_dData_dBits.v_bor ((B_dData_dBits.v_shl32 b2) 8)) b3))))))))
@@ -117,7 +117,7 @@ let v_chunkWordsString = (fun (s : string) (n : int) (total : int) (b : int) -> 
 let rec v_blocksGo = (fun (s : string) (n : int) (total : int) (k : int) (b : int) (st : int B_dData_dList.t_List) -> (if (k <= 0) then st else ((((((v_blocksGo s) n) total) (k - 1)) (b + 1)) ((v_zipAdd st) ((v_compress st) (v_schedule ((((v_chunkWordsString s) n) total) b)))))))
 
 # 337 "Vuna/Compiler/Base/Hash.vuna"
-let v_sha256OfString = (fun (s : string) -> (let n = (bi_strLength s) in (let total = (v_paddedLen n) in ((((((v_blocksGo s) n) total) (if 64 = 0 then failwith "division by zero" else total / 64)) 0) v_shaInit))))
+let v_sha256OfString = (fun (s : string) -> (let n = (String.length s) in (let total = (v_paddedLen n) in ((((((v_blocksGo s) n) total) (if 64 = 0 then failwith "division by zero" else total / 64)) 0) v_shaInit))))
 
 # 33 "Vuna/Compiler/Base/Hash.vuna"
 let v_digestOfString = (fun (s : string) -> (v_sha256OfString s))
@@ -126,10 +126,10 @@ let v_digestOfString = (fun (s : string) -> (v_sha256OfString s))
 let v_digestIntOf = (fun (s : string) -> (v_digestInt (v_digestOfString s)))
 
 # 361 "Vuna/Compiler/Base/Hash.vuna"
-let rec v_prehashGo = (fun (k : int) (i : int) (h0 : int) (h1 : int) (h2 : int) (h3 : int) (s : string) -> (if (k <= 0) then (String.concat "" [(bi_strFromInt h0); ","; (bi_strFromInt h1); ","; (bi_strFromInt h2); ","; (bi_strFromInt h3)]) else (let b = (((dtp_strAt s) i) + 1) in (((((((v_prehashGo (k - 1)) (i + 1)) ((h0 * 131) + b)) ((h1 * 137) + b)) ((h2 * 139) + b)) ((h3 * 149) + b)) s))))
+let rec v_prehashGo = (fun (k : int) (i : int) (h0 : int) (h1 : int) (h2 : int) (h3 : int) (s : string) -> (if (k <= 0) then (String.concat "" [(string_of_int h0); ","; (string_of_int h1); ","; (string_of_int h2); ","; (string_of_int h3)]) else (let b = ((let b = s in let k = i in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)) + 1) in (((((((v_prehashGo (k - 1)) (i + 1)) ((h0 * 131) + b)) ((h1 * 137) + b)) ((h2 * 139) + b)) ((h3 * 149) + b)) s))))
 
 # 357 "Vuna/Compiler/Base/Hash.vuna"
-let v_prehashOfString = (fun (s : string) -> (((((((v_prehashGo (bi_strLength s)) 0) 1) 2) 3) 4) s))
+let v_prehashOfString = (fun (s : string) -> (((((((v_prehashGo (String.length s)) 0) 1) 2) 3) 4) s))
 
 # 58 "Vuna/Compiler/Base/Hash.vuna"
 let v_contentKey = (fun (s : string) -> (v_digestIntOf (v_prehashOfString s)))
@@ -138,7 +138,7 @@ let v_contentKey = (fun (s : string) -> (v_digestIntOf (v_prehashOfString s)))
 let v_digitAt = (fun (v : int) (p : int) -> ((B_dData_dBits.v_band (if p = 0 then failwith "division by zero" else v / p)) 15))
 
 # 384 "Vuna/Compiler/Base/Hash.vuna"
-let v_hexDigit = (fun (d : int) -> (if (d < 10) then (bi_strFromInt d) else (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((87 + d), B_dData_dList.C_List_Nil)))))
+let v_hexDigit = (fun (d : int) -> (if (d < 10) then (string_of_int d) else (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((87 + d), B_dData_dList.C_List_Nil)))))
 
 # 374 "Vuna/Compiler/Base/Hash.vuna"
 let v_hex8 = (fun (v : int) -> (B_dData_dList.dtp_concatMany (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 268435456)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 16777216)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 1048576)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 65536)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 4096)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 256)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 16)), (B_dData_dList.C_List__x58__x58_ ((v_hexDigit ((v_digitAt v) 1)), B_dData_dList.C_List_Nil))))))))))))))))))

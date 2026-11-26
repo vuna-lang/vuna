@@ -58,14 +58,14 @@ let rec v_anyCtorMentions = (fun (mc0 : string) (mc1 : Frontend_dAst.t_Ctor B_dD
 ))
 
 # 140 "Vuna/Compiler/Elab/Derive.vuna"
-let rec v_deriveCtxParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_deriveCtxParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__28, dtb__29) -> (if ((v_anyCtorMentions dtb__28) mc1) then (B_dData_dList.C_List__x58__x58_ (dtb__28, ((v_deriveCtxParams dtb__29) mc1))) else ((v_deriveCtxParams dtb__29) mc1))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 242 "Vuna/Compiler/Elab/Derive.vuna"
-let rec v_deriveFieldTypes = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
+let[@tail_mod_cons] rec v_deriveFieldTypes = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
   | Frontend_dAst.C_Expr_EPi (dtb__30, dtb__31, dtb__32, dtb__33, dtb__34, dtb__35) -> (B_dData_dList.C_List__x58__x58_ (dtb__33, (v_deriveFieldTypes dtb__34)))
   | Frontend_dAst.C_Expr_EApp (dtb__36, dtb__37, dtb__38) -> (match dtb__36 with
   | Frontend_dAst.C_Expr_EVar (dtb__39, dtb__40) -> (if (dtb__39 = "->") then (match dtb__37 with
@@ -152,7 +152,7 @@ let rec v_hashFields = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_
 ))
 
 # 432 "Vuna/Compiler/Elab/Derive.vuna"
-let rec v_varNamesAtGo = (fun (remaining : int) (prefix : string) (n : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((prefix ^ (bi_strFromInt (n - remaining))), (((v_varNamesAtGo (remaining - 1)) prefix) n)))))
+let[@tail_mod_cons] rec v_varNamesAtGo = (fun (remaining : int) (prefix : string) (n : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((prefix ^ (string_of_int (n - remaining))), (((v_varNamesAtGo (remaining - 1)) prefix) n)))))
 
 # 429 "Vuna/Compiler/Elab/Derive.vuna"
 let v_varNamesAt = (fun (prefix : string) (i : int) (n : int) -> (((v_varNamesAtGo (n - i)) prefix) n))

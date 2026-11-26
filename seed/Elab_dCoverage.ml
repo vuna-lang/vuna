@@ -5,7 +5,7 @@ type t_ClauseCover = C_ClauseCover_CovUncovered | C_ClauseCover_CovCovered | C_C
 let v_emptyPatSpan = { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }
 
 # 38 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_wilds = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PWild ((Frontend_dAst.v_detachedNodeRef v_emptyPatSpan))), (v_wilds (n - 1))))))
+let[@tail_mod_cons] rec v_wilds = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PWild ((Frontend_dAst.v_detachedNodeRef v_emptyPatSpan))), (v_wilds (n - 1))))))
 
 # 42 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_patHead = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
@@ -34,7 +34,7 @@ let v_isWildHead = (fun (p : Frontend_dAst.t_Pat) -> (match (v_patHead p) with
 ))
 
 # 66 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_defaultRows = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_defaultRows = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_List B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__11, dtb__12) -> (match dtb__11 with
   | B_dData_dList.C_List_Nil -> (v_defaultRows dtb__12)
   | B_dData_dList.C_List__x58__x58_ (dtb__13, dtb__14) -> (if (v_isWildHead dtb__13) then (B_dData_dList.C_List__x58__x58_ (dtb__14, (v_defaultRows dtb__12))) else (v_defaultRows dtb__12))
@@ -142,7 +142,7 @@ let v_sentinelCtorIn = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_
 let v_orderedCtors = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (heads : string B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads)))) ctors)) ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads))) ctors)))
 
 # 146 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_takePats = (fun (n : int) (xs : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with
+let[@tail_mod_cons] rec v_takePats = (fun (n : int) (xs : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__44, dtb__45) -> (B_dData_dList.C_List__x58__x58_ (dtb__44, ((v_takePats (n - 1)) dtb__45)))
   | _ -> failwith "DT: impossible branch"
@@ -293,7 +293,7 @@ let rec v_renderPatIn = (fun (fuel : int) (paren : bool) (p : Frontend_dAst.t_Pa
   | Frontend_dAst.C_Pat_PCon (dtb__107, dtb__108, dtb__109) -> (if ((B_dData_dList.v_length dtb__108) = 0) then dtb__107 else (let body = (String.concat "" [dtb__107; " "; ((B_dData_dString.v_join " ") ((B_dData_dList.v_map ((v_renderPatIn (fuel - 1)) true)) dtb__108))]) in (if paren then (String.concat "" ["("; body; ")"]) else body)))
   | Frontend_dAst.C_Pat_PVar (dtb__110, dtb__111) -> "_"
   | Frontend_dAst.C_Pat_PWild (dtb__112) -> "_"
-  | Frontend_dAst.C_Pat_PInt (dtb__113, dtb__114) -> (bi_strFromInt dtb__113)
+  | Frontend_dAst.C_Pat_PInt (dtb__113, dtb__114) -> (string_of_int dtb__113)
   | Frontend_dAst.C_Pat_PStr (dtb__115, dtb__116) -> (String.concat "" ["\""; dtb__115; "\""])
   | Frontend_dAst.C_Pat_PRecord (dtb__117, dtb__118, dtb__119) -> (String.concat "" ["{ "; dtb__117; " }"])
   | Frontend_dAst.C_Pat_PAs (dtb__120, dtb__121, dtb__122) -> (((v_renderPatIn (fuel - 1)) paren) dtb__121)

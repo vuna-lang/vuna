@@ -54,7 +54,7 @@ let v_decodedDiags = (fun (payload : string) -> (match (Base_dDiag_dCodec.v_decD
 
 # 192 "Vuna/Compiler/Driver/Target.vuna"
 let v_firstDiagOr = (fun (mc0 : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (mc1 : string) (mc2 : int) -> (match mc0 with
-  | B_dData_dList.C_List_Nil -> (((((Base_dDiag.v_diagNoLoc Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhCodegen) Base_dDiag.C_Category_CatCodegen) "") (String.concat "" ["target backend `"; (v_backendBinaryName mc1); "` failed with exit code "; (bi_strFromInt mc2)]))
+  | B_dData_dList.C_List_Nil -> (((((Base_dDiag.v_diagNoLoc Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhCodegen) Base_dDiag.C_Category_CatCodegen) "") (String.concat "" ["target backend `"; (v_backendBinaryName mc1); "` failed with exit code "; (string_of_int mc2)]))
   | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> dtb__4
   | _ -> failwith "DT: impossible branch"
 ))

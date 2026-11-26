@@ -208,7 +208,7 @@ let v_natChainValue = (fun (t : t_Term) -> ((v_natChainGo 1000000) t))
 let v_termSizeCap = 1000000
 
 # 334 "Vuna/Compiler/Core/Term.vuna"
-let rec v_termSizeArgTerms = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_termSizeArgTerms = (fun (mc0 : (t_Term, t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__33, dtb__34) -> (match dtb__33 with
   | { B_dData_dPair.f_Pair_first = dtb__35; B_dData_dPair.f_Pair_second = dtb__36 } -> (B_dData_dList.C_List__x58__x58_ (dtb__35, (v_termSizeArgTerms dtb__34)))
   | _ -> failwith "DT: impossible branch"
@@ -434,7 +434,7 @@ and v_substMetaVarAlt = (fun (mc0 : int) (mc1 : string) (mc2 : int) (mc3 : int) 
 let v_substMetaVar = (fun (m : int) (name : string) (q : int) (t : t_Term) -> (((((v_substMetaVarGo m) name) q) 0) t))
 
 # 811 "Vuna/Compiler/Core/Term.vuna"
-let rec v_insertDictBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Term) (mc3 : int) (mc4 : t_Term) -> (match mc4 with
+let[@tail_mod_cons] rec v_insertDictBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Term) (mc3 : int) (mc4 : t_Term) -> (match mc4 with
   | C_Term_TPi (dtb__158, dtb__159, dtb__160, dtb__161, dtb__162) -> (if (mc3 = mc1) then (C_Term_TPi (dtb__158, dtb__159, dtb__160, dtb__161, (C_Term_TPi (mc0, true, C_Rig_RigOmega, mc2, (((v_shift 0) 1) dtb__162))))) else (C_Term_TPi (dtb__158, dtb__159, dtb__160, dtb__161, (((((v_insertDictBinderGo mc0) mc1) mc2) (mc3 + 1)) dtb__162))))
   | _ -> mc4
 ))
@@ -443,7 +443,7 @@ let rec v_insertDictBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Term) (m
 let v_insertDictBinder = (fun (name : string) (idx : int) (dictDom : t_Term) (t : t_Term) -> (((((v_insertDictBinderGo name) idx) dictDom) 0) t))
 
 # 823 "Vuna/Compiler/Core/Term.vuna"
-let rec v_insertImplicitBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Rig) (mc3 : t_Term) (mc4 : int) (mc5 : t_Term) -> (match mc5 with
+let[@tail_mod_cons] rec v_insertImplicitBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : t_Rig) (mc3 : t_Term) (mc4 : int) (mc5 : t_Term) -> (match mc5 with
   | C_Term_TPi (dtb__163, dtb__164, dtb__165, dtb__166, dtb__167) -> (if (mc4 = mc1) then (C_Term_TPi (dtb__163, dtb__164, dtb__165, dtb__166, (C_Term_TPi (mc0, true, mc2, mc3, (((v_shift 0) 1) dtb__167))))) else (C_Term_TPi (dtb__163, dtb__164, dtb__165, dtb__166, ((((((v_insertImplicitBinderGo mc0) mc1) mc2) mc3) (mc4 + 1)) dtb__167))))
   | _ -> mc5
 ))
@@ -461,7 +461,7 @@ let rec v_countPis = (fun (mc0 : t_Term) -> (match mc0 with
 ))
 
 # 847 "Vuna/Compiler/Core/Term.vuna"
-let rec v_insertLamBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : int) (mc3 : t_Term) -> (match mc3 with
+let[@tail_mod_cons] rec v_insertLamBinderGo = (fun (mc0 : string) (mc1 : int) (mc2 : int) (mc3 : t_Term) -> (match mc3 with
   | C_Term_TLam (dtb__173, dtb__174, dtb__175, dtb__176, dtb__177) -> (if (mc2 = mc1) then (C_Term_TLam (dtb__173, dtb__174, dtb__175, dtb__176, (C_Term_TLam (mc0, C_Rig_RigOmega, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_shift 0) 1) dtb__177))))) else (C_Term_TLam (dtb__173, dtb__174, dtb__175, dtb__176, ((((v_insertLamBinderGo mc0) mc1) (mc2 + 1)) dtb__177))))
   | _ -> mc3
 ))
@@ -726,7 +726,7 @@ let v_caseAltBody = (fun (p : t_CaseAlt) -> (match p with
 ))
 
 # 338 "Vuna/Compiler/Core/Term.vuna"
-let rec v_termSizeAltTerms = (fun (mc0 : t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_termSizeAltTerms = (fun (mc0 : t_CaseAlt B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__388, dtb__389) -> (B_dData_dList.C_List__x58__x58_ ((v_caseAltBody dtb__388), (v_termSizeAltTerms dtb__389)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -1041,19 +1041,19 @@ let rec v_showTerm = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TBool (dtb__753) -> (if dtb__753 then "True" else "False")
   | C_Term_TFloat (dtb__754) -> dtb__754
   | C_Term_TStr (dtb__755) -> (v_showCoreString dtb__755)
-  | C_Term_TInt (dtb__756) -> (bi_strFromInt dtb__756)
+  | C_Term_TInt (dtb__756) -> (string_of_int dtb__756)
   | C_Term_TCase (dtb__757, dtb__758) -> (String.concat "" ["case "; (v_showTerm dtb__757); " of "; (v_showCoreAlts dtb__758)])
   | C_Term_TRecUpd (dtb__759, dtb__760, dtb__761, dtb__762, dtb__763) -> (String.concat "" [(v_showTerm dtb__759); " with "; dtb__760; " "; (v_showTerm dtb__763)])
-  | C_Term_TProj (dtb__764, dtb__765, dtb__766, dtb__767, dtb__768) -> (String.concat "" [(v_showTerm dtb__764); "."; dtb__765; "#"; (bi_strFromInt dtb__768)])
+  | C_Term_TProj (dtb__764, dtb__765, dtb__766, dtb__767, dtb__768) -> (String.concat "" [(v_showTerm dtb__764); "."; dtb__765; "#"; (string_of_int dtb__768)])
   | C_Term_TRecord (dtb__769, dtb__770) -> ((v_recordAppShow dtb__769) dtb__770)
   | C_Term_TMk (dtb__771, dtb__772) -> (String.concat "" ["("; dtb__771; (v_showArgTerms dtb__772); ")"])
   | C_Term_TCon (dtb__773, dtb__774) -> (String.concat "" ["("; dtb__773; (v_showArgTerms dtb__774); ")"])
   | C_Term_TApp (dtb__775, dtb__776, dtb__777) -> (String.concat "" ["("; (v_showTerm dtb__775); " "; (v_showTerm dtb__776); ")"])
   | C_Term_TLam (dtb__778, dtb__779, dtb__780, dtb__781, dtb__782) -> (String.concat "" ["\\"; dtb__778; " => "; (v_showTerm dtb__782)])
   | C_Term_TPi (dtb__783, dtb__784, dtb__785, dtb__786, dtb__787) -> (if (dtb__783 = "_") then (String.concat "" [(v_showTerm dtb__786); " -> "; (v_showTerm dtb__787)]) else (if dtb__784 then (String.concat "" ["{"; dtb__783; " : "; (v_showTerm dtb__786); "} -> "; (v_showTerm dtb__787)]) else (String.concat "" ["("; dtb__783; " : "; (v_showTerm dtb__786); ") -> "; (v_showTerm dtb__787)])))
-  | C_Term_TType (dtb__788) -> (if ((v_levelToInt dtb__788) = 0) then "Type" else ("Type " ^ (bi_strFromInt (v_levelToInt dtb__788))))
+  | C_Term_TType (dtb__788) -> (if ((v_levelToInt dtb__788) = 0) then "Type" else ("Type " ^ (string_of_int (v_levelToInt dtb__788))))
   | C_Term_TGlobal (dtb__789) -> dtb__789
-  | C_Term_TMeta (dtb__790) -> ("?" ^ (bi_strFromInt dtb__790))
+  | C_Term_TMeta (dtb__790) -> ("?" ^ (string_of_int dtb__790))
   | C_Term_TVar (dtb__791, dtb__792, dtb__793) -> dtb__791
   | _ -> failwith "DT: impossible branch"
 ))

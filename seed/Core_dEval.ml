@@ -16,7 +16,7 @@ let v_evalAlt = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) (mc1 : Core
 ))
 
 # 71 "Vuna/Compiler/Core/Eval.vuna"
-let rec v_evalAlts = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) (mc1 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_evalAlts = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) (mc1 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__5, dtb__6) -> (B_dData_dList.C_List__x58__x58_ (((v_evalAlt mc0) dtb__5), ((v_evalAlts mc0) dtb__6)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -566,7 +566,7 @@ let rec v_nthByte = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int) -> (match 
 ))
 
 # 843 "Vuna/Compiler/Core/Eval.vuna"
-let v_strAtBytes = (fun (s : string) (i : int) -> (if (if (i < 0) then true else (i >= (bi_strLength s))) then (0 - 1) else ((v_nthByte (B_dData_dList.dtp_unpack s)) i)))
+let v_strAtBytes = (fun (s : string) (i : int) -> (if (if (i < 0) then true else (i >= (String.length s))) then (0 - 1) else ((v_nthByte (B_dData_dList.dtp_unpack s)) i)))
 
 # 833 "Vuna/Compiler/Core/Eval.vuna"
 let v_atPrim = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc0 with
@@ -589,7 +589,7 @@ let v_atPrim = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc
 ))
 
 # 873 "Vuna/Compiler/Core/Eval.vuna"
-let rec v_takeBytes = (fun (n : int) (xs : int B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with
+let[@tail_mod_cons] rec v_takeBytes = (fun (n : int) (xs : int B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__165, dtb__166) -> (B_dData_dList.C_List__x58__x58_ (dtb__165, ((v_takeBytes (n - 1)) dtb__166)))
   | _ -> failwith "DT: impossible branch"
@@ -603,7 +603,7 @@ let rec v_dropBytes = (fun (n : int) (xs : int B_dData_dList.t_List) -> (if (n <
 )))
 
 # 865 "Vuna/Compiler/Core/Eval.vuna"
-let v_substringBytes = (fun (start : int) (len : int) (s : string) -> (let n = (bi_strLength s) in (let st = (if (start < 0) then 0 else (if (start > n) then n else start)) in (let ln = (if (len < 0) then 0 else (if ((st + len) > n) then (n - st) else len)) in (B_dData_dList.dtp_pack ((v_takeBytes ln) ((v_dropBytes st) (B_dData_dList.dtp_unpack s))))))))
+let v_substringBytes = (fun (start : int) (len : int) (s : string) -> (let n = (String.length s) in (let st = (if (start < 0) then 0 else (if (start > n) then n else start)) in (let ln = (if (len < 0) then 0 else (if ((st + len) > n) then (n - st) else len)) in (B_dData_dList.dtp_pack ((v_takeBytes ln) ((v_dropBytes st) (B_dData_dList.dtp_unpack s))))))))
 
 # 852 "Vuna/Compiler/Core/Eval.vuna"
 let v_substringPrim = (fun (mc0 : Core_dTerm.t_Value B_dData_dList.t_List) -> (match mc0 with
@@ -887,8 +887,8 @@ and v_primReduce = (fun (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMa
   | Base_dIntrinsics.C_IntrinsicOp_OpConcat -> ((v_strPrim2 sp) (fun (a : string) (b : string) -> (Core_dTerm.C_Value_VStr ((a ^ b)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpAnd -> ((v_boolPrim2 sp) (fun (a : bool) (b : bool) -> (Core_dTerm.C_Value_VBool ((if a then b else false)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpOr -> ((v_boolPrim2 sp) (fun (a : bool) (b : bool) -> (Core_dTerm.C_Value_VBool ((if a then true else b)))))
-  | Base_dIntrinsics.C_IntrinsicOp_OpStrFromInt -> ((v_intPrim1 sp) (fun (n : int) -> (Core_dTerm.C_Value_VStr ((bi_strFromInt n)))))
-  | Base_dIntrinsics.C_IntrinsicOp_OpStrLength -> ((v_strPrim1 sp) (fun (s : string) -> (Core_dTerm.C_Value_VInt ((bi_strLength s)))))
+  | Base_dIntrinsics.C_IntrinsicOp_OpStrFromInt -> ((v_intPrim1 sp) (fun (n : int) -> (Core_dTerm.C_Value_VStr ((string_of_int n)))))
+  | Base_dIntrinsics.C_IntrinsicOp_OpStrLength -> ((v_strPrim1 sp) (fun (s : string) -> (Core_dTerm.C_Value_VInt ((String.length s)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpStrHash -> ((v_strPrim1 sp) (fun (s : string) -> (Core_dTerm.C_Value_VInt ((v_strHashOf s)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpStrDispatchId -> ((v_strPrim1 sp) (fun (s : string) -> (Core_dTerm.C_Value_VInt ((Base_dIntrinsics.v_dispatchIdOf s)))))
   | Base_dIntrinsics.C_IntrinsicOp_OpStrAt -> (v_atPrim sp)
@@ -1037,7 +1037,7 @@ let v_applyClosureBinder = (fun (mc0 : Core_dTerm.t_Closure) (mc1 : Core_dTerm.t
 let v_freshVar = (fun (name : string) (level : int) -> (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (name, level, B_dData_dList.C_List_Nil)))))
 
 # 1057 "Vuna/Compiler/Core/Eval.vuna"
-let rec v_argValsAt = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : int) -> (match mc0 with
+let[@tail_mod_cons] rec v_argValsAt = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__376, dtb__377) -> (match dtb__376 with
   | { B_dData_dPair.f_Pair_first = dtb__378; B_dData_dPair.f_Pair_second = dtb__379 } -> (B_dData_dList.C_List__x58__x58_ (((v_freshVar dtb__378) (mc1 + mc2)), (((v_argValsAt dtb__377) mc1) (mc2 + 1))))
   | _ -> failwith "DT: impossible branch"
@@ -1208,15 +1208,15 @@ let v_isNilList = (fun mc0 -> (match mc0 with
 
 # 1212 "Vuna/Compiler/Core/Eval.vuna"
 let v_showValueAt = (fun (depth : int) (v : Core_dTerm.t_Value) -> (match v with
-  | Core_dTerm.C_Value_VType (dtb__515) -> (if ((Core_dTerm.v_levelToInt dtb__515) = 0) then "Type" else ("Type " ^ (bi_strFromInt (Core_dTerm.v_levelToInt dtb__515))))
+  | Core_dTerm.C_Value_VType (dtb__515) -> (if ((Core_dTerm.v_levelToInt dtb__515) = 0) then "Type" else ("Type " ^ (string_of_int (Core_dTerm.v_levelToInt dtb__515))))
   | Core_dTerm.C_Value_VNeutral (dtb__516) -> (match dtb__516 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__517, dtb__518) -> (if (v_isNilList dtb__518) then dtb__517 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
   | Core_dTerm.C_Neutral_NVar (dtb__519, dtb__520, dtb__521) -> (if (v_isNilList dtb__521) then dtb__519 else (Core_dTerm.v_showTerm ((v_quote depth) v)))
   | _ -> failwith "DT: impossible branch"
 )
-  | Core_dTerm.C_Value_VMeta (dtb__522, dtb__523) -> (if (v_isNilList dtb__523) then ("?" ^ (bi_strFromInt dtb__522)) else (Core_dTerm.v_showTerm ((v_quote depth) v)))
+  | Core_dTerm.C_Value_VMeta (dtb__522, dtb__523) -> (if (v_isNilList dtb__523) then ("?" ^ (string_of_int dtb__522)) else (Core_dTerm.v_showTerm ((v_quote depth) v)))
   | Core_dTerm.C_Value_VCon (dtb__524, dtb__525) -> (match ((v_natCtorInt dtb__524) dtb__525) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__526) -> (bi_strFromInt dtb__526)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__526) -> (string_of_int dtb__526)
   | B_dData_dMaybe.C_Maybe_Nothing -> (Core_dTerm.v_showTerm ((v_quote depth) v))
   | _ -> failwith "DT: impossible branch"
 )

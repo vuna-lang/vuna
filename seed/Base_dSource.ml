@@ -4,7 +4,7 @@ and t_Span = { f_Span_spanFile : string; f_Span_spanStartLine : int; f_Span_span
 
 # 46 "Vuna/Compiler/Base/Source.vuna"
 let v_showSpanLoc = (fun (mc0 : t_Span) -> (match mc0 with
-  | { f_Span_spanFile = dtb__0; f_Span_spanStartLine = dtb__1; f_Span_spanStartCol = dtb__2; f_Span_spanEndLine = dtb__3; f_Span_spanEndCol = dtb__4; f_Span_spanStartOffset = dtb__5; f_Span_spanEndOffset = dtb__6 } -> (String.concat "" [dtb__0; ":"; (bi_strFromInt dtb__1); ":"; (bi_strFromInt dtb__2)])
+  | { f_Span_spanFile = dtb__0; f_Span_spanStartLine = dtb__1; f_Span_spanStartCol = dtb__2; f_Span_spanEndLine = dtb__3; f_Span_spanEndCol = dtb__4; f_Span_spanStartOffset = dtb__5; f_Span_spanEndOffset = dtb__6 } -> (String.concat "" [dtb__0; ":"; (string_of_int dtb__1); ":"; (string_of_int dtb__2)])
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -19,16 +19,16 @@ let rec v_memChar = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match 
 ))
 
 # 82 "Vuna/Compiler/Base/Source.vuna"
-let rec v_scanFor = (fun (c : int) (s : string) (i : int) (n : int) (fuel : int) -> (if (fuel <= 0) then false else (if (i >= n) then false else (if (((dtp_strAt s) i) = c) then true else (((((v_scanFor c) s) (i + 1)) n) (fuel - 1))))))
+let rec v_scanFor = (fun (c : int) (s : string) (i : int) (n : int) (fuel : int) -> (if (fuel <= 0) then false else (if (i >= n) then false else (if ((let b = s in let k = i in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)) = c) then true else (((((v_scanFor c) s) (i + 1)) n) (fuel - 1))))))
 
 # 89 "Vuna/Compiler/Base/Source.vuna"
-let v_containsDot = (fun (s : string) -> (((((v_scanFor 46) s) 0) (bi_strLength s)) (bi_strLength s)))
+let v_containsDot = (fun (s : string) -> (((((v_scanFor 46) s) 0) (String.length s)) (String.length s)))
 
 # 102 "Vuna/Compiler/Base/Source.vuna"
-let rec v_splitOnCharGo = (fun (sep : int) (s : string) (start : int) (i : int) (n : int) (fuel : int) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (n - start)) s), acc))) else (if (i >= n) then (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (i - start)) s), acc))) else (if (((dtp_strAt s) i) = sep) then (((((((v_splitOnCharGo sep) s) (i + 1)) (i + 1)) n) (fuel - 1)) (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (i - start)) s), acc))) else (((((((v_splitOnCharGo sep) s) start) (i + 1)) n) (fuel - 1)) acc)))))
+let rec v_splitOnCharGo = (fun (sep : int) (s : string) (start : int) (i : int) (n : int) (fuel : int) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (n - start)) s), acc))) else (if (i >= n) then (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (i - start)) s), acc))) else (if ((let b = s in let k = i in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)) = sep) then (((((((v_splitOnCharGo sep) s) (i + 1)) (i + 1)) n) (fuel - 1)) (B_dData_dList.C_List__x58__x58_ ((((dtp_substring start) (i - start)) s), acc))) else (((((((v_splitOnCharGo sep) s) start) (i + 1)) n) (fuel - 1)) acc)))))
 
 # 97 "Vuna/Compiler/Base/Source.vuna"
-let v_splitOnChar = (fun (sep : int) (s : string) -> (((((((v_splitOnCharGo sep) s) 0) 0) (bi_strLength s)) ((bi_strLength s) + 1)) B_dData_dList.C_List_Nil))
+let v_splitOnChar = (fun (sep : int) (s : string) -> (((((((v_splitOnCharGo sep) s) 0) 0) (String.length s)) ((String.length s) + 1)) B_dData_dList.C_List_Nil))
 
 # 93 "Vuna/Compiler/Base/Source.vuna"
 let v_splitOnDot = (fun (s : string) -> ((v_splitOnChar 46) s))
@@ -41,7 +41,7 @@ let v_splitLastDot = (fun (parts : string B_dData_dList.t_List) -> (match (B_dDa
 ))
 
 # 130 "Vuna/Compiler/Base/Source.vuna"
-let rec v_dotsRest = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_dotsRest = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__11, dtb__12) -> (B_dData_dList.C_List__x58__x58_ (".", (B_dData_dList.C_List__x58__x58_ (dtb__11, (v_dotsRest dtb__12)))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -58,10 +58,10 @@ let v_joinDotsParts = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 wit
 let v_joinDots = (fun (xs : string B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany (v_joinDotsParts xs)))
 
 # 141 "Vuna/Compiler/Base/Source.vuna"
-let rec v_lastSegGo = (fun (name : string) (i : int) (fuel : int) -> (if (fuel <= 0) then (((dtp_substring (i + 1)) (((bi_strLength name) - i) - 1)) name) else (if (i < 0) then name else (if (((dtp_strAt name) i) = 46) then (((dtp_substring (i + 1)) (((bi_strLength name) - i) - 1)) name) else (((v_lastSegGo name) (i - 1)) (fuel - 1))))))
+let rec v_lastSegGo = (fun (name : string) (i : int) (fuel : int) -> (if (fuel <= 0) then (((dtp_substring (i + 1)) (((String.length name) - i) - 1)) name) else (if (i < 0) then name else (if ((let b = name in let k = i in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)) = 46) then (((dtp_substring (i + 1)) (((String.length name) - i) - 1)) name) else (((v_lastSegGo name) (i - 1)) (fuel - 1))))))
 
 # 138 "Vuna/Compiler/Base/Source.vuna"
-let v_lastSeg = (fun (name : string) -> (((v_lastSegGo name) ((bi_strLength name) - 1)) ((bi_strLength name) + 1)))
+let v_lastSeg = (fun (name : string) -> (((v_lastSegGo name) ((String.length name) - 1)) ((String.length name) + 1)))
 
 # 153 "Vuna/Compiler/Base/Source.vuna"
 let v_prefixOfName = (fun (name : string) -> (match (v_splitLastDot (v_splitOnDot name)) with
@@ -113,7 +113,7 @@ let rec v_dropPastSlash = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 wi
 let v_parentOfPath = (fun (path : string) -> (let chars = (B_dData_dList.dtp_unpack path) in (let rev = (B_dData_dList.v_reverse chars) in (let after = (v_dropPastSlash rev) in (if ((B_dData_dList.v_length after) = (B_dData_dList.v_length rev)) then "." else (let parent = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse after)) in (if (parent = "") then (if ((B_dData_dString.v_startsWith "/") path) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") path) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") parent)) else false) then ("/" ^ parent) else parent))))))))
 
 # 212 "Vuna/Compiler/Base/Source.vuna"
-let v_stripPathPrefix = (fun (prefix : string) (path : string) -> (if (prefix = "") then path else (if ((B_dData_dString.v_startsWith (prefix ^ "/")) path) then (((dtp_substring (bi_strLength (prefix ^ "/"))) ((bi_strLength path) - (bi_strLength (prefix ^ "/")))) path) else path)))
+let v_stripPathPrefix = (fun (prefix : string) (path : string) -> (if (prefix = "") then path else (if ((B_dData_dString.v_startsWith (prefix ^ "/")) path) then (((dtp_substring (String.length (prefix ^ "/"))) ((String.length path) - (String.length (prefix ^ "/")))) path) else path)))
 
 # 222 "Vuna/Compiler/Base/Source.vuna"
 let rec v_stripRootsPath = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
@@ -123,7 +123,7 @@ let rec v_stripRootsPath = (fun (mc0 : string B_dData_dList.t_List) (mc1 : strin
 ))
 
 # 228 "Vuna/Compiler/Base/Source.vuna"
-let v_stripDotSlashPath = (fun (path : string) -> (if ((B_dData_dString.v_startsWith "./") path) then (((dtp_substring 2) ((bi_strLength path) - 2)) path) else path))
+let v_stripDotSlashPath = (fun (path : string) -> (if ((B_dData_dString.v_startsWith "./") path) then (((dtp_substring 2) ((String.length path) - 2)) path) else path))
 
 # 234 "Vuna/Compiler/Base/Source.vuna"
 let v_locationPathUnder = (fun (roots : string B_dData_dList.t_List) (dir : string) (path : string) -> (v_stripDotSlashPath ((v_stripPathPrefix dir) ((v_stripRootsPath roots) path))))
@@ -222,4 +222,4 @@ let v_spanEndOffset = (fun (p : t_Span) -> (match p with
 ))
 
 # 60 "Vuna/Compiler/Base/Source.vuna"
-let v_spanAtName = (fun (name : string) (sp : t_Span) -> (if (v_isSpanEmpty sp) then sp else (if ((v_spanStartOffset sp) = (v_spanEndOffset sp)) then { f_Span_spanFile = (v_spanFile sp); f_Span_spanStartLine = (v_spanStartLine sp); f_Span_spanStartCol = (v_spanStartCol sp); f_Span_spanEndLine = (v_spanStartLine sp); f_Span_spanEndCol = ((v_spanStartCol sp) + (bi_strLength name)); f_Span_spanStartOffset = (v_spanStartOffset sp); f_Span_spanEndOffset = ((v_spanStartOffset sp) + (bi_strLength name)) } else (if (((v_spanEndOffset sp) - (v_spanStartOffset sp)) = (bi_strLength name)) then sp else v_spanEmpty))))
+let v_spanAtName = (fun (name : string) (sp : t_Span) -> (if (v_isSpanEmpty sp) then sp else (if ((v_spanStartOffset sp) = (v_spanEndOffset sp)) then { f_Span_spanFile = (v_spanFile sp); f_Span_spanStartLine = (v_spanStartLine sp); f_Span_spanStartCol = (v_spanStartCol sp); f_Span_spanEndLine = (v_spanStartLine sp); f_Span_spanEndCol = ((v_spanStartCol sp) + (String.length name)); f_Span_spanStartOffset = (v_spanStartOffset sp); f_Span_spanEndOffset = ((v_spanStartOffset sp) + (String.length name)) } else (if (((v_spanEndOffset sp) - (v_spanStartOffset sp)) = (String.length name)) then sp else v_spanEmpty))))

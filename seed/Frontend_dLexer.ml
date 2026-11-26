@@ -7,13 +7,13 @@ and t_CKind = C_CKind_CLine | C_CKind_CBlock
 and t_Comment = { f_Comment_commentKind : t_CKind; f_Comment_commentText : string; f_Comment_commentSpan : Base_dSource.t_Span }
 
 # 52 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_charsEmpty = (fun (cs : t_Chars) -> ((cs).f_Chars_charsOffset >= (bi_strLength (cs).f_Chars_charsSource)))
+let v_charsEmpty = (fun (cs : t_Chars) -> ((cs).f_Chars_charsOffset >= (String.length (cs).f_Chars_charsSource)))
 
 # 55 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_charsPeek = (fun (cs : t_Chars) -> ((dtp_strAt (cs).f_Chars_charsSource) (cs).f_Chars_charsOffset))
+let v_charsPeek = (fun (cs : t_Chars) -> (let b = (cs).f_Chars_charsSource in let k = (cs).f_Chars_charsOffset in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)))
 
 # 58 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_charsPeekAt = (fun (k : int) (cs : t_Chars) -> ((dtp_strAt (cs).f_Chars_charsSource) ((cs).f_Chars_charsOffset + k)))
+let v_charsPeekAt = (fun (k : int) (cs : t_Chars) -> (let b = (cs).f_Chars_charsSource in let k = ((cs).f_Chars_charsOffset + k) in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)))
 
 # 84 "Vuna/Compiler/Frontend/Lexer.vuna"
 let v_posWithEnd = (fun (p : Base_dSource.t_Pos) (end_ : int) -> { Base_dSource.f_Pos_posLine = (Base_dSource.v_posLine p); Base_dSource.f_Pos_posCol = (Base_dSource.v_posCol p); Base_dSource.f_Pos_posOffset = (Base_dSource.v_posOffset p); Base_dSource.f_Pos_posEndOffset = end_ })
@@ -141,7 +141,7 @@ let v_depthAfter = (fun (mc0 : int) (mc1 : t_Tok) -> (match mc1 with
 ))
 
 # 715 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_sourceFuel = (fun (source : string) -> ((4 * (bi_strLength source)) + 64))
+let v_sourceFuel = (fun (source : string) -> ((4 * (String.length source)) + 64))
 
 # 42 "Vuna/Compiler/Frontend/Lexer.vuna"
 let v_ptokTok = (fun (p : t_PTok) -> (match p with

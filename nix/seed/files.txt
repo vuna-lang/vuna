@@ -156,6 +156,7 @@ Vuna_dIr_dDispatch.ml
 Vuna_dIr_dModel.ml
 Vuna_dIr_dRepresent.ml
 Vuna_dIr_dRuntime.ml
+Vuna_dIr_dTail.ml
 Vuna_dIr_dValidate.ml
 Vuna_dTarget_dOcaml_dAssembly.ml
 Vuna_dTarget_dOcaml_dDecl.ml

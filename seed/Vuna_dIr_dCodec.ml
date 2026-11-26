@@ -56,7 +56,7 @@ let rec v_encIrTy = (fun (fuel : int) (ty : Vuna_dIr_dModel.t_IrTy) (acc : strin
   | _ -> failwith "DT: impossible branch"
 )))
 # 105 "Vuna/Ir/Codec.vuna"
-and v_encIrTys = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encIrTysGo fuel) xs) acc))))))))
+and v_encIrTys = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encIrTysGo fuel) xs) acc))))))))
 # 108 "Vuna/Ir/Codec.vuna"
 and v_encIrTysGo = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match xs with
   | B_dData_dList.C_List_Nil -> acc
@@ -134,7 +134,7 @@ let rec v_encBindersGo = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrBinder B_dD
 )))
 
 # 225 "Vuna/Ir/Codec.vuna"
-let v_encBinders = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encBindersGo fuel) xs) acc))))))))
+let v_encBinders = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encBindersGo fuel) xs) acc))))))))
 
 # 237 "Vuna/Ir/Codec.vuna"
 let v_decBinders = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (((Base_dBytes.v_decList v_decBinder) fuel) c))
@@ -148,7 +148,7 @@ let rec v_encAlt = (fun (mc0 : int) (mc1 : Vuna_dIr_dModel.t_IrAlt) (mc2 : strin
   | _ -> failwith "DT: impossible branch"
 ))
 # 260 "Vuna/Ir/Codec.vuna"
-and v_encAlts = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encAltsGo fuel) xs) acc))))))))
+and v_encAlts = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encAltsGo fuel) xs) acc))))))))
 # 263 "Vuna/Ir/Codec.vuna"
 and v_encAltsGo = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match xs with
   | B_dData_dList.C_List_Nil -> acc
@@ -162,7 +162,7 @@ and v_encAltM = (fun (fuel : int) (a : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_
   | _ -> failwith "DT: impossible branch"
 )))
 # 312 "Vuna/Ir/Codec.vuna"
-and v_encFields = (fun (fuel : int) (xs : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encFieldsGo fuel) xs) acc))))))))
+and v_encFields = (fun (fuel : int) (xs : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encFieldsGo fuel) xs) acc))))))))
 # 315 "Vuna/Ir/Codec.vuna"
 and v_encFieldsGo = (fun (fuel : int) (xs : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (let nd_uscrut3 = xs in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__22, dtb__23) -> (match dtb__22 with
@@ -202,7 +202,7 @@ and v_encIrCases = (fun (mc0 : int) (mc1 : Vuna_dIr_dModel.t_Ir) (mc2 : string B
   | _ -> failwith "DT: impossible branch"
 ))
 # 397 "Vuna/Ir/Codec.vuna"
-and v_encIrs = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encIrsGo fuel) xs) acc))))))))
+and v_encIrs = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encIrsGo fuel) xs) acc))))))))
 # 400 "Vuna/Ir/Codec.vuna"
 and v_encIrsGo = (fun (fuel : int) (xs : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match xs with
   | B_dData_dList.C_List_Nil -> acc
@@ -530,10 +530,19 @@ let v_decNamedInt = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (((Base_dBytes.
 let v_decCtorShapes = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (((Base_dBytes.v_decList ((Base_dBytes.v_decPair Base_dBytes.v_decStr) ((Base_dBytes.v_decPair Base_dBytes.v_decStr) v_decBools))) fuel) c))
 
 # 880 "Vuna/Ir/Codec.vuna"
-let v_encShared = (fun (s : Vuna_dIr_dModel.t_IrShared) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) (Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encInt) Base_dBytes.v_encStr)))) (s).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields) (((Base_dBytes.v_encMaybe v_encListFam) (s).Vuna_dIr_dModel.f_IrShared_irSharedListFam) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesObs) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) Base_dBytes.v_encInt))) (s).Vuna_dIr_dModel.f_IrShared_irSharedDefLocs) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) Base_dBytes.v_encInt))) (s).Vuna_dIr_dModel.f_IrShared_irSharedUnboxed) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) v_encBools))) (s).Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes) acc)))))))))
+let v_encShared = (fun (s : Vuna_dIr_dModel.t_IrShared) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) (Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encInt) Base_dBytes.v_encStr)))) (s).Vuna_dIr_dModel.f_IrShared_irSharedRecordFields) (((Base_dBytes.v_encMaybe v_encListFam) (s).Vuna_dIr_dModel.f_IrShared_irSharedListFam) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesObs) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) Base_dBytes.v_encInt))) (s).Vuna_dIr_dModel.f_IrShared_irSharedDefLocs) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) Base_dBytes.v_encInt))) (s).Vuna_dIr_dModel.f_IrShared_irSharedUnboxed) (((Base_dBytes.v_encList ((Base_dBytes.v_encPair Base_dBytes.v_encStr) ((Base_dBytes.v_encPair Base_dBytes.v_encStr) v_encBools))) (s).Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesHost) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesSched) ((Base_dBytes.v_encBool (s).Vuna_dIr_dModel.f_IrShared_irSharedUsesEff) acc))))))))))))
+
+# 943 "Vuna/Ir/Codec.vuna"
+let v_decShared10 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (usesHost : bool) (usesSched : bool) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool fuel) c)) (fun (usesEff : bool) (c1 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Vuna_dIr_dModel.f_IrShared_irSharedRecordFields = recFields; Vuna_dIr_dModel.f_IrShared_irSharedListFam = listFam; Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat = usesFloat; Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace = usesTrace; Vuna_dIr_dModel.f_IrShared_irSharedUsesObs = usesObs; Vuna_dIr_dModel.f_IrShared_irSharedDefLocs = defLocs; Vuna_dIr_dModel.f_IrShared_irSharedUnboxed = unboxed; Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes = ctorShapes; Vuna_dIr_dModel.f_IrShared_irSharedUsesHost = usesHost; Vuna_dIr_dModel.f_IrShared_irSharedUsesSched = usesSched; Vuna_dIr_dModel.f_IrShared_irSharedUsesEff = usesEff }; B_dData_dPair.f_Pair_second = c1 })))))
+
+# 937 "Vuna/Ir/Codec.vuna"
+let v_decShared9 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (usesHost : bool) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool fuel) c)) (fun (usesSched : bool) (c1 : Base_dBytes.t_Cur) -> ((((((((((((v_decShared10 fuel) c1) recFields) listFam) usesFloat) usesTrace) usesObs) defLocs) unboxed) ctorShapes) usesHost) usesSched))))
+
+# 931 "Vuna/Ir/Codec.vuna"
+let v_decShared8 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (ctorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool fuel) c)) (fun (usesHost : bool) (c1 : Base_dBytes.t_Cur) -> (((((((((((v_decShared9 fuel) c1) recFields) listFam) usesFloat) usesTrace) usesObs) defLocs) unboxed) ctorShapes) usesHost))))
 
 # 925 "Vuna/Ir/Codec.vuna"
-let v_decShared7 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair ((v_decCtorShapes fuel) c)) (fun (ctorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Vuna_dIr_dModel.f_IrShared_irSharedRecordFields = recFields; Vuna_dIr_dModel.f_IrShared_irSharedListFam = listFam; Vuna_dIr_dModel.f_IrShared_irSharedUsesFloat = usesFloat; Vuna_dIr_dModel.f_IrShared_irSharedUsesTrace = usesTrace; Vuna_dIr_dModel.f_IrShared_irSharedUsesObs = usesObs; Vuna_dIr_dModel.f_IrShared_irSharedDefLocs = defLocs; Vuna_dIr_dModel.f_IrShared_irSharedUnboxed = unboxed; Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes = ctorShapes }; B_dData_dPair.f_Pair_second = c1 })))))
+let v_decShared7 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair ((v_decCtorShapes fuel) c)) (fun (ctorShapes : (string, (string, bool B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> ((((((((((v_decShared8 fuel) c1) recFields) listFam) usesFloat) usesTrace) usesObs) defLocs) unboxed) ctorShapes))))
 
 # 919 "Vuna/Ir/Codec.vuna"
 let v_decShared6 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (listFam : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Maybe) (usesFloat : bool) (usesTrace : bool) (usesObs : bool) (defLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair ((v_decNamedInt fuel) c)) (fun (unboxed : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> (((((((((v_decShared7 fuel) c1) recFields) listFam) usesFloat) usesTrace) usesObs) defLocs) unboxed))))
@@ -556,32 +565,32 @@ let v_decShared1 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (recFields : (strin
 # 887 "Vuna/Ir/Codec.vuna"
 let v_decShared = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList ((Base_dBytes.v_decPair Base_dBytes.v_decStr) (Base_dBytes.v_decList ((Base_dBytes.v_decPair Base_dBytes.v_decInt) Base_dBytes.v_decStr)))) fuel) c)) (fun (recFields : (string, (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> (((v_decShared1 fuel) c1) recFields))))
 
-# 934 "Vuna/Ir/Codec.vuna"
+# 952 "Vuna/Ir/Codec.vuna"
 let v_encUnit = (fun (fuel : int) (u : Vuna_dIr_dModel.t_IrUnit) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (((Base_dBytes.v_encList (v_encTyDecl (fuel - 1))) (u).Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls) (((Base_dBytes.v_encList (v_encGroup (fuel - 1))) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) ((Base_dBytes.v_encBool (u).Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily) ((v_encStrs (u).Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs) (((Base_dBytes.v_encMaybe (v_encEntry (fuel - 1))) (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry) acc)))))))
 
-# 963 "Vuna/Ir/Codec.vuna"
+# 981 "Vuna/Ir/Codec.vuna"
 let v_decUnit4 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (tyDecls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (groups : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) (hasListFamily : bool) (typeRefs : string B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe v_decEntry) fuel) c)) (fun (entry : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Maybe) (c1 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Vuna_dIr_dModel.f_IrUnit_irUnitTyDecls = tyDecls; Vuna_dIr_dModel.f_IrUnit_irUnitGroups = groups; Vuna_dIr_dModel.f_IrUnit_irUnitHasListFamily = hasListFamily; Vuna_dIr_dModel.f_IrUnit_irUnitTypeRefs = typeRefs; Vuna_dIr_dModel.f_IrUnit_irUnitEntry = entry }; B_dData_dPair.f_Pair_second = c1 })))))
 
-# 957 "Vuna/Ir/Codec.vuna"
+# 975 "Vuna/Ir/Codec.vuna"
 let v_decUnit3 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (tyDecls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (groups : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) (hasListFamily : bool) -> ((Base_dBytes.v_thenPair ((v_decStrs fuel) c)) (fun (typeRefs : string B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> ((((((v_decUnit4 fuel) c1) tyDecls) groups) hasListFamily) typeRefs))))
 
-# 951 "Vuna/Ir/Codec.vuna"
+# 969 "Vuna/Ir/Codec.vuna"
 let v_decUnit2 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (tyDecls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (groups : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair ((Base_dBytes.v_decBool fuel) c)) (fun (hasListFamily : bool) (c1 : Base_dBytes.t_Cur) -> (((((v_decUnit3 fuel) c1) tyDecls) groups) hasListFamily))))
 
-# 947 "Vuna/Ir/Codec.vuna"
+# 965 "Vuna/Ir/Codec.vuna"
 let v_decUnit1 = (fun (fuel : int) (c : Base_dBytes.t_Cur) (tyDecls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decGroup) fuel) c)) (fun (groups : Vuna_dIr_dModel.t_IrGroup B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> ((((v_decUnit2 fuel) c1) tyDecls) groups))))
 
-# 944 "Vuna/Ir/Codec.vuna"
+# 962 "Vuna/Ir/Codec.vuna"
 let v_decUnit = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decTyDecl) fuel) c)) (fun (tyDecls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (c1 : Base_dBytes.t_Cur) -> (((v_decUnit1 fuel) c1) tyDecls))))
 
-# 970 "Vuna/Ir/Codec.vuna"
+# 988 "Vuna/Ir/Codec.vuna"
 let v_irEncoderFuel = 16777216
 
-# 974 "Vuna/Ir/Codec.vuna"
+# 992 "Vuna/Ir/Codec.vuna"
 let v_encodeProgram = (fun (p : Vuna_dIr_dModel.t_IrProgram) -> ((Base_dBytes.v_encTop (fun (x : Vuna_dIr_dModel.t_IrProgram) (acc : string B_dData_dList.t_List) -> ((v_encShared (Vuna_dIr_dModel.v_irProgSharedOf x)) (((v_encUnit v_irEncoderFuel) (Vuna_dIr_dModel.v_irProgUnitOf x)) acc)))) p))
 
-# 979 "Vuna/Ir/Codec.vuna"
-let v_decodeProgram = (fun (fuel : int) (bytes : string) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((bi_strLength bytes) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = ((Base_dBytes.v_thenPair ((v_decShared fuel) (Base_dBytes.v_curOf bytes))) (fun (shared : Vuna_dIr_dModel.t_IrShared) (c1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((v_decUnit fuel) c1)) (fun (unit : Vuna_dIr_dModel.t_IrUnit) (c2 : Base_dBytes.t_Cur) -> (if (Base_dBytes.v_curAtEnd c2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Vuna_dIr_dModel.f_IrProgram_irProgShared = shared; Vuna_dIr_dModel.f_IrProgram_irProgUnit = unit }; B_dData_dPair.f_Pair_second = c2 })) else B_dData_dMaybe.C_Maybe_Nothing))))) in (match nd_uscrut2 with
+# 997 "Vuna/Ir/Codec.vuna"
+let v_decodeProgram = (fun (fuel : int) (bytes : string) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((String.length bytes) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = ((Base_dBytes.v_thenPair ((v_decShared fuel) (Base_dBytes.v_curOf bytes))) (fun (shared : Vuna_dIr_dModel.t_IrShared) (c1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair ((v_decUnit fuel) c1)) (fun (unit : Vuna_dIr_dModel.t_IrUnit) (c2 : Base_dBytes.t_Cur) -> (if (Base_dBytes.v_curAtEnd c2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Vuna_dIr_dModel.f_IrProgram_irProgShared = shared; Vuna_dIr_dModel.f_IrProgram_irProgUnit = unit }; B_dData_dPair.f_Pair_second = c2 })) else B_dData_dMaybe.C_Maybe_Nothing))))) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__117) -> (match dtb__117 with
   | { B_dData_dPair.f_Pair_first = dtb__118; B_dData_dPair.f_Pair_second = dtb__119 } -> (B_dData_dMaybe.C_Maybe_Just (dtb__118))
@@ -590,11 +599,11 @@ let v_decodeProgram = (fun (fuel : int) (bytes : string) -> (if (fuel <= 0) then
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 991 "Vuna/Ir/Codec.vuna"
+# 1009 "Vuna/Ir/Codec.vuna"
 let v_encodeUnit = (fun (u : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dBytes.v_encTop (v_encUnit v_irEncoderFuel)) u))
 
-# 995 "Vuna/Ir/Codec.vuna"
-let v_decodeUnit = (fun (fuel : int) (bytes : string) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((bi_strLength bytes) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = ((Base_dBytes.v_thenPair ((v_decUnit fuel) (Base_dBytes.v_curOf bytes))) (fun (unit : Vuna_dIr_dModel.t_IrUnit) (c2 : Base_dBytes.t_Cur) -> (if (Base_dBytes.v_curAtEnd c2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = unit; B_dData_dPair.f_Pair_second = c2 })) else B_dData_dMaybe.C_Maybe_Nothing))) in (match nd_uscrut2 with
+# 1013 "Vuna/Ir/Codec.vuna"
+let v_decodeUnit = (fun (fuel : int) (bytes : string) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (if ((String.length bytes) <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = ((Base_dBytes.v_thenPair ((v_decUnit fuel) (Base_dBytes.v_curOf bytes))) (fun (unit : Vuna_dIr_dModel.t_IrUnit) (c2 : Base_dBytes.t_Cur) -> (if (Base_dBytes.v_curAtEnd c2) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = unit; B_dData_dPair.f_Pair_second = c2 })) else B_dData_dMaybe.C_Maybe_Nothing))) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
   | B_dData_dMaybe.C_Maybe_Just (dtb__120) -> (match dtb__120 with
   | { B_dData_dPair.f_Pair_first = dtb__121; B_dData_dPair.f_Pair_second = dtb__122 } -> (B_dData_dMaybe.C_Maybe_Just (dtb__121))

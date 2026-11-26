@@ -230,7 +230,7 @@ let v_branchIsReachable = (fun (mc0 : t_BranchVerdict) -> (match mc0 with
 ))
 
 # 305 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_wildArgs = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PWild (Frontend_dAst.v_noNodeRef)), (v_wildArgs (n - 1))))))
+let[@tail_mod_cons] rec v_wildArgs = (fun (n : int) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PWild (Frontend_dAst.v_noNodeRef)), (v_wildArgs (n - 1))))))
 
 # 309 "Vuna/Compiler/Elab/Case.vuna"
 let rec v_ctorExplicitArity = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
@@ -275,13 +275,13 @@ and v_bindCtorField = (fun (cname : string) (fields : string B_dData_dList.t_Lis
 let v_bindCtorTele = (fun (cname : string) (fields : string B_dData_dList.t_List) (ctx : Elab_dTypes.t_Ctx) (ty : Core_dTerm.t_Term) (subpats : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((((((v_bindCtorGo cname) fields) ctx) ty) subpats) B_dData_dList.C_List_Nil))
 
 # 399 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_ctorExplicitNames = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
+let[@tail_mod_cons] rec v_ctorExplicitNames = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
   | Core_dTerm.C_Term_TPi (dtb__142, dtb__143, dtb__144, dtb__145, dtb__146) -> (if dtb__143 then (v_ctorExplicitNames dtb__146) else (B_dData_dList.C_List__x58__x58_ (dtb__142, (v_ctorExplicitNames dtb__146))))
   | _ -> B_dData_dList.C_List_Nil
 ))
 
 # 411 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_freshTeleVals = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : int) -> (match mc0 with
+let[@tail_mod_cons] rec v_freshTeleVals = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) (mc2 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__147, dtb__148) -> (match dtb__147 with
   | { B_dData_dPair.f_Pair_first = dtb__149; B_dData_dPair.f_Pair_second = dtb__150 } -> (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__149, (mc1 + mc2), B_dData_dList.C_List_Nil)))), (((v_freshTeleVals dtb__148) mc1) (mc2 + 1))))
   | _ -> failwith "DT: impossible branch"
@@ -362,7 +362,7 @@ let v_branchVerdict = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (id
 let v_branchReachable = (fun (ctx : Elab_dTypes.t_Ctx) (ec : Elab_dTypes.t_Ec) (idxs : Core_dTerm.t_Value B_dData_dList.t_List) (ctor : Elab_dTypes.t_DtCtor) -> ((Base_dCommon.v_bind ((((v_branchVerdict ctx) ec) idxs) ctor)) (fun (v : t_BranchVerdict) -> (Base_dDiag.C_Check_OkC ((v_branchIsReachable v))))))
 
 # 443 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_teleValsFrom = (fun (low : int) (k : int) -> (if (k <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar ("_tele", low, B_dData_dList.C_List_Nil)))), ((v_teleValsFrom (low + 1)) (k - 1))))))
+let[@tail_mod_cons] rec v_teleValsFrom = (fun (low : int) (k : int) -> (if (k <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar ("_tele", low, B_dData_dList.C_List_Nil)))), ((v_teleValsFrom (low + 1)) (k - 1))))))
 
 # 437 "Vuna/Compiler/Elab/Case.vuna"
 let v_ctorValueIn = (fun (ctx : Elab_dTypes.t_Ctx) (c : Elab_dTypes.t_DtCtor) -> (Core_dTerm.C_Value_VCon ((Elab_dTypes.v_dtCtorName c), ((v_teleValsFrom ((Elab_dTypes.v_ctxDepth ctx) - (B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope c)))) (B_dData_dList.v_length (Elab_dTypes.v_dtCtorTelescope c))))))
@@ -432,7 +432,7 @@ let rec v_litHeadCovered = (fun (mc0 : Frontend_dAst.t_Pat) (mc1 : (Frontend_dAs
 # 505 "Vuna/Compiler/Elab/Case.vuna"
 let v_litLabel = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
   | Frontend_dAst.C_Pat_PStr (dtb__199, dtb__200) -> (String.concat "" ["\""; dtb__199; "\""])
-  | Frontend_dAst.C_Pat_PInt (dtb__201, dtb__202) -> (bi_strFromInt dtb__201)
+  | Frontend_dAst.C_Pat_PInt (dtb__201, dtb__202) -> (string_of_int dtb__201)
   | _ -> ""
 ))
 
@@ -443,7 +443,7 @@ let rec v_stripAsPat = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
 ))
 
 # 519 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_stripAsPats = (fun (mc0 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_stripAsPats = (fun (mc0 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__206, dtb__207) -> (match dtb__206 with
   | { B_dData_dPair.f_Pair_first = dtb__208; B_dData_dPair.f_Pair_second = dtb__209 } -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_stripAsPat dtb__208); B_dData_dPair.f_Pair_second = dtb__209 }, (v_stripAsPats dtb__207)))
   | _ -> failwith "DT: impossible branch"
@@ -467,7 +467,7 @@ let rec v_hasLitHead = (fun (mc0 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B
 ))
 
 # 583 "Vuna/Compiler/Elab/Case.vuna"
-let rec v_altNames = (fun (mc0 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_altNames = (fun (mc0 : (Frontend_dAst.t_Pat, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__218, dtb__219) -> (match dtb__218 with
   | { B_dData_dPair.f_Pair_first = dtb__220; B_dData_dPair.f_Pair_second = dtb__221 } -> (match dtb__220 with
   | Frontend_dAst.C_Pat_PCon (dtb__222, dtb__223, dtb__224) -> (B_dData_dList.C_List__x58__x58_ (dtb__222, (v_altNames dtb__219)))

@@ -12,7 +12,7 @@ let rec v_hasNoExplicitPiFuel = (fun (fuel : int) (ec : Elab_dTypes.t_Ec) (v : C
 let v_hasNoExplicitPi = (fun (ec : Elab_dTypes.t_Ec) (v : Core_dTerm.t_Value) -> (((v_hasNoExplicitPiFuel 128) ec) v))
 
 # 77 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_zipTeleRigs = (fun (mc0 : Core_dTerm.t_Term B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_zipTeleRigs = (fun (mc0 : Core_dTerm.t_Term B_dData_dList.t_List) (mc1 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__5, dtb__6) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__7, dtb__8) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__5; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__7) }, ((v_zipTeleRigs dtb__6) dtb__8)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -226,7 +226,7 @@ let rec v_collectDataDecls = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_Li
 ))
 
 # 320 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_dataNamesOf = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_dataNamesOf = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__194, dtb__195) -> (match dtb__194 with
   | Frontend_dAst.C_Decl_DData (dtb__196, dtb__197, dtb__198, dtb__199, dtb__200, dtb__201, dtb__202, dtb__203, dtb__204) -> (B_dData_dList.C_List__x58__x58_ (dtb__196, (v_dataNamesOf dtb__195)))
   | Frontend_dAst.C_Decl_DRecord (dtb__205, dtb__206, dtb__207, dtb__208, dtb__209, dtb__210, dtb__211, dtb__212) -> (B_dData_dList.C_List__x58__x58_ (dtb__205, (v_dataNamesOf dtb__195)))
@@ -258,7 +258,7 @@ let rec v_kindWellFormed = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
 ))
 
 # 352 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_splitKind = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
+let[@tail_mod_cons] rec v_splitKind = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
   | Core_dTerm.C_Term_TPi (dtb__227, dtb__228, dtb__229, dtb__230, dtb__231) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__227; B_dData_dPair.f_Pair_second = dtb__229 }, (v_splitKind dtb__231)))
   | _ -> B_dData_dList.C_List_Nil
 ))
@@ -513,7 +513,7 @@ let rec v_dropParams = (fun (mc0 : Core_dTerm.t_Term) -> (match mc0 with
 ))
 
 # 677 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_ctorGlobals = (fun (mc0 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_ctorGlobals = (fun (mc0 : Elab_dTypes.t_DtCtor B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__340, dtb__341) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtCtorName dtb__340); B_dData_dPair.f_Pair_second = (Elab_dTypes.v_dtCtorType dtb__340) }, (v_ctorGlobals dtb__341)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -560,8 +560,8 @@ let v_paramNameOf = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
 ))
 
 # 733 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_methodArgTermsGo = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : int) (mc2 : int) (mc3 : int) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__359, dtb__360) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TVar (("x" ^ (bi_strFromInt mc2)), (mc1 + ((mc3 - 1) - mc2)), { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })); B_dData_dPair.f_Pair_second = dtb__359 }, ((((v_methodArgTermsGo dtb__360) mc1) (mc2 + 1)) mc3)))
+let[@tail_mod_cons] rec v_methodArgTermsGo = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : int) (mc2 : int) (mc3 : int) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__359, dtb__360) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Core_dTerm.C_Term_TVar (("x" ^ (string_of_int mc2)), (mc1 + ((mc3 - 1) - mc2)), { Base_dSource.f_Span_spanFile = ""; Base_dSource.f_Span_spanStartLine = 0; Base_dSource.f_Span_spanStartCol = 0; Base_dSource.f_Span_spanEndLine = 0; Base_dSource.f_Span_spanEndCol = 0; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 })); B_dData_dPair.f_Pair_second = dtb__359 }, ((((v_methodArgTermsGo dtb__360) mc1) (mc2 + 1)) mc3)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -570,14 +570,14 @@ let rec v_methodArgTermsGo = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) 
 let v_methodArgTerms = (fun (rigs : Core_dTerm.t_Rig B_dData_dList.t_List) (nFields : int) -> ((((v_methodArgTermsGo rigs) nFields) 0) (B_dData_dList.v_length rigs)))
 
 # 740 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_methodArgLams = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : int) (mc2 : Core_dTerm.t_Term) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__361, dtb__362) -> (Core_dTerm.C_Term_TLam (("x" ^ (bi_strFromInt mc1)), dtb__361, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_methodArgLams dtb__362) (mc1 + 1)) mc2)))
+let[@tail_mod_cons] rec v_methodArgLams = (fun (mc0 : Core_dTerm.t_Rig B_dData_dList.t_List) (mc1 : int) (mc2 : Core_dTerm.t_Term) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__361, dtb__362) -> (Core_dTerm.C_Term_TLam (("x" ^ (string_of_int mc1)), dtb__361, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, (((v_methodArgLams dtb__362) (mc1 + 1)) mc2)))
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 748 "Vuna/Compiler/Elab/Meta.vuna"
-let v_fieldVarName = (fun (i : int) -> ("_f" ^ (bi_strFromInt i)))
+let v_fieldVarName = (fun (i : int) -> ("_f" ^ (string_of_int i)))
 
 # 757 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_fieldBinderGoGo = (fun (remaining : int) (n : int) (acc : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else (((v_fieldBinderGoGo (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_fieldVarName (n - remaining)); B_dData_dPair.f_Pair_second = Core_dTerm.C_Rig_RigOmega }, acc)))))
@@ -1055,7 +1055,7 @@ let v_mkCtorTerm = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (cto
 ))
 
 # 1364 "Vuna/Compiler/Elab/Meta.vuna"
-let rec v_shiftCtorArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_shiftCtorArgs = (fun (mc0 : int) (mc1 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__616, dtb__617) -> (match dtb__616 with
   | { B_dData_dPair.f_Pair_first = dtb__618; B_dData_dPair.f_Pair_second = dtb__619 } -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (((Core_dTerm.v_shift 0) mc0) dtb__618); B_dData_dPair.f_Pair_second = dtb__619 }, ((v_shiftCtorArgs mc0) dtb__617)))
   | _ -> failwith "DT: impossible branch"

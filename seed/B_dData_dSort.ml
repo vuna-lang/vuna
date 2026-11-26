@@ -28,7 +28,7 @@ let rec v_shortList = (fun (mc0 : int) mc1 -> (match mc1 with
 ))
 
 # 37 "Base/Data/Sort.vuna"
-let rec v_insertBy = (fun mc0 mc1 mc2 -> (match mc2 with
+let[@tail_mod_cons] rec v_insertBy = (fun mc0 mc1 mc2 -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (if ((mc0 mc1) dtb__8) then (B_dData_dList.C_List__x58__x58_ (mc1, (B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9)))) else (B_dData_dList.C_List__x58__x58_ (dtb__8, (((v_insertBy mc0) mc1) dtb__9))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc1, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"

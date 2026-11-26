@@ -1,6 +1,6 @@
 open Vuna_runtime
 # 16 "Vuna/Target/Ocaml/Render.vuna"
-let rec v_interpose = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_interpose = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (match dtb__1 with
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (dtb__0, B_dData_dList.C_List_Nil))
   | _ -> (B_dData_dList.C_List__x58__x58_ (dtb__0, (B_dData_dList.C_List__x58__x58_ (mc0, ((v_interpose mc0) dtb__1)))))
@@ -13,7 +13,7 @@ let rec v_interpose = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) ->
 let v_joinWith = (fun (sep : string) (xs : string B_dData_dList.t_List) -> (B_dData_dList.dtp_concatMany ((v_interpose sep) xs)))
 
 # 21 "Vuna/Target/Ocaml/Render.vuna"
-let v_typeParamName = (fun (i : int) -> ("'a" ^ (bi_strFromInt i)))
+let v_typeParamName = (fun (i : int) -> ("'a" ^ (string_of_int i)))
 
 # 24 "Vuna/Target/Ocaml/Render.vuna"
 let v_typeParamDecl = (fun (mc0 : int) -> (if (mc0 = 0) then "" else (let nd_uscrut1 = ((B_dData_dList.v_map v_typeParamName) ((B_dData_dList.v_range 0) mc0)) in (match nd_uscrut1 with

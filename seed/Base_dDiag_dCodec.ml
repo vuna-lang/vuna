@@ -279,7 +279,7 @@ and v_decDiagItems = (fun (fuel : int) (n : int) (c : Base_dBytes.t_Cur) (acc : 
 let v_absentEnc = (fun (r : Base_dDiag.t_NoSourceReason) (acc : string B_dData_dList.t_List) -> ((Base_dBytes.v_encTag (v_absentTag r)) acc))
 
 # 327 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let rec v_encDiagList = (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf ds)); ":"]), ((v_encDiagListGo ds) acc))))
+let rec v_encDiagList = (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf ds)); ":"]), ((v_encDiagListGo ds) acc))))
 # 330 "Vuna/Compiler/Base/Diag/Codec.vuna"
 and v_encDiagListGo = (fun (mc0 : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> ((v_encDiag dtb__45) ((v_encDiagListGo dtb__46) mc1))
@@ -296,7 +296,7 @@ and v_encDiag = (fun (mc0 : Base_dDiag.t_Diagnostic) (mc1 : string B_dData_dList
 let v_encDiagnostics = (fun (ds : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dBytes.v_encConcat ((v_encDiagList ds) B_dData_dList.C_List_Nil)))
 
 # 456 "Vuna/Compiler/Base/Diag/Codec.vuna"
-let v_decDiagnostics = (fun (payload : string) -> (let fuel = ((bi_strLength payload) + 1) in (let nd_uscrut2 = ((v_decDiagList fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
+let v_decDiagnostics = (fun (payload : string) -> (let fuel = ((String.length payload) + 1) in (let nd_uscrut2 = ((v_decDiagList fuel) (Base_dBytes.v_curOf payload)) in (match nd_uscrut2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__64) -> (match dtb__64 with
   | { B_dData_dPair.f_Pair_first = dtb__65; B_dData_dPair.f_Pair_second = dtb__66 } -> (if (Base_dBytes.v_curAtEnd dtb__66) then (B_dData_dMaybe.C_Maybe_Just (dtb__65)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"

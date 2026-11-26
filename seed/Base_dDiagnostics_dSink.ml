@@ -9,11 +9,11 @@ let v_severityTag = (fun (mc0 : Base_dDiag.t_Severity) -> (match mc0 with
 ))
 
 # 27 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
-let v_tagPart = (fun (s : string) -> (String.concat "" [(bi_strFromInt (bi_strLength s)); ":"; s]))
+let v_tagPart = (fun (s : string) -> (String.concat "" [(string_of_int (String.length s)); ":"; s]))
 
 # 42 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let v_spanPart = (fun (mc0 : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__0) -> (String.concat "" ["1:"; (v_tagPart (dtb__0).Base_dSource.f_Span_spanFile); ":"; (bi_strFromInt (dtb__0).Base_dSource.f_Span_spanStartLine); ":"; (bi_strFromInt (dtb__0).Base_dSource.f_Span_spanStartCol); ":"; (bi_strFromInt (dtb__0).Base_dSource.f_Span_spanEndLine); ","])
+  | B_dData_dMaybe.C_Maybe_Just (dtb__0) -> (String.concat "" ["1:"; (v_tagPart (dtb__0).Base_dSource.f_Span_spanFile); ":"; (string_of_int (dtb__0).Base_dSource.f_Span_spanStartLine); ":"; (string_of_int (dtb__0).Base_dSource.f_Span_spanStartCol); ":"; (string_of_int (dtb__0).Base_dSource.f_Span_spanEndLine); ","])
   | B_dData_dMaybe.C_Maybe_Nothing -> "0,"
   | _ -> failwith "DT: impossible branch"
 ))
