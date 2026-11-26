@@ -1,3 +1,4 @@
 ops=2000
 n=2000
 cc_flags=-fwrapv
+ref=direct
