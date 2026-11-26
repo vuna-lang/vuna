@@ -91,7 +91,6 @@ nativeThreadCountLabel 8
 nativeThreadEventLabel 8
 nativeThreadHiLabel 8
 nativeThreadTabLabel 32768
-nativeThreadedLabel 8
 scratchNeededLabel 8
 sigalrmSetLabel 8
 stackTopLabel 8
