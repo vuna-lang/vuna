@@ -26,15 +26,19 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
-| `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | push / PR |
+| `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（PR 必需检查） |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、带 `deep` 标签的 PR |
 | `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、带 `suite` 标签的 PR |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | 定时、手动、带 `backend` 标签的 PR |
 | `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | 同上 |
-| `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动 |
+| `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、带 `browser` 标签的 PR |
+
+PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.yml` 里跑，与 `ci.yml`
+分开，避免标签事件重跑或取消 required 的 `pr / run`。合并前 `pr` 必须绿；加了
+`deep` / `suite` / `backend` 标签时对应长尾也必须绿（见 [CONTRIBUTING.md](../../CONTRIBUTING.md)）。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
-`deep` → `pr`），只在 main push / 定时任务上写；`purge-created: 0` 让每组只留一代。
+`deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。
 `nix run .#ci` 用 `--out-link .ci/result` 构建，产物是 save 前 GC 的 root，所以保存时只会
 回收上一代遗留的 store 路径。restore / save 是独立 action，门禁失败也照常保存，因此不需要
 `continue-on-error` + 汇总 job：每个组的 job 状态就是结论。

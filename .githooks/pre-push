@@ -1,0 +1,46 @@
+#!/bin/sh
+# 推送前守卫：禁止直推 main / master，拒绝含 merge commit 的分支。
+# WIP / fixup! / squash! 只提示——允许先推 draft PR；开 PR 前用 git rebase -i origin/main 整理。
+set -eu
+
+zero=0000000000000000000000000000000000000000
+blocked=0
+
+refs=$(mktemp)
+trap 'rm -f "$refs"' EXIT
+cat > "$refs"
+
+while read -r local_ref local_sha remote_ref _remote_sha; do
+  [ -n "${local_ref:-}" ] || continue
+
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      echo "pre-push: 禁止直接推送 $remote_ref；main 只接受 PR。" >&2
+      blocked=1
+      ;;
+  esac
+
+  [ "$local_sha" = "$zero" ] && continue
+
+  base=$(git merge-base origin/main "$local_sha" 2>/dev/null || true)
+  if [ -z "$base" ]; then
+    echo "pre-push: 提示：找不到 origin/main，跳过线性检查；先 git fetch origin。" >&2
+    continue
+  fi
+
+  if [ -n "$(git rev-list --merges "$base..$local_sha")" ]; then
+    echo "pre-push: $local_ref 含 merge commit；请 rebase 成线性历史。" >&2
+    blocked=1
+  fi
+
+  if ! git merge-base --is-ancestor origin/main "$local_sha"; then
+    echo "pre-push: 提示：$local_ref 未包含最新 origin/main；开 PR 前先 git rebase origin/main。" >&2
+  fi
+
+  if git log --format=%s "$base..$local_sha" |
+    grep -Eq '^(fixup!|squash!|WIP|wip)([ :(]|$)'; then
+    echo "pre-push: 提示：$local_ref 仍有 WIP/fixup 提交；开 PR 前用 git rebase -i origin/main 整理。" >&2
+  fi
+done < "$refs"
+
+exit "$blocked"
