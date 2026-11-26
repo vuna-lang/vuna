@@ -298,26 +298,16 @@ checkResolvedModules meta modules entryDecls runtime datas =
 -- 路径，入口可能是绝对 `<contextDir>/app/Main.vuna` 或调用方给的相对路径。位置表按
 -- 「模块根 → 包目录 → 前导 ./」顺序尽量剥成短路径；都不匹配则保留原样。
 splitStripPrefix : String -> String -> String
-splitStripPrefix prefix path =
-  if prefix == "" then
-    path
-  else if startsWith "${prefix}/" path then
-    strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
-  else
-    path
+splitStripPrefix = stripPathPrefix
 
 splitStripRoots : List String -> String -> String
-splitStripRoots [] path = path
-splitStripRoots (root :: rest) path =
-  if startsWith "${root}/" path then splitStripPrefix root path else splitStripRoots rest path
+splitStripRoots = stripRootsPath
 
 splitStripDotSlash : String -> String
-splitStripDotSlash path =
-  if startsWith "./" path then strSubstring 2 (strLength path - 2) path else path
+splitStripDotSlash = stripDotSlashPath
 
 splitLocPath : List String -> String -> String -> String
-splitLocPath roots contextDir path =
-  splitStripDotSlash (splitStripPrefix contextDir (splitStripRoots roots path))
+splitLocPath roots contextDir path = locationPathUnder roots contextDir path
 
 -- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
 -- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。

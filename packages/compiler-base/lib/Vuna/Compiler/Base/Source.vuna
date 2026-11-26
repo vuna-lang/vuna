@@ -203,6 +203,37 @@ dropPastSlash : List Int -> List Int
 dropPastSlash [] = []
 dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
 
+-- ---------------------------------------------------------------
+-- 位置路径归一（生成产物里的 `#line` 与位置表共用）
+-- ---------------------------------------------------------------
+
+-- | 去掉 `prefix/` 前缀；不匹配原样返回。
+export stripPathPrefix : String -> String -> String
+stripPathPrefix prefix path =
+  if prefix == "" then
+    path
+  else if startsWith "${prefix}/" path then
+    strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
+  else
+    path
+
+-- | 依次尝试前缀，首个命中即去掉。
+export stripRootsPath : List String -> String -> String
+stripRootsPath [] path = path
+stripRootsPath (root :: rest) path =
+  if startsWith "${root}/" path then stripPathPrefix root path else stripRootsPath rest path
+
+-- | 去掉开头的 `./`。
+export stripDotSlashPath : String -> String
+stripDotSlashPath path =
+  if startsWith "./" path then strSubstring 2 (strLength path - 2) path else path
+
+-- | 位置路径归一：先按模块根去前缀，再按包目录去前缀，最后去掉 `./`。
+-- 写接口时用它把 `miDefLocs` 存成与调用方 CWD 无关的形式；读侧再用同一函数即可幂等。
+export locationPathUnder : List String -> String -> String -> String
+locationPathUnder roots dir path =
+  stripDotSlashPath (stripPathPrefix dir (stripRootsPath roots path))
+
 -- | 候选建议：与出错名相似的名字（诊断）。无相似项返回空串。
 export suggest : String -> List String -> String
 suggest name [] = ""

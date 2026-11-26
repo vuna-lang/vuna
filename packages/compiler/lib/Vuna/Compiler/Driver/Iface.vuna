@@ -149,17 +149,72 @@ miPreparedOf m = m.miPrepared
 export miDefLocsOf : ModuleIface -> List (String, String, Int)
 miDefLocsOf m = m.miDefLocs
 
-defLocOf : DtDef -> Maybe (String, String, Int)
-defLocOf d =
+-- | 接口载荷不存 `DtDef` 的 span；`miDefLocs` 保留 (名字, 文件, 起始行)。codegen 的
+-- `#line` 直接读 `irDefSpan`，所以从接口恢复定义前要把这一列贴回去。其余位置字段用
+-- 1/1/0/0 占位（`#line` 只用文件与起始行）。
+export restoreDefLocsSpans : List ModuleIface -> List ModuleIface
+restoreDefLocsSpans ifaces = map restoreDefLocsSpansIface ifaces
+
+restoreDefLocsSpansIface : ModuleIface -> ModuleIface
+restoreDefLocsSpansIface mi =
+  let
+    cp = mi.miCached
+    cp2 =
+      CachedProgram
+        (cachedDatas cp)
+        (map (restoreDefLocsSpansDef mi.miDefLocs) (cachedDefs cp))
+        (cachedGlobals cp)
+        (cachedInsts cp)
+        (cachedClasses cp)
+        (cachedOpaque cp)
+  in ModuleIface
+    mi.miName
+    mi.miPackage
+    mi.miSource
+    mi.miIfaceHash
+    mi.miDepHashes
+    mi.miImports
+    mi.miImplicitImports
+    mi.miExports
+    mi.miFixities
+    mi.miDecls
+    mi.miRecords
+    mi.miPrepared
+    cp2
+    mi.miDefLocs
+
+restoreDefLocsSpansDef : List (String, String, Int) -> DtDef -> DtDef
+restoreDefLocsSpansDef locs d =
+  case dtDefSpan d of
+    Just _ => d
+    Nothing =>
+      case lookupDefLoc (dtDefName d) locs of
+        Nothing => d
+        Just (file, line) =>
+          let
+            sp = Just (Span file line 1 line 1 0 0)
+          in case d of
+            DtDef n ty body _ => DtDef n ty body sp
+            DtAxiom n ty _ => DtAxiom n ty sp
+            DtExtern n ty c _ => DtExtern n ty c sp
+
+lookupDefLoc : String -> List (String, String, Int) -> Maybe (String, Int)
+lookupDefLoc _ [] = Nothing
+lookupDefLoc n ((n2, file, line) :: rest) =
+  if n == n2 then Just (file, line) else lookupDefLoc n rest
+
+defLocOf : (String -> String) -> DtDef -> Maybe (String, String, Int)
+defLocOf norm d =
   case dtDefSpan d of
     Nothing => Nothing
-    Just sp => Just (dtDefName d, sp.spanFile, sp.spanStartLine)
+    Just sp => Just (dtDefName d, norm sp.spanFile, sp.spanStartLine)
 
 -- 位置表按 vuna 名排序：写侧（整包接口）与读侧（增量 codegen 补行）各取一次，顺序
 -- 必须与全量路径 codegen 的位置表逐字节一致（产物是输入摘要的纯函数）。无 span 的定义跳过
--- （与 `dtDefLocTable` 的跳过语义一致）。
-defLocsOfDefs : List DtDef -> List (String, String, Int)
-defLocsOfDefs ds = sortBy (\a, b => firstOf a <= firstOf b) (mapMaybe defLocOf ds)
+-- （与 `dtDefLocTable` 的跳过语义一致）。文件路径在**写侧**就归一成与 CWD 无关的形式
+-- （`locationPathUnder`），否则同一份接口在别的包里读出来会得到不同的 `#line`。
+defLocsOfDefs : (String -> String) -> List DtDef -> List (String, String, Int)
+defLocsOfDefs norm ds = sortBy (\a, b => firstOf a <= firstOf b) (mapMaybe (defLocOf norm) ds)
 
 -- 单模块的 prepared decls：aux = 同包其它模块的原始 decls + 入口声明。
 -- 只在整包写回（本包模块数 > 1）时计算：LSP/单模块写回只有部分上下文，算出的
@@ -200,7 +255,7 @@ setPrepared prepared mi =
 
 -- 接口格式版本：载荷布局或字段语义变化必须 bump（地址随之换代，旧载荷自然失效）。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 35"
+ifaceSchema = "vuna-iface 36"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
@@ -615,8 +670,8 @@ cleanIfaceOf (m :: rest) name = if miNameOf m == name then Just m else cleanIfac
 -- 也不会出现「依赖还没算到 → 哨兵/旧值」导致下一次运行误判脏。
 -- `clean` = 包内增量复用的模块（记录原样保留：重算依赖整包 sols，而增量路径没有干净
 -- 模块的 sols，重算会改变擦除位残 meta 的 zonk 结果 → 哈希漂移）。
-mkIfaceBase : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List ModuleIface -> Module -> ModuleIface
-mkIfaceBase pkg parts prog sources clean m =
+mkIfaceBase : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List ModuleIface -> (String -> String) -> Module -> ModuleIface
+mkIfaceBase pkg parts prog sources clean norm m =
   case cleanIfaceOf clean (moduleNameOf m) of
     Just old => old
     Nothing =>
@@ -649,7 +704,7 @@ mkIfaceBase pkg parts prog sources clean m =
         records
         []
         cp
-        (defLocsOfDefs (cachedDefs cp))
+        (defLocsOfDefs norm (cachedDefs cp))
 
 finishIface : List (String, String) -> List ModuleIface -> Module -> ModuleIface -> ModuleIface
 finishIface tbl clean m mi =
@@ -672,10 +727,10 @@ finishIface tbl clean m mi =
         (miCachedOf mi)
         (miDefLocsOf mi)
 
-ifacesGo : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List (String, String) -> List ModuleIface -> List Module -> (List ModuleIface, List (String, String))
-ifacesGo pkg parts prog sources knownDeps clean modules =
+ifacesGo : String -> ProgParts -> DtProgram -> List (String, SourceInfo) -> List (String, String) -> List ModuleIface -> (String -> String) -> List Module -> (List ModuleIface, List (String, String))
+ifacesGo pkg parts prog sources knownDeps clean norm modules =
   let
-    built = map (\m => (m, mkIfaceBase pkg parts prog sources clean m)) modules
+    built = map (\m => (m, mkIfaceBase pkg parts prog sources clean norm m)) modules
     hashes = map (\p => (miNameOf (secondOf p), miIfaceHashOf (secondOf p))) built
     fullTbl = append knownDeps hashes
   in (map (\p => finishIface fullTbl clean (firstOf p) (secondOf p)) built, fullTbl)
@@ -761,8 +816,8 @@ coverageResult oi ourNames inherited ifaces prog =
     Just issue => icInternal "iface: ${issue}"
     Nothing => OkC ifaces
 
-export ifaceOfPackage : String -> List (String, SourceInfo) -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> Check (List ModuleIface)
-ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
+export ifaceOfPackage : String -> List (String, SourceInfo) -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> (String -> String) -> Check (List ModuleIface)
+ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog norm =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
     declModules = map (\m => (moduleNameOf m, moduleDeclsOf m)) modules
@@ -770,7 +825,7 @@ ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
     oi = ownerIndexOf meta (dtProgDatas prog)
     parts = progPartsOf oi prog
     ourNames = map moduleNameOf ourModules
-  in case ifacesGo pkg parts prog sources knownDeps clean ourModules of
+  in case ifacesGo pkg parts prog sources knownDeps clean norm ourModules of
     (ifaces, _) => coverageResult oi ourNames inherited ifaces prog
 
 -- ---------------------------------------------------------------
@@ -812,8 +867,8 @@ allOwnedPresent oi inherited name (a :: rest) present =
   else
     memName a present && allOwnedPresent oi inherited name rest present
 
-export ifaceOfModule : String -> SourceInfo -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> String -> Check ModuleIface
-ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
+export ifaceOfModule : String -> SourceInfo -> List (String, String) -> List String -> List ModuleIface -> List Module -> List Decl -> DtProgram -> (String -> String) -> String -> Check ModuleIface
+ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog norm name =
   let
     ourModules = reverse (filter (\m => modulePackageOf m == pkg) modules)
     declModules = map (\m => (moduleNameOf m, moduleDeclsOf m)) modules
@@ -825,7 +880,7 @@ ifaceOfModule pkg si knownDeps inherited clean modules entryDecls prog name =
     Nothing => icInternal "iface: module ${name} is not part of the checked package"
     Just m =>
       let
-        mi0 = mkIfaceBase pkg parts prog [(name, si)] [] m
+        mi0 = mkIfaceBase pkg parts prog [(name, si)] [] norm m
         tbl = append knownDeps (map (\x => (miNameOf x, miIfaceHashOf x)) (append clean [mi0]))
         mi = finishIface tbl [] m mi0
         miP =
