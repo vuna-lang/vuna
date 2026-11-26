@@ -20,23 +20,24 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。
 
-门禁分组在 `nix/checks/groups.nix`（唯一事实来源），本地与 CI 共用
-`nix run .#ci -- <group>`；`.github/workflows/ci.yml` 每组一个 job，
+门禁分组在 `nix/checks/groups.nix`，PR 增量检查在
+`nix/checks/pr-gates.nix`；本地与 CI 共用 `nix run .#ci -- <group>` /
+`nix run .#ci -- run-plan <labels>`。`.github/workflows/ci.yml` 跑固定分组，
 `_check.yml` 是共用的 restore → 运行 → save 流程：
 
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
-| `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（PR 必需检查） |
-| `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、带 `deep` 标签的 PR |
-| `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、带 `suite` 标签的 PR |
+| `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（`pr / run`） |
+| `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
+| `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、`suite` 标签 |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
 | `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | **本地手动**（GitHub CI 暂不跑） |
-| `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、带 `browser` 标签的 PR |
+| `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、`browser` 标签 |
 
-PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.yml` 里跑，与 `ci.yml`
-分开，避免标签事件重跑或取消 required 的 `pr / run`。合并前 `pr` 必须绿；加了
-`deep` / `suite` 标签时对应长尾也必须绿；`backend` 标签当前不触发任何 GitHub job（见
-[CONTRIBUTING.md](../../CONTRIBUTING.md)）。
+PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` 从 PR 的
+`type:*` + `pkg:*` / `area:*` 计算检查子集，`gates` 只跑这些检查；`deep` / `suite` /
+`browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub job，只在本地
+`nix run .#ci -- backends|native`（见 [github-workflow.md](github-workflow.md)）。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。
@@ -190,6 +191,8 @@ nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同�
 nix run .#ci -- pr          # 门禁分组：pr / deep / suite / backends / native / browser
 nix run .#ci -- --list      # 打印每组包含的 installable
 nix run .#ci -- deep        # 本地完整便宜门禁（与 CI 的 deep 同一条命令）
+nix run .#ci -- plan type:perf area:base      # 预览 PR 增量检查
+nix run .#ci -- run-plan type:perf area:base  # 只跑这些检查
 CI_TOKENS=8 CI_JOBS=4 nix run .#ci -- deep   # 覆写并行度（默认 CI_JOBS=2，cores=核数/2）
 nix flake check            # 本地全量兜底（包括 suite / 后端矩阵；CI 不用）
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链

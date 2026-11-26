@@ -4,18 +4,23 @@
 本地 `main` 只用于读取与 `git pull --ff-only`。
 
 更细的 agent 规则在 [`.agents/rules/`](.agents/rules/)，PR 操作手册在
-[`.agents/skills/vuna-pr/SKILL.md`](.agents/skills/vuna-pr/SKILL.md)。
+[`.agents/skills/vuna-pr/SKILL.md`](.agents/skills/vuna-pr/SKILL.md)，issue / 标签 /
+门禁 / 自动合并的完整说明在 [docs/reference/github-workflow.md](docs/reference/github-workflow.md)。
 
 ## 1. 准备
 
+先确认已有 issue；没有就按 [`.agents/skills/vuna-issue/SKILL.md`](.agents/skills/vuna-issue/SKILL.md)
+查重后创建或精炼。领取时把 issue 标成 `status:in-progress` 并 assign 给自己。
+
 ```console
+gh issue edit <n> --add-assignee @me --add-label status:in-progress
 git fetch origin
-git switch -c <type>/<slug> origin/main
+git switch -c <type>/<n>-<slug> origin/main
 git config core.hooksPath .githooks   # devShell / direnv 会自动设置
 ```
 
 - 分支名用 `<type>/<slug>`：`feat/`、`fix/`、`docs/`、`chore/`、`refactor/`、`test/`；
-  关联 issue 时形如 `fix/123-slug`。
+  关联 issue 时形如 `fix/123-slug`。也可以用 `gh issue develop <n> --name ... --checkout`。
 - 本地开发建议放独立 worktree：`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`。
 
 ## 2. 开发与本地验证
@@ -57,40 +62,38 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 ```
 
 描述按 [`.github/pull_request_template.md`](.github/pull_request_template.md) 填写，必须写清
-「跑过什么 / 没跑什么」、seed 与后端影响。
+`Closes #N` / `Refs #N`、「跑过什么 / 没跑什么」、seed 与后端影响。
 
 ## 5. PR 门禁
 
-必需检查只有 `pr / run`（fmt + lint + 自检）。其余门禁由标签触发，**加了标签就要等绿**：
-
-| 改动面 | 标签 | 等待 |
-| --- | --- | --- |
-| `packages/compiler/` / `base/` / `ir/` / `target-ocaml/` / `nix/` / `seed/` | `deep` | `deep` |
-| `test/`、语言 / 运行时行为 | `suite` | `suite` |
-| `packages/target-native/` / `target-wasm/`、运行时 | `backend` | —（GitHub CI 暂不跑；本地 `nix run .#ci -- backends` / `native`） |
-| `wasm-host/`、浏览器可跑面 | `browser` | `browser` |
-| 只改文档 / `.github` / `.agents` | 无 | `pr` |
+必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` / `area`
+自动选择检查）。`pr-triage` 会自动维护 type / pkg / area 标签，不需要手工加
+`deep` / `suite`：
 
 ```console
-gh pr edit <n> --add-label deep,suite
+nix run .#ci -- plan type:bug pkg:compiler   # 预览本 PR 会跑哪些检查
 gh pr checks <n> --watch
 ```
 
-`deep` / `suite` / `browser` 另由 nightly 与手动 dispatch 兜底；`backends` / `native`
-暂不在 GitHub CI 跑，只在本地手动。
-分组与清单见 [`docs/reference/testing-checks.md`](docs/reference/testing-checks.md)。
+需要强制整组时再加 `deep` / `suite` / `browser`。`backends` / `native` 暂不在 GitHub CI
+跑，只在本地手动；改后端时在 PR 描述里写清跑过哪些。
+分组与清单见 [`docs/reference/testing-checks.md`](docs/reference/testing-checks.md)，
+选择规则见 [`docs/reference/github-workflow.md`](docs/reference/github-workflow.md)。
 
 ## 6. 合并
 
-`main` 只允许 **rebase merge**（merge commit 与 squash 关闭），并且要求分支与 `main` 同步：
+`main` 只允许 **rebase merge**（merge commit 与 squash 关闭）。非 draft、同仓库分支、无
+`blocked` / `needs-info` / `wontfix` 的 PR 会自动打开 auto-merge；`pr / run` 与
+`gates / run` 全绿且分支与 `main` 同步后自动合并：
 
 ```console
 gh pr checks <n> --watch
-gh pr merge <n> --rebase
+gh pr view <n> --json autoMergeRequest,labels,isDraft
 ```
 
-更新 PR 时重新 `git rebase -i origin/main`，然后用 `git push --force-with-lease`；
-不要对 `main` force push。合并后：
+需要 hold 时加 `blocked` / `needs-info` 或转 draft。分支落后时重新
+`git rebase -i origin/main`，然后 `git push --force-with-lease`；不要对 `main` force push。
+不要手动 merge 绕过 required checks。合并后：
 
 ```console
 git -C <MAIN_ROOT> pull --ff-only

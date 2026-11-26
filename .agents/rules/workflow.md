@@ -4,15 +4,20 @@
 `main` 只读：所有改动（源码、文档、seed 轮换）都经 GitHub PR 合入；本地 `main`
 只用于读取与 `git pull --ff-only`。
 
-## 1. 开工：从 `origin/main` 切分支
+## 1. 开工：从 issue 开始，从 `origin/main` 切分支
+
+先确认已有 issue；没有就按技能 `vuna-issue` 查重后创建/精炼。领取时把 issue 标成
+`status:in-progress` 并 assign 给自己。
 
 ```console
+gh issue edit <n> --add-assignee @me --add-label status:in-progress
 git fetch origin
-git switch -c <type>/<slug> origin/main   # 在副 worktree 内
+git switch -c <type>/<n>-<slug> origin/main   # 在副 worktree 内
 ```
 
 - 分支名用 `<type>/<slug>`：`feat/`、`fix/`、`docs/`、`chore/`、`refactor/`、`test/`；
-  关联 issue / 风巢任务时形如 `fix/123-slug`。
+  关联 issue 时形如 `fix/123-slug`。能用 GitHub 关联分支时用
+  `gh issue develop <n> --name <type>/<n>-<slug> --checkout`。
 - **所有改动都在副 worktree 内完成**（`~/.local/share/opencode/worktree/…` /
   `.local/worktrees/…`），主工作区只读；**不要**再把提交 cherry-pick 回主仓。
 - 分支落后时 `git rebase origin/main`；冲突**按语义合并、双方改动都保留**，不要
@@ -61,13 +66,15 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 
 - PR 标题与主提交一致（Conventional Commits）；描述按
   [`.github/pull_request_template.md`](../../.github/pull_request_template.md) 写清
-  「跑过 / 没跑」、seed 与后端影响。
-- PR 的必需检查是 `pr / run`（fmt + lint + 自检）。按改动面加标签并等对应长尾：
-  `deep`（compiler / base / ir / target / nix / seed）、`suite`（test / 语言行为）、
-  `backend`（native / wasm / runtime）；长尾不是 GitHub required，但**加了标签就必须等绿**。
+  「跑过 / 没跑」、seed 与后端影响。描述必须含 `Closes #N` 或 `Refs #N`（例外加
+  `no-issue`）。
+- PR 的必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` /
+  `area` 自动选择的检查）。`pr-triage` 自动维护 type / pkg / area 标签，不再手工加
+  `deep` / `suite`；需要强制整组时再加 `deep` / `suite` / `browser`。
 - PR 已经有提交后再改动：重新 `git rebase -i origin/main` 整理，然后
   `git push --force-with-lease`；**不要**对 `main` 使用 force push。
-- 默认只创建 PR；**未经用户明确要求不 merge、不删远程分支**。完整规程见技能 `vuna-pr`。
+- 默认交给 auto-merge 在 required checks 全绿后合并；需要 hold 时加 `blocked` / `needs-info`
+  或转 draft。不要手动 merge 绕过检查；完整规程见技能 `vuna-pr`。
 
 ## 5. 合并与收尾
 
@@ -80,7 +87,11 @@ git -C <MAIN_ROOT> pull --ff-only
 ```
 
 - 只允许 **rebase merge**（squash 关闭）：整理过的提交原样落到 `main`，`chore(seed)` 不会被压扁。
-- 合并前确认 `pr` 绿；加了 `deep` / `suite` / `backend` 标签时对应长尾也必须绿。
+- 非 draft、同仓库分支、无 `blocked` / `needs-info` / `wontfix` 的 PR 由 workflow 自动打开
+  auto-merge；`pr / run` 与 `gates / run` 全绿且分支与 main 同步后自动合并。检查失败、
+  取消或落后于 main 都不会合并。
+- 落后时在分支上 `git rebase origin/main && git push --force-with-lease`；不要手动绕过
+  required checks。
 - 合并后主仓 `git pull --ff-only`，再按技能 `worktree` 的 teardown 清掉副 worktree 与本地分支。
 - 分支不合并就放弃时保留 worktree 或按需删除，**不要**把提交带回 `main`。
 
