@@ -24,8 +24,7 @@
 | `build --no-compile`（workspace） | ~5.2 s |
 | `build .`（含链接） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
 | `fmt --check`（各包 + examples） | ~1.4 s |
-| `map`（热缓存命中） | ~0.13 s |
-| `map` 冷启动全量重建 | 空 store 整仓 5.1–5.3 s → 2.9–3.2 s（索引按包分块并行；12 核） |
+| `map`（整仓索引每次重建） | 2.9–3.2 s（索引按包分块并行；12 核） |
 | `lint`（workspace，365 文件） | ~1.8–2.0 s（8 worker；无结果缓存） |
 | `doc --check`（整仓） | 3.5–3.9 s → 1.6–1.8 s（模块按包分块并行） |
 | `doc`（整仓写 HTML） | ~4 s（349 模块 / 10 MB；渲染此前是平方级开销，15 分钟级不可用） |
@@ -197,7 +196,6 @@ CPS 后缺 kind 的 binder 按位置是 `lam=4,824 / let=0 / alt=33`：几乎全
 | `check packages/base` | ~0.40 s | ~0.40 s | ~19 ms |
 | `check packages/compiler` | **21.6–23.6 s** | **11.4–13.4 s** | ~51 ms |
 | `check .` | 冷 21.8 s → 0.23 s（两段收敛） | 同左 | 58 ms |
-| `map` | 2.2–2.5 s | 2.2–2.5 s | 0.16–0.17 s |
 | `build --no-compile compiler` | ~12–28 s（见下） | ~13 s | ~150 ms |
 
 空 store 复核（导出面判据 + 去两处死扫描 + 阶段探针）：同机空 store 冷
@@ -206,12 +204,10 @@ CPS 后缺 kind 的 binder 按位置是 `lam=4,824 / let=0 / alt=33`：几乎全
 
 `check .` 的成员按依赖分层跑（见 [performance-hotspots.md](performance-hotspots.md) §2 第 10 条），因此冷跑之后**第二遍就全命中**
 （实测 21.8 s → 0.23 s，只两段）。冷 `check packages/compiler` 修前 ~22 s 里约**一半是重复精化**：
-入口闭包没覆盖 `[export]` 的全部模块
-（`iface-skip partial ... missing=Vuna.Compiler.Frontend.Canonical.Ast,
-Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
-两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check packages/compiler` 降到 ~12 s；后又修了
-同一类的第二处（`IrDump` / `Ir.Render` 搬进 cli 包），当前 ~10.8 s，门禁
-`checks.vuna-single-pass`。
+入口闭包没覆盖 `[export]` 的全部模块（`iface-skip partial` 的 `missing=` 列出未覆盖模块），
+于是每轮都补一遍 lib check（`collectSigs-done` 出现两次，两遍各 ~11–12 s）。**已修**（见下），
+冷 `check packages/compiler` 降到 ~12 s；后又修了同一类的第二处（`IrDump` / `Ir.Render`
+搬进 cli 包），当前 ~10.8 s，门禁 `checks.vuna-single-pass`。
 
 冷 `build --no-compile compiler` 的墙钟**极不稳定**（同机同源码实测 12.5–38.1 s：按直接依赖
 分层并行，且 `TMPDIR` 里的临时候选产物会让同一 `--out` 的第二次调用假快）：只报 user+sys，或同时报 loadavg。

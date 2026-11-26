@@ -72,9 +72,9 @@
     时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、纯表达式经 DT 求值（支持 import/记录/
     trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
-    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`Eff r a` 表达式编译成
-    可执行文件运行（按内容寻址缓存在 `views/effectbin`，首跑需要 `ocamlopt`，之后命中直接
-    跑）：`Nil` 行可直接求值，带行（非 `Nil`）的要先定义带显式签名的值（如
+    括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；`Eff r a` 表达式在
+    私有临时目录编译成可执行文件运行（不发布产物；需要 PATH 里有 `ocamlopt`）：
+    `Nil` 行可直接求值，带行（非 `Nil`）的要先定义带显式签名的值（如
     `prog : Eff [ConsoleOp] Int`）再求值 `prog`；server 模式拒绝效果表达式（子进程会写真实
     stdout）；tty 下有行编辑（方向键、Ctrl-R、Tab 补全）与颜色，`:load` 接受文件/目录/模块名；
   - `vuna doc [--check] [--package NAME] [DIR [OUT]]`：扫描 `lib/` 生成**单文件交互 HTML**
@@ -87,14 +87,14 @@
     按版本解析出 `(源, hash)`，写回 `[dependencies]` 的内联表行并自动 fetch；
     `--dry-run` 只打印，`--no-fetch` 只改 manifest。索引是便利层，不是身份真源；
   - `vuna store clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：一个 store 根、
-    两类生命周期——`--store` 清缓存族（`objects/<kind>`、`views/bin`、
-    `.tmp`），`--packages` 清包对象族（`objects/pkg` + `pkgs` + `tmp`），`--gc` 只删未被
+    两类生命周期——`--store` 清缓存族（`objects/module-iface`、`objects/pkg-summary`，
+    并清掉遗留的 `views/`），`--packages` 清包对象族（`objects/pkg` + `pkgs` + `tmp`），`--gc` 只删未被
     工作区/项目 roots 引用的包对象，`--all` 两者都清；不带 flag 时只清缓存族。没有树内
     `*.iface`，也没有 `--iface`。见 [cache.md](cache.md) / [package-store.md](package-store.md)；
   - `vuna map` / `vuna map find <Module.name>` / `vuna map impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
-    引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool-context/`，按输入摘要判定
-    新鲜度，refs 带行 / 列位置，没有刷新命令；
+    引用者与建议测试标签；索引每次调用在进程内重建（不落对象库），refs 带行 / 列位置，
+    没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
     `packages/compiler/lib/Vuna/Compiler/Base/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
@@ -256,7 +256,7 @@ modules = ["My.Lib", "My.Lib.Internal"]
 | `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；`Eff r a` 表达式经 compile+运行） |
 | `vuna doc [--check] [--package NAME] [DIR [OUT]]` | 单文件交互 HTML API 文档（docstring；尊重 `[export]`） |
 | `vuna search [--type|--name|--doc] ... <query...>` | 名称 / docstring / 类型检索（Hoogle 式打分；`--json`） |
-| `vuna map` / `vuna map find` / `vuna map impact` | 源码符号索引（内容哈希缓存；定义、引用位置、建议测试） |
+| `vuna map` / `vuna map find` / `vuna map impact` | 源码符号索引（parse 级、每次重建；定义、引用位置、建议测试） |
 | `vuna api <Module.name>` | 某模块的签名面（含 docstring 与行号） |
 | `vuna deps fetch [--locked] [DIR]` | 取不可变源依赖到持久 store；`--locked` 只校验不联网 |
 | `vuna deps add <name>[@<version>] [DIR]` | 查 `[registry].index` → 写回 `[dependencies]` 并取包（`--dry-run` / `--no-fetch`） |

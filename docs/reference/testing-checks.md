@@ -2,7 +2,7 @@
 
 本页是 [testing.md](testing.md) 的另一半：那里讲 suite 与 corpus（用例怎么发现、怎么写、
 怎么分类），这里讲**门禁怎么跑**——`nix flake check` 的 checks 清单与各 check 的语义、
-native 自举 conformance、Nix 命令与本地开发、手动性能基准，以及 effect 测试产物缓存。
+native 自举 conformance、Nix 命令与本地开发、手动性能基准，以及 effect 测试的执行。
 
 ## Nix checks 清单
 
@@ -234,18 +234,16 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 `--check` 的尺寸阈值默认 5% / 20%（跨机器可比），耗时 20% / 50%（同机、软判定）。
 读数见 [performance.md §产物规模](performance.md)。
 
-## effect 测试产物缓存
+## effect 测试的执行
 
-`vuna test` 的 effect 测试（`main : Eff ...`）编译产物按内容寻址缓存在
-`$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器身份、包源码闭包、context roots
-内容与测试源内容；命中直接运行缓存二进制，跳过 `compile + build.sh`。pure 测试仍走
-`interpretFile`，不缓存。没有 coreutils `timeout` 时同一路径不加外部超时（不再有临时包
-fallback）。REPL 的动作表达式用同一套视图机制，产物在 `$VUNA_STORE/views/effectbin/<digest>/`。
+`vuna test` 的 effect 测试（`main : Eff ...`）在私有临时目录 `compile` + `build.sh` 后运行，
+产物不落对象库、没有跨 run 的二进制缓存。pure 测试仍走 `interpretFile`，不缓存。没有
+coreutils `timeout` 时同一路径不加外部超时。REPL 的动作表达式同样在私有临时目录编译运行。
 
 ## 相关阅读
 
 - suite 与 corpus 怎么写、怎么分类：[testing.md](testing.md)；测试体系设计（共享对象库 /
-  store-isolated / verdict 对象）：[test-architecture.md](test-architecture.md)
+  store-isolated）：[test-architecture.md](test-architecture.md)
 - 种子不变量与 rotation：[bootstrap.md](bootstrap.md)；编译器模块职责：[compiler.md](compiler.md)
 - 改动定位与建议测试标签：[architecture.md](../architecture.md)
 - lint 规则：[lint.md](lint.md)；错误码：[tooling.md](tooling.md)

@@ -68,8 +68,7 @@
   用例形状（单个巨型 `_start` + 上千个零参 CAF）叠加 binaryen 的 O(n²) 倾向，不是常量。
   需要绕开时用 `--wasm-opt 2`。
 - **在驱动层执行，不在插件内**：`wasm-opt` 由驱动层调 `build.sh` 跑，`vuna-target-wasm`
-  插件不碰它——`target-out` 缓存键里没有外部工具版本（插件本身按内容摘要计身份），
-  在插件内优化会把旧 `.wasm` 静默缓存。
+  插件只写出 WAT；`.wasm` 的两段外部工具（`wasm-tools parse` / `wasm-opt`）都在驱动层执行。
 - `-O3` 会重写控制流：尾调用折叠后 `tco_mutual` 的 `return_call` 从 66 个降到 1 个。断言产物
   形状时不能假设固定的 `return_call` 计数。
 - 默认内联改变栈深：`hashmap` 在 binaryen 默认 `-O2` 内联下 trap（`Maximum call stack size

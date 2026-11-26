@@ -12,7 +12,7 @@ flag 词汇、帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.m
 派生 + 一份 `vuna-store` 接口预热（`nix build .#vuna` 只重建改动的插件与安装拷贝）；树内
 `nix/tools/dev-loop.sh` 则不经 Nix，直接用宿主对象库。后者用当前工作树源码构建出的 stage 1
 编译器增量构建指定包，再组装
-`VUNA_BASE` / `VUNA_EXEC_PATH`（以及 `VUNA_OCAML_ID`、`VUNA_WASM_RUNNER`）把命令交给
+`VUNA_BASE` / `VUNA_EXEC_PATH`（以及 `VUNA_WASM_RUNNER`）把命令交给
 `packages/cli/.output/bin/vuna`：
 
 ```console
@@ -163,7 +163,7 @@ CLI 统一使用 0 / 1 / 2 三档：
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 error finding 或 warning 超过 `max-warnings`；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
 | 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败） |
 
-约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。`vuna build` / `vuna compile` 的入口能力告警（`UN_TargetEffectUnavailable`）走同一条显示与退出码策略；`--deny-warnings` 失败时按「编译失败不留产物」删除输出目录。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 可能不完整**：诊断列表会随 check 结果（Pass/Fail）一起落盘并在命中时重放；但「干净模块复用」的那次运行只拿到被精化模块的 warning，所以 `-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）仍跳过 check 结果缓存、并让**本包**模块全部重新精化（依赖包仍复用接口摘要）——热缓存下告警完整，代价是该次 check 从「缓存命中 ~ms」回到「本包精化秒级」。普通 `vuna check` 的命中/失败重放照常（不显示 warning）。
+约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。`vuna build` / `vuna compile` 的入口能力告警（`UN_TargetEffectUnavailable`）走同一条显示与退出码策略；`--deny-warnings` 失败时按「编译失败不留产物」删除输出目录。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 可能不完整**：`-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）会让**本包**模块全部重新精化（依赖包仍复用模块接口），代价是该次 check 从「接口命中 ~ms」回到「本包精化秒级」；普通 `vuna check` 不显示 warning（没有检查结果重放）。
 
 约定之外：`vuna search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
 码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。（ICE 的独立退出码为 70，见 [diagnostics.md](diagnostics.md) §7。）
@@ -240,7 +240,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:search [--type\|--name\|--doc] QUERY` | 复用 `vuna search` 的检索；含 `->` / `=>` 自动类型检索；最多 20 条 |
 | `:load TARGET` | 见下方加载矩阵；成功才改变状态，失败保持缓冲 |
 | `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
-| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（会话载荷存 `objects/tool-context/<addr>`，按输入摘要判定；命中从载荷解码，未命中重建并写回）后打印模块接口；无参列出模块。会话内后续 `:browse`/`:info`/`:search` 直接用 `stateBrowseIndex` 的内存索引，不再逐条比较。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
+| `:browse [MODULE]` | 惰性构建 `Vuna.Index`（进程内，不落对象库）后打印模块接口；无参列出模块。会话内后续 `:browse`/`:info`/`:search` 直接用 `stateBrowseIndex` 的内存索引，不再逐条比较。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
 | `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
 | `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」） |
 | `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |
@@ -271,14 +271,14 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 （文本替换语义：后续定义重新绑定到新定义，不是 shadowing）。
 
 **效果表达式**：顶层类型是 `Eff r a` 的表达式编译成可执行文件运行（`compileToDir` + `build.sh`
-+ 产物），效果输出直接到终端、按进程退出码判定，因此需要 PATH 里有 `ocamlopt`。入口源码按
-内容寻址缓存在 `$VUNA_STORE/views/effectbin/<digest>/`，命中直接运行。Nil 行可以直接求值；
++ 产物），效果输出直接到终端、按进程退出码判定，因此需要 PATH 里有 `ocamlopt`。入口源码在
+私有临时目录构建（不落对象库、无跨 run 产物缓存）。Nil 行可以直接求值；
 行里带标签时要先定义成带显式签名的值（`prog : Eff [ConsoleOp] Int`，再求值 `prog`），REPL
 用源码里的签名合成入口。包上下文取最近 `vuna.toml` 的本地依赖闭包（不在包内时 base-only）。
 
 内部的 `VUNA_EFFECT_TARGET=ocaml|native`（缺省 `ocaml`）只给 steps / 排障用，产品面没有
-`--target`：`native` 走私有用目录构建 + `cc` 链接（不发布视图，也不会与 ocaml 的
-`views/effectbin` 混用），未知值明确报错、不静默回落。
+`--target`：`native` 走私有临时目录构建 + `cc` 链接（与 `ocaml` 各自独立、不共享产物），
+未知值明确报错、不静默回落。
 
 **加载矩阵**（`:load` 与 CLI 位置参数同一套解析）：
 

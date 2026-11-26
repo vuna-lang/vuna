@@ -118,7 +118,7 @@
 | D3 | 原生后端用**保守根集 + 分代标记-清扫**：沿 `rbp` 链整帧扫根，年轻代按分配预算先收、整堆按连续次数与晋升压力触发。wasm 后端用 WasmGC（宿主 tracing GC） | 续延已由库机器执行，机器状态全是堆/栈上的普通值，没有栈拷贝；对非移动 GC 来说保守扫根已经足够，逐 call 栈图/槽 kind 只会引入漏根风险。深递归按扫栈成本抬阈值（[performance.md](reference/performance.md)「槽 kind 分布」）。Perceus RC 仍不做：dup/drop 需要精确指针与生命周期，且可变单元的环收不了 | 非移动老代 → 仍有内部碎片、不压缩；写屏障点分散在模块与运行时（可变单元 / cleanup / list 原地改接）；移动/压缩要等精确指针与槽 kind 全部可判定（debt D125） |
 | D4 | 宏终局是 typed macro / elaborator reflection，先做 AST→AST | 声明式宏够用一阵，reflection 才是终态 | 精化器要成为稳定库值；LSP 必须能跑宏并支持超时取消 |
 | D5 | 内容寻址身份停在"依赖按哈希固定 + 包身份接线"：`identityHash` 进 manifest/registry/pin/fetch/check，不做分发服务器 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash` / `identityHash` 三者分开**；依赖身份只需包级 `pkgIfaceHash`；分发真实性仍是非目标 |
-| D11 | 引入 `opaque` / `abstract` 定义修饰符 | 控制下游可见性：`ifaceHash` 不含不展开体，因此改 `opaque` 体不影响下游精化 | 多一个语言特性，用户要理解"能不能展开"的差别；产物缓存移除后不再有 `implHash` |
+| D11 | 引入 `opaque` / `abstract` 定义修饰符 | 控制下游可见性：`ifaceHash` 不含不展开体，因此改 `opaque` 体不影响下游精化 | 多一个语言特性，用户要理解"能不能展开"的差别；没有 `implHash`（产物不进对象库） |
 | D12 | 摘要只固定**不可变源**：`git`+`rev` / `url` 必填 `hash`，`path` 依赖不写摘要 | 完整性（取源）与新鲜度（判脏）是两条链：新鲜度已由 `siHash` → `miIfaceHash` → `miDepHashes` 负责，改依赖源码不该动上游 manifest | `path` 依赖不可复现；发布前必须转成 `git`/`url` |
 | D13 | 一个依赖图内同一包名只能出现一次（无版本号共存） | 无版本命名空间，规则最简；包名只参与"同包可见"判定 | 无法共存同名包的两个版本，只能改名/分叉 |
 | D14 | registry = 内容寻址对象集 + **可选**静态索引；无服务器、无账户、无签名 | 当前无 TLS 能力；网络/账户不进 TCB 或 seed；传输外置给 `git`/`curl`/Nix | 来源可信性由用户选定的 URL 决定；无撤销；索引只是便利层 |
@@ -126,8 +126,8 @@
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
 | D7 | 自举锚点**当前**是 OCaml（`seed/`，同时是语义 oracle）；方向是 native 自举成熟后用 native 产物（`.s` 文件集）当锚点，OCaml 后端可在那之后退役并归档；wasm 不做自举、不设 wasm seed | native 产物只需要 `cc`/`as`/`ld` 且字节确定；wasm 仍只能跑浏览器 / 边缘能力子集，不能承担自举所需的宿主面 | 自举链平台锁定 x86-64 Linux（其它平台用发布二进制）；OCaml 退役后固定点从「独立实现互证」降级为「同一 codegen 自洽」，跨后端差分 oracle 需由 suite + wasm 交叉承担（[bootstrap.md](reference/bootstrap.md)「锚点演进」） |
 | D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由两段外部工具生成——`wasm-tools parse` 汇编、`wasm-opt`（binaryen）优化；WAT 仍不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖 `wasm-tools` 与 `wasm-opt` 两个由 Nix 固定的版本；WAT 布局不承诺跨版本稳定 |
-| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 已落地：REPL 与 `vuna test` 的动作程序都走对象库视图（`views/effectbin` / `views/testbin`）+ 后端链接，临时包 `runEffectProgram` 已删除 |
-| D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
+| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 已落地：REPL 与 `vuna test` 的动作程序都在私有临时目录编译运行（不发布视图、无跨 run 产物缓存） |
+| D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | `roots/` 只追加；GC 只按时间/容量淘汰，没有引用计数 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |
 | D17 | 包内依赖方向是**包格式的一部分**：`vuna.toml` 的 `[layers]` 声明层（= 模块前缀 = 目录）及允许的直接依赖，由 loader 在 import 时强制；不用「拆包」表达方向（[packages.md](reference/packages.md)「层约束」） | 方向是包的语义契约，应该随包一起被校验、被缓存身份覆盖；拆包会把一个编译单元切成多个包，代价远大于收益 | 层内 / 向下但跨子系统的 import 不受约束；只在需要严格方向的层上写表；层表与目录不同构时只能靠改目录（不改表）来纠正 |
 | D18 | **语法层是「parser 发射的无损树 + AST 作为其上的类型化投影」**，不是「AST + 旁挂 trivia 流」 | 现状的 AST 已被表层信息占用（`ESect*` 已退出 AST（parser 把 `(op)` 降级成 `EVar`、左/右 section 降级成单 binder λ，写法记在 section 节点的 `cstSection` 字段，`Loader.Fixity` 只折叠立即应用）；`ELocalFun` 已从 `Expr` 搬到 `BindingValue.BClauses`（带身份的语义子句组，不是纯书写形态；`Elab` 直接读 `Binding.bindValue` / `bindSig`，不再有 `ELocalFun` / `EAnn` 节点）；`EFloat` 的 `raw` 是字面量唯一表示（三后端与 `-0.0` / 溢出语义都依赖它），不是表层文本；`EInterp` 的 `"""` 标记已移到模板节点的 `cstInterpMulti` 字段；`[]`/`()` 靠名字反推；括号与中缀链已退出 AST——前者由 `Frontend.Cst` 按节点 id 记层数，后者在 parser 里降级成普通应用，反引号写法记在链步节点的 `cstBacktick` 字段；`(e : T)` 的 `@vuna@ascribe` 应用也只到名字解析，由 `Elab` 在 `EApp (EVar @vuna@ascribe)` 上直接处理），而 trivia 与字节 span 又没有一处权威（注释归属曾靠 `Fmt.Comment` 里的位置启发式，模式 span 曾缺字节偏移），CST 节点树的区间已由 parser 发射（`NodeEvent`），且与 AST 的 span 同源（同一构造的首 token → 末 token 之后）；分支节点带 parser 分配的 id（节点身份，span 可改写而 id 不变）；声明 / 条目节点（`Decl` / `Import` / `FixityDecl` / `Ctor` / `Field` / `TraitMethod` / `DoStmt` / `ModDecl` / `ExportItem`）与表达式 / 模式（`Expr` / `Pat`）都已把 `NodeRef` 存进 AST（id 与树节点逐条比对；表达式 id 贴在该 `parseExpr` 区间的根构造子上，`Binding.bindSig` 存签名行 `binding` 节点），`Alt` / `Binding` 也已是记录（`altRef` / `bindRef` 指向树里的 `alt` / `binding` 节点），`handle` 块的return / op 子句同样有子句节点。注释槽位按节点 id 存（`Fmt.Comment` 的 `TriviaCtx`，渲染挂载点自带 id），归属已是单趟（锚点按起点排序 + 打开栈 + 本行候选池），锚点集合按树节点种类从树节点上收集（`Cst.anchorRefsOfTree`，不遍历 AST）。投影的做法是**在同一遍解析里贴节点身份并把 AST 值作为树节点的语义载荷**（`CstSem`；`withExtent` 在 `EvClose` 前发 `EvSem`）：`parseExpr` / `parsePatternSingle` 的区间出口把树节点 id 贴到 AST 构造子上，写法读节点字段；文件级 AST 由 `Frontend.AstView.ofTree` 只按顶层载荷与顺序重建（`parseSourceDetailed` 的 `parsedFile` 就是它）——**不做**第二遍「树 → AST」lowering：从树重读 token 就是第二套文法，与「同层禁止两套实现」冲突。表面事实的消费者已改读树节点字段：Fmt 用 `Cst.cstIndexOf` 定位后读字段，加载器用 `Cst.fixityFactsOfParts` 从 parser 直出的括号 / 反引号 / section 表派生中缀重排需要的三条事实（不建主树，事实按模块保留）。内置宏的 source map 已落地（调用是 `macro` 树节点，生成节点用 `Ast.synthNodeRef` 指回调用；`vuna dev macro` 可列出）；剩余是 LSP 展开视图与用户宏（D65）的 per-模板节点映射；编辑路径按「重新 parse + 重建树」处理，树不做原地改写，因此载荷总是跟着一次解析走 | 模板洞的子树随模板节点携带，索引与事实派生一起走；parser 边解析边发射树 ⇒ 改 parser 与 seed（要分步 rotation）；`07_lossless_tree` 用规范编码锁住「投影 AST == parser 直接 AST」，并保持节点 id / 区间逐条对齐；`09_macro_map` 锁住宏调用表与展开节点的合成 id |
@@ -180,7 +180,7 @@
 | --- | --- |
 | 哈希格式 | 编码 roundtrip；同输入跨进程/跨机器同摘要 |
 | 输入寻址对象库 | 新旧路径 audit 差分（同诊断、同产物）；clean/gc 作用域互不误删 |
-| 内容寻址身份 | 依赖身份 = 依赖包 `pkgIfaceHash`；构建视图 key = 源闭包 + 依赖身份 + 编译器/链接工具链身份；同源跨目录地址一致；注释变更不脏依赖方 |
+| 内容寻址身份 | 依赖身份 = 依赖包 `pkgIfaceHash`；模块接口地址 = 包身份 + 模块名 + 自身源摘要 + 包环境 + 直接 import 的源摘要；同源跨目录地址一致；注释变更不脏依赖方 |
 | IR | OCaml-via-IR 与直连 Core 的产物逐字节一致 |
 | wasm / native | 与 OCaml 产物行为差分一致 |
 | 宏 / DSL | 展开后 span 覆盖完整 + 格式化幂等 + 工具可跳转 |
