@@ -294,9 +294,10 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 
 - 名字、层、kind 与顺序声明在 `Vuna.Ir.Passes`（`PassSpec`，纯数据，不把函数放进记录）；
   `passSpan` 把一步求值放进 `ph:"X"` 跨度，事件名 `vuna.pass.<name>`。
-- 已接线：`Ir.Cps.cpsDefsMachine`（5 步）与 `Target.Native.Module.build`（16 次执行，
-  含 `inlineDefs` 两遍、`resolveDefAliases` 两次与条件剪枝）。顺序仍由各链自己的数据依赖
-  串接；表负责命名、观测与后续 `--only` / dump 的公共词汇。
+- 已接线：`Ir.Cps.cpsDefsMachine`（5 步）、`Target.Native.Module.build`（16 次执行，
+  含 `inlineDefs` 两遍、`resolveDefAliases` 两次与条件剪枝）与 `Target.Wasm.Module.build`
+  （host-rewrite / prune / cps / anf / tail；directable 路径跳过 cps）。顺序仍由各链自己的
+  数据依赖串接；表负责命名、观测与后续 `--only` / dump 的公共词汇。
 - `psCheckBefore` / `psCheckAfter` / `psDump` 目前是声明位：post-CPS 的运行时符号
   （`@ir@cps@*` / `@ir@m@*`）不在 `Ir.Runtime` 契约里，逐步校验需要先补 scoped-only 入口，
   不能直接复用 `validateUnit`。

@@ -112,8 +112,8 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
   （名字解析：fixity 重排 / 宏展开 / 入口声明 / 命名空间建表 / 逐模块名字解析 /
   未用 import 判定；逐模块四段同名按次聚合）与 `vuna.resolve.warn.names` / `.sources` /
   `.imports`（未用 import 判定内部的两次名字收集与逐 import 检查）；
-- `ph:"X"` 后端优化链：`vuna.pass.ir.*` / `native.*` / `wasm.*`（IR 5 步与 native 16 次
-  执行逐步计时；同名多轮用 `native.inline` / `native.inline.again` 区分）。名字与顺序的唯一
+- `ph:"X"` 后端优化链：`vuna.pass.ir.*` / `native.*` / `wasm.*`（IR 5 步、native 16 次
+  执行与 wasm 5 步逐步计时；同名多轮用 `native.inline` / `native.inline.again` 区分）。名字与顺序的唯一
   真源是 `Vuna.Ir.Passes.allPassNames`，`vuna dev obs validate` 按 `vuna.pass.` 前缀放行；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"X"` + `args.def`（level ≥ 3）：`vuna.elab.term.core`（逐表达式节点，`args.def` 是
