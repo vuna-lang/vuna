@@ -1,13 +1,14 @@
 -- | 默认导入（自动 import）的精选门面：只重导出最常用的核心模块，`Map` / `Sort` 需要显式 import。`Show` / `Eq` / `Ord` 的 trait 声明与内建类型实例在库里（[Base.Trait.Show] / [Base.Trait.Eq] / [Base.Trait.Ord]），因此随 Prelude 自动可见，用户程序不必显式 import。宿主原语（`@vuna@prim_eff_*`）是隐藏内部名，源码写不出；用户面走 `Base.Effect.Core.*` 标签 + handler，需要标签或运行入口时显式 `import Base.Effect.Core`。
 --
+-- `Base.Effect.Core` **不在**本模块的导入闭包里：纯值程序因此不生成效应 runtime（OCaml 后端省掉
+-- `Effect.Deep` handler 壳、cleanup 表与随之而来的 Domain / Printexc 一整串 stdlib 模块）。
+--
 -- `Base.Data.Float` 也随 Prelude 可见：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import。代价是 Prelude 闭包包含 `Base.Data.Float`，所有程序生成的运行时都会带浮点 helper（见 docs/reference/floats.md）。
 module Prelude where
 
 -- 加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Data.Int
 -- 算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Trait.Num。
--- 只 import 不重导出：保证每个程序加载 Base.Effect.Core（宿主原语签名与 codegen 的 MkEff 需要）；短名 `Eff` / `Row` 仍需显式 import。
-import Base.Effect.Core
 export module Base.Data.Pair
 export module Base.Data.Function
 export module Base.Data.Bool
