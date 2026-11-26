@@ -2062,7 +2062,9 @@ writeIfaceObjects mods (mi :: rest) =
     Nothing => writeIfaceObjects mods rest
     Just m =>
       do
-        bytes <- storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
+        prev <- readIfaceAtEff m.cmAddr
+        let mi2 = mergeDefLocsFrom prev mi
+        bytes <- storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi2)
         n <- writeIfaceObjects mods rest
         pure (if bytes > 0 then n + 1 else n)
 
