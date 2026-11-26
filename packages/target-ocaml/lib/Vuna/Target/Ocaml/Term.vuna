@@ -53,6 +53,34 @@ dtRuntime = """type dt_gc_stat = {
   dt_gs_stack_size : int;
 }
 external dt_gc_quick_stat : unit -> dt_gc_stat = \"caml_gc_quick_stat\"
+(* GC 参数走 `caml_gc_get` / `caml_gc_set`（与 stdlib `Gc.get/set` 同一组 C 原语），
+   不引用 `Gc` 模块——`Gc` 会把 Printexc / Printf / Buffer 整串拖进每个产物。
+   字段顺序与 `Gc.control` 一致（版本升级时这里要跟着 mli 走）。 *)
+type dt_gc_control = {
+  dt_gc_minor_heap_size : int;
+  dt_gc_major_heap_increment : int;
+  dt_gc_space_overhead : int;
+  dt_gc_verbose : int;
+  dt_gc_max_overhead : int;
+  dt_gc_stack_limit : int;
+  dt_gc_allocation_policy : int;
+  dt_gc_window_size : int;
+  dt_gc_custom_major_ratio : int;
+  dt_gc_custom_minor_ratio : int;
+  dt_gc_custom_minor_max_size : int;
+}
+external dt_gc_get : unit -> dt_gc_control = \"caml_gc_get\"
+external dt_gc_set : dt_gc_control -> unit = \"caml_gc_set\"
+(* 8 MB minor heap（1048576 words）+ space_overhead 200。
+   minor heap 是「分配密集型短程序 vs 深栈程序」之间的单一旋钮：
+   - 2 MB（OCaml 默认）对短命分配最省（micro_concat 14ms vs 18ms），但每次 minor GC
+     要扫栈，400k 层 handler 的深度夹具因此从 2.2x 涨到 3.4x 增长（checks.vuna-effect-machine-growth）；
+   - 16 MB 对深栈最友好（同夹具 2.2x），但分配密集程序慢 40%；
+   - 8 MB 落在两者之间：深度夹具 2.6x（门禁 3.0x），micro_concat 约 +3ms。
+   读数见 docs/reference/performance-hotspots.md 的 GC 段。 *)
+let () =
+  let c = dt_gc_get () in
+  dt_gc_set { c with dt_gc_minor_heap_size = 1048576; dt_gc_space_overhead = 200 }
 let () =
   if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then
     at_exit (fun () ->
@@ -1569,7 +1597,7 @@ let dtp_log_emit (lvl : int) (scope : string) (text : string) : int =
 -- `VUNA_OBS_FILE` 或 `${VUNA_OBS_DIR:-${TMPDIR:-/tmp}/vuna-obs}/vuna-<pid>.jsonl`。
 --
 -- 文本里**没有反斜杠**（JSON 的 `"` 全部经 `dtp_obs_qc = Char.chr 34` 拼出）：本文件是
--- vuna 源码，多行字符串里每个 `\` 都要再转义一层，省掉它们才能让模板可读可 diff。
+-- vuna 源码，多行字符串里每个 `` 都要再转义一层，省掉它们才能让模板可读可 diff。
 -- 采样：CPU 用 `ITIMER_PROF` + `SIGPROF` + `Printexc.get_callstack`（handler 里只抓栈，
 -- 不做 I/O/格式化）；内存用 `Gc.Memprof` 分配回调。两处共用一个 8192 槽 reservoir
 -- （Algorithm R，全程均匀抽样，不只是开头一段），停止时批量序列化，并用

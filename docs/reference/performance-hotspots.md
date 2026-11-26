@@ -119,8 +119,13 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
    **`sort_lib` 的 3.9× 不是排序算法**：`Base.Data.Sort.sortBy` 的 20k 排序在同进程
    循环里约 3.9 ms（与手写 OCaml 同量级），bench 的 wall 里主要是分配与 minor heap
-   （单次排序分配 ~3.3M words ≈ 27 MB）。生成程序现在**不设置 GC 参数**（OCaml 默认 minor heap
-   就是 2 MB；显式 `Gc.*` 会把 Gc / Printexc / Printf / Buffer 拖进产物）：16M words =
+   （单次排序分配 ~3.3M words ≈ 27 MB）。生成程序现在**用 `caml_gc_get` / `caml_gc_set` 显式设 GC 参数**（8 MB minor heap +
+   `space_overhead = 200`），不走 `Gc` 模块——`Gc` 会把 Printexc / Printf / Buffer 拖进每个
+   产物。这个旋钮是「分配密集短程序 vs 深栈程序」的取舍（同一夹具，深栈 = 400k 层 handler，
+   见 `checks.vuna-effect-machine-growth`；短程序 = `micro_concat`）：
+   2 MB → 3.2–3.4x 增长 / 14 ms；4 MB → 2.8–3.0x / 15 ms；6 MB → 2.7x / 16 ms；
+   **8 MB → 2.6x / 17 ms**；16 MB → 2.2x / 20 ms。门禁是 ≤3.0x，所以取 8 MB
+   （深栈留 20% 余量，短程序付 ~3 ms）。历史读数：16M words =
    128 MB → 2M words = 16 MB 时
    RSS `gc_retain` −69% / `gc_array_churn` −50% / `sort_lib` −30%，CPU `gc_retain` −47% /
    `gc_array_churn` −19% / `sort_lib` −16%；16 MB → 2 MB 后分配密集的短程序继续变快
