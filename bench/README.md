@@ -74,6 +74,16 @@
   user+sys，**含进程启动**）除对手写 OCaml，超过 N 即 `PERF-GATE-FAIL` 并 exit 1；阈值
   下方 `--gate-slack`（默认 0.05）以内记为 `near`，只提示加 `--runs` 复核，不改退出码。
   短用例（参照 1–5 ms）的进程启动占比高：`repeat=` 放大的是采样内耗时，不改变启动地板。
+- 每个 case 用 `.bench` 的 `ref=` 声明对照与 vuna 走不走同一机制；门禁只对 `ref=same`
+  （默认）生效：
+  - `same`：同机制（effect 用例用 `Effect.Deep`、线程用 `Domain`、纯代码用普通函数）；
+  - `direct`：对照完全不用该机制（如 effect 用例的 `.ml` 用 `try` / `Fun.protect` /
+    普通闭包）。比值测的是**抽象开销**，默认只打印 `record`、不参与 1.2x 判定；需要硬上限时
+    加 `--gate-direct-ratio N`；
+  - `floor`：启动地板（`t0/startup`），CPU 是进程 + 运行时初始化，只记录进
+    `meta.startup_floor_cpu_ms`。
+  这套分类的理由：拿「不用 effect 的对照」去卡「必须用 effect 的 vuna 程序」没有收敛点；
+  抽象开销仍然逐次记录，靠基线 diff 而不是 CI 红绿来跟踪。
 - 采样顺序按轮交替（偶数轮先跑参照、奇数轮先跑被测）：参照与被测在同一次测量里交错，
   避免宿主负载的单调漂移系统性偏向先跑的一方。
 - **对象库默认隔离**：每次运行把 `VUNA_STORE` 指到 `$WORK/store` 的独立空库。热

@@ -50,6 +50,7 @@ JSON_OUT=""
 BASELINE=""
 CHECK=0
 GATE_RATIO=""
+GATE_DIRECT_RATIO=""
 GATE_SLACK=0.05
 ONLY=""
 TIER_FILTER=""
@@ -93,7 +94,8 @@ options:
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
   --baseline FILE        基线 JSON（默认 bench/baselines/programs.json）
   --check                与基线对比；默认软告警（WARN），--strict 时 exit 1
-  --gate-ratio N         绝对门禁：逐 case 的 CPU 比值（含进程启动）超过 N 即 exit 1
+  --gate-ratio N         绝对门禁：`ref=same` 用例的 CPU 比值（含进程启动）超过 N 即 exit 1
+  --gate-direct-ratio N  `ref=direct` 用例的硬上限（默认不设：只记录「抽象开销」）
   --gate-slack N         near 区宽度（默认 0.05：阈值下方这么多倍内提示复核）
   --threshold N          WARN 阈值，百分比（默认 20）
   --fail-threshold N     FAIL 阈值，百分比（默认 50；超过即 exit 1）
@@ -154,6 +156,8 @@ while [ $# -gt 0 ]; do
     --check) CHECK=1; shift ;;
     --gate-ratio) [ $# -ge 2 ] || die "--gate-ratio needs a value"; GATE_RATIO=$2; shift 2 ;;
     --gate-ratio=*) GATE_RATIO=${1#*=}; shift ;;
+    --gate-direct-ratio) [ $# -ge 2 ] || die "--gate-direct-ratio needs a value"; GATE_DIRECT_RATIO=$2; shift 2 ;;
+    --gate-direct-ratio=*) GATE_DIRECT_RATIO=${1#*=}; shift ;;
     --gate-slack) [ $# -ge 2 ] || die "--gate-slack needs a value"; GATE_SLACK=$2; shift 2 ;;
     --gate-slack=*) GATE_SLACK=${1#*=}; shift ;;
     --threshold) [ $# -ge 2 ] || die "--threshold needs a value"; THRESHOLD=$2; shift 2 ;;
@@ -181,6 +185,10 @@ case $PROBE_TIMEOUT_MS in ''|*[!0-9]*) die "--probe-timeout-ms must be a non-neg
 if [ -n "$GATE_RATIO" ]; then
   awk -v v="$GATE_RATIO" 'BEGIN { exit !(v ~ /^[0-9]+([.][0-9]+)?$/ && v + 0 > 0) }' \
     || die "--gate-ratio must be a positive number"
+fi
+if [ -n "$GATE_DIRECT_RATIO" ]; then
+  awk -v v="$GATE_DIRECT_RATIO" 'BEGIN { exit !(v ~ /^[0-9]+([.][0-9]+)?$/ && v + 0 > 0) }' \
+    || die "--gate-direct-ratio must be a positive number"
 fi
 awk -v v="$GATE_SLACK" 'BEGIN { exit !(v ~ /^[0-9]+([.][0-9]+)?$/) }' \
   || die "--gate-slack must be a non-negative number"
@@ -266,16 +274,17 @@ if [ -n "$TIER_FILTER" ]; then
 fi
 
 if [ "$LIST" = 1 ]; then
-  printf '  %-16s %-6s %-16s %-6s %s\n' benchmark tier targets repeat notes
+  printf '  %-16s %-6s %-16s %-6s %-6s %s\n' benchmark tier targets repeat ref notes
   for name in $BENCHES; do
     t=$(bench_meta "$name" targets "ocaml,native,wasm")
     r=$(bench_meta "$name" repeat 1)
     c=$(bench_meta "$name" c "")
     o=$(bench_meta "$name" ops 0)
+    k=$(bench_meta "$name" ref same)
     extra=""
     [ -n "$c" ] && extra="c=$c"
     [ "$o" != 0 ] && extra="$extra ops=$o"
-    printf '  %-16s %-6s %-16s %-6s %s\n' "$name" "${BENCH_TIER[$name]}" "$t" "$r" "$extra"
+    printf '  %-16s %-6s %-16s %-6s %-6s %s\n' "$name" "${BENCH_TIER[$name]}" "$t" "$r" "$k" "$extra"
   done
   exit 0
 fi
@@ -517,7 +526,7 @@ selected() {
   esac
 }
 
-declare -A MED CPU NET CPU_NET RSS RSS_NET WALLVALS CPUVALS \
+declare -A BENCH_REF MED CPU NET CPU_NET RSS RSS_NET WALLVALS CPUVALS \
   RATIO CPU_RATIO RSS_RATIO C_RATIO CPU_C_RATIO RSS_C_RATIO \
   DEFAULT_STACK SKIP CASE_TIMEOUT \
   GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP \
@@ -564,6 +573,13 @@ build_target() { # name target dir
   local name=$1 target=$2 dir=$3
   local csrc
   csrc=$(bench_meta "$name" c "")
+  local ref_kind
+  ref_kind=$(bench_meta "$name" ref same)
+  case $ref_kind in
+    same|direct|floor) ;;
+    *) die "$name: ref= must be same, direct or floor (got $ref_kind)" ;;
+  esac
+  BENCH_REF[$name]=$ref_kind
   local -a csrcs=()
   [ -n "$csrc" ] && csrcs=("${BENCH_DIR[$name]}/$csrc")
   vuna_build_target "${BENCH_DIR[$name]}/$name.vuna" "$target" "$dir" "${csrcs[@]}" || return 1
@@ -889,6 +905,13 @@ if [ "$NODE_VERSION" != n/a ]; then measure_node_floor; fi
 for name in $BENCHES; do
   selected "$name" && run_bench "$name"
 done
+# 启动地板读数（t0/startup，可能没被选中）：只进 JSON meta，不参与门禁。
+STARTUP_FLOOR_CPU_VUNA=""
+STARTUP_FLOOR_CPU_REF=""
+if [ -n "${CPU["startup:vuna_ocaml"]:-}" ] && [ -n "${CPU["startup:ocaml_ref"]:-}" ]; then
+  STARTUP_FLOOR_CPU_VUNA=${CPU["startup:vuna_ocaml"]}
+  STARTUP_FLOOR_CPU_REF=${CPU["startup:ocaml_ref"]}
+fi
 [ ${#ORDER[@]} -gt 0 ] || die "no benchmark selected (--only $ONLY)"
 
 # 写一个后端的测量块；$1=name $2=target，$3=缩进。
@@ -982,6 +1005,10 @@ emit_json() {
   printf '    "gate_ratio": %s,\n' "$(case $GATE_RATIO in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_RATIO" ;; esac)"
   printf '    "gate_slack": %s,\n' "$(case $GATE_SLACK in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_SLACK" ;; esac)"
   printf '    "gate_metric": "cpu",\n'
+  printf '    "gate_direct_ratio": %s,\n' "$(case $GATE_DIRECT_RATIO in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_DIRECT_RATIO" ;; esac)"
+  printf '    "startup_floor_cpu_ms": { "vuna_ocaml": %s, "ocaml_ref": %s },\n' \
+    "$(case ${STARTUP_FLOOR_CPU_VUNA:-} in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$STARTUP_FLOOR_CPU_VUNA" ;; esac)" \
+    "$(case ${STARTUP_FLOOR_CPU_REF:-} in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$STARTUP_FLOOR_CPU_REF" ;; esac)"
   printf '    "store_mode": "%s",\n' "$STORE_MODE"
   printf '    "stack_policy": "%s",\n' "$(json_escape "$STACK_POLICY")"
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
@@ -1000,6 +1027,7 @@ emit_json() {
     first=0
     printf '    "%s": {\n' "$name"
     printf '      "tier": "%s",\n' "${BENCH_TIER[$name]}"
+    printf '      "ref_kind": "%s",\n' "${BENCH_REF[$name]:-same}"
     printf '      "timeout_ms": %s,\n' "${CASE_TIMEOUT[$name]:-0}"
     emit_backend "$name" ocaml_ref '      '
     printf ',\n'
@@ -1355,8 +1383,16 @@ compare_baseline() {
   return 0
 }
 
-# 绝对门禁：逐 case 用 CPU 中位数比值（含进程启动）对手写 OCaml。与基线无关——
-# 阈值是目标而不是回归线，所以只看当前值。near 区不改退出码，只提示加采样复核。
+# 绝对门禁：逐 case 用 CPU 中位数比值对手写 OCaml。与基线无关——阈值是目标而不是
+# 回归线，所以只看当前值。
+#
+# `.bench` 的 `ref=` 把用例分成三类：
+#   - `same`（默认）：对照与 vuna 走同一机制（effect 用例用 Effect.Deep、线程用 Domain、
+#     纯代码用普通函数）。**受 --gate-ratio 门禁**。
+#   - `direct`：对照完全不使用该机制（例如 effect 用例的 `.ml` 用 try/Fun.protect/普通
+#     闭包）。比值测的是「抽象开销」，默认只记录；`--gate-direct-ratio` 可给它设硬上限。
+#   - `floor`：启动地板（`t0/startup`）。它的 CPU 是进程 + 运行时初始化，不是机制开销，
+#     只记录并作为 JSON 的 `startup_floor_cpu_ms` 读数。
 check_gate() {
   case " $TARGETS " in
     *" vuna_ocaml "*) ;;
@@ -1364,18 +1400,26 @@ check_gate() {
   esac
   note ""
   note "-- 绝对门禁（CPU 中位数，含进程启动；阈值 ${GATE_RATIO}x，near 宽度 ${GATE_SLACK}）"
-  printf '  %-16s %-5s %10s %10s  %s\n' benchmark tier cpu_ratio wall_ratio result
-  local name cur wall verdict passes=0 nears=0 fails=0
+  printf '  %-18s %-5s %-7s %9s  %s\n' benchmark tier ref cpu_ratio result
+  local name cur kind verdict limit
+  local passes=0 nears=0 fails=0 recorded=0
   for name in "${ORDER[@]}"; do
     if [ -n "${SKIP["$name:vuna_ocaml"]:-}" ]; then
-      printf '  %-16s %-5s %10s %10s  %s\n' "$name" "${BENCH_TIER[$name]}" "-" "-" \
+      printf '  %-18s %-5s %9s  %s\n' "$name" "${BENCH_TIER[$name]}" "-" \
         "skipped(${SKIP["$name:vuna_ocaml"]})"
       continue
     fi
     cur=${CPU_RATIO["$name:vuna_ocaml"]:-}
     [ -n "$cur" ] || continue
-    wall=${RATIO["$name:vuna_ocaml"]:-"-"}
-    verdict=$(awk -v c="$cur" -v g="$GATE_RATIO" -v s="$GATE_SLACK" 'BEGIN {
+    kind=${BENCH_REF[$name]:-same}
+    if [ "$kind" = floor ] || { [ "$kind" = direct ] && [ -z "$GATE_DIRECT_RATIO" ]; }; then
+      printf '  %-18s %-5s %-7s %9s  %s\n' "$name" "${BENCH_TIER[$name]}" "$kind" "$cur" "record"
+      recorded=$((recorded + 1))
+      continue
+    fi
+    limit=$GATE_RATIO
+    [ "$kind" = direct ] && limit=$GATE_DIRECT_RATIO
+    verdict=$(awk -v c="$cur" -v g="$limit" -v s="$GATE_SLACK" 'BEGIN {
       if (c + 0 > g + 0) print "FAIL";
       else if (c + 0 > g + 0 - s + 0) print "near";
       else print "ok";
@@ -1385,11 +1429,14 @@ check_gate() {
       near) nears=$((nears + 1)) ;;
       *) passes=$((passes + 1)) ;;
     esac
-    printf '  %-16s %-5s %10s %10s  %s\n' "$name" "${BENCH_TIER[$name]}" "${cur}x" "${wall}x" "$verdict"
+    printf '  %-18s %-5s %-7s %9s  %s\n' "$name" "${BENCH_TIER[$name]}" "$kind" "$cur" "$verdict"
   done
-  note "summary: ok=$passes near=$nears fail=$fails"
+  note "summary: ok=$passes near=$nears fail=$fails recorded=$recorded"
+  if [ "$recorded" -gt 0 ]; then
+    note "  recorded = ref=direct / ref=floor：比值只记录，不参与 ${GATE_RATIO}x 判定"
+  fi
   if [ "$fails" -gt 0 ]; then
-    note "PERF-GATE-FAIL（$fails 项超过 ${GATE_RATIO}x）"
+    note "PERF-GATE-FAIL（$fails 项超过 ${GATE_RATIO}x$([ -n "$GATE_DIRECT_RATIO" ] && printf ' / direct %sx' "$GATE_DIRECT_RATIO")）"
     return 1
   fi
   note "PERF-GATE-OK"

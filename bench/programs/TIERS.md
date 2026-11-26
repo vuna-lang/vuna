@@ -129,6 +129,19 @@ bench/programs/
 - 其余：真实程序，也压到下层机制，用于验收。
 - 判定：先看 micro 的增量定位机制，再看 real 的绝对值判定整体。
 
+## 对照机制（`ref=`）
+
+`.ml` 是「手写 OCaml 等价实现」，但有些用例的等价实现**根本不用该层机制**（t8 的
+`eff_abort` / `eff_bracket` / `eff_entry_host` / `eff_exn` / `eff_linear` / `eff_named`
+用 `try` / `Fun.protect` / 普通闭包/纯参数，不走 OCaml `Effect`）。这类对照测的是
+「effect 抽象的代价」，不是「同机制的生成质量」，所以在 `.bench` 里标 `ref=direct`：
+
+- `ref=same`（默认）：受 `--gate-ratio 1.2` 门禁；
+- `ref=direct`：只记录比值（`--gate-direct-ratio` 可加硬上限）；
+- `ref=floor`：启动地板（`t0/startup`），只记录。
+
+新增用例默认按 `same` 写；确实无法用同机制写对照时，在 PR 里说明并标 `direct`。
+
 ## 新增用例
 
 一个用例需要一个 `t<N>/<name>/` 目录，目录内放：
@@ -145,6 +158,7 @@ bench/programs/
 | `n=N` | 传给 C 对照的 argv（可含多个参数） | 是 |
 | `repeat=N` | 单次采样内重复次数（小项用） | 否 |
 | `targets=a,b` | 只在这些后端上跑 | 否 |
+| `ref=same|direct|floor` | OCaml 对照与 vuna 是否走同一机制；`direct` 只记录抽象开销，`floor` 是启动地板（默认 `same`） | 否 |
 | `timeout_x=N` | 超时 = N × 参照耗时（取两个参照里较慢的） | 否 |
 | `timeout_ms=N` | 绝对超时（优先于 `timeout_x`） | 否 |
 | `cc_flags=...` | 额外 cc 参数（如 `-fwrapv`、T0 的 `-nostdlib`） | 否 |
