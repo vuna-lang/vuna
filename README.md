@@ -212,11 +212,12 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制与门禁 |
 | [docs/reference/prior-art-elaboration.md](docs/reference/prior-art-elaboration.md) | 外部先例（Idris 2 / Yaffle）的流水线与精化器对照：可推迟的合一、case tree、擦除与分层契约、vuna 的差距与候选调整 |
-| [docs/reference/debt.md](docs/reference/debt.md) | 唯一债务清单：未关闭的缺陷、能力缺口与编译器分层实现债（按 ID，带证据） |
+| [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt) | 唯一债务清单：未关闭的缺陷、能力缺口与编译器分层实现债（按 `gh#N` 引用，带证据） |
+| [docs/reference/decisions.md](docs/reference/decisions.md) | 已决取舍：不再作为待办的设计决策 |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
 历史与里程碑在 git 历史；已知边界并入各主题参考页
-（见上表），未关闭的缺陷与缺口归 `debt.md`。
+（见上表），未关闭的缺陷与缺口归 `label:debt` 的 issue。
 
 ## 许可
 

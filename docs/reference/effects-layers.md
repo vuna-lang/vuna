@@ -1,7 +1,7 @@
-# Layer 2/3：高阶/作用域、线性续延、调度器与效应标签
+# Layer 2/3：高阶/作用域、线性续延与效应标签
 
 > 本文是 [effects.md](effects.md) §8.5/§8.6 的展开页：高阶 scoped handler、
-> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、效应标签。Layer 1
+> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、效应标签。Layer 1
 > 核心（行/`Eff`/`Member`/运行时）见 [effects.md](effects.md) §8。
 ### 8.5 Layer 2/3
 
@@ -32,91 +32,11 @@
 - 负例 `dt_err/71_catch_row_mismatch`、`72_local_row_mismatch`、`73_async_row_not_nil`：
   catch/local 要求行首是对应效应，async 只接受 `Eff Nil`。
 
-**单线程 fiber 调度器（`Base.EffSched`）**：
+**单线程 fiber 调度器**：
 
-表示与运行模型：
-
-- **纤程 = OCaml 5 一次性续延**。每个被调度的任务体在运行时用一个自己的
-  `Effect.Deep.match_with` 根 handler 执行；根 handler 只拦截**调度器私有效应**
-  （`SchedYield` / `SchedAwait` / `SchedWaitScope` / `SchedWaitScopeTimeout`，均为
-  `Vuna_runtime` 内部 `Effect.t` 构造子，不进语言层），把续延交给纤程外部的调度循环。
-- **调度循环**在 `dtp_sched_main` 里：main 动作本身是纤程 0（生成钩子是
-  `dtp_sched_main (fun () -> v_main 0)`），循环从就绪队列取任务跑一步（运行到下一个
-  挂起点或结束），再按等待关系唤醒。任务之间不共享 handler 栈：用户 `Perform` 效应
-  只在任务自己的纤程里被 handler 处理。
-- 调度器原语是隐藏 intrinsic `prim_sched*`（实现 `dtp_sched_*`，常规只供
-  `Base.EffSched` 包装；普通用户经 `Base.EffSched` 的 API）。它们**不是行里的效应**：
-  行 `Nil` 的任务也能 fork/yield/await。
-
-API（历史位置 `packages/base/lib/Base/EffSched.vuna`，该库当前不存在；运行时 `dtp_sched_*` 与
-`prim_sched*` 仍在，但没有库面 —— 多线程走 `Base.Thread`，见 [primitives.md](primitives.md) §6.2）：
-
-| 名称 | 签名 | 语义 |
-| --- | --- | --- |
-| `forkTask` | `Scope -> Eff Nil a -> Eff r (Task a)` | 子任务入队；父纤程下一次挂起/结束等待时才跑 |
-| `awaitTask` | `Task a -> Eff r (Result a)` | `Ok a` / `Err "cancelled"` / `Err <失败消息>`；可重复 await（幂等） |
-| `yieldNow` | `Eff r Int` | 让出一次调度；返回 0 正常、1 = 已请求取消 |
-| `isCancelled` | `Eff r Int` | 查询当前纤程的取消位 |
-| `cancelTask` / `cancelScope` | 句柄 -> `Eff r Int` | 请求取消（幂等；已完成任务为 no-op） |
-| `scopeWait` | `Scope -> Eff r (Result Int)` | 等范围内任务全部结束；`Ok 完成数` / `Err 失败消息` |
-| `scopeWaitTimeout` | `Int -> Scope -> Eff r (Result Int)` | 带**逻辑步数**预算的 `scopeWait`；预算耗尽先取消范围再等清理 |
-| `withScope` | `(Scope -> Eff r (Result a)) -> Eff r (Result a)` | 结构化作用域；body 的 `Result` 与 scope 的结果合并；body `Err` 时先取消子任务再等干净 |
-| `withScopeTimeout` | `Int -> (Scope -> Eff r (Result a)) -> Eff r (Result a)` | 同上 + 步数超时 |
-| `newScope` | `Eff r Scope` | 新建作用域（一般经 `withScope`） |
-
-语义与边界：
-
-- **协作式**：任务只在 `yieldNow`/`awaitTask`/`scopeWait*` 挂起点让出；纯计算循环
-  不能被抢占（取消只在挂起点生效）。
-- **取消**：`cancelTask`/`cancelScope` 给未结束任务置取消位；已挂起的任务在挂起点
-  恢复并收到取消状态（`yieldNow` 返回 1、`awaitTask` 返回 `Err "cancelled"`），
-  任务可跑清理后返回；未开始的任务直接取消（不执行）。取消后有 **64 步清理宽限**，
-  超时后调度器硬中止该纤程（丢弃续延）。取消是**协作**语义：任务自己决定在哪些
-  检查点查询取消状态并清理。bracket 与取消组合：任务在挂起点恢复后 use 正常返回时，库层 `bracket` 在带内执行 release（夹具 `dt_base/43`）；硬中止路径由调度器尽力执行 cleanup 栈（无 handler 栈，只能无效应清理）。
-- **结构化**：`withScope` 在 body 返回后等待 scope 内任务全部结束；
-  子任务失败会取消同范围其余任务并把首个失败消息记为 scope 失败。`scopeWait` 本身只
-  保证「全部结束」——子任务的取消/失败结果用 `awaitTask` 观察（`withScope` 会把未观察
-  到的 scope 失败作为 `Err` 返回，避免监督信息被吞掉）。
-- **超时**：超时是**调度器逻辑步数**（循环迭代次数；不依赖真实时钟/sleep）。
-  `withScopeTimeout n` 表示「开始等待后的 n 个调度步内清空」；预算耗尽 → 取消范围 →
-  子任务清理 → 返回 `Err "timeout"`。
-- **任务行限制**：任务体必须是 `Eff Nil a`（任务内用户效应必须由任务自己的 handler
-  处理干净）；不能用外层 handler 的行。负例 `dt_err/76_sched_row_not_nil`。
-  任务体内不能再有未处理干净的宿主行效应。任务体本身可以返回任意 `a`
-  （包括 `Result`）；若任务体内再用 `withScope`，`awaitTask` 得到的是嵌套
-  `Result (Result …)`，由调用方显式展平（库不做隐式 flatten）。
-- **句柄**：`Task`/`Scope` 不是线性数据；重复 `await` 幂等。线性 `TaskLin`：
-  `awaitTaskLin`/`cancelTaskLin` 各消费一次，二次使用在用量检查拒绝
-  （夹具 `dt_base/38`、负例 `dt_err/77`）。
-- **Mutex/Semaphore**：`Base.EffMutex` 用可变单元 + yield 忙等；`acquire/release`、
-  `newSemaphore/semWait/semSignal`；夹具 `dt_base/37`（2）。
-
-夹具（均关闭 interp 阶段，只 `check` + `compile` + 运行）：
-
-- `dt_base/42_eff_bracket_abort`：自定义 Abort handler 丢弃续延，`Base.Effect.Core.bracket` 的 release 写入被外层 State handler 看到（4207）。
-- `dt_base/43_eff_sched_bracket`：调度器取消后 `use` 正常返回，带内 release（`acquire/release/3`）。
-- `dt_base/44_eff_linear_fn`：线性资源被一次性闭包捕获、装进 `Cont` rig-1 字段、resume 一次（13）。
-- 负例 `dt_err/79_linear_closure_escape`、`80_linear_nonlinear_field`、`81_linear_cont_twice`。
-
-- `dt_base/31_eff_sched`：fork/await 顺序与结构化 scope（`forked, a1, b1, a2, b2, 30`）。
-- `dt_base/32_eff_sched_cancel`：取消清理（挂起点收到取消 → cleanup → `scopeWait` 等
-  干净；`awaitTask` 观察 `Err "cancelled"`）。
-- `dt_base/33_eff_sched_timeout`：步数超时（4 步预算 → 取消 → cleanup → `Err "timeout"`）。
-- `dt_base/34_eff_sched_supervise`：子任务失败 → 同范围兄弟被取消（可观察清理）、
-  `Err` 携带 `unhandled effect boom (instance 0)`；body 返回 `Err` 后 scope 仍等干净。
-- `dt_base/35_eff_sched_reawait`：重复 await 幂等、对已完成任务 cancel 是 no-op。
-- `dt_base/36_eff_sched_channel`：生产者-消费者；`Base.EffChannel` 的 `send`/`recvWait`
-  用 `yieldNow` 忙等轮询（无阻塞原语），fork 的 producer 在父纤程 yield 时入队，输出 42。
-
-**边界（仍开放）**：Mutex/Semaphore/Channel 都是 cooperative 忙等实现（无阻塞原语）；
-线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：
-`forkTaskWith` 用显式 handler 把 effectful task 收成 Nil
-再 fork（handler 状态为任务局部）；仍无法继承父 fiber 的动态 handler 栈
-（[debt.md](debt.md) D44）；
-取消只在挂起点生效，硬中止会丢弃未执行清理的纤程；`withScope` 的 body 若以非返回方式
-中止（abort/未捕获运行时异常），scope 的等待不会执行，残留任务由 `dtp_sched_main` 在
-main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围（调度器是
-唯一并发路径）。
+`Base.EffSched` / `Base.EffMutex` / `Base.EffChannel` 已作为死代码删除（commit `1c90517`）；
+`prim_sched*` 与本文旧描述的清理由 gh#100 跟踪。当前多线程走 `Base.Thread`
+（`spawn`/`join` / `Mutex` / `Condvar` / `Atomic`），见 [primitives.md](primitives.md) §6.2。
 
 ### 8.6 效应标签（库层 + 一条工具链真实路径）
 

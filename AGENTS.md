@@ -13,7 +13,7 @@
 
 当前基线一句话：自举链（`seed/` → rotation → stage1 == stage2）与全工具链都已工作，
 编译器自身用 vuna 写成；性能读数见 [performance.md](docs/reference/performance.md)，
-未关闭的债务见 [debt.md](docs/reference/debt.md)。
+未关闭的债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 阅读顺序
 
@@ -21,7 +21,7 @@
 2. [`.agents/README.md`](.agents/README.md)——规则与技能索引（**按场景取用**，不要通读）；
 3. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签，以及「改一处 → 跑什么」；
 4. 需要时再下钻：`docs/reference/`（语言 / 类型 / Core / 编译器 / 包 / 工具 / 测试参考页）、
-   [debt](docs/reference/debt.md)。
+   [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 人类贡献者从 [CONTRIBUTING.md](CONTRIBUTING.md) 开始：分支、提交整理、PR 标签门禁与合并方式。
 
@@ -199,8 +199,9 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
   [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `vuna-obs` 的 `Obs` / `vuna dev obs` / `#line` → DWARF）、
   [logging.md](docs/reference/logging.md)（`log!` / `VUNA_LOG` / scope 过滤 / text·jsonl 输出）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
-- 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（唯一清单：只含开放项、带证据，
-  同时收录编译器分层实现债并保留其 ID）
+- 债务 / 已知缺口：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)（唯一清单：只含开放项、带证据；
+  文档引用写 `gh#N`，迁移来源保留在 issue 正文的 `Legacy-Debt` 行）
+- 已决取舍：[`decisions.md`](docs/reference/decisions.md)（不再作为待办的设计决策）
 - 外部先例与精化器对照：[`prior-art-elaboration.md`](docs/reference/prior-art-elaboration.md)
   （Idris 2 / Yaffle 的流水线、可推迟的合一、case tree、分层契约；vuna 的差距与候选调整）
 

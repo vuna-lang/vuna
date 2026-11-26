@@ -60,10 +60,10 @@ main : Eff [] Nat
 | key | op 族规范名（编译器推导，send / handle 两侧由构造保证一致） |
 | 实例名 | 名字与签名进标签 `Named : String -> (Type -> Type) -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
 | 行标签 | 标签 = 命名后的效应签名（`Named "audit" ConsoleOp`、`Named "counter" (StateOp Nat)`）；op 族以结果类型为最后索引（`ConsoleOp : Type -> Type`、`StateOp : (s : Type) -> Type -> Type`） |
-| 权威 | 宿主 op 构造器不导出；宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出；无 manifest 门控，见 [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62） |
+| 权威 | 宿主 op 构造器不导出；宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出；无 manifest 门控，见 [effects.md](effects.md) §8.6 与 gh#104） |
 | 纯效应 | 库级 monad 与 mock handler 并存；核心求值可执行 mock 程序 |
-| 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（[debt.md](debt.md) D42） |
-| handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（[debt.md](debt.md) D27） |
+| 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（gh#102） |
+| handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（gh#39） |
 
 决策（本文内以名字互相引用）：
 
@@ -90,7 +90,7 @@ main : Eff [] Nat
   拿到族，而族名不会进入运行时。
 - **`handle` 的 op 族从 clause 构造子推断**：所有 clause 头构造子必须同族，否则编译错误；
   族名不需要显式写出。
-- **one-shot 不变**：multi-shot 不做；线性续延由 QTT 管（见 [debt.md](debt.md) D42）。
+- **one-shot 不变**：multi-shot 不做；线性续延由 QTT 管（见 gh#102）。
 - **语法编码沿仓库先例**：`perform`/`handle` 不新增 `Expr` 构造子，用保留名标记
   `EVar "@vuna@perform"` / `EVar "@vuna@handle@ret"` / `EVar "@vuna@handle@op"` 编码（与
   `@vuna@do@bind@` / `@vuna@list@cons` 同法），Elab 按标记降级；`exprSpan`、Fmt、Index、
@@ -120,7 +120,7 @@ handle comp {
 - 合成 λ 的第一个参数是结果索引（隐式擦除），第二个是 op，第三个是续延 `k`：alt 的
   pattern **只含构造子实参**，不补通配；`k` 的类型是 `resIdx i (Ctor pats)`（归约到该
   构造子的结果索引），依赖匹配下按构造子索引收窄。续延是 ω，线性化未做
-  （[debt.md](debt.md) D42）。同一 handle 块的所有 op 子句共用一个续延 binder 名。
+  （gh#102）。同一 handle 块的所有 op 子句共用一个续延 binder 名。
 - `handleWith` 的 handler 类型显式写成 `(i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b`，
   这是 `handleCore` 的裸 `h : Type` 做不到的（否则 clause 里的 `case o of ...` 拿不到族、`k`
   拿不到续延域）。`sig` 是**擦除量**（类型级函数不能作显式类型实参）；`resIdx` 是索引投影，
@@ -194,7 +194,7 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
   handler 在宿主层由 runtime 直接提供），自定义效应必须先 handle 成 `Nil`。
 - 宿主 op 类型（`ConsoleOp` 等的宿主分支）构造器不导出：用户能 `perform`、能写 mock
   handler，但**不能**在无 handler 情况下构造宿主动作。权威只有「宿主 op 构造器不导出」
-  ——manifest 权威（`unsafe`/`privileged`）不存在（[debt.md](debt.md) D62）。
+  ——manifest 权威（`unsafe`/`privileged`）不存在（gh#104）。
 - 宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`：只在内建模块（模块前缀 `Base.` /
   `Vuna.`，即 base / 编译器 / 工具链）里可引用，普通包源码写 `prim_eff_print` 与
   `@vuna@prim_eff_print` 都报 `RN_UnknownVariable`；`prim_schedNewScope` 这类纯原语仍是可见内建。
@@ -206,15 +206,15 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
 - 纯 handler（不触宿主 op）在 NbE 内执行（delimited continuation 的 NbE 实现）；
   核心求值可跑 mock 效应程序，mock/real 对拍变成核心求值 vs 产物。
 - 续延类型化未做：`k` 当前是 ω，线性续延 / 一次性闭包的 QTT 类型化见
-  [debt.md](debt.md) D42。
+  gh#102。
 - handler 续延域用索引投影 `resIdx i o` 保持「不透明擦除值」（漏 cast 边界、trait
-  自动 λ 插入点）见 [debt.md](debt.md) D27。
+  自动 λ 插入点）见 gh#39。
 
 ## 6. 箭头行 direct-style（未实现）
 
 `a ->{r} b` 这样的箭头类型不存在：效应只进 `Eff r a`，箭头类型没有效应域。这条路径要动
 Core `TPi`（增加效应域或引入新形式）、行合一半路（row variable）与 `do`/`>>=` 的互操作
-设计。当前的线性/依赖箭头缺口见 [debt.md](debt.md) D42。
+设计。当前的线性/依赖箭头缺口见 gh#102。
 
 ## 7. 改动面
 
@@ -226,7 +226,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 | `Eff [` 闭行 | `packages/base/lib` 与 `test` 的行字面量写成 `Named n <Op> :: …` / `[<Op>@name]` |
 | `rowRem`/`Member (` | `packages/base/lib` 约 50 处按行条目（`Named n <Op>` 或裸标签）写 |
 | 测试夹具 | `dt_base/11–45,74–82`、`corpus/effect/*`、`corpus/pure_cross/07_eff_main`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
-| 文档 | `effects.md`、`effects-layers.md`、`stdlib.md`、`language.md`、`type-system.md`、`debt.md`、本文 |
+| 文档 | `effects.md`、`effects-layers.md`、`stdlib.md`、`language.md`、`type-system.md`、`label:debt` 的 issue、本文 |
 
 ## 8. 测试与验收
 
@@ -300,7 +300,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
      结果类型来自 op 的索引，不再由上下文推断。
   5. **key 配对**：`perform` 与 `handle` 的 key 都是 op 族规范名，二者配对；base 里手写
      `"console"`/`"state"`/`"reader"` 等 key 的 wrapper（`get`/`put`/`ask`/`runConsole`…）
-     **不**配对（[debt.md](debt.md) D57），所以参数化族的语法夹具用 `perform` 而不是
+     **不**配对（gh#55），所以参数化族的语法夹具用 `perform` 而不是
      `get`/`ask` 写程序。
   6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type -> Type`。
      降级点按 op 族 kind 数**显式参数个数 `k`**（不含末尾结果索引）：`k` 给族参数补洞，
@@ -309,7 +309,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
      `ExnOp : Type -> Type`、`Try : {a} -> Scoped a -> ExnOp (Result a)`；`handle` 块里
      `Try sub k -> k (handleScoped sub)`，标签就是 `Named n ExnOp`，不再需要标记类型或
      `Row` 参数。族形状不符（显式参数不是类型，如 `Boom : Row -> Type -> Type`）仍报
-     `TC_HandleFamilyUnsupported`（[debt.md](debt.md) D54）。`handleScoped` 三端
+     `TC_HandleFamilyUnsupported`（gh#103）。`handleScoped` 三端
      （OCaml/WASM/Native）同语义，`Base.Effect.Exn` 不再需要 fuel。`perform` 走同一套族推导
      （`perfFamilyOfValue` 允许族参数是中性 spine）。
   7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析；其它形态（应用、do 块、
@@ -372,7 +372,7 @@ consolePrint@audit "hi"    -- 行 [ConsoleOp@audit] ⇒ 显式选 audit
   （`runError`/`catch`/`tryWith`/`local`/`handleExn`/`run*Host` 等）保留显式 `{n}`/`{w}`
   （`rowRem` 需要在 comp 之后解名字），内部跨 wrapper 调用把同一个 `n` 传给名字槽。
 - **不做**：`consolePrintAt`、`Defaulted`、`:=` 默认参数、显式位置默认参数、把 `Member`
-  变成 trait；`perform`/`handle` 语法本身仍无 `@`（[debt.md](debt.md) D60 的剩余部分）。
+  变成 trait；`perform`/`handle` 语法本身仍无 `@`（gh#56 的剩余部分）。
 
 ## 11. native 后端的续延实现
 
@@ -382,7 +382,7 @@ native 与 wasm 都跑 `Base.Effect.Core` 的库机器（`Control` 循环 + hand
 不再由后端各自实现续延。
 
 旧栈拷贝实现（`Native.Runtime` 的 `rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段）已删除；
-延迟 answer 的 handler 边界见 [debt.md](debt.md) D101。
+延迟 answer 的 handler 边界见 gh#37。
 
 wasm 后端与 native 一样用 base 的显式效应机器实现 handler（见 [effect-machine.md](effect-machine.md)）；
 效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的

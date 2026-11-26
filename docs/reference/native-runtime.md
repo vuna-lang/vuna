@@ -298,7 +298,7 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   会改写所有 caller-saved 寄存器，不能把 tag 留在寄存器里）。
 - 续延是**一次性**（one-shot）：resume 两次被 epoch 表拒绝；multi-shot 不做。顺序 effect
   的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler 仍不支持
-  （[debt.md](debt.md) D101）。
+  （gh#37）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **多线程原语**：`clone` + futex 已实现（`thread_*` / `mutex*` / `condvar*` / `atomic*`），
   并行区用 **STW + safepoint** 回收（TCB 在 `%fs`、线程表、`saved_rsp` / park 协议、
@@ -309,21 +309,21 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   登记失败先 `munmap` 栈与 scratch 再 trap `too many threads`。子进程 pid 表仍是进程级的
   （64 槽、一把 futex 锁；`sigalrm` 不拿锁读一次计数；槽满时收掉新子进程并报
   `ProcessTooManyChildren`）。边界：worker 体内用 `runFsHost` + `runFsError` 显式装
-  handler 后并行 fs 可用；**没有 detach**——未 join 的线程不回收（[debt.md](debt.md) D140）。
+  handler 后并行 fs 可用；**没有 detach**——未 join 的线程不回收（gh#54）。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；成员包 `processSpawn` 按 argv 边界逐项传参（105 的 9u5），GC 逐帧
   保守扫根，入口自带栈（105 的 9u7）：深递归不再依赖 `ulimit -s`，40 万层非尾递归由 9u7 锁定。
   整仓 `check .` 的成本与 selfhost / parity / corpus 读数见 [native-selfhost.md](native-selfhost.md)：
   尾调用（[native.md](native.md) §3）只覆盖
   **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃自带栈；效应侧另有延迟 answer 的
-  handler 缺口（[debt.md](debt.md) D101）。
+  handler 缺口（gh#37）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing-checks.md](testing-checks.md)「后端自举 conformance」）。
 - **GC 的边界**：栈帧与卡片都按机器字保守判断；两代、非移动、不压缩。因此
   1. 帧内偶然形似指针的字（`.rodata` 字面量、复用过的临时值、已消费的参数）会多留对象；
   2. 老代引用靠写屏障：`writeRef` 与两处列表改接之外的写入路径（宿主缓冲、`prim_*`）
      不经过屏障，漏登记的引用在年轻代回收里会被当成死块；卡片粒度 512 字节，一个脏
-     卡片整段重扫（见 [debt.md](debt.md)）；
+     卡片整段重扫（见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）；
   3. 非移动，指针不会失效；也没有压缩，碎片见下；
   4. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   5. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；

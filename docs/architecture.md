@@ -266,7 +266,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   （源码写不出，只由 base 的 handler 与编译器/工具链内部使用）；用户面的唯一入口是
   `Base.Effect.Core.*` 标签 + handler。原语返回 `Eff []` 动作（只在 `main` 执行，
   钩子是 `v_main 0`）。显式接受的损失见 [effects.md](reference/effects.md) §8.6
-  （缺口编号见 [debt.md](reference/debt.md) D62）。
+  （缺口编号见 gh#104）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 

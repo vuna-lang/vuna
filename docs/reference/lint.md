@@ -96,7 +96,7 @@ workspace 整体读数见 [performance.md](performance.md)。
 （写盘 / 读盘竞态）汇总为工具错误（exit 2）。
 
 `max-warnings` 仍是整次运行的阈值；每个文件的配置只决定该文件的规则严重度与 exclude。
-静态分块的长尾保留（`Base.Thread.Par` 没有动态任务队列，见 [debt](debt.md) D136）。
+静态分块的长尾保留（`Base.Thread.Par` 没有动态任务队列，见 gh#101）。
 
 ## 2. 实现模型
 

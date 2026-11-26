@@ -77,7 +77,7 @@ native / wasm 列与对手写 C 的对照见该文件；t3 行取 2026-11-26 nat
 | micro_apply_dyn | 运行期选闭包后动态应用 | 解析不出的 head 走 `rt_apply` 饱和快路径 |
 | micro_partial | 每轮部分应用 shim | 已知 arity 的 shim 调用；shim 仍逐轮分配 |
 | micro_overapply | 一次给足两层实参 | `rt_apply` 过度应用路径；首参闭包捕获 |
-| micro_capture | maker 返回捕获闭包 | 堆环境 + 每轮分配（D129 的剩余慢路径） |
+| micro_capture | maker 返回捕获闭包 | 堆环境 + 每轮分配（gh#92 的剩余慢路径） |
 | micro_closure8 | 8 参闭包饱和应用 | 闭包 ABI：5 个寄存器 + 3 个栈实参 |
 | micro_args8 | 非尾 8 参直调 | 标准 ABI：6 个寄存器 + 2 个栈实参，返回后回收 |
 | micro_record_dispatch | 投影字段 head | 不参与去虚拟化，走 `rt_apply` |
@@ -120,7 +120,7 @@ native / wasm 列与对手写 C 的对照见该文件；t3 行取 2026-11-26 nat
 2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；核心求值也
    归约 `OpStrSubstring`），`Base.Data.String.substring` 不走 List 桥接；`Base.Data.String.repeat` 改一次
    `strConcatMany`；可变数据（`MutRef` 等值句柄）经 `MutOp` 标记隔离，不引入线性
-   类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
+   类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 gh#97）。
 3. **容器与表示**：
    1. **内建类型构造子** `Array`（类型层，恒可见；OCaml 表示 `'a array`），
       签名支持隐式 `{a : Type}`。
@@ -352,7 +352,7 @@ native 领先。差异来源与 native 的既有缺口一致：native 无寄存�
 
 另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
 手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
-函数的库 handler 仍不可用（D114），没有进基准。
+函数的库 handler 仍不可用（gh#38），没有进基准。
 
 三端同窗口（HEAD `cf17a85`，`--target all --runs 5 --warmup 2`，node 24.21.0，loadavg ≈1.3；
 ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 ms 的 net）：

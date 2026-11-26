@@ -13,8 +13,8 @@
 - **陷阱与破例后果**：不做某件事会怎样；某个参数为什么必须是这个值。
 - **性能口径**：可复现的复杂度/实测来源（写成「O(n²) 因为每次 X 都扫全表」这类**因果**，
   而不是「比上一版快」）。
-- **仍开放的限制**：只有指向 `docs/reference/debt.md` 里**当前仍存在**条目的编号才允许出现，
-  且必须与「当下的限制」写在同一句；债务关闭时同步删掉编号。
+- **仍开放的限制**：只有指向开放 `label:debt` issue 的 `gh#N` 才允许出现，
+  且必须与「当下的限制」写在同一句；债务关闭时同步删掉引用。
 
 ## 不该写什么（写进注释就是债）
 
@@ -23,7 +23,7 @@
 | 阶段 / 里程碑 / 任务编号 | `-- M38：...`、`（M34.5 收尾）`、`（A14）`、`（S3 新增导出）`、`（N1 提交 4b）` | 直接写这件事本身：`-- 线性捕获标记（binder 名编码）` |
 | 实现史 | `旧实现把整项按深度 0 quote，产生错位索引` | `cutoff 必须是 0：shift 下钻 binder 时会自动抬高 cutoff`（写**现在必须怎样**） |
 | 迁移/替换记录 | `从原 1227 行 Core.vuna 拆出`、`合并后只有一棵树`、`已删除 X`、`曾用 Y` | 删掉；结构调整的原因若仍成立就写成一句职责/不变量 |
-| 未来计划 / 排期 | `后续会`、`下一步`、`待 M3b 落地`、`暂时` | 删掉；确有未关闭缺口就登记 `debt.md` |
+| 未来计划 / 排期 | `后续会`、`下一步`、`待 M3b 落地`、`暂时` | 删掉；确有未关闭缺口就开 `type:bug` / `type:feature` issue |
 | 版本号 / 提交号 / 日期 | `2026-11 起`、`在 239f525 被取代`、`cache v2 与旧 v1` | 只留**与行为有关**的 schema 号，并且只写当前值 |
 | 会漂移的定位 | 行号、`原 XXX.vuna` 这种已不存在的路径 | 用符号名或 `vuna map find` 可查的模块名 |
 
@@ -45,7 +45,7 @@
   （「case on Bool accepts only True, False, or variable patterns」），不是「哪个里程碑还没做完」。
 - **`docs/reference/*.md` 主题页**：描述现状与不变量；**不写里程碑编号、不写「后续路线」**。
   终态方向集中在 [`docs/architecture-target.md`](../../docs/architecture-target.md)，
-  未关闭缺口集中在 [`docs/reference/debt.md`](../../docs/reference/debt.md)。
+  未关闭缺口集中在 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 - **`.agents/`、`nix/`**：规则/脚本注释同样只写当下口径；门槛脚本的「标定历史」只保留
   方法与当前值，逐轮记录留在 git 历史。
 - **`nix/checks/data/context.budget` 这类阈值文件**：写清指标定义与当前值即可，不要累积每轮改动的说明。
@@ -67,7 +67,7 @@ grep -rnE '"[^"]*\bM[0-9]' compiler base lib app
 grep -rnE '\bM[0-9]+(\.[0-9]+)?|后续路线|下一步|待实现' docs/*.md docs/reference/*.md README.md
 ```
 
-**允许保留的编号**：`docs/reference/debt.md` 里**仍开放**的条目编号（如 `D33`），以及
+**允许保留的引用**：开放 `label:debt` issue 的 `gh#N`（如 `gh#82`），以及
 [`docs/architecture-target.md`](../../docs/architecture-target.md) 的终态决策 `D1`–`D16`
 （它们描述长期成立的设计，不是阶段）。其余编号（已关闭的债务、里程碑、里程碑内的子任务）
 一律清掉。

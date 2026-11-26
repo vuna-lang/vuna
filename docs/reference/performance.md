@@ -100,7 +100,7 @@ wasm 的 `.wasm` 是两段工具的产物（`wasm-tools parse` → `wasm-opt -O3
 `precompute-propagate` / `optimize-instructions` / 内联。需要绕开时用 `--wasm-opt 2`
 （同一模块 0.14 s，产物 28,973 B；`-O3` 是 37,930 B）。
 
-native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 121 KB、`defs-1000`
+native 的纯程序不再带机器：`minimal` 2 个 `.s` / 121 KB、`defs-1000`
 2 个 / 505 KB、`mods-100` 102 个 / 179 KB；`hello`（最小效应程序，带 Console handler）
 是 10 个 `.s` / 297 KB。
 
@@ -125,7 +125,7 @@ native 的纯程序不再带机器（D110 已关闭）：`minimal` 2 个 `.s` / 
   （[native.md](native.md) §3.5），已知小函数的调用点已内联（§3.6），标量表达式延时
   wrap（§3.8），循环携带的标量槽提到 callee-saved 寄存器（§3.7），守卫推导的区间事实
   省掉可证明多余的 wrap 与非负常量除法的符号修正（§3.10）；剩余体积/墙钟空间在带捕获
-  的高阶参数、分配与复制合并 / 32-bit 窄化（[debt.md](debt.md) D129）。产物作为自举锚点的取舍见
+  的高阶参数、分配与复制合并 / 32-bit 窄化（gh#92）。产物作为自举锚点的取舍见
   [bootstrap.md](bootstrap.md)「锚点演进」。
 
 OCaml 二进制里的调试信息记录的是**相对**源码名（`build.sh` 先 `cd` 到产物目录、用相对模块名
@@ -371,7 +371,7 @@ n²（≈4×）的下界。
 
 ### 5.5 Nat 字面量（终止性分析的输入折回）
 
-Nat 字面量在精化期展开成 `Zero` / `Succ` 链（[debt.md](debt.md) D24），链长等于字面量。
+Nat 字面量在精化期展开成 `Zero` / `Succ` 链（gh#53），链长等于字面量。
 终止性分析读精化产物：入口把 `Term` 翻成分析表达式时，若保留链的逐层 `EApp` 形状，
 前向器重写与调用图收集的成本按链长平方增长。`Elab/Termination/ElabInput.convExpr` 在入口
 先走 `natChainValue` 把链折回 `EInt`（非链立即返回），分析层因此只看到常量。
@@ -433,7 +433,7 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 * `syntax` 次数 ≈ 模块数的 **2 倍**（base 142 / 71、compiler 335 / 181）：加载一次 +
   `ifaceModsEff` 的 header 解析一次。闭包扫描原先在「摘要判定」「写 iface 影子」
   「干净模块判定」各跑一遍，已全部合并到检查入口的那一次；
-* 前端整体约占冷 `check` 的 **6%**（0.32 s / 5.3 s）：减少**次数**（债 D88 剩余的那一次
+* 前端整体约占冷 `check` 的 **6%**（0.32 s / 5.3 s）：减少**次数**（债 gh#87 剩余的那一次
   复用）比加快单次解析收益更直接。
 
 增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义；`fmt --check` 相邻档 ≤2.5×，
@@ -468,7 +468,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 **配置与 fixity 上下文按目录缓存**：lint 的配置链（manifest 的 `[lint]` 与合并结果）与
 `FixityEnv` 同形按目录缓存，一个 manifest 每进程只读/解析一次；LSP 复用调用方已拿到的
 `ParsedSource`，fixity 与规则扫描共用一次词法。单文件 lint 的 `vuna.toml` 打开次数 41 → 39
-（剩余来自包加载的依赖遍历，见 debt D137），每多一个文件不再增加 manifest 读（此前每文件 +2，
+（剩余来自包加载的依赖遍历），每多一个文件不再增加 manifest 读（此前每文件 +2，
 每个祖先 manifest 一次）。LSP 会话可用时 lint 配置随 `DiagCache` 复用，不再每请求重读；
 无会话的回退路径没有可挂载的缓存，仍在每次请求重建一次。
 

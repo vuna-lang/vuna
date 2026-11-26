@@ -12,7 +12,7 @@
 
 **`Eff []` 就是纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。确定性的内部可变
 状态经 `Base.Effect.Mut.MutOp` 标记行表达（空 data、无操作 / 无 handler，`with*` 在作用域
-结束时关闭它），所以 `Eff []` 里读不到任何可变句柄；调度器原语不占行。唯一能拿到
+结束时关闭它），所以 `Eff []` 里读不到任何可变句柄。唯一能拿到
 `Eff [HostOp]` 值的入口是隐藏宿主原语；关闭它的只有
 `Base.Effect.Host.runHost`（裸值，供直连 opH）与 `hostSync`（放回任意行），`rowRem` 不对
 `HostOp` 归约，所以源码层没有第二条移除路径。
@@ -20,9 +20,8 @@
 运行时核心（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
 一阶效应（`Base.Effect.Core` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
 Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续延与一次性闭包
-（`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）、单线程 fiber
-调度器（`Base.EffSched`：`forkTask`/`awaitTask`/`yieldNow`/`cancelTask`/`cancelScope`/
-结构化 `withScope` + 步数超时）。学习路径：写程序看 §2–§3；表示层看 §5；
+（`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）。单线程 fiber
+调度器库面已删除（gh#100）。学习路径：写程序看 §2–§3；表示层看 §5；
 运行时核心看 §8。
 
 ## 1. 范围
@@ -31,7 +30,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   宿主层纪律、通用 Eff 的边界。
 - **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
   （`Base.Effect.Pure.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
-  并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
+  并行/多核与 Domain 内存模型（`Base.Thread`，见 [primitives.md](primitives.md) §6.2）；完整 QTT。
 
 ## 2. 动作类型与宿主层
 
@@ -55,7 +54,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - `Eff []` 表示**纯**：求值不观察也不改变外部世界（发散与不变式破坏不计）。宿主交互只能出现在
   `HostOp` 行里（`Base.Effect.Host`），宿主原语的类型固定为 `Eff [HostOp] a`，`rowRem` 不对
   `HostOp` 归约；确定性的内部可变状态经 `MutOp` 标记行表达（`with*` 关闭），所以 `Eff []`
-  里读不到任何可变句柄；调度器原语不占行。宿主副作用没有 manifest 能力/特权门控；用户面应经
+  里读不到任何可变句柄。宿主副作用没有 manifest 能力/特权门控；用户面应经
   `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
 - **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、`IEffHost`（宿主原语类型 =
   `Eff [HostOp] a`）、隐藏
@@ -87,7 +86,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - **宿主层边界（无 manifest 门控）**：`vuna.toml` 没有 `[capabilities]` / `[trust]` /
   `[privileged]`；`prim_*`（纯原语）任何包（用户包、ad-hoc 文件）都可直调。
   宿主效应原语是隐藏名，源码写不出：唯一路径是 `Base.Effect.*` 标签 + handler。
-  显式接受的损失见 §8.6（登记在 [debt.md](debt.md) D62）。
+  显式接受的损失见 §8.6（登记在 gh#104）。
 - **错误报告**：没有异常 / handler 层之外的语言级异常；未捕获的宿主异常由生成的 main 钩子
   统一报告为 `vuna: runtime error: ...` + 位置帧 + exit 2（见 [debugging.md](debugging.md)）。
   `log!` / `dbgShow` / `assert` / `todo` 是语言级调试构造，不参与效应系统。
@@ -105,7 +104,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `Base.Container.Mut*` 的**值句柄**（`MutRef` / `MutArray` / `MutVec` / `MutDynArray` /
 `MutBuffer`，见 §8.8）；分配与读写要求 `MutOp` 标记，作用域入口 `with*` 关闭它。
 没有 region 令牌；句柄本身是普通值，可以逃逸（GC 所有权）。语言保留 `linear record` /
-`linear data` 与 QTT 规则，线性句柄是将来收紧逃逸的路径（[debt.md](debt.md) D63）。
+`linear data` 与 QTT 规则，线性句柄是将来收紧逃逸的路径（gh#105）。
 
 ## 5. 表示轴：不透明擦除值
 
@@ -134,7 +133,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
 - 数据族的**索引值实参**（`Vec (Succ n) a` 的 `Succ n`）是擦除后的索引，不参与判定；
 - 已知边界：精化期未解的元变量按可表示处理（可能漏 cast）；trait 自动生成的 λ
-  （方法投影 / 实例 tele）不在插入点覆盖范围内（[debt.md](debt.md) D27）。
+  （方法投影 / 实例 tele）不在插入点覆盖范围内（gh#39）。
 
 **注意这不是 QTT 能解决的**：续延是**真的运行时函数**（要被 handler 以真实值调用），
 `resIdx i o` 是类型级、按擦除纪律 0 用量、在 OCaml 里不可命名；QTT 只把 0/1/ω 用量写精确，
@@ -143,18 +142,18 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 依赖擦除类型的旧 CPS 编码仍由 `packages/compiler/test/corpus/dt/82_eff_cps.vuna` / `83_eff_cps_two_instances.vuna` /
 `84_eff_cps_result.vuna` 覆盖；它们验证同一套不透明值机制。
 
-**结论**：表示层的阻塞已消除；剩余边界见 §9 与 [debt.md](debt.md)。
+**结论**：表示层的阻塞已消除；剩余边界见 §9 与 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 6. 通用效应系统的三条路线
 
 | 路线 | 解决什么 | 不解决 / 代价 |
 | --- | --- | --- |
 | **完整 QTT**（依赖 multiplicity、线性/唯一） | 线性 record 的「句柄不复制/恰好用一次」、一次性续延（取消/超时）、线性世界令牌 | **不解决**擦除依赖续延的运行时表示（§5）；类型理论 + 编译器 + base + 语法面全量改动 |
-| **后端不透明擦除值**（`Obj.t` 类 + codegen 转换/cast） | 让 `resIdx i o` 这类「擦除依赖」位置有统一运行时表示，秩二 handler 续延才可编译 | 声明位置 `Obj.t`、表达式位置恒等 cast（§5）；残留边界见 [debt.md](debt.md) D27 |
+| **后端不透明擦除值**（`Obj.t` 类 + codegen 转换/cast） | 让 `resIdx i o` 这类「擦除依赖」位置有统一运行时表示，秩二 handler 续延才可编译 | 声明位置 `Obj.t`、表达式位置恒等 cast（§5）；残留边界见 gh#39 |
 | **运行时类型码**（Tarski `Ty`/`Tm` 上移为通用机制） | 显式携带类型信息，彻底绕开「不可命名」 | 语言层引入 type codes（当前明确不在终态）、运行时开销、与擦除判据整合 |
 
 - 三者不是互斥：QTT 解决**作用/线性**轴，后两者解决**表示**轴。
-- 当前采用「表示」轴的不透明擦除值；QTT 的线性/一次性缺口见 [debt.md](debt.md) D22。
+- 当前采用「表示」轴的不透明擦除值；QTT 的线性/一次性缺口见 gh#97。
 
 ## 7. 设计规则
 
@@ -166,10 +165,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 3. **可变数据边界**：用户面可变是 `Base.Container.Mut*` 的值句柄（`MutRef` / `MutArray` /
    `MutVec` / `MutDynArray` / `MutBuffer`，§8.8）；单元身份在值上，分配与读写要求 `MutOp`
    标记，`with*` 关闭。句柄可以逃逸（GC 所有权）；没有 region 形式，线性句柄是收紧路径
-   （见 [debt.md](debt.md) D63）。
+   （见 gh#105）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerformId` / `prim_effectHandleId` /
    cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
-   `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
+   `unsafe` 能力位或 `[trust]` 定义级清单（gh#104）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
    `Lowering.Env` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
@@ -260,16 +259,13 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHostWith`（自定义 `onExit` 的宿主 handler）/`runProcessHost`（entry 预装：`Exit` 走真实退出）；启动失败（cwd 不存在 / 权限 / 并发子进程超上限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`，`runProcessResult` 把默认 process 行收成 `Eff [] (Result a)`（worker / 子计算用，`Exit` 仍真实退出）；子进程非零退出码仍是**值** |
 | `Base.Effect.Error` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
 | `Base.Effect.Exn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
-| `Base.EffMutex` | Mutex/Semaphore（可变单元 + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
-| `Base.EffChannel` | cooperative Channel：`send`/`tryRecv`/`recvWait` |
-| `Base.EffSched` | 单线程 fiber 调度器：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
+| ~~`Base.EffMutex` / `Base.EffChannel` / `Base.EffSched`~~ | 单线程 fiber 调度器库面已删除（commit `1c90517`）；`prim_sched*` 与文档清理见 gh#100。多线程走 `Base.Thread` |
 
 夹具：`dt_base/16`（两个 Reader 实例嵌套 handler）、`17`（State 状态线程）、
 `18`（宿主-backed Fs 真实读写，实例名 `"real"`）、`20–21`（local/catch）、`23`
 （scoped handler）、`24–25`（线性续延 / bracketExn）、`26–30`（mock↔real 对拍）、
-`31–36`（调度器：fork/await、取消、超时、监督、重复 await、Channel）、`37–39`
-（Mutex、线性 TaskLin、effect-aware forkTaskWith）、`40–41`（fs 命名实例 /
-process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 bracket、一次性闭包）、`45`（行语法糖）；
+`40–41`（fs 命名实例 / process 可控 Exit）、`42` / `44`（通用 bracket abort cleanup /
+一次性闭包）、`45`（行语法糖）；
 负例 `dt_err/70–81`；原语探针夹具 `packages/10_prim_io`（`clockSleepMicros`，内部走 `@vuna@prim_eff_sleep`）。
 细节见 §8.6 与 [effects-layers.md](effects-layers.md)。
 
@@ -307,7 +303,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 - **一阶效应核**：普通 send op 不含子计算；`Base.Effect.Exn.Try` 支持携带子计算，
   `bracketExn` 提供 Exn 路径的 cleanup；通用 `Base.Effect.Core.bracket`/`finally` 用运行时
   cleanup 栈覆盖**任意效应 abort**（handler 丢弃续延），见 §8.5 与 effects-layers.md。
-- **并发/async**：单线程 fiber 调度器属于 §8.5 的协作式机制（库面当前不存在）；**多线程**是
+- **并发/async**：单线程 fiber 调度器库面已删除（gh#100）；**多线程**是
   另一条轴：`Base.Thread` 用 OS 线程（OCaml 侧 `Domain`）提供 `spawn`/`join`、`Mutex`、
   `Condvar`、`Atomic`，线程体是 `Eff [] a`、续延不跨线程；宿主效应要在任务体内显式安装
   真实 handler（`runFsError "fs-error" (runFsHost comp)`，夹具 `effect/common/104`）。
@@ -317,22 +313,21 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   `runNetResult`，收成 `Eff [] (Result a)`。结构化并行入口是 `Base.Thread.Par`：
   纯 body 用 `parMap` / `parFoldMap`；effectful body 用 `parMapEff` / `parMapEffWith`，
   由上述 runner 在 worker 内收成 `Eff []`，见 [primitives.md](primitives.md) §6.2
-  （夹具 `effect/common/106`、`107`，native / ocaml 的 `96` / `95`）。并行/多核不走
-  fiber 调度器（[debt.md](debt.md) D41）。
+  （夹具 `effect/common/106`、`107`，native / ocaml 的 `96` / `95`）。
 - **未处理效应诊断**：入口在类型层收紧——`runPure : Eff [] a -> a`；
   `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签；负例 `dt_err/82_unhandled_effect_entry`）。
   运行时兜底保留：main 钩子识别 `Effect.Unhandled (Perform (key,name,_))`，报告
   `unhandled effect key (instance name)`（`name` 是 String 实例名；`packages/compiler/test/corpus/run_err/04_unhandled_effect`）；任务内
   的未处理效应经 `awaitTask` 的 `Err` 返回同一条消息。剩余：`runEff` 内部信任入口
-  （库内路径）接受任意行（[debt.md](debt.md) D37）。
+  （库内路径）接受任意行（gh#99）。
 
-### 8.5 高阶 / 调度器
+### 8.5 高阶 / 效应标签
 
-高阶/作用域误差、线性续延/一次性闭包/`bracket`、单线程调度器与效应标签的语义见
+高阶/作用域误差、线性续延/一次性闭包/`bracket` 与效应标签的语义见
 [effects-layers.md](effects-layers.md)。核心边界：`Try` 子计算 + scoped
 handler；`Cont` resume-once（`mkCont`）+ `bracket` 的 abort cleanup；
-fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（库层）。
+console/clock/env/process/fs 标签（库层）。单线程 fiber 调度器库面已删除（gh#100）。
 
 
 ### 8.6 效果进类型
@@ -355,14 +350,10 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
   `Base.Effect.*` 标签 + handler（`runX = joinEff (handleXHost …)`）；关闭宿主行只有
   `Base.Effect.Host.runHost` / `hostSync`，且 `rowRem` 不对 `HostOp` 归约（负例
   `dt_err/134_host_row_not_removable`、`dt_err/135_runpure_host`）。没有每包原语白名单、
-  `unsafe` 定义级审计，也没有 REPL `--privileged`。缺口见 [debt.md](debt.md) D62：
+  `unsafe` 定义级审计，也没有 REPL `--privileged`。缺口见 gh#104：
   `@vuna@` 名字在词法层可写，所以保证的前提是不手写内部名。
-- **base 宿主层直接使用点（安全审计参考，不是强制约束）**：13 处——
-  `Base.Effect.Core.sendCore`、`Base.Effect.Core.handleCore`、`Base.Effect.Core.bracket`、
-  `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、
-  `Base.EffSched.forkTask`、`Base.EffSched.awaitTask`、`Base.EffSched.cancelTask`、
-  `Base.EffSched.cancelScope`、`Base.EffSched.scopeWait`、`Base.EffSched.scopeWaitTimeout`、
-  `Base.EffSched.forkTaskLin`。
+- **base 宿主层直接使用点（安全审计参考，不是强制约束）**：3 处——
+  `Base.Effect.Core.sendCore`、`Base.Effect.Core.handleCore`、`Base.Effect.Core.bracket`。
 - **单效应组合子与自动 lift**：`runConsole`/`runFs`/`runEnv`/`runClock`/`runProcess`
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
 
@@ -397,7 +388,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
    错误载荷带操作名与路径 / 句柄，所以文本能定位「哪个操作、哪个对象」。
 
    **为什么没有源码位置帧**：typed error 在 effect handler 里抛，用户函数编译成 `Eff`
-   闭包并由调度器经尾调用重的 bind/joinEff 链执行——`get_callstack` / 异常 backtrace
+   闭包并由运行时经尾调用重的 bind/joinEff 链执行——`get_callstack` / 异常 backtrace
    都只剩运行时与 base 帧（用户 def 的帧不进栈）。要给出调用点只能给每次宿主操作付
    栈捕获的代价，且仍拿不到用户帧；因此收口只给操作上下文。崩溃路径（`dt_report_exn`）
    仍有源码帧，因为它走普通异常栈。
@@ -423,7 +414,7 @@ net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin
 句柄失效（重复 close / 伪造句柄）也是 typed `NetBadHandle`（exit 1），不再是崩溃。
 
 剩余边界：没有异步/多连接/TLS（非目标）；超时只覆盖单次 accept/read/write，
-没有全局 deadline——见 [debt.md](debt.md) D90。
+没有全局 deadline——见 gh#143。
 
 ### 8.8 可变数据：值句柄 + `MutOp` 标记
 
@@ -467,7 +458,7 @@ withMutRefPure : a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
 - **嵌套作用域**：重复的 `MutOp` 条目是同一标记，`Member` 取最近的头部（具体候选取头部
   规则，见 `Elab/Dict`）；不需要名字消歧。
 - **逃逸**：允许（GC 所有权）。句柄离开 `with*` 后仍然存在，但任何读写都要求某个 `MutOp`
-  作用域；要严格禁止逃逸需要线性句柄（[debt.md](debt.md) D63）。
+  作用域；要严格禁止逃逸需要线性句柄（gh#105）。
 - **表示与操作**：
 
 | 类型 | 表示 | 操作 |
@@ -487,24 +478,24 @@ withMutRefPure : a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
 
 | 缺口 | 内容 | 入口 |
 | --- | --- | --- |
-| 线性 / 依赖 multiplicity | 多射续延不做；通用线性箭头与依赖 multiplicity 未做（线性值经 ω 形参通用函数被拒，库 API 需显式 `(1 x : …)`） | [debt.md](debt.md) D22 |
-| 表示轴残留 | handler 续延域的 `resIdx i o` 用不透明值 + 恒等 cast 编译；精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖 | [debt.md](debt.md) D27 |
-| 信任入口 | `runEff` 内部入口接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | [debt.md](debt.md) D37 |
-| 并行 | 无 Domain 并行、无父 fiber handler 继承 | [debt.md](debt.md) D41 |
-| 调度器边界 | 取消只在挂起点生效、清理有 64 步宽限后硬中止；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff Nil a`（`forkTaskWith` 显式 handler，但无法继承父 fiber handler 栈） | [debt.md](debt.md) D44 |
+| 线性 / 依赖 multiplicity | 多射续延不做；通用线性箭头与依赖 multiplicity 未做（线性值经 ω 形参通用函数被拒，库 API 需显式 `(1 x : …)`） | gh#97 |
+| 表示轴残留 | handler 续延域的 `resIdx i o` 用不透明值 + 恒等 cast 编译；精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖 | gh#39 |
+| 信任入口 | `runEff` 内部入口接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | gh#99 |
+| 并行工具层 | 静态分块的长尾、无动态任务队列 / Channel / 取消 token | gh#101 |
+| 调度器库面 | 单线程 fiber 调度器（`Base.EffSched` / `EffMutex` / `EffChannel`）已作为死代码删除；`prim_sched*` 与文档清理见 gh#100。多线程走 `Base.Thread` | gh#100 |
 
 ## 10. 非目标（明确不做）
 
 - 多射续延：`perform`/`handle` 只有 one-shot 续延；`Cont` 的线性类型化见
-  [debt.md](debt.md) D42。
+  gh#102。
 - 完整的**高阶效应类型**（对子计算的行/answer 做 rank-2 量化、multi-shot）不做：
   scope op 用 `Scoped a` 的一等擦除子计算 + `handleScoped`（行在 `scope` 处检查）；
   `handle` 语法支持结果索引族（含 scope 族），但显式参数不是类型的族仍报
-  `TC_HandleFamilyUnsupported`（[debt.md](debt.md) D54）。自动 lift 只在 check 方向
+  `TC_HandleFamilyUnsupported`（gh#103）。自动 lift 只在 check 方向
   （`tryEffLift`，见 §8.4）。
 - 类型级能力行（`Eff [caps] r a`）。
-- 并行/多核（OCaml `Domain` 并行、内存模型）：只有**单线程**调度器；通道/互斥量等并发
-  数据结构与网络/服务端框架不在本层范围（[debt.md](debt.md) D41）。
+- 并行/多核（OCaml `Domain` 并行、内存模型）：多线程走 `Base.Thread`（`spawn`/`join` /
+  `Mutex` / `Condvar` / `Atomic`）；通道 / 动态任务队列见 gh#101，网络 / 服务端框架不在本层范围。
 
 ## 相关阅读
 
@@ -514,6 +505,6 @@ withMutRefPure : a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
 - 类型系统（擦除判据、宇宙）：[type-system.md](type-system.md)；Core 实现：[core.md](core.md)
 - 自举与 rotation：[bootstrap.md](bootstrap.md)；测试标签：[testing.md](testing.md)
 
-- 高阶 / 调度器展开：[effects-layers.md](effects-layers.md)
+- 高阶 / 效应标签展开：[effects-layers.md](effects-layers.md)
 - 效应系统内建化（`perform`/`handle` 语法、行求解规则、实例名）：
   [native-effects.md](native-effects.md)

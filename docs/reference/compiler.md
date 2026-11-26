@@ -283,7 +283,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 - LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
   增量 + 单模块写回；工具写回与整包产物按 `meOrigin` 结构性隔离。残留擦除位 meta
   靠**按模块名排序后的名次**分配段号重编号（`Driver/Cache.shiftTerm` / `Driver/Dt.shiftedDepPrograms`；
-  覆盖与段确定性已修，彻底收尾需语义方案 B，见 [debt](debt.md) C37）。
+  覆盖与段确定性已修，彻底收尾需语义方案 B，见 gh#136）。
 - 源校验默认内容哈希；mtime+size 只用于同秒安全窗（`mtimeSafetyWindowSec`），不参与判等；缓存载荷是
   各模块的规范编码（`Base.Bytes` / `Frontend.Canonical.*` / `Core.Canonical` / `Elab.Canonical`）+ `Base.Store` framing（magic/tag/codec/len/内容地址），读侧坏条目
   即 miss 并覆盖写（见 [cache.md](cache.md)）。

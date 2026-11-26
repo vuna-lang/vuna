@@ -75,7 +75,7 @@ vuna doc [--check] [--package NAME] [DIR [OUT]]
 - `--check` 不写文件：逐个报告**顶层符号**缺失 docstring（前置 `-- |` 与尾随 `-- ^` 都
   算；私有名 `_` 前缀跳过），有缺失 exit 1；成员（构造子/字段/方法）不强制。
 - `--check` 只在本地按需运行，**不在** `nix flake check` 里（docstring 覆盖不是 CI 门禁）；
-  受管辖包与缺失统计口径见 [testing-checks.md](testing-checks.md) 的 Nix checks 清单与 [debt.md](debt.md) D30。
+  受管辖包与缺失统计口径见 [testing-checks.md](testing-checks.md) 的 Nix checks 清单与 gh#138。
 - 输出包含：标题/统计、搜索框、包/kind 过滤、左侧 TOC、模块/符号章节、签名代码块、
   docstring 渲染、内嵌搜索 JSON 与客户端 JS。无外部 CSS/JS/CDN，`file://` 直接打开。
 - HTML 是可复现的：无时间戳/随机数，同一 DocBook 两次生成逐字节一致。
@@ -139,7 +139,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 - 类型名解析是**语法级近似**：短名歧义时回退源码短名比较；不按 import 闭包解析。
 - 无实例/隐式参数/依赖相等/类型别名展开的语义匹配；`Eq a =>` 约束在检索中忽略。
-- 没有语义级检索（精化后比较），CLI 也没有 `--semantic`；见 [debt.md](debt.md)。
+- 没有语义级检索（精化后比较），CLI 也没有 `--semantic`；见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 - 文档输出是单页 HTML；没有多页站点 / 搜索服务 / 托管。
 
 ## 4. 索引 v3

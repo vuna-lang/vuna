@@ -68,9 +68,7 @@
 | `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`，即 `Named "mock" FsOp`））：`ReadFile`/`ReadFileRange`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile`/`fsReadFileRange`（按偏移读片段）/`fsFileCursor`（按块读文件，配 `Base.Effect.Cursor`）/`fsWriteFile`/…（默认名；显式 `@name`；`handleFs n` 的 handler 仍显式 n）；`WriteFile` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值）；真实 handler 用 `@vuna@host@try*` 原语，宿主失败抛 `FsErrorOp`（`FsError`：missing/denied/no-space/not-dir/is-dir/exists/io，`fsErrorText` 渲染）；`runFsError n` 把失败收成 `Result`，`runFsHost` 是默认实例的真实 handler（entry 预装与 worker 显式安装共用），`runFsResult` 把默认 fs 行完整收成 `Eff [] (Result a)`（worker / 子计算用），entry 预装的 `runFsErrorHost` 打印 `vuna: fs: …` 并 exit 1；mock（纯 answer）与 real handler 可并存（`dt_base/37`、`dt_base/85`） |
 | `Base.Effect.Error` | 一阶 Error 效应 + 作用域 `catch`：`throw`/`handleError`/`runError`/`catch` |
 | `Base.Effect.Exn` | 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
-| `Base.EffSched` | 单线程 fiber 调度器：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
-| `Base.EffChannel` | cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
-| `Base.EffMutex` | cooperative Mutex/Semaphore（可变单元 + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
+| ~~`Base.EffSched` / `Base.EffChannel` / `Base.EffMutex`~~ | 单线程 fiber 调度器库面已删除（commit `1c90517`）；`prim_sched*` 与文档清理见 gh#100。多线程走 `Base.Thread`，见 [primitives.md](primitives.md) §6.2 |
 | `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`runConsoleHost`（entry 预装的真实 handler，用 `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsoleEff` 把默认 console 行收成 `Eff []`（worker / 子计算用） |
 | `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`runClockHost`（entry 预装的真实 handler，用 `effTimeUs` 与原生 `@vuna@prim_eff_sleep`）；`runClockEff` 把默认 clock 行收成 `Eff []`（worker / 子计算用） |
 | `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetEnvNonEmpty`（未设置或空串 ⇒ `Nothing`）/`envGetCwd`/`envExecPath`/`handleEnv`/`runEnvHost`（entry 预装的真实 handler，用 `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`）；`runEnvEff` 把默认 env 行收成 `Eff []`（worker / 子计算用） |
@@ -269,7 +267,7 @@ packages/base/lib/
 - **库级效应**：`State` / `Reader` / `Error` 是带 `Functor`/`Monad` 实例的纯函数
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；语言级 `perform`/`handle`
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
-  （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；
+  （用户自定义 op + 深 handler + 行/重排）未实现（见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt) / [effects.md](effects.md)）；
   **效应标签在库层**：`Base.Effect.Fs` 是完整 fs 面并带命名实例（`Named "mock" FsOp` / `Named "real" FsOp`），
   `Base.Effect.Console` / `Base.Effect.Clock` / `Base.Effect.Env` / `Base.Effect.Process` 是命名实例 + 宿主 handler，宿主 handler
   内部直调隐藏原语 `@vuna@prim_eff_*`；原生 `@vuna@prim_eff_sleep`（`Base.Effect.Clock` 的 `SleepMicros` 用它）、可控

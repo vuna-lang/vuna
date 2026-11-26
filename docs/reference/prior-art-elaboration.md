@@ -3,7 +3,7 @@
 本文是对两个外部依赖类型语言实现的**只读调研**，用于对照 vuna 的 Core / Elab / IR 分层，
 并为「哪些设计值得采纳、哪些差距是结构性的」提供证据。它不是 vuna 的设计文档：
 vuna 的现状见 [compiler.md](compiler.md) / [core.md](core.md)，终态决策见
-[architecture-target.md](../architecture-target.md)，未关闭缺口见 [debt.md](debt.md)。
+[architecture-target.md](../architecture-target.md)，未关闭缺口见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 1. 快照与方法
 
@@ -105,33 +105,33 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 
 ## 6. vuna 侧的差距（按结构性问题排序）
 
-所有条目都能在本仓库里核实；`debt.md` 里已有编号的直接引用，不重复描述。
+所有条目都能在本仓库里核实；`label:debt` 的 issue 里已有编号的直接引用，不重复描述。
 
 1. **等式不可推迟**。`Core.Conv.conv : HashMap String Term -> Sols -> Int -> Value -> Value ->
    Check Sols`：要么成功，要么立刻 `type mismatch`。字典 / 行成员目标另有 FIFO 队列 + epoch
-   重试（`Elab.Types.ConstraintStore`，收敛固定 8 轮，见 EC-28），但**等式本身不排队**。
-   后果是债务 B07（高阶合一只有空 spine 与 Miller pattern 完整）、CO-07（卡住 case 相等
-   可能烧尽 conv 预算）、EC-40（索引精化不下钻 `VCase` / `VProj`）。
+   重试（`Elab.Types.ConstraintStore`，收敛固定 8 轮，见 gh#128），但**等式本身不排队**。
+   后果是gh#95（高阶合一只有空 spine 与 Miller pattern 完整）、gh#72（卡住 case 相等
+   可能烧尽 conv 预算）、gh#47（索引精化不下钻 `VCase` / `VProj`）。
 2. **没有 case tree 中间层**。多 clause 在语法层被 `Elab.Match.multiToExpr` 拆成
    `case` / `if` 链，可反驳性的「证据」没有结构化载体：覆盖率 / 可达性散在五处
    （`Elab.Case.BranchVerdict`、`Elab.Coverage.clauseCover`、`Elab.Match.familyCovered`、
-   `Elab.Coverage.familyCtors`、`Elab.Term.Impl` 的 Bool/Nat/Int/String 专用路径），即 EL-24。
+   `Elab.Coverage.familyCtors`、`Elab.Term.Impl` 的 Bool/Nat/Int/String 专用路径），即 gh#31。
 3. **精化状态是单体**。`Ec` 22 字段、解表三份真源（`ecSols` / `ecSolTbl` / `csSolsCount`）、
-   15 处 setter 按位置重列字段（EC-31）；`ConstraintStore` 一个 record 兼待处理队列 /
-   id 分配 / 重试表 / 解表计数 / 构造子索引完整性（EC-32）；
+   15 处 setter 按位置重列字段（gh#69）；`ConstraintStore` 一个 record 兼待处理队列 /
+   id 分配 / 重试表 / 解表计数 / 构造子索引完整性（gh#70）；
    `Elab/Term/Impl.vuna` 3.8k 行、签名带十几个参数与 fuel。
 4. **擦除后 Core 只是视图**。`Lowering.Erased.eraseTerm : … -> Check Term` 返回仍是 `Term`，
    下游无法靠类型禁止「还有 meta」「还指向 Rig0」。`WhyErased` 那种「擦除原因」标记不存在，
-   于是 C37（擦除位未解 meta 跨包段重编号）与 D27（未解 meta 漏插 cast）只能靠段号/启发式补。
+   于是 gh#136（擦除位未解 meta 跨包段重编号）与 gh#39（未解 meta 漏插 cast）只能靠段号/启发式补。
 5. **`check` 没有阶段上限**。`Driver.Dt.checkDtProgramOf` = `lowerProgramOf` + `checkUnitParts`；
-   已不拼文本，但 lowering 与装配校验本身仍在 check 路径上（C49 记为「后续」）；
-   同模块一次 check 被 parse 约两次（D88）。
+   已不拼文本，但 lowering 与装配校验本身仍在 check 路径上（gh#80 记为「后续」）；
+   同模块一次 check 被 parse 约两次（gh#87）。
 6. **候选级快照缺失**。已有「单遍逐定义恢复」（`Elab.Driver.elabProgramErrors`，只有 body 阶段
-   可恢复），但没有 per-candidate 的回滚：EC-09 明确记「上一候选的解表污染下一候选」；
-   `perform` / `handle` 现在是三候选试错、失败抛第一个错（EC-14）。
+   可恢复），但没有 per-candidate 的回滚：gh#33 明确记「上一候选的解表污染下一候选」；
+   `perform` / `handle` 现在是三候选试错、失败抛第一个错（gh#126）。
 7. **没有严格正性检查**（本文档调查中实测）。`Elab.Data.elabCtor` 只校验构造子结果头是本族、
    索引个数、字段的宇宙层级（`checkCtorFieldSorts`）；仓库内没有 positivity 标记或文档章节。
-   见 `debt.md` 的 EL-26 与 §9 的探针。
+   见 gh#32 与 §9 的探针。
 
 ## 7. 值得采纳的设计（分级）
 
@@ -141,17 +141,17 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
    状态：`conv` 返回 `(Sols, List Equation)`，`Equation` 带 env / lhs / rhs / blockers / span /
    收尾深度；收尾只对「确实没有进展」的等式报错，并优先报最早 / 最有解释力的一条。
    dot 约束作为同队列的一个 kind 一并进来。
-   **消掉** B07 / CO-07 / EC-40 的近似，并为 dot pattern 与 `rewrite` 打开门（当前
+   **消掉** gh#95 / gh#72 / gh#47 的近似，并为 dot pattern 与 `rewrite` 打开门（当前
    `frontend-syntax.md` 两者都是「等具体痛点」）。
 2. **dispatch-only case tree 中间层**。`TCase` 只 dispatch 变量、`STerm` 带 clause id 与
    forced equality、`TUnmatched` / `TImpossible` 显式。由 `Elab.Match` 与 `Elab.Case` 共同产出，
    覆盖率 / 可达性 / 终止性 / 擦除分支形状读同一结构。
-   **消掉** EL-24 的多口径；不可达分支第一次有可检查的载体。
+   **消掉** gh#31 的多口径；不可达分支第一次有可检查的载体。
 3. **擦除后的 Core 变成一层类型**（newtype + 构造时校验），而不是返回同一个 `Term`。
    顺带引入 `WhyErased = Placeholder | Impossible | Dotted` 这样的原因位，
-   **把** C37 / D27 的补丁换成语义位。
+   **把** gh#136 / gh#39 的补丁换成语义位。
 4. **`Stage` 枚举**（`Cases | Anamed | Ir | Text`）接在 `Driver.Dt` / `Driver.Compile` 上，
-   `check` 停在 `Ir` 校验。**消掉** C49 与 D88 的一半。
+   `check` 停在 `Ir` 校验。**消掉** gh#80 与 gh#87 的一半。
 
 ### 7.2 实现级（局部、可独立落地）
 
@@ -182,16 +182,16 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 
 1. 若是终态方向的改变 → 写进 [architecture-target.md](../architecture-target.md) 的已决决策表
    （含理由与代价），并在提交信息里说明；
-2. 若是缺口 → 登记到 [debt.md](debt.md)，带可复现证据；
+2. 若是缺口 → 登记到 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)，带可复现证据；
 3. 未被采纳的条目留在本文档，作为先例对照；不要复制进其它主题页。
 
 按「收益 / 风险」排序的三条：
 
 | 候选 | 收益（消掉的债务） | 代价 / 风险 |
 | --- | --- | --- |
-| 严格正性检查 | 补一致性缺口（EL-26）；当前可构造空类型居民 | 低：纯加法，判据可整段照搬 Idris2 `Core/Termination/Positivity.idr` 的 `nameIn` 思路；需先扫 base 的自引用形状 |
-| `Ec` / `ConstraintStore` 拆分 + 名字身份化 | EC-31 / EC-32；让 `branch` 式快照与按定义增量可行 | 中：面广，但可机械分步（先拆 record，再在 Core/Elab 边界引入确定性 id） |
-| 等式推迟 | B07 / CO-07 / EC-40 + dot / rewrite 的前置 | 高：贯穿精化器；需要先写决策（契约、错误选择、与字典队列的关系） |
+| 严格正性检查 | 补一致性缺口（gh#32）；当前可构造空类型居民 | 低：纯加法，判据可整段照搬 Idris2 `Core/Termination/Positivity.idr` 的 `nameIn` 思路；需先扫 base 的自引用形状 |
+| `Ec` / `ConstraintStore` 拆分 + 名字身份化 | gh#69 / gh#70；让 `branch` 式快照与按定义增量可行 | 中：面广，但可机械分步（先拆 record，再在 Core/Elab 边界引入确定性 id） |
+| 等式推迟 | gh#95 / gh#72 / gh#47 + dot / rewrite 的前置 | 高：贯穿精化器；需要先写决策（契约、错误选择、与字典队列的关系） |
 
 ## 9. 证据与复现
 
@@ -243,6 +243,6 @@ nix run .#vuna -- check probe.vuna   # 当前 exit 0
 - 想知道「改精化器要动哪些模块」：[compiler.md](compiler.md) 的 Elab 表 + [architecture.md](../architecture.md) §1；
 - 想知道「Core 表示与合一今天的规则」：[core.md](core.md)；
 - 想知道「擦除、IR 与后端边界」：[ir.md](ir.md) / [compiler.md](compiler.md)；
-- 想知道「哪些缺口仍开放」：[debt.md](debt.md)（B07 / CO-07 / EC-31 / EC-32 / EC-40 / EL-24 / EL-26 / C49 / D88）；
+- 想知道「哪些缺口仍开放」：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)（gh#95 / gh#72 / gh#69 / gh#70 / gh#47 / gh#31 / gh#32 / gh#80 / gh#87）；
 - 先例本身的入口按 §9 的文件清单读，读 `TTImp/Elab/*` 与 `Core/Case/*` 时要整篇读，
   不要按符号搜索。

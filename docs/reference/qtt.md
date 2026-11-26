@@ -88,7 +88,7 @@ linear data Token : Type where
   「函数值本身线性」的箭头类型；要让一个闭包只能被消费一次，用 `Base.Effect.Core.Cont`
   （见 §6）。
 - **没有**依赖 multiplicity / multiplicity 多态；线性多态与泛型容器见
-  [debt.md](debt.md) D22。
+  gh#97。
 
 ## 6. 线性捕获与一次性闭包（已实现）
 
@@ -141,14 +141,14 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 
 `linear record` / `linear data` 语法与 QTT 规则保留；当前 base 里有 `linear data Cont`
 （一次性续延）与 `linear data TaskLin`（调度器线性任务）两个用例，没有库级线性 record
-用例（没有 `Base.ST`，重建约束见 [debt.md](debt.md) D63）。
+用例（没有 `Base.ST`，重建约束见 gh#105）。
 
 ## 9. 边界
 
 - 无依赖 multiplicity、multiplicity 变量/多态：`Rig` 只有 `0 / 1 / ω` 三值，签名里
   写不出 multiplicity 变量（`(p : Qty) -> …` 不可写）。探针：`packages/compiler/test/corpus/dt/80_qtt_usage`
   只覆盖三值；多态 multiplicity 需要 `Rig` 变成项层/类型层数据 + 依赖 Pi
-  （[debt.md](debt.md) D22）。
+  （gh#97）。
 - 无「函数值线性」的通用箭头类型与借用（`&`）、region 推断；一次性闭包只有
   `Base.Effect.Core.Cont` 这一种库级包装（`mkCont`/`resumeCont`），不是语言级箭头。
   线性箭头 binder `(1 x : A) -> B` 本身可用（§1）。
@@ -156,14 +156,14 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
   嵌套/curried 线性闭包、`if`/`case` 里的捕获一律拒绝。
 - 用量检查把 let 的 RHS 按单次求值计（应用 rig=1），线性值经 let 传递不误报；
   但推断位置把线性值传给通用运算符/trait 方法仍被拒（形参默认 ω；期望类型触发
-  `bi_add` 等特化才通过），见 [debt.md](debt.md) D22。
-- 线性世界令牌未做（没有 per-module `unsafe` 门控，见 [debt.md](debt.md) D22）。
+  `bi_add` 等特化才通过），见 gh#97。
+- 线性世界令牌未做（没有 per-module `unsafe` 门控，见 gh#97）。
 - 运行时不做所有权检查；线性是静态纪律（线性值仍可经非线性 data 的字段被复制，
-  见 [debt.md](debt.md) D42）。
+  见 gh#102）。
 
 ## 10. 与其它文档
 
 - 类型系统与擦除：[type-system.md](type-system.md)
 - Core 表示/NbE：[core.md](core.md)
 - 效应：[effects.md](effects.md)
-- 未关闭的债务：[debt.md](debt.md)
+- 未关闭的债务：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)

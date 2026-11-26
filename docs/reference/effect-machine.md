@@ -195,7 +195,7 @@ Control       = Done value
    标记只沿尾位置传播，非尾位置的 resume 仍是 `MkRestCont`（读数见
    [benchmarks.md](benchmarks.md) §1.4 的 `eff_entry_host`）。
 2. **cleanup 自身的效应/异常**走当前 handler 链（不吞）；native / OCaml 的旧实现是
-   「release 只能访问外层 handler、自身异常被吞」，两边口径不同（debt D42）。
+   「release 只能访问外层 handler、自身异常被吞」，两边口径不同（gh#102）。
 3. `hframe` 的 cleanup 深度按「安装时的 `$g_cleanDepth`」记录：跨 resume 重装帧时沿用
    原值，因此 resume 段里新登记的 cleanup 仍归该帧。
 

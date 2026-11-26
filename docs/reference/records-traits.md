@@ -287,7 +287,7 @@ main = pretty Red ++ "/" ++ show Red
   访问器在方法签名上 cast 一次，因此同一字典可以按不同实例化使用。方法投影的签名是
   `{p1 .. pn} -> {d : Dict_C p1 .. pn} -> <方法类型>`；字典 binder 是**隐式但运行时**
   参数（`RigOmega`：投影体要 case 它取字段），与约束字典一致。默认方法、关联类型
-  未实现（见 [debt.md](debt.md)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
+  未实现（见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
