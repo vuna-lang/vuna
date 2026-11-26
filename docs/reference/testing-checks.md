@@ -29,13 +29,23 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
 | `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（`pr / run`） |
-| `gate` | `vuna-tests-gate`（完整 fast+integration） | main push（人工 / break-glass；自动合并不触发，见下） |
+| `gate` | `vuna-tests-gate`（完整 fast+integration）+ `vuna-tests-units` | 本地全量 / 未分片的单 derivation |
 | `slices` | 7 个 `vuna-tests-*` area 切片 | PR 计划器按 area 选；本地 `nix run .#ci -- slices` |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
-| `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、`suite` 标签 |
+| `suite` | `vuna-tests-gate` + `vuna-tests-units` + `vuna-tests-e2e`（未分片） | 本地全量；CI 定时/手动改跑下面 3 组分片 |
+| `gate-shard-0..3` | `vuna-tests-gate-shard-i`（`--shard i/4`） | CI main push / 定时 / 手动（matrix 并行） |
+| `e2e-shard-0..3` | `vuna-tests-e2e-shard-i`（`--shard i/4`） | CI 定时 / 手动（matrix 并行） |
+| `units` | `vuna-tests-units`（各包 `vuna test`） | CI main push / 定时 / 手动 |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
 | `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | **本地手动**（GitHub CI 暂不跑） |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、`browser` 标签 |
+
+CI 的 `ci.yml` 把 gate / e2e 各拆成 4 个 matrix job：每个 shard 是一个独立 derivation
+（`VUNA_TEST_SHARD=i/4`），共用 `nix-suite-<os>-` 的 store cache（`cache-key: suite`），
+gate 的第 0 片负责写 cache（其余 job 只 restore，避免同 key 并发写）。分片是**完整 case
+集合的划分**而不是采样：`--shard i/N` 在 runner 内按耗时均分，每片仍执行自己那部分全部
+case；每片带 `VUNA_TEST_MIN_CASES` 下限（gate 150、e2e 12）挡住分片过滤后骤降。包内单测
+独立成 `units` job，不随 shard 重复。
 
 PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` 从 PR 的
 `type:*` + `pkg:*` / `area:*` 计算检查子集，`gates` 只跑这些检查；`deep` / `suite` /

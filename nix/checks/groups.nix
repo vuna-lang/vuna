@@ -21,8 +21,11 @@ in
 {
   inherit pr;
 
-  # 完整 suite gate（fast+integration）：main push 与本地全量。
-  gate = [ "check:vuna-tests-gate" ];
+  # 完整 suite gate（fast+integration）+ 包内单测：main push 与本地全量。
+  gate = [
+    "check:vuna-tests-gate"
+    "check:vuna-tests-units"
+  ];
 
   # PR 增量 suite 切片（`nix/checks/slices.nix`）：按 area 组合选择器，PR 计划器只
   # 构建命中的那几个；`nix run .#ci -- slices` 一次跑全部。
@@ -66,6 +69,7 @@ in
   # ocaml suite：fast + integration（gate）与 steps/e2e。
   suite = [
     "check:vuna-tests-gate"
+    "check:vuna-tests-units"
     "check:vuna-tests-e2e"
   ];
 
@@ -81,3 +85,17 @@ in
   # 浏览器可跑面实跑（package，不在 flake check 里）。
   browser = [ "package:vuna-wasm-browser-smoke" ];
 }
+# CI 分片组：每个名字对应 `nix/checks/default.nix` 里的一个 shard check。
+# GitHub workflow 用 matrix 并行调用；本地 `nix run .#ci -- gate-shard-0` 可单跑一片。
+// builtins.listToAttrs (
+  map (i: {
+    name = "gate-shard-${toString i}";
+    value = [ "check:vuna-tests-gate-shard-${toString i}" ];
+  }) (builtins.genList (i: i) 4)
+)
+// builtins.listToAttrs (
+  map (i: {
+    name = "e2e-shard-${toString i}";
+    value = [ "check:vuna-tests-e2e-shard-${toString i}" ];
+  }) (builtins.genList (i: i) 4)
+)

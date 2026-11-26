@@ -46,16 +46,22 @@ jobs:
       save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
   # main push 的完整 suite 层（fast+integration）：PR 只跑命中的 area 切片
-  # （gates.yml），合并后在这里把完整夹具基线跑一遍；e2e / backends 仍只在定时与手动 dispatch。
-  gate:
-    if: github.event_name == 'push'
+  # （gates.yml），合并后在这里把完整夹具基线跑一遍。按 case 耗时均分成 4 片并行，
+  # 每片仍是完整集合的一部分（不是采样）；包内单测单独一个 job。
+  gate-shards:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     uses: ./.github/workflows/_check.yml
     with:
-      group: gate
+      group: gate-shard-${{ matrix.shard }}
+      cache-key: suite
       timeout: 60
       jobs: 1
       cache-size: 2G
-      save: true
+      save: ${{ matrix.shard == 0 }}
 
   deep:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -67,13 +73,31 @@ jobs:
       cache-size: 2G
       save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
-  suite:
+  # e2e（steps / 长 case）同样按耗时均分成 4 片并行。
+  e2e-shards:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     uses: ./.github/workflows/_check.yml
     with:
-      group: suite
+      group: e2e-shard-${{ matrix.shard }}
+      cache-key: suite
       timeout: 60
       jobs: 1
+      cache-size: 2G
+
+  # 包内单测（vuna test packages/*）与 suite 解耦，独立并行。
+  units:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: units
+      cache-key: suite
+      timeout: 45
+      jobs: 1
+      cache-size: 2G
 
   browser:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

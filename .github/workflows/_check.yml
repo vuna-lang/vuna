@@ -12,6 +12,11 @@ on:
         required: true
         type: number
       # 每组一份 Nix store cache：前缀带组名，互不干扰；没用到的组不写。
+      # `cache-key` 让多个 job（例如 suite 分片）共享同一个 cache 前缀。
+      cache-key:
+        required: false
+        type: string
+        default: ""
       save:
         required: false
         type: boolean
@@ -63,9 +68,9 @@ jobs:
         id: restore
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ inputs.group }}-${{ runner.os }}-${{ github.sha }}
+          primary-key: nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-${{ github.sha }}
           restore-prefixes-first-match: |
-            nix-${{ inputs.group }}-${{ runner.os }}-
+            nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-
             nix-deep-${{ runner.os }}-
             nix-pr-${{ runner.os }}-
 
@@ -113,7 +118,7 @@ jobs:
           primary-key: ${{ steps.restore.outputs.primary-key }}
           gc-max-store-size-linux: ${{ inputs.cache-size }}
           purge: true
-          purge-prefixes: nix-${{ inputs.group }}-${{ runner.os }}-
+          purge-prefixes: nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-
           # 只留一代：purge 在 save 之后执行，save 失败时不会清掉旧缓存。
           purge-created: 0
           purge-primary-key: never

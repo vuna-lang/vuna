@@ -240,7 +240,7 @@ in
   inherit seed-selfhost;
 
   # 测试分两层：gate 只跑 fast+integration，e2e（steps/长 case）单独一个 derivation。
-  # 两层可并行（CI 用 --max-jobs 2 --cores 8），每层内部仍共享一个私有对象库。
+  # CI 里两层各拆成 4 个 shard（matrix 并行）；本地 `nix run .#ci -- gate|suite` 跑未分片形态。
   vuna-tests-gate = vunaCheck {
     name = "vuna-tests-gate";
     srcs = testTree;
@@ -248,6 +248,8 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
       VUNA_SUITE_AREAS = knownAreas;
+      # 包内单测是独立 check，不挂在 gate 的尾巴上串行。
+      VUNA_TEST_UNIT_PKGS = "";
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;
@@ -260,12 +262,24 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
       VUNA_SUITE_AREAS = knownAreas;
+      VUNA_TEST_UNIT_PKGS = "";
       # 109_web_static 的 smoke 需要 web-cli 产物；`nix run .#vuna-run-tests` 已注入，
       # 派生环境必须同样提供，否则 step 拿到空路径。
       VUNA_WEB_CLI = "${vuna-web-cli}/bin/vuna-web-cli";
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;
+  };
+
+  # 包内单测：与 suite 解耦成独立 derivation（不随 shard 重复、不挂在 gate 尾部）。
+  vuna-tests-units = vunaCheck {
+    name = "vuna-tests-units";
+    srcs = testTree;
+    env = {
+      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+    };
+    nativeBuildInputs = e2eTools;
+    script = ./vuna-units.sh;
   };
 
   # 后端矩阵：同一份 suite 在两个非默认目标上跑它声明允许的用例
@@ -674,3 +688,45 @@ in
   };
 }
 // lib.mapAttrs' (name: spec: lib.nameValuePair "vuna-tests-${name}" (sliceCheck name spec)) slices
+# CI 分片：每个 shard 是独立 derivation，job 之间并行；`--shard i/N` 在 runner 内按耗时
+# 把选中 case 均分成 N 份，每份仍跑完整 case 集合的一部分（不是采样）。分片数量与
+# 每片下限同 `nix/checks/vuna-tests.sh` 的 `VUNA_TEST_SHARD` / `VUNA_TEST_MIN_CASES`。
+// builtins.listToAttrs (
+  map (
+    i:
+    lib.nameValuePair "vuna-tests-gate-shard-${toString i}" (vunaCheck {
+      name = "vuna-tests-gate-shard-${toString i}";
+      srcs = testTree;
+      env = {
+        VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+        VUNA_TEST_TIERS = "fast integration";
+        VUNA_SUITE_AREAS = knownAreas;
+        VUNA_TEST_SHARD = "${toString i}/4";
+        VUNA_TEST_MIN_CASES = "150";
+        VUNA_TEST_UNIT_PKGS = "";
+      };
+      nativeBuildInputs = e2eTools;
+      script = ./vuna-tests.sh;
+    })
+  ) (lib.range 0 3)
+)
+// builtins.listToAttrs (
+  map (
+    i:
+    lib.nameValuePair "vuna-tests-e2e-shard-${toString i}" (vunaCheck {
+      name = "vuna-tests-e2e-shard-${toString i}";
+      srcs = testTree;
+      env = {
+        VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+        VUNA_TEST_TIERS = "e2e";
+        VUNA_SUITE_AREAS = knownAreas;
+        VUNA_TEST_SHARD = "${toString i}/4";
+        VUNA_TEST_MIN_CASES = "12";
+        VUNA_TEST_UNIT_PKGS = "";
+        VUNA_WEB_CLI = "${vuna-web-cli}/bin/vuna-web-cli";
+      };
+      nativeBuildInputs = e2eTools;
+      script = ./vuna-tests.sh;
+    })
+  ) (lib.range 0 3)
+)
