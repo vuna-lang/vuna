@@ -12,7 +12,7 @@ let v_Num_ub27c21f837ed69cc_uInt = (B_dTrait_dNum.C_Num_Num ((fun x y -> (x + y)
 let v_Neg_uc22890dadc3767a7_uInt = (B_dTrait_dNeg.C_Neg_Neg ((fun x -> (0 - x))))
 
 # 34 "Base/Data/Int.vuna"
-let v_Show_u0077d73cf424e521_uInt = (B_dTrait_dShow.C_Show_Show ((fun x -> (bi_strFromInt x))))
+let v_Show_u0077d73cf424e521_uInt = (B_dTrait_dShow.C_Show_Show ((fun x -> (string_of_int x))))
 
 # 38 "Base/Data/Int.vuna"
 let v_Hashable_ue4b0f10b020a5e82_uInt = (B_dTrait_dHashable.C_Hashable_Hashable ((fun n -> n)))

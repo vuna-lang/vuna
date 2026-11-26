@@ -31,7 +31,7 @@ let v_addInterpMulti = (fun (off : int) (multi : bool) (st : t_PState) -> { st w
 let v_addTemplateHoles = (fun (nid : int) (trees : Frontend_dCst.t_CstNode B_dData_dList.t_List) (st : t_PState) -> { st with f_PState_templateHoles = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = nid; B_dData_dPair.f_Pair_second = trees }, (st).f_PState_templateHoles)) })
 
 # 167 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let rec v_rekeyInfixGo = (fun (mc0 : int) (mc1 : int) (mc2 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+let[@tail_mod_cons] rec v_rekeyInfixGo = (fun (mc0 : int) (mc1 : int) (mc2 : (int, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (if ((B_dData_dPair.v_firstOf dtb__0) = mc0) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc1; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__0) }, dtb__1)) else (B_dData_dList.C_List__x58__x58_ (dtb__0, (((v_rekeyInfixGo mc0) mc1) dtb__1))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -326,7 +326,7 @@ let v_holeAtomAt = (fun (st : t_PState) -> (let nd_uscrut1 = (v_peekTok st) in (
   | Frontend_dLexer.C_Tok_TSym (dtb__110) -> (if (dtb__110 = "?") then (let nd_uscrut5 = ((v_peekTokAt st) 1) in (match nd_uscrut5 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__111) -> (match dtb__111 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__112; Frontend_dLexer.f_PTok_ptokPos = dtb__113 } -> (match dtb__112 with
-  | Frontend_dLexer.C_Tok_TIdent (dtb__114) -> (if (if ((Base_dSource.v_posLine dtb__113) = (Base_dSource.v_posLine dtb__109)) then ((Base_dSource.v_posCol dtb__113) = ((Base_dSource.v_posCol dtb__109) + 1)) else false) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ("?" ^ dtb__114); B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb__109); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb__109); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb__113); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb__113) + (bi_strLength dtb__114)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb__109); Base_dSource.f_Span_spanEndOffset = ((Base_dSource.v_posOffset dtb__113) + (bi_strLength dtb__114)) } })) else B_dData_dMaybe.C_Maybe_Nothing)
+  | Frontend_dLexer.C_Tok_TIdent (dtb__114) -> (if (if ((Base_dSource.v_posLine dtb__113) = (Base_dSource.v_posLine dtb__109)) then ((Base_dSource.v_posCol dtb__113) = ((Base_dSource.v_posCol dtb__109) + 1)) else false) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ("?" ^ dtb__114); B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = (v_fileOf st); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb__109); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb__109); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb__113); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb__113) + (String.length dtb__114)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb__109); Base_dSource.f_Span_spanEndOffset = ((Base_dSource.v_posOffset dtb__113) + (String.length dtb__114)) } })) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"

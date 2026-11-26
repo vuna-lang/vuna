@@ -42,7 +42,7 @@ let v_isUpperAlphaChar = (fun (c : int) -> (if (c >= 65) then (c <= 90) else fal
 let v_isLowerAlphaChar = (fun (c : int) -> (if (c >= 97) then (c <= 122) else false))
 
 # 104 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_atLine = (fun (path : string) (line : int) (msg : string) -> (if (path = "") then (String.concat "" ["line "; (bi_strFromInt line); ": "; msg]) else (String.concat "" [path; ":"; (bi_strFromInt line); ": "; msg])))
+let v_atLine = (fun (path : string) (line : int) (msg : string) -> (if (path = "") then (String.concat "" ["line "; (string_of_int line); ": "; msg]) else (String.concat "" [path; ":"; (string_of_int line); ": "; msg])))
 
 # 107 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_manifestErr = (fun (path : string) (msg : string) -> (if (path = "") then msg else (String.concat "" [path; ": "; msg])))
@@ -69,7 +69,7 @@ let v_fieldLine = (fun (path : string) (section : string B_dData_dList.t_List) (
 
 # 121 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_fieldLoc = (fun (path : string) (section : string B_dData_dList.t_List) (key : string) (entries : Frontend_dToml.t_TomlEntry B_dData_dList.t_List) -> (match (((Frontend_dToml.v_lookupEntryLine section) key) entries) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (if (path = "") then (String.concat "" ["line "; (bi_strFromInt dtb__21); ": "]) else (String.concat "" [path; ":"; (bi_strFromInt dtb__21); ": "]))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (if (path = "") then (String.concat "" ["line "; (string_of_int dtb__21); ": "]) else (String.concat "" [path; ":"; (string_of_int dtb__21); ": "]))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if (path = "") then "" else (path ^ ": "))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -266,7 +266,7 @@ let rec v_hasAcc = (fun (mc0 : string) (mc1 : t_DepAcc B_dData_dList.t_List) -> 
 let v_ensureAcc = (fun (alias : string) (line : int) (acc : t_DepAcc B_dData_dList.t_List) -> (if ((v_hasAcc alias) acc) then acc else ((B_dData_dList.v_append acc) (B_dData_dList.C_List__x58__x58_ (((v_emptyDepAcc alias) line), B_dData_dList.C_List_Nil)))))
 
 # 304 "Vuna/Compiler/Frontend/Manifest.vuna"
-let rec v_mapAcc = (fun (mc0 : string) (mc1 : (t_DepAcc) -> t_DepAcc) (mc2 : t_DepAcc B_dData_dList.t_List) -> (match mc2 with
+let[@tail_mod_cons] rec v_mapAcc = (fun (mc0 : string) (mc1 : (t_DepAcc) -> t_DepAcc) (mc2 : t_DepAcc B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__76, dtb__77) -> (if ((dtb__76).f_DepAcc_depAccAlias = mc0) then (B_dData_dList.C_List__x58__x58_ ((mc1 dtb__76), dtb__77)) else (B_dData_dList.C_List__x58__x58_ (dtb__76, (((v_mapAcc mc0) mc1) dtb__77))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -418,7 +418,7 @@ let rec v_allHex = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
 ))
 
 # 449 "Vuna/Compiler/Frontend/Manifest.vuna"
-let v_validHashText = (fun (s : string) -> (if ((B_dData_dString.v_startsWith "sha256:") s) then (if ((bi_strLength s) = 71) then (v_allHex (B_dData_dList.dtp_unpack (((B_dData_dString.v_substring 7) 64) s))) else false) else (if ((bi_strLength s) = 64) then (v_allHex (B_dData_dList.dtp_unpack s)) else false)))
+let v_validHashText = (fun (s : string) -> (if ((B_dData_dString.v_startsWith "sha256:") s) then (if ((String.length s) = 71) then (v_allHex (B_dData_dList.dtp_unpack (((B_dData_dString.v_substring 7) 64) s))) else false) else (if ((String.length s) = 64) then (v_allHex (B_dData_dList.dtp_unpack s)) else false)))
 
 # 456 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_checkHashForm = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dMaybe.t_Maybe) -> (match mc2 with
@@ -480,7 +480,7 @@ let v_validateDiagFormat = (fun (mc0 : string) (mc1 : string B_dData_dMaybe.t_Ma
 
 # 507 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_validateDiagMax = (fun (mc0 : string) (mc1 : int B_dData_dMaybe.t_Maybe) -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__144) -> (if (dtb__144 >= 1) then (Base_dDiag.C_Check_OkC (0)) else (((Base_dDiagnostics_dPkg.v_pkgPath1 mc0) (Base_dDiagnostics_dPkg.C_PkgErr_InvalidDiagMaxErrors ((bi_strFromInt dtb__144)))) (bi_strFromInt dtb__144)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__144) -> (if (dtb__144 >= 1) then (Base_dDiag.C_Check_OkC (0)) else (((Base_dDiagnostics_dPkg.v_pkgPath1 mc0) (Base_dDiagnostics_dPkg.C_PkgErr_InvalidDiagMaxErrors ((string_of_int dtb__144)))) (string_of_int dtb__144)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))

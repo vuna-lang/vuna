@@ -40,7 +40,7 @@ let rec v_checkSymbolRefs = (fun (mc0 : (string, int B_dData_dMaybe.t_Maybe) B_d
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["IR references an undeclared runtime symbol: `"; (B_dData_dPair.v_firstOf dtb__8); "`"]))
   | B_dData_dMaybe.C_Maybe_Just (dtb__10) -> (match (B_dData_dPair.v_secondOf dtb__8) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_checkSymbolRefs dtb__9)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__11) -> (if (if (dtb__11 > 0) then ((Vuna_dIr_dModel.v_irInlineArity (B_dData_dPair.v_firstOf dtb__8)) = dtb__11) else false) then (v_checkSymbolRefs dtb__9) else (Base_dDiag.v_icInternal (String.concat "" ["IR saturated runtime symbol `"; (B_dData_dPair.v_firstOf dtb__8); "` has the wrong arity ("; (bi_strFromInt dtb__11); ")"])))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__11) -> (if (if (dtb__11 > 0) then ((Vuna_dIr_dModel.v_irInlineArity (B_dData_dPair.v_firstOf dtb__8)) = dtb__11) else false) then (v_checkSymbolRefs dtb__9) else (Base_dDiag.v_icInternal (String.concat "" ["IR saturated runtime symbol `"; (B_dData_dPair.v_firstOf dtb__8); "` has the wrong arity ("; (string_of_int dtb__11); ")"])))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -60,7 +60,7 @@ let v_checkDefArityVsSig = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dI
   | B_dData_dMaybe.C_Maybe_Just (dtb__14) -> (Base_dDiag.C_Check_OkC (0))
   | B_dData_dMaybe.C_Maybe_Nothing -> (match (Vuna_dIr_dModel.v_irDefTy d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__15) -> (let arrows = (v_irTyArrowArity dtb__15) in (if (if ((Vuna_dIr_dModel.v_irDefArity d) = 0) then true else (arrows = 0)) then (Base_dDiag.C_Check_OkC (0)) else (if ((Vuna_dIr_dModel.v_irDefArity d) <= arrows) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["definition `"; (Vuna_dIr_dModel.v_irDefName d); "` has "; (bi_strFromInt (Vuna_dIr_dModel.v_irDefArity d)); " runtime parameters but its signature has "; (bi_strFromInt arrows)])))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__15) -> (let arrows = (v_irTyArrowArity dtb__15) in (if (if ((Vuna_dIr_dModel.v_irDefArity d) = 0) then true else (arrows = 0)) then (Base_dDiag.C_Check_OkC (0)) else (if ((Vuna_dIr_dModel.v_irDefArity d) <= arrows) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["definition `"; (Vuna_dIr_dModel.v_irDefName d); "` has "; (string_of_int (Vuna_dIr_dModel.v_irDefArity d)); " runtime parameters but its signature has "; (string_of_int arrows)])))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -76,7 +76,7 @@ let rec v_countKeptFlags = (fun (mc0 : bool B_dData_dList.t_List) -> (match mc0 
 # 216 "Vuna/Ir/Validate.vuna"
 let v_checkCtorArity = (fun (shared : Vuna_dIr_dModel.t_IrShared) (family : string) (ctor : string) (nargs : int) -> (let nd_uscrut4 = ((Vuna_dIr_dModel.v_irSharedCtorShapeOf ctor) (shared).Vuna_dIr_dModel.f_IrShared_irSharedCtorShapes) in (match nd_uscrut4 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> (match dtb__18 with
-  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> (if (dtb__19 = family) then (let n = (v_countKeptFlags dtb__20) in (if (nargs = n) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` has "; (bi_strFromInt nargs); " runtime arguments, expected "; (bi_strFromInt n)])))) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` belongs to family `"; dtb__19; "`, not `"; family; "`"])))
+  | { B_dData_dPair.f_Pair_first = dtb__19; B_dData_dPair.f_Pair_second = dtb__20 } -> (if (dtb__19 = family) then (let n = (v_countKeptFlags dtb__20) in (if (nargs = n) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` has "; (string_of_int nargs); " runtime arguments, expected "; (string_of_int n)])))) else (Base_dDiag.v_icInternal (String.concat "" ["constructor `"; ctor; "` belongs to family `"; dtb__19; "`, not `"; family; "`"])))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["IR references an undeclared constructor: `"; ctor; "`"]))
@@ -126,7 +126,7 @@ let rec v_listLength = (fun mc0 -> (match mc0 with
 # 296 "Vuna/Ir/Validate.vuna"
 let rec v_checkTyArityIn = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) (mc1 : int B_dData_dMaybe.t_Maybe) (mc2 : Vuna_dIr_dModel.t_IrTy) -> (match mc2 with
   | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__41, dtb__42) -> (match ((v_tyDeclArityOf mc0) dtb__41) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__43) -> (if ((v_listLength dtb__42) = dtb__43) then (((v_checkTyArityListIn mc0) mc1) dtb__42) else (Base_dDiag.v_icInternal (String.concat "" ["binder type annotation has the wrong type argument count for `"; dtb__41; "` (expected "; (bi_strFromInt dtb__43); ", got "; (bi_strFromInt (v_listLength dtb__42)); ")"])))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__43) -> (if ((v_listLength dtb__42) = dtb__43) then (((v_checkTyArityListIn mc0) mc1) dtb__42) else (Base_dDiag.v_icInternal (String.concat "" ["binder type annotation has the wrong type argument count for `"; dtb__41; "` (expected "; (string_of_int dtb__43); ", got "; (string_of_int (v_listLength dtb__42)); ")"])))
   | B_dData_dMaybe.C_Maybe_Nothing -> (((v_checkTyArityListIn mc0) mc1) dtb__42)
   | _ -> failwith "DT: impossible branch"
 )
@@ -140,7 +140,7 @@ let rec v_checkTyArityIn = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.
   | Vuna_dIr_dModel.C_IrTy_IrTyInt -> (Base_dDiag.C_Check_OkC (0))
   | Vuna_dIr_dModel.C_IrTy_IrTyVar (dtb__48) -> (if (dtb__48 < 0) then (Base_dDiag.v_icInternal "negative runtime type parameter slot") else (match mc1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (0))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__49) -> (if (dtb__48 < dtb__49) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["runtime type parameter slot "; (bi_strFromInt dtb__48); " is out of range (declaration has "; (bi_strFromInt dtb__49); " type parameters)"])))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__49) -> (if (dtb__48 < dtb__49) then (Base_dDiag.C_Check_OkC (0)) else (Base_dDiag.v_icInternal (String.concat "" ["runtime type parameter slot "; (string_of_int dtb__48); " is out of range (declaration has "; (string_of_int dtb__49); " type parameters)"])))
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
@@ -313,7 +313,7 @@ let v_maybeAlts = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) ->
 ))
 
 # 432 "Vuna/Ir/Validate.vuna"
-let rec v_altWork = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_altWork = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (Vuna_dIr_dModel.v_irAltBindersOf dtb__127)) mc0); B_dData_dPair.f_Pair_second = (Vuna_dIr_dModel.v_irAltBodyOf dtb__127) }, ((v_altWork mc0) dtb__128)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"

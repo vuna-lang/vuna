@@ -351,7 +351,7 @@ let rec v_levelPosGo = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) (mc2 : 
 let v_levelPos = (fun (level : int) (levels : int B_dData_dList.t_List) -> (((v_levelPosGo level) levels) 0))
 
 # 639 "Vuna/Compiler/Core/Conv.vuna"
-let rec v_spineLevels = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_spineLevels = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__175, dtb__176) -> (B_dData_dList.C_List__x58__x58_ ((B_dData_dPair.v_secondOf dtb__175), (v_spineLevels dtb__176)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -392,7 +392,7 @@ let rec v_absPatternBody = (fun (mc0 : int) (mc1 : int) (mc2 : int) (mc3 : int) 
 ))
 
 # 700 "Vuna/Compiler/Core/Conv.vuna"
-let rec v_wrapPatternLams = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
+let[@tail_mod_cons] rec v_wrapPatternLams = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__208, dtb__209) -> (match dtb__208 with
   | { B_dData_dPair.f_Pair_first = dtb__210; B_dData_dPair.f_Pair_second = dtb__211 } -> (Core_dTerm.C_Term_TLam (dtb__210, Core_dTerm.C_Rig_RigOmega, B_dData_dMaybe.C_Maybe_Nothing, Base_dSource.v_spanEmpty, ((v_wrapPatternLams dtb__209) mc1)))
   | _ -> failwith "DT: impossible branch"
@@ -415,7 +415,7 @@ let v_patternSolution = (fun (mc0 : (string, int) B_dData_dPair.t_Pair B_dData_d
 ))
 
 # 732 "Vuna/Compiler/Core/Conv.vuna"
-let v_solveMetaEmptyStore = (fun (sols : Core_dTerm.t_Sols) (depth : int) (m : int) (rhs : Core_dTerm.t_Value) -> (let created = (((v_metaCreatedDepth sols) depth) m) in (let t = ((Core_dEval.v_quote depth) rhs) in (if (((Core_dTerm.v_hasMeta m) 0) t) then ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveOccurs ((bi_strFromInt m)))) (bi_strFromInt m)) else (if (((((v_termScopedTo created) depth) 0) B_dData_dList.C_List_Nil) t) then (Base_dDiag.C_Check_OkC ((((Core_dTerm.v_solsCons m) rhs) sols))) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveMetavar ((bi_strFromInt m)))) (bi_strFromInt m)))))))
+let v_solveMetaEmptyStore = (fun (sols : Core_dTerm.t_Sols) (depth : int) (m : int) (rhs : Core_dTerm.t_Value) -> (let created = (((v_metaCreatedDepth sols) depth) m) in (let t = ((Core_dEval.v_quote depth) rhs) in (if (((Core_dTerm.v_hasMeta m) 0) t) then ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveOccurs ((string_of_int m)))) (string_of_int m)) else (if (((((v_termScopedTo created) depth) 0) B_dData_dList.C_List_Nil) t) then (Base_dDiag.C_Check_OkC ((((Core_dTerm.v_solsCons m) rhs) sols))) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveMetavar ((string_of_int m)))) (string_of_int m)))))))
 
 # 727 "Vuna/Compiler/Core/Conv.vuna"
 let v_solveMetaEmpty = (fun (mc0 : Core_dTerm.t_Sols) (mc1 : int) (mc2 : int) (mc3 : Core_dTerm.t_Value) -> (match mc3 with
@@ -599,19 +599,19 @@ and v_solveMetaHoLegacyFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Te
   | Core_dTerm.C_Value_VNeutral (dtb__318) -> (match dtb__318 with
   | Core_dTerm.C_Neutral_NGlobal (dtb__319, dtb__320) -> (((((((((v_solveMetaHeadLegacyFuel (fuel - 1)) defs) sols) depth) m) sp) (Core_dTerm.C_Value_VNeutral (dtb__318))) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal (dtb__319, B_dData_dList.C_List_Nil))))) dtb__320)
   | Core_dTerm.C_Neutral_NVar (dtb__321, dtb__322, dtb__323) -> (((((((((v_solveMetaHeadLegacyFuel (fuel - 1)) defs) sols) depth) m) sp) (Core_dTerm.C_Value_VNeutral (dtb__318))) (Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (dtb__321, dtb__322, B_dData_dList.C_List_Nil))))) dtb__323)
-  | _ -> ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m))
+  | _ -> ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((string_of_int m)))) (string_of_int m))
 )
-  | _ -> ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m))
+  | _ -> ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((string_of_int m)))) (string_of_int m))
 )))
 # 772 "Vuna/Compiler/Core/Conv.vuna"
 and v_solveMetaHeadLegacyFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (depth : int) (m : int) (sp : Core_dTerm.t_Value B_dData_dList.t_List) (whole : Core_dTerm.t_Value) (headVal : Core_dTerm.t_Value) (args : Core_dTerm.t_Value B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "conv") else (if ((B_dData_dList.v_length args) >= (B_dData_dList.v_length sp)) then (let extra = (bi_natSub (B_dData_dList.v_length args) (B_dData_dList.v_length sp)) in (match ((v_splitAtVals extra) args) with
   | { B_dData_dPair.f_Pair_first = dtb__324; B_dData_dPair.f_Pair_second = dtb__325 } -> ((Base_dCommon.v_bind (((((((v_solveMetaFuel (fuel - 1)) defs) sols) depth) m) B_dData_dList.C_List_Nil) ((Core_dEval.v_applySpine headVal) dtb__324))) (fun (sols2 : Core_dTerm.t_Sols) -> ((((((((v_convSpinesFuel (fuel - 1)) defs) sols2) depth) sp) dtb__325) (Core_dTerm.C_Value_VMeta (m, sp))) whole)))
   | _ -> failwith "DT: impossible branch"
-)) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((bi_strFromInt m)))) (bi_strFromInt m)))))
+)) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveHigherOrder ((string_of_int m)))) (string_of_int m)))))
 # 784 "Vuna/Compiler/Core/Conv.vuna"
 and v_solveMetaPattern = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (depth : int) (m : int) (sp : Core_dTerm.t_Value B_dData_dList.t_List) (rhs : Core_dTerm.t_Value) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "conv") else (match (v_patternSpineOf sp) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (((((((v_solveMetaHoLegacyFuel (fuel - 1)) defs) sols) depth) m) sp) rhs)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__326) -> (let created = (((v_metaCreatedDepth sols) depth) m) in (let t = ((Core_dEval.v_quote depth) rhs) in (let n = (B_dData_dList.v_length dtb__326) in (let levels = (v_spineLevels dtb__326) in (if (((Core_dTerm.v_hasMeta m) 0) t) then ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveOccurs ((bi_strFromInt m)))) (bi_strFromInt m)) else (if (((((v_termScopedTo created) depth) 0) dtb__326) t) then (Base_dDiag.C_Check_OkC ((((Core_dTerm.v_solsCons m) ((((v_patternSolution dtb__326) created) depth) ((((((v_absPatternBody n) created) depth) 0) levels) t))) sols))) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveMetavar ((bi_strFromInt m)))) (bi_strFromInt m))))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__326) -> (let created = (((v_metaCreatedDepth sols) depth) m) in (let t = ((Core_dEval.v_quote depth) rhs) in (let n = (B_dData_dList.v_length dtb__326) in (let levels = (v_spineLevels dtb__326) in (if (((Core_dTerm.v_hasMeta m) 0) t) then ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveOccurs ((string_of_int m)))) (string_of_int m)) else (if (((((v_termScopedTo created) depth) 0) dtb__326) t) then (Base_dDiag.C_Check_OkC ((((Core_dTerm.v_solsCons m) ((((v_patternSolution dtb__326) created) depth) ((((((v_absPatternBody n) created) depth) 0) levels) t))) sols))) else ((Base_dDiagnostics_dTc.v_tcErr1NoLoc (Base_dDiagnostics_dTc.C_TcErr_CannotSolveMetavar ((string_of_int m)))) (string_of_int m))))))))
   | _ -> failwith "DT: impossible branch"
 )))
 # 799 "Vuna/Compiler/Core/Conv.vuna"
@@ -635,7 +635,7 @@ and v_solveMetaFuel = (fun (fuel : int) (defs : (string, Core_dTerm.t_Term) B_dC
 let v_solveMetaNew = (fun (defs : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (sols : Core_dTerm.t_Sols) (depth : int) (m : int) (rhs : Core_dTerm.t_Value) -> ((((v_solveMetaEmpty sols) depth) m) rhs))
 
 # 824 "Vuna/Compiler/Core/Conv.vuna"
-let v_conv = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) (a5 : Core_dTerm.t_Value) -> (let _u = (((Base_dObs.v_obsCountAt 3) "vuna.counter.core.conv") 1) in (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Core.Conv") then (((dtp_log_emit 3) "Vuna.Compiler.Core.Conv") (String.concat "" ["conv-in: "; (Core_dTerm.v_showTerm ((Core_dEval.v_quote a3) a4)); " <> "; (Core_dTerm.v_showTerm ((Core_dEval.v_quote a3) a5)); " |v: "; ((Core_dEval.v_showValueAt a3) a4); " <> "; ((Core_dEval.v_showValueAt a3) a5); " @"; (bi_strFromInt a3)])) else 0) in ((((((v_convFuel ((v_convFuelFor a4) a5)) a1) a2) a3) a4) a5))))
+let v_conv = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) (a5 : Core_dTerm.t_Value) -> (let _u = (((Base_dObs.v_obsCountAt 3) "vuna.counter.core.conv") 1) in (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Core.Conv") then (((dtp_log_emit 3) "Vuna.Compiler.Core.Conv") (String.concat "" ["conv-in: "; (Core_dTerm.v_showTerm ((Core_dEval.v_quote a3) a4)); " <> "; (Core_dTerm.v_showTerm ((Core_dEval.v_quote a3) a5)); " |v: "; ((Core_dEval.v_showValueAt a3) a4); " <> "; ((Core_dEval.v_showValueAt a3) a5); " @"; (string_of_int a3)])) else 0) in ((((((v_convFuel ((v_convFuelFor a4) a5)) a1) a2) a3) a4) a5))))
 
 # 834 "Vuna/Compiler/Core/Conv.vuna"
 let v_convBoth = (fun (a1 : (string, Core_dTerm.t_Term) B_dContainer_dHashMap.t_HashMap) (a2 : Core_dTerm.t_Sols) (a3 : int) (a4 : Core_dTerm.t_Value) (a5 : Core_dTerm.t_Value) -> ((((((v_convBothFuel ((v_convFuelFor a4) a5)) a1) a2) a3) a4) a5))

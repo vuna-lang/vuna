@@ -697,7 +697,7 @@ let rec v_parseFieldSuffix = (fun (fuel : int) (st : Frontend_dParser_dSupport.t
 # 1928 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_macroBangAt = (fun (st : Frontend_dParser_dSupport.t_PState) (start : Base_dSource.t_Pos) (name : string) -> (let nd_uscrut3 = (Frontend_dParser_dSupport.v_peekTok st) in (match nd_uscrut3 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb__219; Frontend_dLexer.f_PTok_ptokPos = dtb__220 } -> (match dtb__219 with
-  | Frontend_dLexer.C_Tok_TSym (dtb__221) -> (if (dtb__221 = "!") then (if ((Base_dSource.v_posLine dtb__220) = (Base_dSource.v_posLine start)) then ((Base_dSource.v_posCol dtb__220) = ((Base_dSource.v_posCol start) + (bi_strLength name))) else false) else false)
+  | Frontend_dLexer.C_Tok_TSym (dtb__221) -> (if (dtb__221 = "!") then (if ((Base_dSource.v_posLine dtb__220) = (Base_dSource.v_posLine start)) then ((Base_dSource.v_posCol dtb__220) = ((Base_dSource.v_posCol start) + (String.length name))) else false) else false)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -1646,7 +1646,7 @@ let rec v_parseDecls = (fun (recover : bool) (fuel : int) (st : Frontend_dParser
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"
-) else (((v_ps1 st) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedDeclAtColumn ((bi_strFromInt blockCol)))) (bi_strFromInt blockCol)))
+) else (((v_ps1 st) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedDeclAtColumn ((string_of_int blockCol)))) (string_of_int blockCol)))
   | _ -> failwith "DT: impossible branch"
 ))))
 

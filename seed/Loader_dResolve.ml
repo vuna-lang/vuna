@@ -104,7 +104,7 @@ let rec v_memPathKey = (fun (mc0 : string) (mc1 : (string, string B_dData_dList.
 ))
 
 # 265 "Vuna/Compiler/Loader/Resolve.vuna"
-let rec v_uniqPathResults = (fun (mc0 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_uniqPathResults = (fun (mc0 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (if ((v_memPathKey (v_pathKey dtb__49)) dtb__50) then (v_uniqPathResults dtb__50) else (B_dData_dList.C_List__x58__x58_ (dtb__49, (v_uniqPathResults dtb__50))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -344,7 +344,7 @@ let v_dottedFieldSelector = (fun (mc0 : string) (mc1 : Loader_dModules.t_Namespa
 ))
 
 # 597 "Vuna/Compiler/Loader/Resolve.vuna"
-let rec v_takeSegs = (fun (mc0 : int) mc1 -> (match mc1 with
+let[@tail_mod_cons] rec v_takeSegs = (fun (mc0 : int) mc1 -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__139, dtb__140) -> (if (mc0 <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (dtb__139, ((v_takeSegs (mc0 - 1)) dtb__140))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -432,7 +432,7 @@ let rec v_pathEntryHits = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t_L
 ))
 
 # 631 "Vuna/Compiler/Loader/Resolve.vuna"
-let rec v_uniqPathTargets = (fun (mc0 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_uniqPathTargets = (fun (mc0 : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__159, dtb__160) -> (if ((v_memPathKey (v_pathKey dtb__159)) dtb__160) then (v_uniqPathTargets dtb__160) else (B_dData_dList.C_List__x58__x58_ (dtb__159, (v_uniqPathTargets dtb__160))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -607,7 +607,7 @@ let rec v_collectRecBinds = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t
 ))
 
 # 956 "Vuna/Compiler/Loader/Resolve.vuna"
-let rec v_templateChunks = (fun (mc0 : Frontend_dAst.t_NodeRef) (mc1 : Frontend_dAst.t_InterpPart B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_templateChunks = (fun (mc0 : Frontend_dAst.t_NodeRef) (mc1 : Frontend_dAst.t_InterpPart B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__215, dtb__216) -> (match dtb__215 with
   | Frontend_dAst.C_InterpPart_IPHole (dtb__217) -> (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_interpMethodName, (Frontend_dAst.v_exprRef dtb__217))), (B_dData_dList.C_List__x58__x58_ (dtb__217, B_dData_dList.C_List_Nil)), (Frontend_dAst.v_exprRef dtb__217))), ((v_templateChunks mc0) dtb__216)))
   | Frontend_dAst.C_InterpPart_IPText (dtb__218) -> (if (dtb__218 = "") then ((v_templateChunks mc0) dtb__216) else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (dtb__218, mc0)), ((v_templateChunks mc0) dtb__216))))
@@ -642,7 +642,7 @@ let v_isParserSyntaxName = (fun (name : string) -> (match (Frontend_dReserved.v_
 ))
 
 # 997 "Vuna/Compiler/Loader/Resolve.vuna"
-let v_hiddenRef = (fun (name : string) (sp : Frontend_dAst.t_NodeRef) -> (let stripped = (((B_dData_dString.v_substring 1) (bi_natFromInt (bi_strLength name))) name) in (match (Base_dIntrinsics.v_findIntrinsic stripped) with
+let v_hiddenRef = (fun (name : string) (sp : Frontend_dAst.t_NodeRef) -> (let stripped = (((B_dData_dString.v_substring 1) (bi_natFromInt (String.length name))) name) in (match (Base_dIntrinsics.v_findIntrinsic stripped) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__224) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EVar (stripped, sp))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal ("hidden reference to unknown intrinsic " ^ stripped))
   | _ -> failwith "DT: impossible branch"
@@ -994,7 +994,7 @@ and v_resolveExpr = (fun (fuel : int) (modules : Loader_dModules.t_Module B_dDat
 )))
 # 1028 "Vuna/Compiler/Loader/Resolve.vuna"
 and v_resolveExprRaw = (fun (fuel : int) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (label : string) (prefix : string) (ns : Loader_dModules.t_Namespaces) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (scope : string B_dData_dList.t_List) (expr : Frontend_dAst.t_Expr) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "resolver") else (match expr with
-  | Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371) -> (if (Frontend_dReserved.v_isHoleName dtb__370) then (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371)))) else (if (if ((B_dData_dString.v_startsWith "!") dtb__370) then ((bi_strLength dtb__370) > 1) else false) then ((v_hiddenRef dtb__370) dtb__371) else (if (Frontend_dReserved.v_isMacroSyntaxName dtb__370) then (Base_dDiag.v_icInternal ("unexpanded macro invocation " ^ dtb__370)) else (if (Frontend_dReserved.v_isInternalSyntaxName dtb__370) then (if (if (v_isParserSyntaxName dtb__370) then true else (Frontend_dName.v_isCompilerModulePrefix prefix)) then (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371)))) else ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__371))) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_UnknownVariable (dtb__370))) dtb__370))) else (if (Base_dSource.v_containsDot dtb__370) then ((((((((v_resolveDottedExpr modules) label) prefix) ns) imports) scope) dtb__370) dtb__371) else ((Base_dCommon.v_bind ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__371))) (((((((v_resolveGlobal modules) label) prefix) ns) imports) scope) dtb__370))) (fun (n : string) -> (((((v_checkDebugConstruct (ns).Loader_dModules.f_Namespaces_nsRelease) dtb__371) dtb__370) n) scope))))))))
+  | Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371) -> (if (Frontend_dReserved.v_isHoleName dtb__370) then (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371)))) else (if (if ((B_dData_dString.v_startsWith "!") dtb__370) then ((String.length dtb__370) > 1) else false) then ((v_hiddenRef dtb__370) dtb__371) else (if (Frontend_dReserved.v_isMacroSyntaxName dtb__370) then (Base_dDiag.v_icInternal ("unexpanded macro invocation " ^ dtb__370)) else (if (Frontend_dReserved.v_isInternalSyntaxName dtb__370) then (if (if (v_isParserSyntaxName dtb__370) then true else (Frontend_dName.v_isCompilerModulePrefix prefix)) then (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EVar (dtb__370, dtb__371)))) else ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__371))) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_UnknownVariable (dtb__370))) dtb__370))) else (if (Base_dSource.v_containsDot dtb__370) then ((((((((v_resolveDottedExpr modules) label) prefix) ns) imports) scope) dtb__370) dtb__371) else ((Base_dCommon.v_bind ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__371))) (((((((v_resolveGlobal modules) label) prefix) ns) imports) scope) dtb__370))) (fun (n : string) -> (((((v_checkDebugConstruct (ns).Loader_dModules.f_Namespaces_nsRelease) dtb__371) dtb__370) n) scope))))))))
   | Frontend_dAst.C_Expr_EInt (dtb__372, dtb__373) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EInt (dtb__372, dtb__373))))
   | Frontend_dAst.C_Expr_EStr (dtb__374, dtb__375) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EStr (dtb__374, dtb__375))))
   | Frontend_dAst.C_Expr_EFloat (dtb__376, dtb__377) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EFloat (dtb__376, dtb__377))))
@@ -1123,7 +1123,7 @@ let v_isRowDomainExpr = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
 ))
 
 # 1481 "Vuna/Compiler/Loader/Resolve.vuna"
-let rec v_leadingImplicitNames = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
+let[@tail_mod_cons] rec v_leadingImplicitNames = (fun (mc0 : Frontend_dAst.t_Expr) -> (match mc0 with
   | Frontend_dAst.C_Expr_EPi (dtb__507, dtb__508, dtb__509, dtb__510, dtb__511, dtb__512) -> (if dtb__508 then (if (dtb__507 = "_") then (v_leadingImplicitNames dtb__511) else (if (if (if (v_isStringDomainExpr dtb__510) then true else (v_isTypeDomainExpr dtb__510)) then true else (v_isRowDomainExpr dtb__510)) then (B_dData_dList.C_List__x58__x58_ (dtb__507, (v_leadingImplicitNames dtb__511))) else (v_leadingImplicitNames dtb__511))) else B_dData_dList.C_List_Nil)
   | _ -> B_dData_dList.C_List_Nil
 ))

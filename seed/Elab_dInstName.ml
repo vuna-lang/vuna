@@ -6,7 +6,7 @@ let v_classDigest = (fun (cname : string) -> (((B_dData_dString.v_substring 0) 1
 let v_isAsciiAlphaNum = (fun (c : int) -> (if (if (if (c >= 65) then (c <= 90) else false) then true else (if (c >= 97) then (c <= 122) else false)) then true else (if (c >= 48) then (c <= 57) else false)))
 
 # 50 "Vuna/Compiler/Elab/InstName.vuna"
-let v_instNameChar = (fun (c : int) -> (if (if (v_isAsciiAlphaNum c) then true else (c = 95)) then (B_dData_dList.C_List__x58__x58_ (c, B_dData_dList.C_List_Nil)) else ((B_dData_dList.v_append (B_dData_dList.dtp_unpack "$")) ((B_dData_dList.v_append (B_dData_dList.dtp_unpack (bi_strFromInt c))) (B_dData_dList.dtp_unpack "$")))))
+let v_instNameChar = (fun (c : int) -> (if (if (v_isAsciiAlphaNum c) then true else (c = 95)) then (B_dData_dList.C_List__x58__x58_ (c, B_dData_dList.C_List_Nil)) else ((B_dData_dList.v_append (B_dData_dList.dtp_unpack "$")) ((B_dData_dList.v_append (B_dData_dList.dtp_unpack (string_of_int c))) (B_dData_dList.dtp_unpack "$")))))
 
 # 47 "Vuna/Compiler/Elab/InstName.vuna"
 let v_sanitizeInstName = (fun (s : string) -> (B_dData_dList.dtp_pack ((B_dData_dList.v_concatMap v_instNameChar) (B_dData_dList.dtp_unpack s))))
@@ -33,7 +33,7 @@ and v_exprNameFor = (fun (e : Frontend_dAst.t_Expr) -> (let nd_uscrut1 = e in (m
 )
   | Frontend_dAst.C_Expr_EPi (dtb__11, dtb__12, dtb__13, dtb__14, dtb__15, dtb__16) -> ((v_piName dtb__14) dtb__15)
   | Frontend_dAst.C_Expr_EStr (dtb__17, dtb__18) -> dtb__17
-  | Frontend_dAst.C_Expr_EInt (dtb__19, dtb__20) -> (bi_strFromInt dtb__19)
+  | Frontend_dAst.C_Expr_EInt (dtb__19, dtb__20) -> (string_of_int dtb__19)
   | Frontend_dAst.C_Expr_EVar (dtb__21, dtb__22) -> dtb__21
   | _ -> ("?" ^ (Base_dHash.v_digestHex (Base_dHash.v_digestOfString ((Base_dBytes.v_encTop Frontend_dCanonical_dAst.v_encExpr) nd_uscrut1))))
 )))

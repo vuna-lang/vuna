@@ -47,7 +47,7 @@ let v_dispatchSpine = (fun (mc0 : Vuna_dIr_dModel.t_Ir) (mc1 : t_SpineArg B_dDat
 ))
 
 # 77 "Vuna/Ir/Dispatch.vuna"
-let rec v_dispatchSpineArgs = (fun (fuel : int) (args : t_SpineArg B_dData_dList.t_List) -> (if (fuel <= 0) then args else (match args with
+let[@tail_mod_cons] rec v_dispatchSpineArgs = (fun (fuel : int) (args : t_SpineArg B_dData_dList.t_List) -> (if (fuel <= 0) then args else (match args with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (B_dData_dList.C_List__x58__x58_ ({ f_SpineArg_saTy = (dtb__14).f_SpineArg_saTy; f_SpineArg_saValue = ((v_dispatch (fuel - 1)) (dtb__14).f_SpineArg_saValue) }, ((v_dispatchSpineArgs (fuel - 1)) dtb__15)))
   | _ -> failwith "DT: impossible branch"

@@ -27,7 +27,7 @@ let v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat =
 let v_Ord_u5afb3bbeddafcb50_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat = (B_dTrait_dOrd.C_Ord_Ord ((fun x y -> ((v_toInt x) < (v_toInt y))), (fun x y -> ((v_toInt x) <= (v_toInt y))), (fun x y -> ((v_toInt x) > (v_toInt y))), (fun x y -> ((v_toInt x) >= (v_toInt y)))))
 
 # 72 "Base/Data/Nat.vuna"
-let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat = (B_dTrait_dShow.C_Show_Show ((fun n -> (bi_strFromInt (v_toInt n)))))
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat = (B_dTrait_dShow.C_Show_Show ((fun n -> (string_of_int (v_toInt n)))))
 
 # 75 "Base/Data/Nat.vuna"
 let v_Hashable_ue4b0f10b020a5e82_uBase_x36_46_x36_Data_x36_46_x36_Nat_x36_46_x36_Nat = (B_dTrait_dHashable.C_Hashable_Hashable ((fun n -> (v_toInt n))))

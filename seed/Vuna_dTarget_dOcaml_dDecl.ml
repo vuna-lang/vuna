@@ -8,16 +8,16 @@ let v_ctorShortName = (fun (name : string) -> (Base_dSource.v_lastSeg name))
 let v_isAsciiAlphaNum = (fun (c : int) -> (if (if (if (c >= 65) then (c <= 90) else false) then true else (if (c >= 97) then (c <= 122) else false)) then true else (if (c >= 48) then (c <= 57) else false)))
 
 # 38 "Vuna/Target/Ocaml/Decl.vuna"
-let v_sanitizeChar = (fun (mc0 : int) -> (if (mc0 = 46) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (100, B_dData_dList.C_List_Nil)))) else (if (mc0 = 95) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (117, B_dData_dList.C_List_Nil)))) else (if (mc0 = 39) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (112, B_dData_dList.C_List_Nil)))) else (if (mc0 = 35) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (104, B_dData_dList.C_List_Nil)))) else (if (v_isAsciiAlphaNum mc0) then (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil)) else (B_dData_dList.dtp_unpack (String.concat "" ["_x"; (bi_strFromInt mc0); "_"]))))))))
+let v_sanitizeChar = (fun (mc0 : int) -> (if (mc0 = 46) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (100, B_dData_dList.C_List_Nil)))) else (if (mc0 = 95) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (117, B_dData_dList.C_List_Nil)))) else (if (mc0 = 39) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (112, B_dData_dList.C_List_Nil)))) else (if (mc0 = 35) then (B_dData_dList.C_List__x58__x58_ (95, (B_dData_dList.C_List__x58__x58_ (104, B_dData_dList.C_List_Nil)))) else (if (v_isAsciiAlphaNum mc0) then (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil)) else (B_dData_dList.dtp_unpack (String.concat "" ["_x"; (string_of_int mc0); "_"]))))))))
 
 # 45 "Vuna/Target/Ocaml/Decl.vuna"
 let v_sanitizeName = (fun (name : string) -> (B_dData_dList.dtp_pack ((B_dData_dList.v_concatMap v_sanitizeChar) (B_dData_dList.dtp_unpack name))))
 
 # 48 "Vuna/Target/Ocaml/Decl.vuna"
-let v_ocamlPad3 = (fun (s : string) -> (if ((bi_strLength s) = 1) then ("00" ^ s) else (if ((bi_strLength s) = 2) then ("0" ^ s) else s)))
+let v_ocamlPad3 = (fun (s : string) -> (if ((String.length s) = 1) then ("00" ^ s) else (if ((String.length s) = 2) then ("0" ^ s) else s)))
 
 # 51 "Vuna/Target/Ocaml/Decl.vuna"
-let v_ocamlEscapeChar = (fun (mc0 : int) -> (if (mc0 = 34) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (34, B_dData_dList.C_List_Nil)))) else (if (mc0 = 92) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (92, B_dData_dList.C_List_Nil)))) else (if (mc0 = 10) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (110, B_dData_dList.C_List_Nil)))) else (if (mc0 = 9) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (116, B_dData_dList.C_List_Nil)))) else (if (mc0 = 13) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (114, B_dData_dList.C_List_Nil)))) else (if (if (mc0 >= 32) then (mc0 <= 126) else false) then (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil)) else (B_dData_dList.dtp_unpack ("\\" ^ (v_ocamlPad3 (bi_strFromInt mc0)))))))))))
+let v_ocamlEscapeChar = (fun (mc0 : int) -> (if (mc0 = 34) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (34, B_dData_dList.C_List_Nil)))) else (if (mc0 = 92) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (92, B_dData_dList.C_List_Nil)))) else (if (mc0 = 10) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (110, B_dData_dList.C_List_Nil)))) else (if (mc0 = 9) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (116, B_dData_dList.C_List_Nil)))) else (if (mc0 = 13) then (B_dData_dList.C_List__x58__x58_ (92, (B_dData_dList.C_List__x58__x58_ (114, B_dData_dList.C_List_Nil)))) else (if (if (mc0 >= 32) then (mc0 <= 126) else false) then (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil)) else (B_dData_dList.dtp_unpack ("\\" ^ (v_ocamlPad3 (string_of_int mc0)))))))))))
 
 # 59 "Vuna/Target/Ocaml/Decl.vuna"
 let v_ocamlString = (fun (s : string) -> (String.concat "" ["\""; (B_dData_dList.dtp_pack ((B_dData_dList.v_concatMap v_ocamlEscapeChar) (B_dData_dList.dtp_unpack s))); "\""]))
@@ -78,8 +78,8 @@ let v_ocamlBinderName = (fun (name : string) -> (let oc = (v_sanitizeName name) 
 let v_irBinderText = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) -> (match mc0 with
   | { Vuna_dIr_dModel.f_IrBinder_irBinderId = dtb__1; Vuna_dIr_dModel.f_IrBinder_irBinderName = dtb__2; Vuna_dIr_dModel.f_IrBinder_irBinderErased = dtb__3; Vuna_dIr_dModel.f_IrBinder_irBinderTy = dtb__4 } -> (match dtb__2 with
   | Vuna_dIr_dModel.C_IrBName_IrBWild -> "_"
-  | Vuna_dIr_dModel.C_IrBName_IrBNat (dtb__5) -> ("dtnat__" ^ (bi_strFromInt dtb__5))
-  | Vuna_dIr_dModel.C_IrBName_IrBArm (dtb__6) -> ("dtb__" ^ (bi_strFromInt dtb__6))
+  | Vuna_dIr_dModel.C_IrBName_IrBNat (dtb__5) -> ("dtnat__" ^ (string_of_int dtb__5))
+  | Vuna_dIr_dModel.C_IrBName_IrBArm (dtb__6) -> ("dtb__" ^ (string_of_int dtb__6))
   | Vuna_dIr_dModel.C_IrBName_IrBUser (dtb__7) -> (v_ocamlBinderName dtb__7)
   | _ -> failwith "DT: impossible branch"
 )
@@ -114,7 +114,7 @@ let v_toOCtor = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_IrTy B_dDa
 ))
 
 # 255 "Vuna/Target/Ocaml/Decl.vuna"
-let rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (match mc2 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((v_recordFieldLabel mc0) (B_dData_dPair.v_secondOf dtb__17)); B_dData_dPair.f_Pair_second = (v_toOTy dtb__19) }, (((v_recordFieldsOf mc0) dtb__18) dtb__20)))

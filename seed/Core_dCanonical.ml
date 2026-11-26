@@ -28,7 +28,7 @@ let rec v_encArg = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPa
   | _ -> failwith "DT: impossible branch"
 ))
 # 43 "Vuna/Compiler/Core/Canonical.vuna"
-and v_encArgs = (fun (xs : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", ((v_encArgsGo xs) acc))))))))
+and v_encArgs = (fun (xs : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", ((v_encArgsGo xs) acc))))))))
 # 47 "Vuna/Compiler/Core/Canonical.vuna"
 and v_encArgsGo = (fun (mc0 : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__4, dtb__5) -> ((v_encArg dtb__4) ((v_encArgsGo dtb__5) mc1))
@@ -41,7 +41,7 @@ and v_encAlt = (fun (mc0 : Core_dTerm.t_CaseAlt) (mc1 : string B_dData_dList.t_L
   | _ -> failwith "DT: impossible branch"
 ))
 # 64 "Vuna/Compiler/Core/Canonical.vuna"
-and v_encAlts = (fun (xs : Core_dTerm.t_CaseAlt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", ((v_encAltsGo xs) acc))))))))
+and v_encAlts = (fun (xs : Core_dTerm.t_CaseAlt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (Base_dBytes.v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", ((v_encAltsGo xs) acc))))))))
 # 68 "Vuna/Compiler/Core/Canonical.vuna"
 and v_encAltsGo = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__9, dtb__10) -> ((v_encAlt dtb__9) ((v_encAltsGo dtb__10) mc1))
@@ -438,7 +438,7 @@ and v_decTerm = (fun (fuel : int) (bytes : Base_dBytes.t_Cur) -> (if (fuel <= 0)
 ))))
 
 # 318 "Vuna/Compiler/Core/Canonical.vuna"
-let v_decTermComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTerm (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decTermComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTerm (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__205) -> (match dtb__205 with
   | { B_dData_dPair.f_Pair_first = dtb__206; B_dData_dPair.f_Pair_second = dtb__207 } -> (if (Base_dBytes.v_curAtEnd dtb__207) then (B_dData_dMaybe.C_Maybe_Just (dtb__206)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"

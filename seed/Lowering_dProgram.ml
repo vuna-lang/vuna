@@ -252,7 +252,7 @@ let rec v_alignCtorArgs = (fun (mc0 : string) (mc1 : bool B_dData_dList.t_List) 
 let v_ctorArgIr = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (mc1 : bool) (mc2 : Vuna_dIr_dModel.t_Ir) -> (if mc1 then (Vuna_dIr_dModel.C_Ir_IrCast (mc0, (B_dData_dMaybe.C_Maybe_Just (Vuna_dIr_dModel.C_IrTy_IrTyOpaque)), mc2)) else mc2))
 
 # 598 "Vuna/Compiler/Lowering/Program.vuna"
-let rec v_ctorOpaqueKeptFlags = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : bool B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_ctorOpaqueKeptFlags = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : bool B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__82, dtb__83) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__84, dtb__85) -> (if dtb__82 then (B_dData_dList.C_List__x58__x58_ (dtb__84, ((v_ctorOpaqueKeptFlags dtb__83) dtb__85))) else ((v_ctorOpaqueKeptFlags dtb__83) dtb__85))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -361,7 +361,7 @@ let v_altEnvCheckedIn = (fun (st : t_LwSt) (label : string) (outer : Vuna_dIr_dM
 let v_binderWithTy = (fun (ty : Vuna_dIr_dModel.t_IrTy B_dData_dMaybe.t_Maybe) (b : Vuna_dIr_dModel.t_IrBinder) -> (if (b).Vuna_dIr_dModel.f_IrBinder_irBinderErased then { Vuna_dIr_dModel.f_IrBinder_irBinderId = (b).Vuna_dIr_dModel.f_IrBinder_irBinderId; Vuna_dIr_dModel.f_IrBinder_irBinderName = (b).Vuna_dIr_dModel.f_IrBinder_irBinderName; Vuna_dIr_dModel.f_IrBinder_irBinderErased = true; Vuna_dIr_dModel.f_IrBinder_irBinderTy = B_dData_dMaybe.C_Maybe_Nothing } else { Vuna_dIr_dModel.f_IrBinder_irBinderId = (b).Vuna_dIr_dModel.f_IrBinder_irBinderId; Vuna_dIr_dModel.f_IrBinder_irBinderName = (b).Vuna_dIr_dModel.f_IrBinder_irBinderName; Vuna_dIr_dModel.f_IrBinder_irBinderErased = false; Vuna_dIr_dModel.f_IrBinder_irBinderTy = (v_justTy ty) }))
 
 # 773 "Vuna/Compiler/Lowering/Program.vuna"
-let rec v_typedPats = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_typedPats = (fun (mc0 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__121, dtb__122) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__123, dtb__124) -> (B_dData_dList.C_List__x58__x58_ (((v_binderWithTy (B_dData_dMaybe.C_Maybe_Just (dtb__121))) dtb__123), ((v_typedPats dtb__122) dtb__124)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -409,7 +409,7 @@ let v_retagArmBinder = (fun (tbl : (int, Vuna_dIr_dModel.t_IrTy) B_dData_dPair.t
 ))
 
 # 808 "Vuna/Compiler/Lowering/Program.vuna"
-let rec v_retagArmEnv = (fun (mc0 : (int, Vuna_dIr_dModel.t_IrTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_retagArmEnv = (fun (mc0 : (int, Vuna_dIr_dModel.t_IrTy) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__135, dtb__136) -> (B_dData_dList.C_List__x58__x58_ (((v_retagArmBinder mc0) dtb__135), ((v_retagArmEnv mc0) dtb__136)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -501,10 +501,10 @@ let rec v_findCatchAllAlt = (fun (mc0 : Core_dTerm.t_CaseAlt B_dData_dList.t_Lis
 ))
 
 # 1064 "Vuna/Compiler/Lowering/Program.vuna"
-let v_recordProjVarIn = (fun (i : int) -> ("@vuna@record@proj" ^ (bi_strFromInt i)))
+let v_recordProjVarIn = (fun (i : int) -> ("@vuna@record@proj" ^ (string_of_int i)))
 
 # 1067 "Vuna/Compiler/Lowering/Program.vuna"
-let rec v_projBindersIn = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
+let[@tail_mod_cons] rec v_projBindersIn = (fun (mc0 : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__160, dtb__161) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_recordProjVarIn mc1); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__160) }, ((v_projBindersIn dtb__161) (mc1 + 1))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -534,7 +534,7 @@ let rec v_lookupRtPosIn = (fun (mc0 : int) (mc1 : (int, string) B_dData_dPair.t_
 let rec v_lookupRtPositionsIn = (fun (mc0 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__170, dtb__171) -> (match (((v_lookupRtPosIn dtb__170) mc0) 0) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__172) -> ((Base_dCommon.v_bind ((v_lookupRtPositionsIn mc0) dtb__171)) (fun (ps : (int, int) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__170; B_dData_dPair.f_Pair_second = dtb__172 }, ps))))))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["record update targets field index "; (bi_strFromInt dtb__170); ", which has no runtime field"]))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal (String.concat "" ["record update targets field index "; (string_of_int dtb__170); ", which has no runtime field"]))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
@@ -564,7 +564,7 @@ let v_recordAltBindersIn = (fun (tele : (string, Core_dTerm.t_Rig) B_dData_dPair
 # 80 "Vuna/Compiler/Lowering/Program.vuna"
 let rec v_lowerTermFuel = (fun (fuel : int) (env : Lowering_dEnv.t_LwEnv) (st : t_LwSt) (binders : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (t : Core_dTerm.t_Term) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-lower") else (match t with
   | Core_dTerm.C_Term_TVar (dtb__179, dtb__180, dtb__181) -> (match ((v_runtimeBinderAt dtb__180) binders) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__182) -> (if (v_binderErasedOf dtb__182) then (Base_dDiag.v_icInternal (String.concat "" ["erased binder "; dtb__179; ": runtime idx "; (bi_strFromInt dtb__180); " of "; (bi_strFromInt (Lowering_dEnv.v_listLength binders)); " binders"])) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.C_Ir_IrVar (dtb__182)); B_dData_dPair.f_Pair_second = st })))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__182) -> (if (v_binderErasedOf dtb__182) then (Base_dDiag.v_icInternal (String.concat "" ["erased binder "; dtb__179; ": runtime idx "; (string_of_int dtb__180); " of "; (string_of_int (Lowering_dEnv.v_listLength binders)); " binders"])) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.C_Ir_IrVar (dtb__182)); B_dData_dPair.f_Pair_second = st })))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal "unbound runtime variable")
   | _ -> failwith "DT: impossible branch"
 )
@@ -1061,7 +1061,7 @@ let v_spanOfTbl = (fun (tbl : (string, Elab_dTypes.t_DtDef) B_dContainer_dHashMa
 ))
 
 # 1384 "Vuna/Compiler/Lowering/Program.vuna"
-let rec v_mapMaybeDef = (fun (mc0 : (string, Elab_dTypes.t_DtDef) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_mapMaybeDef = (fun (mc0 : (string, Elab_dTypes.t_DtDef) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__419, dtb__420) -> (match ((v_tblLookup mc0) dtb__419) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_mapMaybeDef mc0) dtb__420)
   | B_dData_dMaybe.C_Maybe_Just (dtb__421) -> (B_dData_dList.C_List__x58__x58_ (dtb__421, ((v_mapMaybeDef mc0) dtb__420)))

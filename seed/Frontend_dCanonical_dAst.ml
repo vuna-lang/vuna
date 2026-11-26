@@ -32,10 +32,10 @@ let rec v_encStrListGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string 
 ))
 
 # 79 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_encStrList = (fun (xs : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrListGo xs) acc))))
+let v_encStrList = (fun (xs : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrListGo xs) acc))))
 
 # 97 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_encPatList = (fun (xs : Frontend_dAst.t_Pat B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPatListGo xs) acc))))
+let rec v_encPatList = (fun (xs : Frontend_dAst.t_Pat B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPatListGo xs) acc))))
 # 101 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encPatListGo = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__3, dtb__4) -> ((v_encPat dtb__3) ((v_encPatListGo dtb__4) mc1))
@@ -43,7 +43,7 @@ and v_encPatListGo = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_List) (mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 # 173 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encStrPatList = (fun (xs : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrPatListGo xs) acc))))
+and v_encStrPatList = (fun (xs : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrPatListGo xs) acc))))
 # 177 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encStrPatListGo = (fun (mc0 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__5, dtb__6) -> (match dtb__5 with
@@ -66,7 +66,7 @@ and v_encPat = (fun (mc0 : Frontend_dAst.t_Pat) (mc1 : string B_dData_dList.t_Li
 ))
 
 # 88 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_encExprList = (fun (xs : Frontend_dAst.t_Expr B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encExprListGo xs) acc))))
+let rec v_encExprList = (fun (xs : Frontend_dAst.t_Expr B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encExprListGo xs) acc))))
 # 92 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encExprListGo = (fun (mc0 : Frontend_dAst.t_Expr B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> ((v_encExpr dtb__25) ((v_encExprListGo dtb__26) mc1))
@@ -74,7 +74,7 @@ and v_encExprListGo = (fun (mc0 : Frontend_dAst.t_Expr B_dData_dList.t_List) (mc
   | _ -> failwith "DT: impossible branch"
 ))
 # 106 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encPatExprList = (fun (xs : Frontend_dAst.t_Binding B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPatExprListGo xs) acc))))
+and v_encPatExprList = (fun (xs : Frontend_dAst.t_Binding B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPatExprListGo xs) acc))))
 # 110 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encPatExprListGo = (fun (mc0 : Frontend_dAst.t_Binding B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28) -> ((v_encPat (dtb__27).Frontend_dAst.f_Binding_bindPat) ((v_encBindingSig dtb__27) ((v_encBindingValue (dtb__27).Frontend_dAst.f_Binding_bindValue) ((v_encPatExprListGo dtb__28) mc1))))
@@ -94,7 +94,7 @@ and v_encBindingValue = (fun (mc0 : Frontend_dAst.t_BindingValue) (mc1 : string 
   | _ -> failwith "DT: impossible branch"
 ))
 # 128 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encAltList = (fun (xs : Frontend_dAst.t_Alt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encAltListGo xs) acc))))
+and v_encAltList = (fun (xs : Frontend_dAst.t_Alt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encAltListGo xs) acc))))
 # 131 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encAltListGo = (fun (mc0 : Frontend_dAst.t_Alt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__32, dtb__33) -> ((v_encPat (dtb__32).Frontend_dAst.f_Alt_altPat) ((v_encExpr (dtb__32).Frontend_dAst.f_Alt_altBody) ((v_encAltListGo dtb__33) mc1)))
@@ -102,7 +102,7 @@ and v_encAltListGo = (fun (mc0 : Frontend_dAst.t_Alt B_dData_dList.t_List) (mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 # 136 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encClauses = (fun (xs : Frontend_dAst.t_LocalClause B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encClausesGo xs) acc))))
+and v_encClauses = (fun (xs : Frontend_dAst.t_LocalClause B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encClausesGo xs) acc))))
 # 140 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encClausesGo = (fun (mc0 : Frontend_dAst.t_LocalClause B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__34, dtb__35) -> ((v_encPatList (dtb__34).Frontend_dAst.f_LocalClause_lcPats) ((v_encExpr (dtb__34).Frontend_dAst.f_LocalClause_lcBody) ((v_encClausesGo dtb__35) mc1)))
@@ -110,7 +110,7 @@ and v_encClausesGo = (fun (mc0 : Frontend_dAst.t_LocalClause B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 # 146 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encStmtList = (fun (xs : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStmtListGo xs) acc))))
+and v_encStmtList = (fun (xs : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStmtListGo xs) acc))))
 # 150 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encStmtListGo = (fun (mc0 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__36, dtb__37) -> ((v_encDoStmt dtb__36) ((v_encStmtListGo dtb__37) mc1))
@@ -118,7 +118,7 @@ and v_encStmtListGo = (fun (mc0 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (
   | _ -> failwith "DT: impossible branch"
 ))
 # 155 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encPartList = (fun (xs : Frontend_dAst.t_InterpPart B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPartListGo xs) acc))))
+and v_encPartList = (fun (xs : Frontend_dAst.t_InterpPart B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encPartListGo xs) acc))))
 # 159 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encPartListGo = (fun (mc0 : Frontend_dAst.t_InterpPart B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__38, dtb__39) -> ((v_encInterpPart dtb__38) ((v_encPartListGo dtb__39) mc1))
@@ -126,7 +126,7 @@ and v_encPartListGo = (fun (mc0 : Frontend_dAst.t_InterpPart B_dData_dList.t_Lis
   | _ -> failwith "DT: impossible branch"
 ))
 # 164 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_encStrExprList = (fun (xs : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrExprListGo xs) acc))))
+and v_encStrExprList = (fun (xs : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encStrExprListGo xs) acc))))
 # 168 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encStrExprListGo = (fun (mc0 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__40, dtb__41) -> (match dtb__40 with
@@ -190,7 +190,7 @@ let rec v_encCtorListGo = (fun (mc0 : Frontend_dAst.t_Ctor B_dData_dList.t_List)
 ))
 
 # 182 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_encCtorList = (fun (xs : Frontend_dAst.t_Ctor B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encCtorListGo xs) acc))))
+let v_encCtorList = (fun (xs : Frontend_dAst.t_Ctor B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encCtorListGo xs) acc))))
 
 # 272 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encField = (fun (mc0 : Frontend_dAst.t_Field) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
@@ -206,7 +206,7 @@ let rec v_encFieldListGo = (fun (mc0 : Frontend_dAst.t_Field B_dData_dList.t_Lis
 ))
 
 # 191 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_encFieldList = (fun (xs : Frontend_dAst.t_Field B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encFieldListGo xs) acc))))
+let v_encFieldList = (fun (xs : Frontend_dAst.t_Field B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encFieldListGo xs) acc))))
 
 # 276 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encTraitParam = (fun (mc0 : Frontend_dAst.t_TraitParam) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
@@ -222,7 +222,7 @@ let rec v_encTraitParamListGo = (fun (mc0 : Frontend_dAst.t_TraitParam B_dData_d
 ))
 
 # 200 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_encTraitParamList = (fun (xs : Frontend_dAst.t_TraitParam B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encTraitParamListGo xs) acc))))
+let v_encTraitParamList = (fun (xs : Frontend_dAst.t_TraitParam B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encTraitParamListGo xs) acc))))
 
 # 280 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_encTraitMethod = (fun (mc0 : Frontend_dAst.t_TraitMethod) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
@@ -238,10 +238,10 @@ let rec v_encTraitMethodListGo = (fun (mc0 : Frontend_dAst.t_TraitMethod B_dData
 ))
 
 # 209 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_encTraitMethodList = (fun (xs : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encTraitMethodListGo xs) acc))))
+let v_encTraitMethodList = (fun (xs : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encTraitMethodListGo xs) acc))))
 
 # 218 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_encDecls = (fun (xs : Frontend_dAst.t_Decl B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Base_dBytes.v_lenOf xs)); ":"]), ((v_encDeclsGo xs) acc))))
+let rec v_encDecls = (fun (xs : Frontend_dAst.t_Decl B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["["; (string_of_int (Base_dBytes.v_lenOf xs)); ":"]), ((v_encDeclsGo xs) acc))))
 # 222 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_encDeclsGo = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__118, dtb__119) -> ((v_encDecl dtb__118) ((v_encDeclsGo dtb__119) mc1))
@@ -1169,7 +1169,7 @@ and v_decDeclsItems = (fun (fuel : int) (n : int) (bytes : Base_dBytes.t_Cur) (a
 )))))
 
 # 940 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decPatComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decPat (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decPatComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decPat (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__520) -> (match dtb__520 with
   | { B_dData_dPair.f_Pair_first = dtb__521; B_dData_dPair.f_Pair_second = dtb__522 } -> (if (Base_dBytes.v_curAtEnd dtb__522) then (B_dData_dMaybe.C_Maybe_Just (dtb__521)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1179,7 +1179,7 @@ let v_decPatComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decPat (bi_str
 )))
 
 # 947 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decExprComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decExpr (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decExprComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decExpr (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__523) -> (match dtb__523 with
   | { B_dData_dPair.f_Pair_first = dtb__524; B_dData_dPair.f_Pair_second = dtb__525 } -> (if (Base_dBytes.v_curAtEnd dtb__525) then (B_dData_dMaybe.C_Maybe_Just (dtb__524)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1189,7 +1189,7 @@ let v_decExprComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decExpr (bi_s
 )))
 
 # 954 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decDeclComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDecl (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decDeclComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDecl (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__526) -> (match dtb__526 with
   | { B_dData_dPair.f_Pair_first = dtb__527; B_dData_dPair.f_Pair_second = dtb__528 } -> (if (Base_dBytes.v_curAtEnd dtb__528) then (B_dData_dMaybe.C_Maybe_Just (dtb__527)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1199,7 +1199,7 @@ let v_decDeclComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDecl (bi_s
 )))
 
 # 961 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decQtyComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decQty (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decQtyComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decQty (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__529) -> (match dtb__529 with
   | { B_dData_dPair.f_Pair_first = dtb__530; B_dData_dPair.f_Pair_second = dtb__531 } -> (if (Base_dBytes.v_curAtEnd dtb__531) then (B_dData_dMaybe.C_Maybe_Just (dtb__530)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1209,7 +1209,7 @@ let v_decQtyComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decQty (bi_str
 )))
 
 # 968 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decReprTierComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decReprTier (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decReprTierComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decReprTier (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__532) -> (match dtb__532 with
   | { B_dData_dPair.f_Pair_first = dtb__533; B_dData_dPair.f_Pair_second = dtb__534 } -> (if (Base_dBytes.v_curAtEnd dtb__534) then (B_dData_dMaybe.C_Maybe_Just (dtb__533)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1219,7 +1219,7 @@ let v_decReprTierComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decReprTi
 )))
 
 # 975 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decInterpPartComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decInterpPart (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decInterpPartComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decInterpPart (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__535) -> (match dtb__535 with
   | { B_dData_dPair.f_Pair_first = dtb__536; B_dData_dPair.f_Pair_second = dtb__537 } -> (if (Base_dBytes.v_curAtEnd dtb__537) then (B_dData_dMaybe.C_Maybe_Just (dtb__536)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1229,7 +1229,7 @@ let v_decInterpPartComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decInte
 )))
 
 # 982 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decDoStmtComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDoStmt (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decDoStmtComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDoStmt (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__538) -> (match dtb__538 with
   | { B_dData_dPair.f_Pair_first = dtb__539; B_dData_dPair.f_Pair_second = dtb__540 } -> (if (Base_dBytes.v_curAtEnd dtb__540) then (B_dData_dMaybe.C_Maybe_Just (dtb__539)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1239,7 +1239,7 @@ let v_decDoStmtComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDoStmt (
 )))
 
 # 989 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decCtorComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decCtor (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decCtorComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decCtor (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__541) -> (match dtb__541 with
   | { B_dData_dPair.f_Pair_first = dtb__542; B_dData_dPair.f_Pair_second = dtb__543 } -> (if (Base_dBytes.v_curAtEnd dtb__543) then (B_dData_dMaybe.C_Maybe_Just (dtb__542)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1249,7 +1249,7 @@ let v_decCtorComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decCtor (bi_s
 )))
 
 # 996 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decFieldComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decField (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decFieldComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decField (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__544) -> (match dtb__544 with
   | { B_dData_dPair.f_Pair_first = dtb__545; B_dData_dPair.f_Pair_second = dtb__546 } -> (if (Base_dBytes.v_curAtEnd dtb__546) then (B_dData_dMaybe.C_Maybe_Just (dtb__545)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1259,7 +1259,7 @@ let v_decFieldComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decField (bi
 )))
 
 # 1003 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decTraitParamComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTraitParam (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decTraitParamComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTraitParam (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__547) -> (match dtb__547 with
   | { B_dData_dPair.f_Pair_first = dtb__548; B_dData_dPair.f_Pair_second = dtb__549 } -> (if (Base_dBytes.v_curAtEnd dtb__549) then (B_dData_dMaybe.C_Maybe_Just (dtb__548)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1269,7 +1269,7 @@ let v_decTraitParamComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTrai
 )))
 
 # 1010 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decTraitMethodComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTraitMethod (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decTraitMethodComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTraitMethod (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__550) -> (match dtb__550 with
   | { B_dData_dPair.f_Pair_first = dtb__551; B_dData_dPair.f_Pair_second = dtb__552 } -> (if (Base_dBytes.v_curAtEnd dtb__552) then (B_dData_dMaybe.C_Maybe_Just (dtb__551)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1279,7 +1279,7 @@ let v_decTraitMethodComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decTra
 )))
 
 # 1017 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decDeclsComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDecls (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decDeclsComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decDecls (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__553) -> (match dtb__553 with
   | { B_dData_dPair.f_Pair_first = dtb__554; B_dData_dPair.f_Pair_second = dtb__555 } -> (if (Base_dBytes.v_curAtEnd dtb__555) then (B_dData_dMaybe.C_Maybe_Just (dtb__554)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"
@@ -1364,7 +1364,7 @@ let v_decFixityLike = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes
 let v_decSourceFileGo = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decMaybe v_decModDecl) (fuel - 1)) c)) (fun (modDecl : Frontend_dAst.t_ModDecl B_dData_dMaybe.t_Maybe) (b1 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decImportLike) (fuel - 1)) b1)) (fun (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (b2 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decFixityLike) (fuel - 1)) b2)) (fun (fixities : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decDecl) (fuel - 1)) b3)) (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (b4 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportSpec) (fuel - 1)) b4)) (fun (exports : Frontend_dAst.t_ExportSpec B_dData_dList.t_List) (b5 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decExportItem) (fuel - 1)) b5)) (fun (reexports : Frontend_dAst.t_ExportItem B_dData_dList.t_List) (b6 : Base_dBytes.t_Cur) -> ((Base_dBytes.v_thenPair (((Base_dBytes.v_decList v_decOpacitySpec) (fuel - 1)) b6)) (fun (opacity : Frontend_dAst.t_OpacitySpec B_dData_dList.t_List) (b7 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_SourceFile_sourceFileModDecl = modDecl; Frontend_dAst.f_SourceFile_sourceFileImports = imports; Frontend_dAst.f_SourceFile_sourceFileFixities = fixities; Frontend_dAst.f_SourceFile_sourceFileDecls = decls; Frontend_dAst.f_SourceFile_sourceFileExports = exports; Frontend_dAst.f_SourceFile_sourceFileReexports = reexports; Frontend_dAst.f_SourceFile_sourceFileOpacity = opacity }; B_dData_dPair.f_Pair_second = b7 })))))))))))))))))
 
 # 1164 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_decSourceFileComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decSourceFileGo (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
+let v_decSourceFileComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decSourceFileGo (String.length s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__574) -> (match dtb__574 with
   | { B_dData_dPair.f_Pair_first = dtb__575; B_dData_dPair.f_Pair_second = dtb__576 } -> (if (Base_dBytes.v_curAtEnd dtb__576) then (B_dData_dMaybe.C_Maybe_Just (dtb__575)) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> failwith "DT: impossible branch"

@@ -54,7 +54,7 @@ let v_matchingLayers = (fun (rules : Frontend_dManifest.t_Layer B_dData_dList.t_
 
 # 84 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_labelBest = (fun (mc0 : Frontend_dManifest.t_Layer) (mc1 : Frontend_dManifest.t_Layer B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__11, dtb__12) -> (if ((bi_strLength (dtb__11).Frontend_dManifest.f_Layer_layerName) > (bi_strLength (mc0).Frontend_dManifest.f_Layer_layerName)) then ((v_labelBest dtb__11) dtb__12) else ((v_labelBest mc0) dtb__12))
+  | B_dData_dList.C_List__x58__x58_ (dtb__11, dtb__12) -> (if ((String.length (dtb__11).Frontend_dManifest.f_Layer_layerName) > (String.length (mc0).Frontend_dManifest.f_Layer_layerName)) then ((v_labelBest dtb__11) dtb__12) else ((v_labelBest mc0) dtb__12))
   | B_dData_dList.C_List_Nil -> (mc0).Frontend_dManifest.f_Layer_layerName
   | _ -> failwith "DT: impossible branch"
 ))

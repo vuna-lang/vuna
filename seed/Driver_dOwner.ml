@@ -11,7 +11,7 @@ let v_entryOwner = "Main"
 let v_modulePrefixOfName = (fun (name : string) -> (Base_dSource.v_prefixOfName name))
 
 # 38 "Vuna/Compiler/Driver/Owner.vuna"
-let rec v_splitDeclNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_splitDeclNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (match dtb__0 with
   | Frontend_dAst.C_Decl_DSig (dtb__2, dtb__3, dtb__4, dtb__5) -> (B_dData_dList.C_List__x58__x58_ (dtb__2, (v_splitDeclNames dtb__1)))
   | Frontend_dAst.C_Decl_DExtern (dtb__6, dtb__7, dtb__8, dtb__9) -> (B_dData_dList.C_List__x58__x58_ (dtb__6, (v_splitDeclNames dtb__1)))
@@ -26,7 +26,7 @@ let rec v_splitDeclNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List
 ))
 
 # 50 "Vuna/Compiler/Driver/Owner.vuna"
-let rec v_splitDataNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_splitDataNames = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__36, dtb__37) -> (match dtb__36 with
   | Frontend_dAst.C_Decl_DData (dtb__38, dtb__39, dtb__40, dtb__41, dtb__42, dtb__43, dtb__44, dtb__45, dtb__46) -> (B_dData_dList.C_List__x58__x58_ (dtb__38, (v_splitDataNames dtb__37)))
   | Frontend_dAst.C_Decl_DRecord (dtb__47, dtb__48, dtb__49, dtb__50, dtb__51, dtb__52, dtb__53, dtb__54) -> (B_dData_dList.C_List__x58__x58_ (dtb__47, (v_splitDataNames dtb__37)))
@@ -56,14 +56,14 @@ let v_hasFieldRecordTypeExpr = (fun (mc0 : string) (mc1 : string B_dData_dList.t
 let v_hasFieldOwnerOf = (fun (owner : string) (dname : string) (params : string B_dData_dList.t_List) (f : Frontend_dAst.t_Field) -> (let fname = (Frontend_dAst.v_fieldName f) in (let fty = (Frontend_dAst.v_fieldType f) in (let label = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldLabelName, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (fname, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), B_dData_dList.C_List_Nil)), (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))) in (let head = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldTraitName, (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (((v_hasFieldRecordTypeExpr dname) params), (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))) in { B_dData_dPair.f_Pair_first = ((Elab_dInstName.v_instanceSymbol Base_dIntrinsics.v_hasFieldTraitName) head); B_dData_dPair.f_Pair_second = owner })))))
 
 # 106 "Vuna/Compiler/Driver/Owner.vuna"
-let rec v_splitHasFieldOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (match mc3 with
+let[@tail_mod_cons] rec v_splitHasFieldOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> (B_dData_dList.C_List__x58__x58_ (((((v_hasFieldOwnerOf mc0) mc1) mc2) dtb__62), ((((v_splitHasFieldOwners mc0) mc1) mc2) dtb__63)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 111 "Vuna/Compiler/Driver/Owner.vuna"
-let rec v_splitDerivedOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
+let[@tail_mod_cons] rec v_splitDerivedOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((Elab_dInstName.v_instanceSymbol dtb__64) ((((Elab_dDerive.v_instHead dtb__64) mc1) mc2) (Frontend_dAst.v_detachedNodeRef v_splitNoSpan))); B_dData_dPair.f_Pair_second = mc0 }, ((((v_splitDerivedOwners mc0) mc1) mc2) dtb__65)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"

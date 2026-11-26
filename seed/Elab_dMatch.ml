@@ -64,7 +64,7 @@ let v_arityOf = (fun (mc0 : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_
 ))
 
 # 120 "Vuna/Compiler/Elab/Match.vuna"
-let rec v_paramNamesGo = (fun (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else (((v_paramNamesGo (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ (("mc" ^ (bi_strFromInt (n - remaining))), acc)))))
+let rec v_paramNamesGo = (fun (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else (((v_paramNamesGo (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ (("mc" ^ (string_of_int (n - remaining))), acc)))))
 
 # 117 "Vuna/Compiler/Elab/Match.vuna"
 let v_paramNames = (fun (n : int) -> (((v_paramNamesGo (n - 0)) n) B_dData_dList.C_List_Nil))
@@ -258,7 +258,7 @@ let rec v_allIrrefutablePats = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_L
 ))
 
 # 370 "Vuna/Compiler/Elab/Match.vuna"
-let rec v_pruneRows = (fun (mc0 : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_pruneRows = (fun (mc0 : (Frontend_dAst.t_Pat B_dData_dList.t_List, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__108, dtb__109) -> (if (v_allIrrefutablePats (B_dData_dPair.v_firstOf dtb__108)) then (B_dData_dList.C_List__x58__x58_ (dtb__108, B_dData_dList.C_List_Nil)) else (B_dData_dList.C_List__x58__x58_ (dtb__108, (v_pruneRows dtb__109))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -485,7 +485,7 @@ let rec v_ctorSubPatCount = (fun (mc0 : (Frontend_dAst.t_Pat B_dData_dList.t_Lis
 ))
 
 # 564 "Vuna/Compiler/Elab/Match.vuna"
-let rec v_subNamesForGoGo = (fun (pos : string) (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else ((((v_subNamesForGoGo pos) (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["_sc_"; pos; "_"; (bi_strFromInt (n - remaining))]), acc)))))
+let rec v_subNamesForGoGo = (fun (pos : string) (remaining : int) (n : int) (acc : string B_dData_dList.t_List) -> (if (remaining <= 0) then (B_dData_dList.v_reverse acc) else ((((v_subNamesForGoGo pos) (remaining - 1)) n) (B_dData_dList.C_List__x58__x58_ ((String.concat "" ["_sc_"; pos; "_"; (string_of_int (n - remaining))]), acc)))))
 
 # 561 "Vuna/Compiler/Elab/Match.vuna"
 let v_subNamesForGo = (fun (pos : string) (i : int) (n : int) (acc : string B_dData_dList.t_List) -> ((((v_subNamesForGoGo pos) (n - i)) n) acc))
@@ -494,7 +494,7 @@ let v_subNamesForGo = (fun (pos : string) (i : int) (n : int) (acc : string B_dD
 let v_subNamesFor = (fun (pos : string) (n : int) -> ((((v_subNamesForGo pos) 0) n) B_dData_dList.C_List_Nil))
 
 # 581 "Vuna/Compiler/Elab/Match.vuna"
-let rec v_addNameDistinct = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_addNameDistinct = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__246, dtb__247) -> (if (dtb__246 = mc0) then (B_dData_dList.C_List__x58__x58_ (dtb__246, dtb__247)) else (B_dData_dList.C_List__x58__x58_ (dtb__246, ((v_addNameDistinct mc0) dtb__247))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"

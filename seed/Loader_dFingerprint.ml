@@ -6,7 +6,7 @@ let v_buildIdFileName = "build-id"
 let v_buildIdSchema = "vuna-compiler-id 1"
 
 # 53 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_sourceFrag = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [(B_dData_dPair.v_firstOf p); "="; (bi_strFromInt (B_dData_dPair.v_secondOf p))]))
+let v_sourceFrag = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [(B_dData_dPair.v_firstOf p); "="; (string_of_int (B_dData_dPair.v_secondOf p))]))
 
 # 48 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_compilerIdOf = (fun (own : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (depsDigest : string) -> (Loader_dAddr.v_addrOf (B_dData_dList.C_List__x58__x58_ (v_buildIdSchema, (B_dData_dList.C_List__x58__x58_ (depsDigest, ((B_dData_dList.v_map v_sourceFrag) ((B_dData_dSort.v_sortBy (fun (a : (string, int) B_dData_dPair.t_Pair) (b : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf a)) (B_dData_dPair.v_firstOf b)))) own))))))))
@@ -15,7 +15,7 @@ let v_compilerIdOf = (fun (own : (string, int) B_dData_dPair.t_Pair B_dData_dLis
 let v_textHashOf = (fun (s : string) -> (Base_dHash.v_contentKey s))
 
 # 57 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_fingerprintOfStat = (fun (exe : string) (size : int) (mtime : int) -> (v_textHashOf (String.concat "" [exe; ":"; (bi_strFromInt size); ":"; (bi_strFromInt mtime)])))
+let v_fingerprintOfStat = (fun (exe : string) (size : int) (mtime : int) -> (v_textHashOf (String.concat "" [exe; ":"; (string_of_int size); ":"; (string_of_int mtime)])))
 
 # 104 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_cacheTagFileName = "cache-tag"
@@ -38,7 +38,7 @@ let v_compilerTagEff = (fun (nFs : string) (nEnv : string) -> (((B_dTrait_dMonad
   | B_dData_dMaybe.C_Maybe_Just (dtb__2) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) dtb__2)
   | B_dData_dMaybe.C_Maybe_Nothing -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsFileSize nFs) exe)) (fun sizeOpt -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dTrait_dFunctor.v_fmap B_dEffect_dCore.v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dData_dMaybe.v_fromMaybe 0)) ((B_dEffect_dFs.v_fsFileMtime nFs) exe))) (fun mtime -> (match sizeOpt with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) Base_dVersion.v_vunaVersion)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__3) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ("stat:" ^ (bi_strFromInt (((v_fingerprintOfStat exe) dtb__3) mtime))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__3) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ("stat:" ^ (string_of_int (((v_fingerprintOfStat exe) dtb__3) mtime))))
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"

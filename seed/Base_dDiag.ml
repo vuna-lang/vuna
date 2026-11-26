@@ -275,7 +275,7 @@ let v_sameSeverity = (fun (mc0 : t_Severity) (mc1 : t_Severity) -> (match mc0 wi
 ))
 
 # 687 "Vuna/Compiler/Base/Diag.vuna"
-let rec v_labelSpanOf = (fun (mc0 : t_Label B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_labelSpanOf = (fun (mc0 : t_Label B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__75, dtb__76) -> (match dtb__75 with
   | { f_Label_labelSpan = dtb__77; f_Label_labelText = dtb__78; f_Label_labelStyle = dtb__79; f_Label_labelProvenance = dtb__80 } -> (match dtb__77 with
   | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ""; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = 0; B_dData_dPair.f_Pair_second = 0 } } }, (v_labelSpanOf dtb__76)))

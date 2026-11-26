@@ -251,7 +251,7 @@ let v_withExportItemRef = (fun (mc0 : t_NodeRef) (mc1 : t_ExportItem) -> (match 
 ))
 
 # 487 "Vuna/Compiler/Frontend/Ast.vuna"
-let rec v_collectClauses = (fun (mc0 : t_Decl B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
+let[@tail_mod_cons] rec v_collectClauses = (fun (mc0 : t_Decl B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (match dtb__259 with
   | C_Decl_DFun (dtb__261, dtb__262, dtb__263, dtb__264) -> (if (dtb__261 = mc1) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 }, ((v_collectClauses dtb__260) mc1))) else ((v_collectClauses dtb__260) mc1))
   | _ -> ((v_collectClauses dtb__260) mc1)

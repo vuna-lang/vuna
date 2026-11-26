@@ -23,13 +23,13 @@ let v_fPayloadOf = (fun (mc0 : t_Frame) -> (match mc0 with
 ))
 
 # 66 "Vuna/Compiler/Base/Store.vuna"
-let v_frameHeader = (fun (tag : string) (codec : string) (len : int) (digest : string) -> (String.concat "" [v_storeMagic; "|"; tag; "|"; codec; "|"; (bi_strFromInt len); "|"; digest; "\n"]))
+let v_frameHeader = (fun (tag : string) (codec : string) (len : int) (digest : string) -> (String.concat "" [v_storeMagic; "|"; tag; "|"; codec; "|"; (string_of_int len); "|"; digest; "\n"]))
 
 # 70 "Vuna/Compiler/Base/Store.vuna"
-let v_storeEncode = (fun (tag : string) (codec : string) (payload : string) -> (((((v_frameHeader tag) codec) (bi_strLength payload)) (Base_dHash.v_contentAddress payload)) ^ payload))
+let v_storeEncode = (fun (tag : string) (codec : string) (payload : string) -> (((((v_frameHeader tag) codec) (String.length payload)) (Base_dHash.v_contentAddress payload)) ^ payload))
 
 # 78 "Vuna/Compiler/Base/Store.vuna"
-let v_storeEncodeAs = (fun (tag : string) (codec : string) (digest : string) (payload : string) -> (((((v_frameHeader tag) codec) (bi_strLength payload)) digest) ^ payload))
+let v_storeEncodeAs = (fun (tag : string) (codec : string) (digest : string) (payload : string) -> (((((v_frameHeader tag) codec) (String.length payload)) digest) ^ payload))
 
 # 82 "Vuna/Compiler/Base/Store.vuna"
 let v_headerFields = (fun (line : string) -> (let nd_uscrut1 = ((B_dData_dString.v_split "|") line) in (match nd_uscrut1 with
@@ -60,16 +60,16 @@ let rec v_breakFirstNewline = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B
 ))
 
 # 96 "Vuna/Compiler/Base/Store.vuna"
-let v_frameSplit = (fun (raw : string) -> (let n = (bi_strLength raw) in (let headLen = (if (n < 512) then n else 512) in (match ((v_breakFirstNewline (B_dData_dList.dtp_unpack (((dtp_substring 0) headLen) raw))) B_dData_dList.C_List_Nil) with
+let v_frameSplit = (fun (raw : string) -> (let n = (String.length raw) in (let headLen = (if (n < 512) then n else 512) in (match ((v_breakFirstNewline (B_dData_dList.dtp_unpack (((dtp_substring 0) headLen) raw))) B_dData_dList.C_List_Nil) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (let header = (B_dData_dPair.v_firstOf dtb__21) in (let start = ((bi_strLength header) + 1) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = header; B_dData_dPair.f_Pair_second = (((dtp_substring start) (n - start)) raw) }))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (let header = (B_dData_dPair.v_firstOf dtb__21) in (let start = ((String.length header) + 1) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = header; B_dData_dPair.f_Pair_second = (((dtp_substring start) (n - start)) raw) }))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 110 "Vuna/Compiler/Base/Store.vuna"
 let v_headerOk = (fun (tag : string) (codec : string) (header : string) (payload : string) -> (match (v_headerFields header) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__22) -> (let magic = (B_dData_dPair.v_firstOf dtb__22) in (let rest1 = (B_dData_dPair.v_secondOf dtb__22) in (let gotTag = (B_dData_dPair.v_firstOf rest1) in (let rest2 = (B_dData_dPair.v_secondOf rest1) in (let gotCodec = (B_dData_dPair.v_firstOf rest2) in (let rest3 = (B_dData_dPair.v_secondOf rest2) in (let gotLen = (B_dData_dPair.v_firstOf rest3) in (if (if (if (magic = v_storeMagic) then (gotTag = tag) else false) then (gotCodec = codec) else false) then (gotLen = (bi_strFromInt (bi_strLength payload))) else false))))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__22) -> (let magic = (B_dData_dPair.v_firstOf dtb__22) in (let rest1 = (B_dData_dPair.v_secondOf dtb__22) in (let gotTag = (B_dData_dPair.v_firstOf rest1) in (let rest2 = (B_dData_dPair.v_secondOf rest1) in (let gotCodec = (B_dData_dPair.v_firstOf rest2) in (let rest3 = (B_dData_dPair.v_secondOf rest2) in (let gotLen = (B_dData_dPair.v_firstOf rest3) in (if (if (if (magic = v_storeMagic) then (gotTag = tag) else false) then (gotCodec = codec) else false) then (gotLen = (string_of_int (String.length payload))) else false))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 

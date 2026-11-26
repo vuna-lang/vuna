@@ -94,7 +94,7 @@ let v_startsWithTripleOf = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> 
 ))
 
 # 151 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_stripCR = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_stripCR = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> (if (dtb__23 = 13) then (v_stripCR dtb__24) else (B_dData_dList.C_List__x58__x58_ (dtb__23, (v_stripCR dtb__24))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -134,7 +134,7 @@ let rec v_lookupField = (fun (mc0 : string) (mc1 : (string, t_TomlNode) B_dData_
 ))
 
 # 174 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_replaceField = (fun (mc0 : string) (mc1 : t_TomlNode) (mc2 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
+let[@tail_mod_cons] rec v_replaceField = (fun (mc0 : string) (mc1 : t_TomlNode) (mc2 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__34, dtb__35) -> (match dtb__34 with
   | { B_dData_dPair.f_Pair_first = dtb__36; B_dData_dPair.f_Pair_second = dtb__37 } -> (if (dtb__36 = mc0) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__36; B_dData_dPair.f_Pair_second = mc1 }, dtb__35)) else (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__36; B_dData_dPair.f_Pair_second = dtb__37 }, (((v_replaceField mc0) mc1) dtb__35))))
   | _ -> failwith "DT: impossible branch"
@@ -154,7 +154,7 @@ let rec v_lastFields = (fun (mc0 : (string, t_TomlNode) B_dData_dPair.t_Pair B_d
 ))
 
 # 185 "Vuna/Compiler/Frontend/Toml.vuna"
-let rec v_replaceLastFields = (fun (mc0 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List B_dData_dList.t_List) -> (match mc1 with
+let[@tail_mod_cons] rec v_replaceLastFields = (fun (mc0 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__40, dtb__41) -> (match dtb__41 with
   | B_dData_dList.C_List_Nil -> (B_dData_dList.C_List__x58__x58_ (mc0, B_dData_dList.C_List_Nil))
   | _ -> (B_dData_dList.C_List__x58__x58_ (dtb__40, ((v_replaceLastFields mc0) dtb__41)))
@@ -350,7 +350,7 @@ and v_flattenNode = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) (mc2 : 
 ))
 # 337 "Vuna/Compiler/Frontend/Toml.vuna"
 and v_flattenElems = (fun (mc0 : int) (mc1 : int) (mc2 : string B_dData_dList.t_List) (mc3 : (string, t_TomlNode) B_dData_dPair.t_Pair B_dData_dList.t_List B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__126, dtb__127) -> ((B_dData_dList.v_append (((v_flattenFields (mc0 - 1)) ((v_appendPath mc2) (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt mc1), B_dData_dList.C_List_Nil)))) dtb__126)) ((((v_flattenElems (mc0 - 1)) (mc1 + 1)) mc2) dtb__127))
+  | B_dData_dList.C_List__x58__x58_ (dtb__126, dtb__127) -> ((B_dData_dList.v_append (((v_flattenFields (mc0 - 1)) ((v_appendPath mc2) (B_dData_dList.C_List__x58__x58_ ((string_of_int mc1), B_dData_dList.C_List_Nil)))) dtb__126)) ((((v_flattenElems (mc0 - 1)) (mc1 + 1)) mc2) dtb__127))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))

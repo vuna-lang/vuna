@@ -3,14 +3,14 @@ type t_RecordFieldMeta = { f_RecordFieldMeta_recordFieldName : string; f_RecordF
 and t_RecordMeta = { f_RecordMeta_recordMetaName : string; f_RecordMeta_recordMetaParams : string B_dData_dList.t_List; f_RecordMeta_recordMetaFields : t_RecordFieldMeta B_dData_dList.t_List; f_RecordMeta_recordMetaDerivings : string B_dData_dList.t_List; f_RecordMeta_recordMetaDerivingVia : bool; f_RecordMeta_recordMetaRepr : Frontend_dAst.t_ReprTier; f_RecordMeta_recordMetaCtor : string; f_RecordMeta_recordMetaLinear : bool }
 
 # 42 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordFieldPairs = (fun (mc0 : t_RecordFieldMeta B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_recordFieldPairs = (fun (mc0 : t_RecordFieldMeta B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (dtb__0).f_RecordFieldMeta_recordFieldName; B_dData_dPair.f_Pair_second = (dtb__0).f_RecordFieldMeta_recordFieldType }, (v_recordFieldPairs dtb__1)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 47 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordFieldNames = (fun (mc0 : t_RecordFieldMeta B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_recordFieldNames = (fun (mc0 : t_RecordFieldMeta B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (B_dData_dList.C_List__x58__x58_ ((dtb__2).f_RecordFieldMeta_recordFieldName, (v_recordFieldNames dtb__3)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -24,7 +24,7 @@ let rec v_lookupRecord = (fun (mc0 : string) (mc1 : t_RecordMeta B_dData_dList.t
 ))
 
 # 56 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_fieldNamesOf = (fun mc0 -> (match mc0 with
+let[@tail_mod_cons] rec v_fieldNamesOf = (fun mc0 -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__6, dtb__7) -> (match dtb__6 with
   | { B_dData_dPair.f_Pair_first = dtb__8; B_dData_dPair.f_Pair_second = dtb__9 } -> (B_dData_dList.C_List__x58__x58_ (dtb__8, (v_fieldNamesOf dtb__7)))
   | _ -> failwith "DT: impossible branch"
@@ -87,7 +87,7 @@ let rec v_firstUnknownFieldMsg = (fun (mc0 : Base_dSource.t_Span) (mc1 : string 
 ))
 
 # 101 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordFieldsOf = (fun (mc0 : Frontend_dAst.t_Field B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
+let[@tail_mod_cons] rec v_recordFieldsOf = (fun (mc0 : Frontend_dAst.t_Field B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28) -> (B_dData_dList.C_List__x58__x58_ ({ f_RecordFieldMeta_recordFieldName = (Frontend_dAst.v_fieldName dtb__27); f_RecordFieldMeta_recordFieldType = (Frontend_dAst.v_fieldType dtb__27); f_RecordFieldMeta_recordFieldIndex = mc1 }, ((v_recordFieldsOf dtb__28) (mc1 + 1))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -149,7 +149,7 @@ and v_desugarRecordPatternFieldsFuel = (fun (fuel : int) (records : t_RecordMeta
 let v_desugarPattern = (fun (records : t_RecordMeta B_dData_dList.t_List) (pat : Frontend_dAst.t_Pat) -> (((v_desugarPatternFuel ((Frontend_dAstQuery.v_patBudget 64) pat)) records) pat))
 
 # 333 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordInstancePatsFrom = (fun (i : int) (remaining : int) (sp : Base_dSource.t_Span) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ((Frontend_dReserved.v_recordHiddenFieldBinderName i), (Frontend_dAst.v_detachedNodeRef sp))), (((v_recordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
+let[@tail_mod_cons] rec v_recordInstancePatsFrom = (fun (i : int) (remaining : int) (sp : Base_dSource.t_Span) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ((Frontend_dReserved.v_recordHiddenFieldBinderName i), (Frontend_dAst.v_detachedNodeRef sp))), (((v_recordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
 
 # 329 "Vuna/Compiler/Elab/Records.vuna"
 let v_recordInstancePats = (fun (n : int) (sp : Base_dSource.t_Span) -> (((v_recordInstancePatsFrom 0) n) sp))
@@ -161,7 +161,7 @@ let v_hasFieldInstanceDecl = (fun (rname : string) (params : string B_dData_dLis
 ) in (let label = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldLabelName, fref)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (fname, fref)), B_dData_dList.C_List_Nil)), fref)) in (let head = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (Base_dIntrinsics.v_hasFieldTraitName, fref)), (B_dData_dList.C_List__x58__x58_ (label, (B_dData_dList.C_List__x58__x58_ (recType, (B_dData_dList.C_List__x58__x58_ (fty, B_dData_dList.C_List_Nil)))))), fref)) in (let pats = ((v_recordInstancePats n) fsp) in (let body = (Frontend_dAst.C_Expr_ECase ((Frontend_dAst.C_Expr_EVar ("p", fref)), (B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_Alt_altPat = (Frontend_dAst.C_Pat_PCon (ctor, pats, fref)); Frontend_dAst.f_Alt_altBody = (Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_recordHiddenFieldBinderName fi), fref)); Frontend_dAst.f_Alt_altRef = fref }, B_dData_dList.C_List_Nil)), fref)) in (let meth = (Frontend_dAst.C_Decl_DFun (Base_dIntrinsics.v_hasFieldMethodName, (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Pat_PVar ("p", fref)), B_dData_dList.C_List_Nil)), body, fref)) in (Frontend_dAst.C_Decl_DInstance (B_dData_dList.C_List_Nil, head, (B_dData_dList.C_List__x58__x58_ (meth, B_dData_dList.C_List_Nil)), fref)))))))))))
 
 # 322 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordHasFieldInstancesGo = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : string) (mc3 : int) (mc4 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : int) -> (match mc4 with
+let[@tail_mod_cons] rec v_recordHasFieldInstancesGo = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : string) (mc3 : int) (mc4 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc5 : int) -> (match mc4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__53, dtb__54) -> (match dtb__53 with
   | { B_dData_dPair.f_Pair_first = dtb__55; B_dData_dPair.f_Pair_second = dtb__56 } -> (B_dData_dList.C_List__x58__x58_ ((((((((v_hasFieldInstanceDecl mc0) mc1) mc2) mc3) mc5) dtb__55) dtb__56), ((((((v_recordHasFieldInstancesGo mc0) mc1) mc2) mc3) dtb__54) (mc5 + 1))))
   | _ -> failwith "DT: impossible branch"
@@ -184,7 +184,7 @@ let rec v_recordHasFieldInstances = (fun (mc0 : t_RecordMeta B_dData_dList.t_Lis
 let v_ctorName = (fun (dname : string) -> dname)
 
 # 91 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_recordsOfDecls = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_recordsOfDecls = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__59, dtb__60) -> (match dtb__59 with
   | Frontend_dAst.C_Decl_DRecord (dtb__61, dtb__62, dtb__63, dtb__64, dtb__65, dtb__66, dtb__67, dtb__68) -> (B_dData_dList.C_List__x58__x58_ ({ f_RecordMeta_recordMetaName = dtb__61; f_RecordMeta_recordMetaParams = dtb__62; f_RecordMeta_recordMetaFields = ((v_recordFieldsOf dtb__63) 0); f_RecordMeta_recordMetaDerivings = dtb__64; f_RecordMeta_recordMetaDerivingVia = dtb__65; f_RecordMeta_recordMetaRepr = dtb__66; f_RecordMeta_recordMetaCtor = (v_ctorName dtb__61); f_RecordMeta_recordMetaLinear = dtb__67 }, (v_recordsOfDecls dtb__60)))
   | _ -> (v_recordsOfDecls dtb__60)

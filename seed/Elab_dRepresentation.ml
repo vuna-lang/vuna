@@ -5,7 +5,7 @@ type t_UnboxedCand = { f_UnboxedCand_unboxedCandName : string; f_UnboxedCand_unb
 let v_ctorKeepFlags = (fun (c : Elab_dTypes.t_DtCtor) -> ((B_dData_dList.v_map (fun (b : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased (B_dData_dPair.v_secondOf b))))) (Elab_dTypes.v_dtCtorTelescope c)))
 
 # 34 "Vuna/Compiler/Elab/Representation.vuna"
-let rec v_keptIndicesGo = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
+let[@tail_mod_cons] rec v_keptIndicesGo = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (if dtb__0 then (B_dData_dList.C_List__x58__x58_ (mc1, ((v_keptIndicesGo dtb__1) (mc1 + 1)))) else ((v_keptIndicesGo dtb__1) (mc1 + 1)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"

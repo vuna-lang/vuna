@@ -19,26 +19,58 @@ let dtp_ocamlOf xs =
   let rec go l = match l with C_List_Nil -> [] | C_List__x58__x58_ (x, rest) -> x :: go rest in
   go xs
 
-let dtp_concatMany xs = String.concat "" (dtp_ocamlOf xs)
+let dtp_concatMany xs =
+  let rec len acc l = match l with C_List_Nil -> acc | C_List__x58__x58_ (x, rest) -> len (acc + String.length x) rest in
+  let n = len 0 xs in
+  let buf = Bytes.create n in
+  let rec put off l = match l with
+    | C_List_Nil -> ()
+    | C_List__x58__x58_ (x, rest) ->
+      let k = String.length x in
+      Bytes.blit_string x 0 buf off k;
+      put (off + k) rest
+  in
+  (put 0 xs; Bytes.unsafe_to_string buf)
 
 let dtp_substTemplate tmpl xs =
   let args = Array.of_list (dtp_ocamlOf xs) in
   let n = String.length tmpl and na = Array.length args in
-  let buf = Buffer.create (n + 32) in
-  let rec go i =
-    if i >= n then ()
+  let rec scan_len i acc =
+    if i >= n then acc
     else if tmpl.[i] = '<' then begin
       let j = ref (i + 1) and k = ref 0 in
       while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
         k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
       done;
-      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin
-        (if !k < na then Buffer.add_string buf args.(!k)
-         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));
-        go (!j + 1)
-      end else (Buffer.add_char buf '<'; go (i + 1))
-    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
-  in go 0; Buffer.contents buf
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then
+        if !k < na then scan_len (!j + 1) (acc + String.length args.(!k))
+        else scan_len (!j + 1) (acc + (!j - i + 1))
+      else scan_len (i + 1) (acc + 1)
+    end else scan_len (i + 1) (acc + 1)
+  in
+  let out = Bytes.create (scan_len 0 0) in
+  let rec fill i o =
+    if i >= n then o
+    else if tmpl.[i] = '<' then begin
+      let j = ref (i + 1) and k = ref 0 in
+      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
+        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
+      done;
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then
+        if !k < na then begin
+          let s = args.(!k) in
+          Bytes.blit_string s 0 out o (String.length s);
+          fill (!j + 1) (o + String.length s)
+        end else begin
+          let l = !j - i + 1 in
+          Bytes.blit_string tmpl i out o l;
+          fill (!j + 1) (o + l)
+        end
+      else (Bytes.set out o '<'; fill (i + 1) (o + 1))
+    end else (Bytes.set out o tmpl.[i]; fill (i + 1) (o + 1))
+  in
+  let m = fill 0 0 in
+  Bytes.sub_string out 0 m
 # 200 "Base/Data/List.vuna"
 let rec v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua = (fun _uctx0 -> (B_dTrait_dEq.C_Eq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_List__x58__x58_ (dtb__0, dtb__1) -> (match mc1 with
@@ -85,7 +117,7 @@ let rec v_Traversable_u3e5fb3267308d1c3_uBase_x36_46_x36_Data_x36_46_x36_List_x3
 ))) : Obj.t))))
 
 # 32 "Base/Data/List.vuna"
-let rec v_append = (fun mc0 mc1 -> (match mc0 with
+let[@tail_mod_cons] rec v_append = (fun mc0 mc1 -> (match mc0 with
   | C_List__x58__x58_ (dtb__14, dtb__15) -> (C_List__x58__x58_ (dtb__14, ((v_append dtb__15) mc1)))
   | C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
@@ -115,7 +147,7 @@ let rec v_lengthInt = (fun mc0 -> (match mc0 with
 let v_length = (fun xs -> (bi_natFromInt (v_lengthInt xs)))
 
 # 56 "Base/Data/List.vuna"
-let rec v_map = (fun mc0 mc1 -> (match mc1 with
+let[@tail_mod_cons] rec v_map = (fun mc0 mc1 -> (match mc1 with
   | C_List__x58__x58_ (dtb__20, dtb__21) -> (C_List__x58__x58_ ((mc0 dtb__20), ((v_map mc0) dtb__21)))
   | C_List_Nil -> C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -125,7 +157,7 @@ let rec v_map = (fun mc0 mc1 -> (match mc1 with
 let v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f xs -> ((v_map f) xs))) : Obj.t)))
 
 # 61 "Base/Data/List.vuna"
-let rec v_filter = (fun mc0 mc1 -> (match mc1 with
+let[@tail_mod_cons] rec v_filter = (fun mc0 mc1 -> (match mc1 with
   | C_List__x58__x58_ (dtb__22, dtb__23) -> (if (mc0 dtb__22) then (C_List__x58__x58_ (dtb__22, ((v_filter mc0) dtb__23))) else ((v_filter mc0) dtb__23))
   | C_List_Nil -> C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -186,7 +218,7 @@ let rec v_lookupPair = (fun (mc0 : string) mc1 -> (match mc1 with
 ))
 
 # 103 "Base/Data/List.vuna"
-let rec v_nubNames = (fun (mc0 : string t_List) -> (match mc0 with
+let[@tail_mod_cons] rec v_nubNames = (fun (mc0 : string t_List) -> (match mc0 with
   | C_List__x58__x58_ (dtb__36, dtb__37) -> (if ((v_memName dtb__36) dtb__37) then (v_nubNames dtb__37) else (C_List__x58__x58_ (dtb__36, (v_nubNames dtb__37))))
   | C_List_Nil -> C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -214,7 +246,7 @@ let rec v_hasDupNames = (fun (mc0 : string t_List) -> (match mc0 with
 ))
 
 # 123 "Base/Data/List.vuna"
-let rec v_zip = (fun mc0 mc1 -> (match mc0 with
+let[@tail_mod_cons] rec v_zip = (fun mc0 mc1 -> (match mc0 with
   | C_List__x58__x58_ (dtb__44, dtb__45) -> (match mc1 with
   | C_List__x58__x58_ (dtb__46, dtb__47) -> (C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__44; B_dData_dPair.f_Pair_second = dtb__46 }, ((v_zip dtb__45) dtb__47)))
   | _ -> C_List_Nil
@@ -223,7 +255,7 @@ let rec v_zip = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 128 "Base/Data/List.vuna"
-let rec v_take = (fun (mc0 : int) mc1 -> (match mc1 with
+let[@tail_mod_cons] rec v_take = (fun (mc0 : int) mc1 -> (match mc1 with
   | C_List__x58__x58_ (dtb__48, dtb__49) -> (if (mc0 <= 0) then C_List_Nil else (C_List__x58__x58_ (dtb__48, ((v_take (mc0 - 1)) dtb__49))))
   | C_List_Nil -> C_List_Nil
   | _ -> failwith "DT: impossible branch"
@@ -237,13 +269,13 @@ let rec v_drop = (fun (mc0 : int) mc1 -> (match mc1 with
 ))
 
 # 143 "Base/Data/List.vuna"
-let rec v_rangeFrom = (fun (i : int) (k : int) -> (if (k <= 0) then C_List_Nil else (C_List__x58__x58_ (i, ((v_rangeFrom (i + 1)) (k - 1))))))
+let[@tail_mod_cons] rec v_rangeFrom = (fun (i : int) (k : int) -> (if (k <= 0) then C_List_Nil else (C_List__x58__x58_ (i, ((v_rangeFrom (i + 1)) (k - 1))))))
 
 # 139 "Base/Data/List.vuna"
 let v_range = (fun (i : int) (n : int) -> ((v_rangeFrom i) (n - i)))
 
 # 147 "Base/Data/List.vuna"
-let rec v_mapMaybe = (fun mc0 mc1 -> (match mc1 with
+let[@tail_mod_cons] rec v_mapMaybe = (fun mc0 mc1 -> (match mc1 with
   | C_List__x58__x58_ (dtb__52, dtb__53) -> (match (mc0 dtb__52) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_mapMaybe mc0) dtb__53)
   | B_dData_dMaybe.C_Maybe_Just (dtb__54) -> (C_List__x58__x58_ (dtb__54, ((v_mapMaybe mc0) dtb__53)))

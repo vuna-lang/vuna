@@ -385,17 +385,23 @@ let v_obsIntrinsicNames = (B_dData_dList.C_List__x58__x58_ (v_obsLevelIntrinsicN
 # 1287 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_floatIntrinsicNames = (B_dData_dList.C_List__x58__x58_ ("strFromFloat", (B_dData_dList.C_List__x58__x58_ ("floatFromInt", (B_dData_dList.C_List__x58__x58_ ("intFromFloat", (B_dData_dList.C_List__x58__x58_ ("floatAbs", (B_dData_dList.C_List__x58__x58_ ("floatSqrt", (B_dData_dList.C_List__x58__x58_ ("bi_add_float", (B_dData_dList.C_List__x58__x58_ ("bi_sub_float", (B_dData_dList.C_List__x58__x58_ ("bi_mul_float", (B_dData_dList.C_List__x58__x58_ ("bi_div_float", (B_dData_dList.C_List__x58__x58_ ("bi_eq_float", (B_dData_dList.C_List__x58__x58_ ("bi_neq_float", (B_dData_dList.C_List__x58__x58_ ("bi_lt_float", (B_dData_dList.C_List__x58__x58_ ("bi_le_float", (B_dData_dList.C_List__x58__x58_ ("bi_gt_float", (B_dData_dList.C_List__x58__x58_ ("bi_ge_float", B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))
 
-# 1332 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1309 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_schedIntrinsicNames = (B_dData_dList.C_List__x58__x58_ ("prim_schedNewScope", (B_dData_dList.C_List__x58__x58_ ("prim_schedFork", (B_dData_dList.C_List__x58__x58_ ("prim_schedYield", (B_dData_dList.C_List__x58__x58_ ("prim_schedIsCancelled", (B_dData_dList.C_List__x58__x58_ ("prim_schedAwait", (B_dData_dList.C_List__x58__x58_ ("prim_schedTaskResult", (B_dData_dList.C_List__x58__x58_ ("prim_schedTaskError", (B_dData_dList.C_List__x58__x58_ ("prim_schedCancelTask", (B_dData_dList.C_List__x58__x58_ ("prim_schedCancelScope", (B_dData_dList.C_List__x58__x58_ ("prim_schedScopeWait", (B_dData_dList.C_List__x58__x58_ ("prim_schedScopeWaitTimeout", (B_dData_dList.C_List__x58__x58_ ("prim_schedScopeError", (B_dData_dList.C_List__x58__x58_ ("prim_schedScopeCount", B_dData_dList.C_List_Nil))))))))))))))))))))))))))
+
+# 1330 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_effIntrinsicNames = (B_dData_dList.C_List__x58__x58_ ("prim_effectPerformId", (B_dData_dList.C_List__x58__x58_ ("effectId", (B_dData_dList.C_List__x58__x58_ ("prim_effectHandleId", (B_dData_dList.C_List__x58__x58_ ("prim_effectSelf", (B_dData_dList.C_List__x58__x58_ ("prim_cleanupPush", (B_dData_dList.C_List__x58__x58_ ("prim_cleanupPop", B_dData_dList.C_List_Nil))))))))))))
+
+# 1376 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dispatchIdIntrinsicName = "effectId"
 
-# 1341 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1385 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_dispatchIdChars = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__32, dtb__33) -> ((v_dispatchIdChars dtb__33) (((mc1 lxor dtb__32) * 16777619) land 4294967295))
   | B_dData_dList.C_List_Nil -> (mc1 land 1073741823)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1338 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1382 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_dispatchIdOf = (fun (s : string) -> ((v_dispatchIdChars (B_dData_dList.dtp_unpack s)) 2166136261))
 
 # 85 "Vuna/Compiler/Base/Intrinsics.vuna"
@@ -495,6 +501,9 @@ let v_intrinsicName = (fun (p : t_Intrinsic) -> (match p with
 # 1242 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_threadIntrinsicNames = ((B_dData_dList.v_map v_intrinsicName) v_threadIntrinsics)
 
+# 1345 "Vuna/Compiler/Base/Intrinsics.vuna"
+let v_hostIntrinsicNames = ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ("effTimeUs", (B_dData_dList.C_List__x58__x58_ ("effTimeUs_host", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_sleep", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_spawn", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_wait", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_runIn", (B_dData_dList.C_List__x58__x58_ ("@vuna@prim_eff_execPath", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@sleep", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@fileMtime", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@fileSize", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@execPath", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryRunIn", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryReadFileRange", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryReadFile", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryWriteFile", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryWriteFileAtomic", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryReadDir", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryIsDirectory", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryMakeDir", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryRemoveFile", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryRemoveTree", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryRename", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@trySymlink", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryMakeDirExclusive", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@isTty", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetListen", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetPort", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetAccept", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetRecv", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetSend", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetClose", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetConnect", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetAcceptWithin", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetRecvWithin", (B_dData_dList.C_List__x58__x58_ ("@vuna@host@tryNetSendWithin", B_dData_dList.C_List_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) v_threadIntrinsicNames)
+
 # 677 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicSignature = (fun (p : t_Intrinsic) -> (match p with
   | { f_Intrinsic_intrinsicName = dtb__85; f_Intrinsic_intrinsicSignature = dtb__86; f_Intrinsic_intrinsicOp = dtb__87; f_Intrinsic_intrinsicVisible = dtb__88 } -> dtb__86
@@ -528,23 +537,23 @@ let v_internalIntrinsicNames = ((B_dData_dList.v_map v_intrinsicName) v_internal
 # 1281 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_allIntrinsics = ((B_dData_dList.v_append v_baseIntrinsics) ((B_dData_dList.v_append v_floatIntrinsics) ((B_dData_dList.v_append v_effIntrinsics) v_internalIntrinsics)))
 
-# 1308 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1352 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_intrinsicTbl = ((((B_dContainer_dHashMap.v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (i : t_Intrinsic) -> { B_dData_dPair.f_Pair_first = (v_intrinsicName i); B_dData_dPair.f_Pair_second = i })) v_allIntrinsics)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil))
 
-# 1313 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1357 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_findIntrinsic = (fun (name : string) -> ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) v_intrinsicTbl))
 
-# 1317 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1361 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_isIntrinsicName = (fun (name : string) -> (match (v_findIntrinsic name) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__97) -> (v_intrinsicVisible dtb__97)
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1324 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1368 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_userIntrinsics = ((B_dData_dList.v_filter v_intrinsicVisible) v_allIntrinsics)
 
-# 1328 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1372 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_preludeValueNames = ((B_dData_dList.v_map v_intrinsicName) v_userIntrinsics)
 
 # 797 "Vuna/Compiler/Base/Intrinsics.vuna"

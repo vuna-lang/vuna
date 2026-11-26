@@ -78,7 +78,7 @@ let rec v_ityToTermEnv = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Base_dI
 let v_ityToTerm = (fun (ty : Base_dIntrinsics.t_IType) -> ((v_ityToTermEnv B_dData_dList.C_List_Nil) ty))
 
 # 128 "Vuna/Compiler/Elab/Prelude.vuna"
-let rec v_typeCtorKindTerm = (fun (arity : int) -> (if (arity <= 0) then (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) else (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), (v_typeCtorKindTerm (arity - 1))))))
+let[@tail_mod_cons] rec v_typeCtorKindTerm = (fun (arity : int) -> (if (arity <= 0) then (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) else (Core_dTerm.C_Term_TPi ("_", false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), (v_typeCtorKindTerm (arity - 1))))))
 
 # 136 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_preludeTypeGlobals = ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)) })) Base_dIntrinsics.v_typeIntrinsicNames)) ((B_dData_dList.v_map (fun (t : Base_dIntrinsics.t_TypeIntrinsic) -> { B_dData_dPair.f_Pair_first = (Base_dIntrinsics.v_typeIntrinsicCtorName t); B_dData_dPair.f_Pair_second = (v_typeCtorKindTerm (Base_dIntrinsics.v_typeIntrinsicCtorArity t)) })) Base_dIntrinsics.v_typeIntrinsicArities))
@@ -110,7 +110,7 @@ let v_cmpBuiltinTyName = (fun (v : Core_dTerm.t_Value) -> (match (v_builtinTyNam
 ))
 
 # 181 "Vuna/Compiler/Elab/Prelude.vuna"
-let rec v_prependParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
+let[@tail_mod_cons] rec v_prependParams = (fun (mc0 : string B_dData_dList.t_List) (mc1 : Core_dTerm.t_Term) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__24, dtb__25) -> (Core_dTerm.C_Term_TPi (dtb__24, false, Core_dTerm.C_Rig_Rig0, (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero)), ((v_prependParams dtb__25) mc1)))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"

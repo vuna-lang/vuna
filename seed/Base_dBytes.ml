@@ -5,10 +5,10 @@ type t_Cur = { f_Cur_curS : string; f_Cur_curI : int }
 let v_curOf = (fun (s : string) -> { f_Cur_curS = s; f_Cur_curI = 0 })
 
 # 52 "Vuna/Compiler/Base/Bytes.vuna"
-let v_curAtEnd = (fun (c : t_Cur) -> ((c).f_Cur_curI >= (bi_strLength (c).f_Cur_curS)))
+let v_curAtEnd = (fun (c : t_Cur) -> ((c).f_Cur_curI >= (String.length (c).f_Cur_curS)))
 
 # 56 "Vuna/Compiler/Base/Bytes.vuna"
-let v_curChar = (fun (c : t_Cur) -> (if ((c).f_Cur_curI < (bi_strLength (c).f_Cur_curS)) then (B_dData_dMaybe.C_Maybe_Just (((dtp_strAt (c).f_Cur_curS) (c).f_Cur_curI))) else B_dData_dMaybe.C_Maybe_Nothing))
+let v_curChar = (fun (c : t_Cur) -> (if ((c).f_Cur_curI < (String.length (c).f_Cur_curS)) then (B_dData_dMaybe.C_Maybe_Just ((let b = (c).f_Cur_curS in let k = (c).f_Cur_curI in if k < 0 || k >= String.length b then -1 else Char.code (String.unsafe_get b k)))) else B_dData_dMaybe.C_Maybe_Nothing))
 
 # 60 "Vuna/Compiler/Base/Bytes.vuna"
 let v_curSkip = (fun (c : t_Cur) -> { f_Cur_curS = (c).f_Cur_curS; f_Cur_curI = ((c).f_Cur_curI + 1) })
@@ -30,13 +30,13 @@ let v_encConcat = (fun (parts : string B_dData_dList.t_List) -> (B_dData_dList.d
 let v_encTop = (fun f x -> (v_encConcat ((f x) B_dData_dList.C_List_Nil)))
 
 # 81 "Vuna/Compiler/Base/Bytes.vuna"
-let v_encTag = (fun (n : int) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("#", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt n), (B_dData_dList.C_List__x58__x58_ (";", acc)))))))
+let v_encTag = (fun (n : int) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("#", (B_dData_dList.C_List__x58__x58_ ((string_of_int n), (B_dData_dList.C_List__x58__x58_ (";", acc)))))))
 
 # 85 "Vuna/Compiler/Base/Bytes.vuna"
-let v_encInt = (fun (n : int) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("i", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt n), (B_dData_dList.C_List__x58__x58_ (";", acc)))))))
+let v_encInt = (fun (n : int) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("i", (B_dData_dList.C_List__x58__x58_ ((string_of_int n), (B_dData_dList.C_List__x58__x58_ (";", acc)))))))
 
 # 89 "Vuna/Compiler/Base/Bytes.vuna"
-let v_encStr = (fun (s : string) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("s", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (bi_strLength s)), (B_dData_dList.C_List__x58__x58_ (":", (B_dData_dList.C_List__x58__x58_ (s, acc)))))))))
+let v_encStr = (fun (s : string) (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("s", (B_dData_dList.C_List__x58__x58_ ((string_of_int (String.length s)), (B_dData_dList.C_List__x58__x58_ (":", (B_dData_dList.C_List__x58__x58_ (s, acc)))))))))
 
 # 93 "Vuna/Compiler/Base/Bytes.vuna"
 let v_encBool = (fun (mc0 : bool) (mc1 : string B_dData_dList.t_List) -> (if mc0 then (B_dData_dList.C_List__x58__x58_ ("b1", mc1)) else (B_dData_dList.C_List__x58__x58_ ("b0", mc1))))
@@ -49,7 +49,7 @@ let rec v_encListGo = (fun mc0 mc1 (mc2 : string B_dData_dList.t_List) -> (match
 ))
 
 # 98 "Vuna/Compiler/Base/Bytes.vuna"
-let v_encList = (fun f xs (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((bi_strFromInt (v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encListGo f) xs) acc))))))))
+let v_encList = (fun f xs (acc : string B_dData_dList.t_List) -> (B_dData_dList.C_List__x58__x58_ ("[", (B_dData_dList.C_List__x58__x58_ ((string_of_int (v_lenOf xs)), (B_dData_dList.C_List__x58__x58_ (":", (((v_encListGo f) xs) acc))))))))
 
 # 107 "Vuna/Compiler/Base/Bytes.vuna"
 let v_encMaybe = (fun mc0 mc1 (mc2 : string B_dData_dList.t_List) -> (match mc1 with
@@ -110,7 +110,7 @@ let v_decBool = (fun (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dData_dM
 
 # 173 "Vuna/Compiler/Base/Bytes.vuna"
 let v_decStr = (fun (fuel : int) (c : t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else (let nd_uscrut2 = (v_curChar c) in (match nd_uscrut2 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__16) -> (if (dtb__16 = 115) then ((v_thenPair ((((v_decNumStop (fuel - 1)) 58) 0) (v_curSkip c))) (fun (n : int) (b : t_Cur) -> (if (if (n < 0) then true else (((b).f_Cur_curI + n) > (bi_strLength (b).f_Cur_curS))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (((v_curSlice b) (b).f_Cur_curI) n); B_dData_dPair.f_Pair_second = { f_Cur_curS = (b).f_Cur_curS; f_Cur_curI = ((b).f_Cur_curI + n) } }))))) else B_dData_dMaybe.C_Maybe_Nothing)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__16) -> (if (dtb__16 = 115) then ((v_thenPair ((((v_decNumStop (fuel - 1)) 58) 0) (v_curSkip c))) (fun (n : int) (b : t_Cur) -> (if (if (n < 0) then true else (((b).f_Cur_curI + n) > (String.length (b).f_Cur_curS))) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (((v_curSlice b) (b).f_Cur_curI) n); B_dData_dPair.f_Pair_second = { f_Cur_curS = (b).f_Cur_curS; f_Cur_curI = ((b).f_Cur_curI + n) } }))))) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 ))))
 

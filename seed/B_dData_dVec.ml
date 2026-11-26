@@ -38,10 +38,10 @@ let rec v_getMaybe = (fun mc0 (mc1 : int) -> (match mc0 with
 ))
 
 # 51 "Base/Data/Vec.vuna"
-let rec v_tabulate = (fun (mc0 : int) mc1 -> (let dtnat__13 = mc0 in (if (dtnat__13 = 0) then C_Vec_Nil else (let dtb__14 = (dtnat__13 - 1) in (C_Vec__x58__x58_ ((mc1 B_dData_dFin.C_Fin_FZero), ((v_tabulate dtb__14) (fun (i : B_dData_dFin.t_Fin) -> (mc1 (B_dData_dFin.C_Fin_FSucc (i)))))))))))
+let[@tail_mod_cons] rec v_tabulate = (fun (mc0 : int) mc1 -> (let dtnat__13 = mc0 in (if (dtnat__13 = 0) then C_Vec_Nil else (let dtb__14 = (dtnat__13 - 1) in (C_Vec__x58__x58_ ((mc1 B_dData_dFin.C_Fin_FZero), ((v_tabulate dtb__14) (fun (i : B_dData_dFin.t_Fin) -> (mc1 (B_dData_dFin.C_Fin_FSucc (i)))))))))))
 
 # 65 "Base/Data/Vec.vuna"
-let rec v_vecToList = (fun mc0 -> (match mc0 with
+let[@tail_mod_cons] rec v_vecToList = (fun mc0 -> (match mc0 with
   | C_Vec__x58__x58_ (dtb__15, dtb__16) -> (B_dData_dList.C_List__x58__x58_ (dtb__15, (v_vecToList dtb__16)))
   | C_Vec_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"

@@ -125,7 +125,7 @@ let v_compressBlock = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_d
 let v_wordsToBytes = (fun (hs : int B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap v_bigEndian32) hs))
 
 # 20 "Base/Data/Sha1.vuna"
-let v_sha1Raw = (fun (s : string) -> (let n = (bi_strLength s) in (let body = ((v_padMessage (B_dData_dList.dtp_unpack s)) n) in (let blocks = ((B_dData_dList.v_map (fun (i : int) -> ((B_dData_dList.v_take 64) ((B_dData_dList.v_drop (i * 64)) body)))) ((B_dData_dList.v_range 0) (if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64))) in (v_wordsToBytes (((B_dData_dList.v_foldl v_compressBlock) v_sha1Init) blocks))))))
+let v_sha1Raw = (fun (s : string) -> (let n = (String.length s) in (let body = ((v_padMessage (B_dData_dList.dtp_unpack s)) n) in (let blocks = ((B_dData_dList.v_map (fun (i : int) -> ((B_dData_dList.v_take 64) ((B_dData_dList.v_drop (i * 64)) body)))) ((B_dData_dList.v_range 0) (if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64))) in (v_wordsToBytes (((B_dData_dList.v_foldl v_compressBlock) v_sha1Init) blocks))))))
 
 # 132 "Base/Data/Sha1.vuna"
 let v_hexDigit = (fun (d : int) -> (if (d < 10) then (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((48 + d), B_dData_dList.C_List_Nil))) else (B_dData_dList.dtp_pack (B_dData_dList.C_List__x58__x58_ ((87 + d), B_dData_dList.C_List_Nil)))))

@@ -127,20 +127,20 @@ let rec v_dsLen = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
 ))
 
 # 233 "Base/Data/Float.vuna"
-let v_digitsText = (fun (ds : int B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : string) (d : int) -> (acc ^ (bi_strFromInt d)))) "") ds))
+let v_digitsText = (fun (ds : int B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : string) (d : int) -> (acc ^ (string_of_int d)))) "") ds))
 
 # 237 "Base/Data/Float.vuna"
 let v_zerosText = (fun (n : int) -> (v_digitsText ((B_dData_dList.v_map (fun (_u : int) -> 0)) ((B_dData_dList.v_range 0) n))))
 
 # 241 "Base/Data/Float.vuna"
-let v_expSuffix = (fun (e : int) -> (let n = (if (e < 0) then (0 - e) else e) in (let sign = (if (e < 0) then "-" else "+") in (sign ^ (if (n < 10) then ("0" ^ (bi_strFromInt n)) else (bi_strFromInt n))))))
+let v_expSuffix = (fun (e : int) -> (let n = (if (e < 0) then (0 - e) else e) in (let sign = (if (e < 0) then "-" else "+") in (sign ^ (if (n < 10) then ("0" ^ (string_of_int n)) else (string_of_int n))))))
 
 # 249 "Base/Data/Float.vuna"
 let v_expForm = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List_Nil -> "0e+00"
   | B_dData_dList.C_List__x58__x58_ (dtb__10, dtb__11) -> (match dtb__11 with
-  | B_dData_dList.C_List_Nil -> (String.concat "" [(bi_strFromInt dtb__10); "e"; (v_expSuffix mc0)])
-  | _ -> (String.concat "" [(bi_strFromInt dtb__10); "."; (v_digitsText dtb__11); "e"; (v_expSuffix mc0)])
+  | B_dData_dList.C_List_Nil -> (String.concat "" [(string_of_int dtb__10); "e"; (v_expSuffix mc0)])
+  | _ -> (String.concat "" [(string_of_int dtb__10); "."; (v_digitsText dtb__11); "e"; (v_expSuffix mc0)])
 )
   | _ -> failwith "DT: impossible branch"
 ))

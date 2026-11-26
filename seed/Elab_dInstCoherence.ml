@@ -2,7 +2,7 @@ open Vuna_runtime
 type t_InstClash = C_InstClash_ClashDuplicate | C_InstClash_ClashOverlap
 
 # 101 "Vuna/Compiler/Elab/InstCoherence.vuna"
-let rec v_teleAlphaEnvGo = (fun (remaining : int) (i : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (Frontend_dReserved.v_teleProbeBinderName, i, B_dData_dList.C_List_Nil)))), ((v_teleAlphaEnvGo (remaining - 1)) (i + 1))))))
+let[@tail_mod_cons] rec v_teleAlphaEnvGo = (fun (remaining : int) (i : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NVar (Frontend_dReserved.v_teleProbeBinderName, i, B_dData_dList.C_List_Nil)))), ((v_teleAlphaEnvGo (remaining - 1)) (i + 1))))))
 
 # 98 "Vuna/Compiler/Elab/InstCoherence.vuna"
 let v_teleAlphaEnv = (fun (n : int) -> ((v_teleAlphaEnvGo n) 0))
@@ -28,7 +28,7 @@ let v_instanceExactQuiet = (fun (ec : Elab_dTypes.t_Ec) (n : int) (head : Core_d
 let v_instanceKey = (fun (ec : Elab_dTypes.t_Ec) (cname : string) (tele : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (head : Core_dTerm.t_Term) -> (let zonked = (((Elab_dMeta.v_zonkTerm ec) 0) head) in (let n = (B_dData_dList.v_length tele) in (let canon = ((Core_dEval.v_quote n) ((Core_dEval.v_eval (v_teleAlphaEnv n)) zonked)) in (String.concat "" [cname; "#"; (Base_dHash.v_digestHex (Base_dHash.v_digestOfString ((Base_dBytes.v_encTop Core_dCanonical.v_encTerm) canon)))])))))
 
 # 134 "Vuna/Compiler/Elab/InstCoherence.vuna"
-let rec v_teleGlobalEnvGo = (fun (remaining : int) (i : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Frontend_dReserved.v_ovProbeName i), B_dData_dList.C_List_Nil)))), ((v_teleGlobalEnvGo (remaining - 1)) (i + 1))))))
+let[@tail_mod_cons] rec v_teleGlobalEnvGo = (fun (remaining : int) (i : int) -> (if (remaining <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ ((Core_dTerm.C_Value_VNeutral ((Core_dTerm.C_Neutral_NGlobal ((Frontend_dReserved.v_ovProbeName i), B_dData_dList.C_List_Nil)))), ((v_teleGlobalEnvGo (remaining - 1)) (i + 1))))))
 
 # 131 "Vuna/Compiler/Elab/InstCoherence.vuna"
 let v_teleGlobalEnv = (fun (n : int) -> ((v_teleGlobalEnvGo n) 0))
