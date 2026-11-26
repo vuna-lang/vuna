@@ -26,6 +26,7 @@ vuna dev suite --all --tier e2e           # 只跑 e2e 层（steps）
 vuna dev suite --all --backend wasm       # 只跑 matrix 允许 wasm 的 case
 vuna dev suite --all --matrix pure-cross  # 只跑三端差分精选集
 vuna dev suite --all --filter layer:effect  # 按层次 tag 筛选
+vuna dev suite --all --area compiler-frontend  # 只跑前端影响面（PR 切片同口径）
 vuna dev suite --all --jobs 16            # 显式并行度（覆盖 auto）
 vuna dev suite --all --timeout 240        # 每个 case 预算的上限（秒；更紧的 family 值仍生效）
 vuna dev suite --all --json               # 机器可读汇总（每个 suite 一行）
@@ -113,6 +114,21 @@ fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[fami
   差分。没有 `--backend` 时只跑 ocaml；`effect-*` 分类即使只跑 ocaml 也走私有包目录。
 - `vuna-base` 的 `stdlib` family 也声明 `pure-cross`：40+ 个标准库夹具在三个后端上对拍。
 - 机制断言（trap 文本、WAT / ELF 形状、import 缺失、ABI）留在 steps 的单后端用例，不进差分。
+
+### 影响面（area）与 PR 切片
+
+`[family.<name>] areas = ["compiler-frontend", ...]` 声明这个族「哪一类改动最可能被它抓到」；
+每个 case 派生 `area:<名>` tag，`--area NAME` 按 tag 精确筛选（可重复，多值 OR）。
+`*.steps` 文件任意位置出现 `# areas: a, b` 即覆盖 family 的声明（没有则沿用 family 的；
+只进 e2e 全量的 steps family 声明 `areas = ["tests"]`）。
+
+- 这是**风险定向**，不是严格依赖图：严格按「用例跑到哪些阶段」算，前端改动会命中所有夹具
+  （都要解析），等于没切。漏检由 nightly 的完整 `suite` 组兜底。
+- area 名与 PR 标签同一套词表（`nix/checks/pr-gates.nix` 的 `areas`）；Nix 把词表注入
+  `VUNA_SUITE_AREAS`，runner 的 `audit/areas` 在全量运行时校验「每个 case 至少一个 area tag
+  且都在词表内」。
+- PR 切片在 `nix/checks/slices.nix`：area 组合 + tier + 单测包 + `minCases`。过滤后 case
+  数低于 `minCases` 直接失败，挡住「area 打错 → 0 个 case 全绿」。
 
 ### 声明式步进用例（`*.steps`）
 
@@ -261,6 +277,7 @@ vuna dev suite --all --cache-dir DIR   # 覆盖测试对象库与构建桶根
 
 - `--changed REV`：`git diff --name-only REV`；`packages/` 源码、`examples/` 或 suite 执行器配置变更跑全量，
   夹具变更只跑对应 family case，以及 steps 文件文本里提到该目录的 case；无变更时不跑 case。
+  需要按影响面切子集时用 `--area`（PR 切片走这条，路径判定由 PR 标签完成）。
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
 - `--bless`：golden 失败时把实际输出写回对应 `.out`，并打印 `blessed`；负例走 `--bless-diag`。
@@ -289,7 +306,8 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
   孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
   新增夹具无需调整；批量删除夹具时同步下调对应 suite 的数字。
 
-局部运行（`--only` / `--filter`）会把这两个审计 case 一起过滤掉，符合预期。
+局部运行（`--only` / `--filter` / `--area` / `--tier`）会把审计 case 一起过滤掉，符合预期；
+切片自己用 `nix/checks/slices.nix` 的 `minCases` 兜底（低于下限直接失败）。
 
 ### 进程内断言（fixture 用例零子进程）
 

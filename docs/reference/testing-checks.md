@@ -6,8 +6,8 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **34 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 31 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **41 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 38 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-container-growth`、
 `vuna-diag`、`vuna-effect-machine-growth`、`vuna-fmt`、`vuna-frontend-growth`、`vuna-iface-selftest`、
@@ -15,8 +15,9 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 `vuna-native-surface`、
 `vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-resolve-chain-growth`、`vuna-single-pass`、`vuna-static`、
-`vuna-tests-e2e`、`vuna-tests-gate`、
-`vuna-tests-native`、`vuna-tests-wasm`、`vuna-wasm-browser`、
+`vuna-tests-base`、`vuna-tests-core`、`vuna-tests-e2e`、`vuna-tests-frontend`、
+`vuna-tests-gate`、`vuna-tests-ir`、`vuna-tests-native`、`vuna-tests-ocaml`、
+`vuna-tests-runtime`、`vuna-tests-toolchain`、`vuna-tests-wasm`、`vuna-wasm-browser`、
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。
 
@@ -28,6 +29,8 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
 | `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（`pr / run`） |
+| `gate` | `vuna-tests-gate`（完整 fast+integration） | main push |
+| `slices` | 7 个 `vuna-tests-*` area 切片 | PR 计划器按 area 选；本地 `nix run .#ci -- slices` |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
 | `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、`suite` 标签 |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
@@ -38,6 +41,27 @@ PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` �
 `type:*` + `pkg:*` / `area:*` 计算检查子集，`gates` 只跑这些检查；`deep` / `suite` /
 `browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub job，只在本地
 `nix run .#ci -- backends|native`（见 [github-workflow.md](github-workflow.md)）。
+
+### PR 的 area 切片
+
+`nix/checks/slices.nix` 把 area 组合成独立 check（独立 store path），PR 只构建命中的那些。
+用例侧的影响面在 `suite.toml` 的 `[family.<name>] areas` 与 `*.steps` 的 `# areas:` 里
+声明（语义与 `--area` 见 [testing.md](testing.md)「影响面（area）与 PR 切片」）：
+
+| 切片 | area | tier | backend | 单测包 |
+| --- | --- | --- | --- | --- |
+| `vuna-tests-frontend` | `compiler-frontend` | fast+integration | ocaml | `packages/compiler` |
+| `vuna-tests-core` | `compiler-core` | fast+integration | ocaml | `packages/compiler` |
+| `vuna-tests-ir` | `ir` | fast+integration | ocaml | `packages/ir` |
+| `vuna-tests-ocaml` | `codegen-ocaml` | fast+integration | ocaml | — |
+| `vuna-tests-runtime` | `runtime` | fast+integration | ocaml | `base` / `http` / `web` |
+| `vuna-tests-base` | `base` | fast+integration | ocaml | `packages/base` |
+| `vuna-tests-toolchain` | `toolchain` | fast+integration | ocaml | `packages/plugin-kit` |
+
+选择是**风险定向**的：它回答「这类改动最可能被哪些用例抓到」，不是严格依赖图（严格依赖会
+让前端改动命中所有夹具）。完整覆盖由 nightly 的 `suite` 组（gate + e2e）兜底；切片保留
+`minCases` 下限，过滤后 case 数骤降直接失败。`codegen-wasm` / `codegen-native` 暂不进
+GitHub CI（维持只在本地 `backends` 组跑），它们的 area 标签只服务 `--area` 局部筛选。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。
