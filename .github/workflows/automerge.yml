@@ -1,0 +1,50 @@
+name: automerge
+
+# 门禁全绿的 PR 自动 rebase merge。非 draft、同仓库分支、没有 hold 标签时
+# 打开 GitHub auto-merge；draft / hold 时关闭。冲突、失败、取消的检查都不会触发合并。
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, synchronize]
+
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: enable or disable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          pr_json=$(gh pr view "$PR" --repo "$REPO" \
+            --json isDraft,labels,headRepository,autoMergeRequest)
+          is_draft=$(jq -r '.isDraft' <<<"$pr_json")
+          head_repo=$(jq -r '.headRepository.nameWithOwner // empty' <<<"$pr_json")
+          labels=$(jq -r '.labels[].name' <<<"$pr_json")
+          auto=$(jq -r '.autoMergeRequest // empty' <<<"$pr_json")
+
+          hold=""
+          if printf '%s\n' "$labels" | grep -Eq '^(blocked|needs-info|wontfix)$'; then
+            hold=yes
+          fi
+
+          if [ "$is_draft" = "true" ] || [ -n "$hold" ] || [ "$head_repo" != "$REPO" ]; then
+            if [ -n "$auto" ]; then
+              gh pr merge "$PR" --repo "$REPO" --disable-auto || true
+            fi
+            exit 0
+          fi
+
+          if [ -z "$auto" ]; then
+            gh pr merge "$PR" --repo "$REPO" --auto --rebase
+          fi

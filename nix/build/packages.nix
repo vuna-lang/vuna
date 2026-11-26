@@ -16,8 +16,9 @@
 let
   inherit (pkgs) lib;
 
-  # CI 门禁分组（唯一事实来源）。
+  # CI 门禁分组与 PR gate 计划。
   groups = import ../checks/groups.nix;
+  prGates = import ../checks/pr-gates.nix;
 
   # 安装时剥符号表：vuna 的运行时报错/回栈标签来自 `dt_def_locs`（`.data` 里的
   # 数据表）+ frametable（`-g` 编进去的 `.data`），不依赖 ELF 的 `.symtab` / `.debug_*`
@@ -562,13 +563,15 @@ let
   ci =
     let
       groupNames = builtins.attrNames groups;
+      system = pkgs.stdenv.hostPlatform.system;
       attrOf =
         ref:
         let
           m = builtins.match "(check|package):(.*)" ref;
-          system = pkgs.stdenv.hostPlatform.system;
         in
-        if builtins.head m == "check" then
+        if m == null then
+          throw "nix/checks/pr-gates.nix: 引用必须是 check:<name> 或 package:<name>：${ref}"
+        else if builtins.head m == "check" then
           ".#checks.${system}.${builtins.elemAt m 1}"
         else
           ".#packages.${system}.${builtins.elemAt m 1}";
@@ -577,19 +580,121 @@ let
       listCase = g: ''
         echo "${g}:"
         for a in ${attrsOf g}; do echo "  $a"; done'';
+      prGatesJson = builtins.toJSON prGates;
+      groupDefsJson = builtins.toJSON groups;
     in
     (pkgs.writeShellScriptBin "ci" ''
       set -eu
-      export PATH="${lib.makeBinPath [ pkgs.coreutils ]}:$PATH"
+      export PATH="${
+        lib.makeBinPath [
+          pkgs.coreutils
+          pkgs.jq
+        ]
+      }:$PATH"
       groups="${lib.concatStringsSep " " groupNames}"
+      pr_gates_json='${prGatesJson}'
+      group_defs_json='${groupDefsJson}'
+
       usage() {
         echo "usage: ci <group> [nix build args...]" >&2
         echo "groups: $groups" >&2
         echo "       ci --list" >&2
+        echo "       ci --plan <type:... pkg:... area:...>" >&2
+        echo "       ci --run-plan <type:... pkg:... area:...>" >&2
       }
+
+      attr_of() {
+        case "$1" in
+          check:*) echo ".#checks.${system}.''${1#check:}" ;;
+          package:*) echo ".#packages.${system}.''${1#package:}" ;;
+          *) echo "ci: 未知引用 $1" >&2; exit 2 ;;
+        esac
+      }
+
+      plan_refs() {
+        if [ "$#" -eq 0 ]; then
+          echo "ci: --plan/--run-plan 需要至少一个 type:/pkg:/area: 标签" >&2
+          return 2
+        fi
+        jq -rn --argjson gates "$pr_gates_json" --argjson group_defs "$group_defs_json" --args '
+          ($ARGS.positional) as $labels
+          | ($labels | map(select(startswith("type:")) | .[5:])) as $types
+          | ($labels | map(select(startswith("area:")) | .[5:])) as $area_labels
+          | ($labels | map(select(startswith("pkg:")) | .[4:])) as $pkg_labels
+          | (if ($types | length) == 0 then error("缺少 type:* 标签") else . end)
+          | (if ($area_labels | length) > 0 then $area_labels
+             elif ($pkg_labels | length) > 0 then ([$pkg_labels[] as $p | $gates.pkgs[$p] // empty] | add // [])
+             else [$gates.fallback] end) as $areas0
+          | (if ($areas0 | length) == 0 then [$gates.fallback] else $areas0 end) as $areas
+          | ([$areas[] as $a | select($gates.areas[$a] == null) | $a]) as $bad_areas
+          | if ($bad_areas | length) > 0 then error("未知 area: " + ($bad_areas | join(","))) else . end
+          | ([$types[] as $t | select($gates.types[$t] == null) | $t]) as $bad_types
+          | if ($bad_types | length) > 0 then error("未知 type: " + ($bad_types | join(","))) else . end
+          | ([$types[] as $t | $gates.types[$t]] | add // []) as $type_refs
+          | ([$areas[] as $a
+              | (if ($types | index("perf")) != null
+                 then ($gates.areas[$a].perf // $gates.areas[$a].default)
+                 else $gates.areas[$a].default end)] | add // []) as $area_refs
+          | ([$labels[] | select(. == "deep" or . == "suite" or . == "browser")] ) as $forced
+          | ([$forced[] | $group_defs[.]] | add // []) as $forced_refs
+          | ($area_refs + $type_refs + $forced_refs) | unique | .[]
+        ' "$@"
+      }
+
+      plan() {
+        echo "ci: plan labels=$*" >&2
+        refs=$(plan_refs "$@")
+        if [ -z "$refs" ]; then
+          echo "(no extra checks)"
+        else
+          printf '%s\n' "$refs"
+        fi
+      }
+
+      build() {
+        group=$1
+        attrs=$2
+        shift 2
+        TOKENS=''${CI_TOKENS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 8)}
+        case "$TOKENS" in ""|*[!0-9]*) TOKENS=8 ;; esac
+        JOBS=''${CI_JOBS:-2}
+        case "$JOBS" in ""|*[!0-9]*) JOBS=2 ;; esac
+        [ "$JOBS" -ge 1 ] || JOBS=1
+        [ "$JOBS" -le "$TOKENS" ] || JOBS=$TOKENS
+        CORES=''${CI_CORES:-$((TOKENS / JOBS))}
+        [ "$CORES" -ge 1 ] || CORES=1
+        echo "ci: group=$group jobs=$JOBS cores=$CORES"
+        # out-link 让本次产物成为 GC root：save 前 GC 只回收上一代遗留，不会把本次
+        # 刚构建的路径当垃圾删掉（`--no-link` 的产物不是 root）。
+        mkdir -p .ci
+        exec env NIX_CONFIG='eval-cache = false
+      log-lines = 5000' nix build --keep-going --max-jobs "$JOBS" --cores "$CORES" --out-link .ci/result $attrs "$@"
+      }
+
       case "''${1:-}" in
         --list|-l)
           ${lib.concatMapStringsSep "\n" listCase groupNames}
+          exit 0
+          ;;
+        --plan|plan)
+          shift
+          plan "$@"
+          exit 0
+          ;;
+        --run-plan|run-plan)
+          shift
+          refs=$(plan_refs "$@")
+          if [ -z "$refs" ]; then
+            echo "ci: no extra checks"
+            exit 0
+          fi
+          attrs=""
+          for ref in $refs; do
+            attrs="$attrs $(attr_of "$ref")"
+          done
+          echo "ci: selected checks:" >&2
+          printf '%s\n' "$refs" | sed 's/^/  /' >&2
+          build run-plan "$attrs"
           exit 0
           ;;
         "")
@@ -597,6 +702,7 @@ let
           exit 2
           ;;
       esac
+
       group=$1
       shift
       case " $groups " in
@@ -606,23 +712,10 @@ let
       case "$group" in
       ${lib.concatStringsSep "\n" (map groupCase groupNames)}
       esac
-      TOKENS=''${CI_TOKENS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 8)}
-      case "$TOKENS" in ""|*[!0-9]*) TOKENS=8 ;; esac
-      JOBS=''${CI_JOBS:-2}
-      case "$JOBS" in ""|*[!0-9]*) JOBS=2 ;; esac
-      [ "$JOBS" -ge 1 ] || JOBS=1
-      [ "$JOBS" -le "$TOKENS" ] || JOBS=$TOKENS
-      CORES=''${CI_CORES:-$((TOKENS / JOBS))}
-      [ "$CORES" -ge 1 ] || CORES=1
-      echo "ci: group=$group jobs=$JOBS cores=$CORES"
-      # out-link 让本次产物成为 GC root：save 前 GC 只回收上一代遗留，不会把本次
-      # 刚构建的路径当垃圾删掉（`--no-link` 的产物不是 root）。
-      mkdir -p .ci
-      exec env NIX_CONFIG='eval-cache = false
-      log-lines = 5000' nix build --keep-going --max-jobs "$JOBS" --cores "$CORES" --out-link .ci/result $attrs "$@"
+      build "$group" "$attrs" "$@"
     '')
     // {
-      meta.description = "CI 门禁分组 runner（nix run .#ci -- pr|deep|suite|backends|native|browser）";
+      meta.description = "CI 门禁 runner（分组或 type/area gate 计划）";
     };
 
   # 跨编译器 conformance runner：在 native 自举编译器上跑 selfhost / parity / corpus。
