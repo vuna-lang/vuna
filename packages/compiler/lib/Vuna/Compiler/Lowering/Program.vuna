@@ -185,17 +185,23 @@ recordTermAsAppIn : Term -> List (Term, Rig) -> Term
 recordTermAsAppIn t [] = t
 recordTermAsAppIn t ((a, rig) :: rest) = recordTermAsAppIn (TApp t a rig) rest
 
--- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
--- 分支顺序固定（Nat Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
+-- | 顶层名引用：Nat / Fin 构造子 / 程序构造子 / 内建 / 普通运行时定义。
+-- 分支顺序固定（Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
 -- 需要 List 桥接的内建在没有 canonical `Base.Data.List.List` 族时报 `CG_ListBridgeRequired`。
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name =
   if name == natZeroCtor then
     OkC (IrInt 0)
+  else if name == finZeroCtor then
+    OkC (IrInt 0)
   else if name == "strFromFloat" then
     OkC (IrGlobal floatRenderRefName)
   else if name == natSuccCtor then
     OkC (IrRt irRtNatSucc)
+  else if name == finSuccCtor then
+    OkC (IrRt irRtNatSucc)
+  else if name == finToNatName then
+    OkC (IrRt "natToInt")
   else
     case HashMap.lookup name env.lwCtors of
       Just (family, keepFlags) => OkC (IrCtor family name Nothing [])
@@ -635,6 +641,28 @@ lowerConAppNonChainFuel fuel env st binders c args =
                         _ => icInternal "Nat Succ must have exactly one runtime argument"
                     [] => icInternal "Nat Succ must have exactly one runtime argument"
           )
+  else if c == finZeroCtor then
+    case alignCtorArgs c [False] args of
+      ErrC e => ErrC e
+      OkC runtimeArgs =>
+        case runtimeArgs of
+          [] => OkC (IrInt 0, st)
+          _ => icInternal "Fin FZero applied to arguments"
+  else if c == finSuccCtor then
+    case alignCtorArgs c [False, True] args of
+      ErrC e => ErrC e
+      OkC runtimeArgs =>
+        Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st binders [False] runtimeArgs) (
+            \p =>
+              case p of
+                (irs, st2) =>
+                  case irs of
+                    ir :: rest =>
+                      case rest of
+                        [] => OkC (IrApp (justAppTy Nothing) (IrRt irRtNatSucc) ir, st2)
+                        _ => icInternal "Fin FSucc must have exactly one runtime argument"
+                    [] => icInternal "Fin FSucc must have exactly one runtime argument"
+          )
   else
     case HashMap.lookup c env.lwCtors of
       Nothing => icInternal "unknown constructor ${c}"
@@ -944,10 +972,11 @@ lowerArmsFuel fuel env scrutTy st outer (alt :: rest) =
       )
 
 -- ---------------------------------------------------------------
--- Nat case 降级（运行时是 int）
+-- Nat / Fin case 降级（运行时都是 int）
 -- ---------------------------------------------------------------
 isNatCtorName : String -> Bool
-isNatCtorName name = name == natZeroCtor || name == natSuccCtor
+isNatCtorName name =
+  name == natZeroCtor || name == natSuccCtor || name == finZeroCtor || name == finSuccCtor
 
 natCaseApplies : List CaseAlt -> Bool
 natCaseApplies [] = False
@@ -970,6 +999,11 @@ natCaseHasCtor (alt :: rest) =
 findAltBy : String -> List CaseAlt -> Maybe CaseAlt
 findAltBy name [] = Nothing
 findAltBy name (alt :: rest) = if caseAltName alt == name then Just alt else findAltBy name rest
+
+-- 首个命中的 alt：Nat 与 Fin 共用同一套 `IrNatCase` 降级，按出现的构造子选族。
+firstAltOf : Maybe CaseAlt -> Maybe CaseAlt -> Maybe CaseAlt
+firstAltOf (Just a) _ = Just a
+firstAltOf Nothing b = b
 
 findCatchAllAlt : List CaseAlt -> Maybe CaseAlt
 findCatchAllAlt [] = Nothing
@@ -1004,8 +1038,8 @@ lowerNatCaseFuel fuel env st outer scrut alts =
               let
                 fresh = st1.lwNext
                 st2 = LwSt (fresh + 1) st1.lwBinder
-                zeroAlt = findAltBy natZeroCtor alts
-                succAlt = findAltBy natSuccCtor alts
+                zeroAlt = firstAltOf (findAltBy natZeroCtor alts) (findAltBy finZeroCtor alts)
+                succAlt = firstAltOf (findAltBy natSuccCtor alts) (findAltBy finSuccCtor alts)
                 catchAlt = findCatchAllAlt alts
               in Vuna.Compiler.Base.Common.bind (lowerNatAltFuel (fuel - 1) env st2 outer zeroAlt) (
                   \pz =>

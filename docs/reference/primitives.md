@@ -44,8 +44,9 @@
   | `True` / `False` | `Base.Data.Bool.True` / `Base.Data.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
   | `List` | `Base.Data.List.List`（`(::)` / `Nil`） | `Base.Data.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Data.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Data.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
+  | `Fin` | `Base.Data.Fin.Fin`（`FZero` / `FSucc` 同理） | `Base.Data.Fin` | `finTypeName` / `finZeroCtor` / `finSuccCtor` |
 
-  三族的身份、固定构造子与运行时表示类别在 `Base.Intrinsics.canonicalFamilies` 单点声明
+  四族的身份、固定构造子与运行时表示类别在 `Base.Intrinsics.canonicalFamilies` 单点声明
   （`FamilyRepr` = `FamReprBool` / `FamReprNat` / `FamReprBoxed`）：表示判定、IR 类型、
   展示与 FFI 白名单都查这张表，新增 canonical 族只改这里。
 

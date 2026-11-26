@@ -1,4 +1,9 @@
--- | 长度索引位置：`Fin n` 恰好有 n 个值（`0` 到 `n - 1`），是 `Vec n a` 的合法下标；`n` 是 Rig0，运行时擦除。`Fin` 是普通归纳族（`FZero` / `FSucc` 与 `Zero` / `Succ` 同构），不引入新的类型层构造。出向转换 `Fin n -> Nat` / `Fin n -> Int` 有无损的 `Convert` 实例；进入 `Fin` 要运行时界，用 `finFromNat` / `finFromInt`。
+-- | 长度索引位置：`Fin n` 恰好有 n 个值（`0` 到 `n - 1`），是 `Vec n a` 的合法下标；`n` 是 Rig0，运行时擦除。`Fin` 是普通归纳族（`FZero` / `FSucc` 与 `Zero` / `Succ` 同构），不引入新的类型层构造。
+--
+-- 运行时表示和 `Nat` 同档：值是 OCaml `int`（`FZero` = 0、`FSucc n` = n + 1），
+-- 构造子不生成变体、模式匹配降成整数分支；下标读取因此是 O(1)，不是沿链递归。
+-- 出向转换 `Fin n -> Nat` / `Fin n -> Int` 有无损的 `Convert` 实例；进入 `Fin` 要
+-- 运行时界，用 `finFromNat` / `finFromInt`。
 module Base.Data.Fin where
 
 import Base.Data.Nat

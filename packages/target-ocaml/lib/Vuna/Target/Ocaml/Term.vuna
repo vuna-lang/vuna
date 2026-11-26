@@ -2847,12 +2847,31 @@ bindFirstOf st group (d, def) = lineDirectiveOf st d ++ bindKeywordOf group d ++
 bindAndOf : GenSt -> (IrDef, ODef) -> String
 bindAndOf st (d, def) = lineDirectiveOf st d ++ "and " ++ renderDefOf def
 
+-- | 组内成员是否真的在 IR 里自引用。`irGroupIsRec` 来自源码级依赖表；内建重写
+-- （如 `finToNat` → 恒等 `natToInt`）会把自引用消掉，此时再生成 `let rec`
+-- 会触发 `-warn-error` 的 warning 39。按实际 IR 再确认一次。
+groupReallyRec : IrGroup -> Bool
+groupReallyRec group =
+  if irGroupIsRec group then
+    let
+      names = map irDefName group.irGroupDefs
+    in anyDefMentions names group.irGroupDefs
+  else
+    False
+
+anyDefMentions : List String -> List IrDef -> Bool
+anyDefMentions names [] = False
+anyDefMentions names (d :: rest) =
+  case irDefBody d of
+    Nothing => anyDefMentions names rest
+    Just body => anyMem (irGlobalsOf body) names || anyDefMentions names rest
+
 -- 单递归绑定若命中 TMC（构造子末字段上的自递归），加 `[@tail_mod_cons]`：OCaml 把它
 -- 编成单遍原地构造（`List.map` / `List.init` 同一机制），省掉深栈的 GC 扫描与
 -- reverse 复制。多定义组（`and`）不注解。
 bindKeywordOf : IrGroup -> IrDef -> String
 bindKeywordOf group d =
-  if irGroupIsRec group then
+  if groupReallyRec group then
     if tmcCandidate d then "let[@tail_mod_cons] rec " else "let rec "
   else
     "let "
