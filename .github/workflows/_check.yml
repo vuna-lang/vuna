@@ -30,6 +30,17 @@ on:
         required: false
         type: boolean
         default: false
+      # PR gate 计划器使用的标签串（type:/pkg:/area:）。非空时执行
+      # `nix run .#ci -- run-plan <labels>`，替代固定的 group。
+      gate-labels:
+        required: false
+        type: string
+        default: ""
+      # detect / policy job 的结果；失败时让必需检查保持失败，而不是跳过。
+      precondition:
+        required: false
+        type: string
+        default: "success"
 
 permissions:
   contents: read
@@ -62,10 +73,31 @@ jobs:
         if: inputs.eval
         run: env NIX_CONFIG='eval-cache = false' nix flake check --no-build
 
+      - name: precondition
+        if: inputs.precondition != 'success'
+        run: |
+          echo "precondition failed: ${{ inputs.precondition }}" >&2
+          exit 1
+
+      - name: plan
+        if: inputs.gate-labels != ''
+        env:
+          GATE_LABELS: ${{ inputs.gate-labels }}
+        run: |
+          read -r -a labels <<< "$GATE_LABELS"
+          nix run .#ci -- plan "${labels[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: ${{ inputs.group }}
         env:
           CI_JOBS: ${{ inputs.jobs }}
-        run: nix run .#ci -- ${{ inputs.group }}
+          GATE_LABELS: ${{ inputs.gate-labels }}
+        run: |
+          if [ -n "${GATE_LABELS:-}" ]; then
+            read -r -a labels <<< "$GATE_LABELS"
+            nix run .#ci -- run-plan "${labels[@]}"
+          else
+            nix run .#ci -- ${{ inputs.group }}
+          fi
 
       # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
       - name: Drop builder lock files

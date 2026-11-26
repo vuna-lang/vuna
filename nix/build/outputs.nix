@@ -30,6 +30,7 @@ let
       # 门禁分组覆盖（nix/checks/groups.nix）：分组引用必须存在，且每个 check 至少进
       # 一个门禁分组；`vuna` / `vuna-seed` / `vuna-compiler` 是构建产物，不要求分组。
       groups = import ../checks/groups.nix;
+      prGates = import ../checks/pr-gates.nix;
       refs = builtins.concatLists (
         map (g: groups.${g}) [
           "deep"
@@ -39,6 +40,38 @@ let
           "browser"
         ]
       );
+      prGateRefs =
+        builtins.concatLists (builtins.attrValues prGates.types)
+        ++ builtins.concatLists (map (a: a.default ++ a.perf) (builtins.attrValues prGates.areas));
+      prGateParsed = map (ref: {
+        inherit ref;
+        m = builtins.match "(check|package):(.+)" ref;
+      }) prGateRefs;
+      prGateMalformed = map (x: x.ref) (builtins.filter (x: x.m == null) prGateParsed);
+      prGateCheckRefs = map (x: builtins.elemAt x.m 1) (
+        builtins.filter (x: x.m != null && builtins.head x.m == "check") prGateParsed
+      );
+      prGatePackageRefs = map (x: builtins.elemAt x.m 1) (
+        builtins.filter (x: x.m != null && builtins.head x.m == "package") prGateParsed
+      );
+      prGateUnknownChecks = builtins.filter (
+        n: !(builtins.elem n (builtins.attrNames checks))
+      ) prGateCheckRefs;
+      prGateUnknownPackages = builtins.filter (
+        n: !(builtins.elem n (builtins.attrNames packages))
+      ) prGatePackageRefs;
+      prGateAreaNames = builtins.attrNames prGates.areas;
+      prGateBadAreas = builtins.filter (
+        name:
+        let
+          area = prGates.areas.${name};
+        in
+        area.default == [ ] || area.perf == [ ]
+      ) prGateAreaNames;
+      prGateBadPkgs = builtins.filter (
+        name: builtins.any (area: !(builtins.elem area prGateAreaNames)) prGates.pkgs.${name}
+      ) (builtins.attrNames prGates.pkgs);
+      prGateBadFallback = !(builtins.elem prGates.fallback prGateAreaNames);
       parsed = map (ref: {
         inherit ref;
         m = builtins.match "(check|package):(.+)" ref;
@@ -70,11 +103,23 @@ let
           "分组引用了不存在的 package：${toString unknownPackages}"
         else if missing != [ ] then
           "check 未进入任何门禁分组（deep/suite/backends）：${toString missing}"
+        else if prGateMalformed != [ ] then
+          "pr-gates 项必须是 check:<name> 或 package:<name>：${toString prGateMalformed}"
+        else if prGateUnknownChecks != [ ] then
+          "pr-gates 引用了不存在的 check：${toString prGateUnknownChecks}"
+        else if prGateUnknownPackages != [ ] then
+          "pr-gates 引用了不存在的 package：${toString prGateUnknownPackages}"
+        else if prGateBadAreas != [ ] then
+          "pr-gates 的 area 缺少 default/perf：${toString prGateBadAreas}"
+        else if prGateBadPkgs != [ ] then
+          "pr-gates 的 pkg 映射到不存在的 area：${toString prGateBadPkgs}"
+        else if prGateBadFallback then
+          "pr-gates fallback 不是已存在的 area：${prGates.fallback}"
         else
           null;
     in
     if groupError != null then
-      throw "nix/checks/groups.nix: ${groupError}"
+      throw "nix/checks: ${groupError}"
     else
       {
         inherit packages checks;

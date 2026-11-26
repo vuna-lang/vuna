@@ -1,8 +1,8 @@
 name: ci
 
-# PR 的常跑门禁只有 `pr`（fmt + lint + 自检）；`deep` / `suite` 由 PR 标签在
-# label-checks.yml 里按需触发，nightly 与手动 dispatch 兜底。这样标签事件不会重跑或
-# 取消 required 的 `pr / run`。
+# PR 的固定必需检查是 `pr`（fmt + lint + 自检）；增量检查由 gates.yml 按 type + area
+# 选择。`deep` / `suite` / `browser` 在定时与手动 dispatch 上跑整组，PR 需要强制整组时
+# 加对应标签由 gates 计划器带上。
 #
 # `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
 # 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。

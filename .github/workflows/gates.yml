@@ -1,0 +1,111 @@
+name: gates
+
+# PR 的细粒度门禁：detect 按 type + pkg/area 计算检查子集，gates 只跑这些检查。
+# `gates / run` 是 required check；detect 失败时 precondition 让这个检查保持失败，
+# 不会因为 job 被跳过而卡在 Expected。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+
+concurrency:
+  group: gates-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+  pull-requests: read
+  issues: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      labels: ${{ steps.labels.outputs.labels }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: compute labels
+        id: labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin "$BASE"
+          files=$(git diff --name-only "origin/$BASE...HEAD")
+          path_labels=$(printf '%s\n' "$files" | nix/tools/pr-labels.sh)
+          current_labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
+
+          issue_number=$(printf '%s\n' "$BODY" |
+            grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?|references?)[[:space:]]+#[0-9]+' |
+            grep -Eo '[0-9]+' | head -n 1 || true)
+          issue_labels=""
+          if [ -n "$issue_number" ]; then
+            issue_labels=$(gh api "repos/$REPO/issues/$issue_number" --jq '.labels[].name' 2>/dev/null || true)
+          fi
+
+          type_label=""
+          prefix=$(printf '%s' "$TITLE" | sed -nE 's/^([A-Za-z]+)(\([^)]*\))?!?:.*/\1/p' | tr '[:upper:]' '[:lower:]')
+          case "$prefix" in
+            feat|feature) type_label="type:feature" ;;
+            fix|bug|revert) type_label="type:bug" ;;
+            docs|refactor|perf|test|chore) type_label="type:$prefix" ;;
+            build|ci|style) type_label="type:chore" ;;
+            epic) type_label="type:epic" ;;
+          esac
+          if [ -z "$type_label" ]; then
+            type_label=$(printf '%s\n' "$current_labels" | grep -E '^type:' | head -n 1 || true)
+          fi
+          if [ -z "$type_label" ]; then
+            type_label=$(printf '%s\n' "$issue_labels" | grep -E '^type:' | head -n 1 || true)
+          fi
+          if [ -z "$type_label" ]; then
+            echo "::error::PR 缺少 type:* 标签；请在标题写 Conventional Commits 前缀，或在关联 issue 上补 type。"
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$BODY" |
+            grep -Eqi '(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?|references?)[[:space:]]+#[0-9]+'; then
+            if ! printf '%s\n' "$current_labels" | grep -Fqx 'no-issue'; then
+              echo "::error::PR 描述必须包含 'Closes #N' 或 'Refs #N'；例外请加 no-issue 标签。"
+              exit 1
+            fi
+          fi
+
+          labels=$(printf '%s\n' \
+            "$current_labels" \
+            "$path_labels" \
+            "$issue_labels" \
+            "$type_label" |
+            grep -v '^$' | sort -u | tr '\n' ' ')
+          labels=${labels% }
+
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          {
+            echo "## gates plan"
+            echo
+            echo "- PR: #$PR"
+            echo "- type: \`$type_label\`"
+            echo "- labels: \`$labels\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  gates:
+    needs: detect
+    if: always()
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: gates
+      timeout: 60
+      jobs: 2
+      cache-size: 2G
+      gate-labels: ${{ needs.detect.outputs.labels }}
+      precondition: ${{ needs.detect.result }}

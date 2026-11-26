@@ -2,11 +2,13 @@
 # 把 main 的分支保护落到 GitHub：PR 必需、必需检查、strict up-to-date、线性历史、
 # 禁止 force push / 删除，并关闭 merge commit / squash（只留 rebase merge）。
 #
+# 必需检查默认是 `pr / run`（快速门禁）与 `gates / run`（type + area 选出的子集）。
+#
 # 依赖：gh（已登录，且有仓库 admin 权限）、jq。
 #
 # 用法:
 #   nix/tools/github-branch-protection.sh [--dry-run] [--consolidate] [--no-repo-settings]
-#     [--repo OWNER/REPO] [--branch main] [--checks "pr / run"] [--approvals N]
+#     [--repo OWNER/REPO] [--branch main] [--checks "pr / run,gates / run"] [--approvals N]
 #
 # 默认只创建/更新名为 main-pr-flow 的 ruleset；--consolidate 会删除旧的
 # disable-force-push-main / liner-commit（新 ruleset 已包含它们的规则）。
@@ -21,7 +23,7 @@ usage: github-branch-protection.sh [options]
   --no-repo-settings   不改仓库的 merge 方式设置
   --repo OWNER/REPO    默认取当前仓库
   --branch NAME        受保护分支，默认 main
-  --checks LIST        逗号分隔的必需检查，默认 "pr / run"
+  --checks LIST        逗号分隔的必需检查，默认 "pr / run,gates / run"
   --approvals N        必需 approve 数，默认 0
   -h, --help           显示本帮助
 EOF
@@ -30,7 +32,7 @@ EOF
 repo=""
 branch="main"
 ruleset_name="main-pr-flow"
-required_checks="pr / run"
+required_checks="pr / run,gates / run"
 approvals="0"
 dry_run=0
 consolidate=0
