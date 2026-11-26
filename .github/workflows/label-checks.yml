@@ -1,0 +1,68 @@
+name: label-checks
+
+# PR 标签触发的长尾门禁。与 ci.yml 分开：标签事件不会重跑或取消 required 的 `pr / run`，
+# 不同标签各自分组，加 suite 不会取消正在跑的 deep。新增提交时，已带标签的组会重跑。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  # 同一标签（或同一次同步）的新 run 取消旧的；不同标签互不取消。
+  group: label-${{ github.ref }}-${{ github.event.label.name || 'sync' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  deep:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'deep') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'deep')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: deep
+      timeout: 60
+      jobs: 2
+      cache-size: 2G
+
+  suite:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'suite') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'suite')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: suite
+      timeout: 60
+      jobs: 1
+
+  backends:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'backend') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'backend')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: backends
+      timeout: 60
+      jobs: 1
+
+  native:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'backend') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'backend')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: native
+      timeout: 120
+      jobs: 1
+
+  browser:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'browser') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'browser')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: browser
+      timeout: 60
+      jobs: 1

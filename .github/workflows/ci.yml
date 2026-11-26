@@ -1,12 +1,13 @@
 name: ci
 
-# push / PR 只跑最小档 `pr`（fmt + lint + 自检）。完整便宜门禁 `deep` 与长尾
-# `suite` / `backends` / `native` / `browser` 走定时、手动 dispatch 或带对应标签的
-# PR；每组一个独立 job + 独立 Nix store 缓存，互不拖累。
+# PR 的常跑门禁只有 `pr`（fmt + lint + 自检）；`deep` / `suite` / `backends` / `native`
+# 由 PR 标签在 label-checks.yml 里按需触发，nightly 与手动 dispatch 兜底。这样标签事件
+# 不会重跑或取消 required 的 `pr / run`。
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "0 19 * * *"
   workflow_dispatch:
@@ -35,7 +36,7 @@ jobs:
       save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
   deep:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'deep')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/_check.yml
     with:
       group: deep
@@ -45,7 +46,7 @@ jobs:
       save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
   suite:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'suite')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/_check.yml
     with:
       group: suite
@@ -53,7 +54,7 @@ jobs:
       jobs: 1
 
   backends:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'backend')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/_check.yml
     with:
       group: backends
@@ -61,7 +62,7 @@ jobs:
       jobs: 1
 
   native:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'backend')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/_check.yml
     with:
       group: native
