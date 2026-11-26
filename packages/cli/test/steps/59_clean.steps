@@ -1,6 +1,6 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 59) `vuna store clean`：一个 store 根、两类生命周期。
-#     --store     清缓存族（objects/<kind>、views/bin、.tmp），保留包对象族与 roots
+#     --store     清缓存族（objects/<kind>、.tmp（含旧 views）），保留包对象族与 roots
 #     --packages  清包对象族（objects/pkg、pkgs、tmp），保留缓存族与 roots
 #     --gc        与 --packages 连用：只删未被工作区/项目 roots 引用的包对象
 #     不带 flag 时只清缓存族；--dry-run 只报数量。
@@ -12,17 +12,17 @@ out-contains: would remove
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --store'
 exit: 0
 out-contains: removed
-# 缓存族清空；包对象族、物化视图、roots 必须存活。
-run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/module-iface" && test -f "$TMPDIR/clean-store/objects/pkg/fake" && test -f "$TMPDIR/clean-store/pkgs/fake/.complete" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+# 缓存族清空；包对象族与物化视图必须存活。
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/module-iface" && test -f "$TMPDIR/clean-store/objects/pkg/fake" && test -f "$TMPDIR/clean-store/pkgs/fake/.complete"'
 exit: 0
 file-exists: $TMPDIR/keep.txt
-# 恢复缓存族，再清包对象族：缓存族与 roots 必须存活。
+# 恢复缓存族，再清包对象族：缓存族必须存活。
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/module-iface"'
 exit: 0
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --packages'
 exit: 0
 out-contains: removed
-run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/pkg" && test ! -d "$TMPDIR/clean-store/pkgs" && test -d "$TMPDIR/clean-store/objects/module-iface" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/pkg" && test ! -d "$TMPDIR/clean-store/pkgs" && test -d "$TMPDIR/clean-store/objects/module-iface"'
 exit: 0
 # 裸 `vuna store clean` 只清缓存族：包对象族不动。
 run: sh -c 'mkdir -p "$TMPDIR/clean-store/objects/pkg"; printf x >"$TMPDIR/clean-store/objects/pkg/fake2"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean'

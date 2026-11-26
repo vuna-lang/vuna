@@ -1,49 +1,27 @@
-# 76) 共享对象库：同一 VUNA_STORE 连续 check 命中，且对象落盘。
+# 76) 共享对象库：同一 VUNA_STORE 连续 check 复用 module-iface，且对象落盘。
 #     本 case 自己指定临时 store（不依赖 suite 状态），验证 runner 透传的
-#     VUNA_STORE 可被命令行覆盖，以及 check marker 的命中标签。
-#     后半段是**单一根**的门禁：跨目录复用（check/build）、项目根裁剪、默认根、
-#     视图 key 含链接工具链身份。
+#     VUNA_STORE 可被命令行覆盖。
 run: sh -c 'rm -rf "$TMPDIR/share-store" "$TMPDIR/share-pkg"; mkdir -p "$TMPDIR/share-pkg/app"; printf "[package]\nname = \"share-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/share-pkg/vuna.toml"; printf "main : Int\nmain = 1\n" > "$TMPDIR/share-pkg/app/Main.vuna"'
 exit: 0
 run: sh -c 'VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1'
 exit: 0
-run: sh -c 'VUNA_STORE="$TMPDIR/share-store" VUNA_LOG=debug "$VUNA" check "$TMPDIR/share-pkg" 2>&1 | grep -q "cache-path=hit"'
-exit: 0
-run: sh -c 'test -n "$(find "$TMPDIR/share-store/objects" -type f | head -1)"'
+run: sh -c 'n1=$(find "$TMPDIR/share-store/objects" -type f | wc -l); VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1; n2=$(find "$TMPDIR/share-store/objects" -type f | wc -l); [ "$n1" -eq "$n2" ] && [ "$n1" -gt 0 ]'
 exit: 0
 
-#     统一 store 的价值全在「同一份输入在另一个目录直接命中」；这几档就是它的哨兵。
-
-# 两个内容相同的包目录（一个 store）。
-run: sh -c 'S="$TMPDIR/uni"; rm -rf "$S"; mkdir -p "$S/a/app" "$S/b/app"; for d in a b; do printf "[package]\nname = \"uni\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$S/$d/app/Main.vuna"; done'
+# 两个内容相同的包目录（一个 store）：模块接口按输入地址复用。
+run: sh -c 'S="$TMPDIR/uni"; rm -rf "$S"; mkdir -p "$S/a/app" "$S/b/app"; for d in a b; do mkdir -p "$S/$d/lib"; printf "[package]\nname = \"uni\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/$d/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/$d/app/Main.vuna"; done'
+exit: 0
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" check "$S/a" >/dev/null 2>&1; n1=$(find "$S/store/objects/module-iface" -type f | wc -l); VUNA_STORE="$S/store" "$VUNA" check "$S/b" >/dev/null 2>&1; n2=$(find "$S/store/objects/module-iface" -type f | wc -l); [ "$n1" -gt 0 ] && [ "$n1" -eq "$n2" ]'
 exit: 0
 
-# 预热：`build` 建立视图并按 roots 登记（第二遍用于收敛摘要路径）。
-run: sh -c 'S="$TMPDIR/uni"; for i in 1 2; do VUNA_STORE="$S/store" "$VUNA" check "$S/a" >/dev/null 2>&1; VUNA_STORE="$S/store" "$VUNA" build "$S/a" >/dev/null 2>&1; done'
+# 默认 build 写入当前包目录的 `.output`（真目录，不是共享视图）。
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" build "$S/a" >/dev/null 2>&1; test -x "$S/a/.output/bin/uni"; test ! -L "$S/a/.output"'
 exit: 0
-
-# 项目根记录绝对目录（GC 用它判断项目是否还存在）。
-run: sh -c 'S="$TMPDIR/uni"; find "$S/store/roots" -name .project | head -1 | xargs cat | grep -q "/a$"'
-exit: 0
-
-# 另一个目录、同一个 store：check 判定命中。
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_LOG=debug "$VUNA" check "$S/b" 2>&1 | grep -q "cache-path=hit"'
-exit: 0
-
-# 另一个目录、同一个 store：build 复用视图（不重跑 codegen / 链接）。
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" build "$S/b" 2>&1 | grep -q "up to date"'
-exit: 0
-
-# 复用不发生写入：B 跑完后对象数不变。
-run: sh -c 'S="$TMPDIR/uni"; n1=$(find "$S/store/objects" -type f | wc -l); VUNA_STORE="$S/store" "$VUNA" check "$S/b" >/dev/null 2>&1; VUNA_STORE="$S/store" "$VUNA" build "$S/b" >/dev/null 2>&1; n2=$(find "$S/store/objects" -type f | wc -l); test "$n1" -eq "$n2"'
-exit: 0
-
-# 视图 key 含链接工具链身份：换 `VUNA_OCAML_ID` 就换视图（不把别的工具链的链接产物当同一次构建）。
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_OCAML_ID=tool-a "$VUNA" build "$S/b" >/dev/null 2>&1; p1=$(readlink -f "$S/b/.output"); VUNA_STORE="$S/store" VUNA_OCAML_ID=tool-b "$VUNA" build "$S/b" >/dev/null 2>&1; p2=$(readlink -f "$S/b/.output"); test -n "$p1" && test "$p1" != "$p2"'
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" build "$S/a" 2>&1 | grep -q "up to date"'
 exit: 0
 
 # 项目根裁剪：legacy（无 `.project`）与目录已消失的项目根都被删；活项目保留。
-run: sh -c 'S="$TMPDIR/uni"; store="$S/store"; live=$(find "$store/roots" -maxdepth 1 -mindepth 1 -type d | head -1); mkdir -p "$store/roots/legacy-root"; : > "$store/roots/legacy-root/deadbeef"; mkdir -p "$store/roots/gone-root"; printf "%s" "$S/does-not-exist" > "$store/roots/gone-root/.project"; : > "$store/roots/gone-root/deadbeef"; VUNA_STORE="$store" "$VUNA" store gc --dry-run 2>&1 | grep -q "2 dead project root(s)"; VUNA_STORE="$store" "$VUNA" store gc >/dev/null 2>&1; test ! -e "$store/roots/legacy-root" && test ! -e "$store/roots/gone-root" && test -d "$live"'
+run: sh -c 'S="$TMPDIR/uni"; store="$S/store"; mkdir -p "$store/roots/live-root"; printf "%s" "$S/a" > "$store/roots/live-root/.project"; mkdir -p "$store/roots/legacy-root"; : > "$store/roots/legacy-root/deadbeef"; mkdir -p "$store/roots/gone-root"; printf "%s" "$S/does-not-exist" > "$store/roots/gone-root/.project"; : > "$store/roots/gone-root/deadbeef"; VUNA_STORE="$store" "$VUNA" store gc 2>&1 | grep -q "2 dead project root(s)"; test ! -e "$store/roots/legacy-root" && test ! -e "$store/roots/gone-root" && test -d "$store/roots/live-root"'
 exit: 0
 
 # 默认根：`VUNA_STORE` 未设 ⇒ `$HOME/.vuna/store`（`XDG_DATA_HOME` 也未设）。
