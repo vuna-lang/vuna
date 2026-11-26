@@ -19,6 +19,7 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
 import Vuna.Ir.Runtime
+import Vuna.Ir.Tail
 import Vuna.Target.Ocaml.Decl
 import Vuna.Target.Ocaml.Model
 import Vuna.Target.Ocaml.Render
@@ -2111,15 +2112,17 @@ inlineText _ _ = Nothing
 export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> String
 dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched usesEff =
   let
+    -- 观测 runtime 的 `dtp_obs_tid` 读调度器的当前任务槽，所以 obs 也带调度器。
+    needsSched = usesSched || usesObs
     -- 效应机器是调度器（`Perform` + cleanup 表）与宿主 handler 的共同底座：
     -- 三条旗标任一命中都要带上它。纯值程序三者皆空，产物因此只有纯数据原语。
-    usesEffRt = usesEff || usesSched || usesHost
+    usesEffRt = usesEff || needsSched || usesHost
   in dtRuntime
     ++ (if usesEffRt then dtEffRuntime else "")
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs_raw = \"\"\n" else "let dt_def_locs_raw = ${locs}\n")
     ++ dtReporterRuntimeWith usesEffRt
-    ++ (if usesSched then dtSchedRuntime else "")
+    ++ (if needsSched then dtSchedRuntime else "")
     ++ (if usesHost then dtHostRuntime else "")
     ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")
 
@@ -2791,13 +2794,20 @@ bindGroupOf st group (p :: rest) =
   joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
 
 bindFirstOf : GenSt -> IrGroup -> (IrDef, ODef) -> String
-bindFirstOf st group (d, def) = lineDirectiveOf st d ++ bindKeywordOf group ++ renderDefOf def
+bindFirstOf st group (d, def) = lineDirectiveOf st d ++ bindKeywordOf group d ++ renderDefOf def
 
 bindAndOf : GenSt -> (IrDef, ODef) -> String
 bindAndOf st (d, def) = lineDirectiveOf st d ++ "and " ++ renderDefOf def
 
-bindKeywordOf : IrGroup -> String
-bindKeywordOf group = if irGroupIsRec group then "let rec " else "let "
+-- 单递归绑定若命中 TMC（构造子末字段上的自递归），加 `[@tail_mod_cons]`：OCaml 把它
+-- 编成单遍原地构造（`List.map` / `List.init` 同一机制），省掉深栈的 GC 扫描与
+-- reverse 复制。多定义组（`and`）不注解。
+bindKeywordOf : IrGroup -> IrDef -> String
+bindKeywordOf group d =
+  if irGroupIsRec group then
+    if tmcCandidate d then "let[@tail_mod_cons] rec " else "let rec "
+  else
+    "let "
 
 -- `#line` 指令（`# <line> "<file>"`，`docs/reference/observability.md` §5）：让 DWARF 的
 -- `.debug_line` 直接指向 `.vuna` 源，`gdb` / `perf` / 异常回栈不必再靠 `dt_def_locs`。
