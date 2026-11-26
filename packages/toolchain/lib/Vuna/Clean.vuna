@@ -77,7 +77,7 @@ cacheKindNames = ["module-iface"]
 -- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让模块顺序
 -- 或依赖身份漂移），只有显式 `clean --store` 才清理。
 identityKindNames : List String
-identityKindNames = ["module-order", "pkg-iface"]
+identityKindNames = ["pkg-summary"]
 
 -- | 内部：缓存族的清理作用域：各 kind 目录 + 两类视图产物 / `.tmp`。
 -- 不碰包对象族（`objects/pkg`）、`pkgs` 与 `roots`。
@@ -398,7 +398,7 @@ gcFilesOf root =
   do
     objs <- walkFiles 1048576 "${root}/objects"
     let
-      excluded = ["${root}/objects/pkg/", "${root}/objects/module-order/", "${root}/objects/pkg-iface/"]
+      excluded = ["${root}/objects/pkg/", "${root}/objects/pkg-summary/"]
     in pure (filter (\p => not (anyLine (\pre => startsWith pre p) excluded)) objs)
 
 -- | 内部：文件候选：名字（对象摘要）不在 roots 里，且 mtime 早于宽限窗口；带 size 便于容量判定。
