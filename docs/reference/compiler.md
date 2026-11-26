@@ -73,7 +73,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Loader.Fixity` | 按每模块可见表重排中缀 / 换别名 / 展开 section（`->` 恒可见；未知符号运算符报错） | `reorderProgram` |
 | `Loader.Selectors` | record 字段选择器的生成与冲突判据（`Loader.Flatten` 在解析后、导出表计算前调用）：模块内唯一的字段名生成 `f : {params} -> R params -> T`，同名字段要在一处 `deriving (Selectors)` 认领，与顶层声明撞名报错；`export R` / `R(..)` 都带上生成的选择器，导出表按源码声明计算（生成的声明不在 `topNames` 里） | `selectorDecls`、`selectedFieldNames`、`selectorDerivingName` |
 | `Loader.Addr` | **输入摘要（地址）唯一构造器**：`addrOf`（域分隔 + 规范编码 + SHA-256）、模块头抽取 `headerOfSource`、项目身份 `projectIdAddrOf`；所有对象路径都由这里的纯函数决定 | `addrOf`、`headerOfSource`、`projectIdAddrOf` |
-| `Loader.Header` | 模块头（import 名单）的输入寻址缓存：键 = 源内容地址（与编译器身份无关），命中即不 parse；未命中现 parse 一次并写回。只缓存成功解析的模块 | `headerImportsEff`、`headerObjKey` |
+
 | `Loader.Fingerprint` | 编译器身份的唯一来源：**身份属于编译器闭包**——本包模块含 `Vuna.Compiler.Loader.Fingerprint` 时按源闭包 + 依赖身份定址（`compilerIdOf`，`build-id` 由构建写入产物目录），其余包继承构建它的编译器身份；运行时读 `VUNA_COMPILER_TAG` → 可执行文件旁 `build-id` → 路径+大小+mtime 兜底。iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用；缓存键另用 `cacheTagEff`（`$out/cache-tag` = 二进制 sha256，回退 `build-id`），同源不同 seed 的二进制不共享缓存 | `compilerIdOf`、`compilerTagEff`、`compilerFingerprintEff`、`buildIdFileName`、`textHashOf` |
 | `Loader.Layers` | `[layers]` 的执行者：模块属于所有匹配的层前缀，import 合法 ⇔ 对每个匹配层目标落在自身子树或 `closure(uses)` 的层子树；只看直接 import 边，依赖包恒放行 | `checkProjectLayers`、`labelOf` |
 

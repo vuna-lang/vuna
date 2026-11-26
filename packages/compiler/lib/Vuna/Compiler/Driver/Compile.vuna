@@ -34,7 +34,6 @@ import Vuna.Compiler.Base.Diag.Codec
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
-import Vuna.Compiler.Loader.Header
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Version
@@ -901,7 +900,15 @@ closureModOf pe root p raw =
       name = moduleNameOfPath root p
       src = contentAddress raw
     in do
-      imports <- headerImportsEff p src raw
+      parsed <- parseFileWithPath p raw
+      let
+        imports =
+          case parsed of
+            ErrC _ => []
+            OkC parsedFile =>
+              let
+                hdr = headerOfSource "" (firstOf parsedFile)
+              in hdr.mhImports
       pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src imports "")
 
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」

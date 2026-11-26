@@ -41,8 +41,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
   objects/module-order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
-  objects/module-header/<源内容地址>  # 模块的 import 名单（codec module-header 1）；闭包扫描先读它，
-                                    # 命中就不 parse 源文件（键与编译器身份无关：头是源字节的纯函数）
   objects/check-outcome/<checkIn>   # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
   objects/tool-context/<工具会话地址>  # LSP / REPL / vuna map 的会话载荷
   objects/pkg-iface/<key>           # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）

@@ -76,7 +76,6 @@ modules = [
   "Vuna.Compiler.Loader.Fingerprint",
   "Vuna.Compiler.Loader.Fixity",
   "Vuna.Compiler.Loader.Flatten",
-  "Vuna.Compiler.Loader.Header",
   "Vuna.Compiler.Loader.Layers",
   "Vuna.Compiler.Loader.Modules",
   "Vuna.Compiler.Loader.Resolve",

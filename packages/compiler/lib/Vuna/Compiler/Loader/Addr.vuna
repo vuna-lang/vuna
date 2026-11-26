@@ -39,9 +39,8 @@ projectIdAddrOf dir = addrOf ["project", dir]
 -- ---------------------------------------------------------------
 -- 模块头（header）
 --
--- import 名单与 fixity 表是 parse 的产物。抽取口径只有 `headerOfSource` 一处；import 名单
--- 按**源内容地址**缓存在 `Loader.Header`（`objects/module-header`），命中即不 parse。
--- 缓存的载荷与模块名无关（名字来自路径），所以同一份字节在不同包/路径下共用同一份头。
+-- import 名单与 fixity 表是 parse 的产物。抽取口径只有 `headerOfSource` 一处。
+-- 载荷与模块名无关（名字来自路径），所以同一份字节在不同包/路径下得到同一份头。
 --
 -- 隐式导入（Prelude）不进 header：它依赖包上下文，同一份源文件在两个包里应得到不同的
 -- 依赖边。依赖方在算输入摘要时**无条件**并入 `Prelude` 的输入摘要（过近似，
