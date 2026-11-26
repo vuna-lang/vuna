@@ -46,13 +46,14 @@ vuna: runtime error: division by zero
 - 消息：`Failure m` 解包成 `m`（所以 `prim_fail` / `assert` / `todo` 的文案直接可见），
   其它异常用 `Printexc.to_string`。
 - 帧：`Printexc.Slot.name` → 生成代码里的 mangled 值名（如 `v_main`）→ 查
-  `Vuna_runtime.dt_def_locs` 表（编译器生成，条目 = `vuna 定义名 + 相对路径:行`）；
+  `Vuna_runtime.dt_def_locs_raw` 表（编译器生成，压平成一个字符串，每条 =
+  `键\n定义名\n相对路径:行\n`；只在异常报告路径扫描）；
   最多打印 12 条命中帧，未命中帧（如 `Stdlib.failwith`）跳过。
 - 位置是**定义级**（span 起点行），不是表达式级；路径归一成模块根/包目录下的相对路径
   （`Base/Show.vuna:42`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。
 - **`#line` 注入**：每个绑定前写一行 `# <起始行> "<包相对路径>"`（`Target.Ocaml.Term` 的
   `genGroup`/`genDef`），所以 `ocamlopt -g` 的 DWARF `.debug_line`、`gdb`、`perf` 以及
-  `Printexc` 回栈**原生**指向 `.vuna`，不必只靠 `dt_def_locs` 表（两者互补：裁剪掉 DWARF
+  `Printexc` 回栈**原生**指向 `.vuna`，不必只靠 `dt_def_locs_raw` 表（两者互补：裁剪掉 DWARF
   的产物仍靠表）。位置是**文件 + 行**粒度（同一指令后连续生成的代码都归到该起始行，
   没有表达式级定位，见 gh#84）；`ocamlopt` 单元内联仍可能把帧归到调用者（gh#82）。
   规范见 [observability.md](observability.md) §5。

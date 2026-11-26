@@ -1319,6 +1319,15 @@ let dt_slot_defname slot =
   match slot with
   | Unknown_location _ -> None
   | Known_location l -> if l.defname = \"\" then None else Some l.defname
+(* 位置表压平成一个字符串（`key\\ndisplay\\nloc\\n` 重复）：每个条目是三条字符串
+   字面量时，静态数据里的指针每个都要一条重定位，启动时几千条重定位纯属浪费。
+   查表只在异常报告路径发生，扫一遍字符串即可。 *)
+let dt_def_loc_find key =
+  let rec go rest =
+    match rest with
+    | k :: d :: l :: tl -> if k = key then Some (d, l) else go tl
+    | _ -> None
+  in go (String.split_on_char (Char.chr 10) dt_def_locs_raw)
 let dt_frame_label slot =
   match dt_slot_defname slot with
   | None -> None
@@ -1326,7 +1335,7 @@ let dt_frame_label slot =
     match dt_frame_key nm with
     | None -> None
     | Some key ->
-      (match List.assoc_opt key dt_def_locs with
+      (match dt_def_loc_find key with
        | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
        | None -> None)
 let dt_bt_labels (bt : dt_raw_backtrace) : string list =
@@ -2095,7 +2104,7 @@ inlineText "natDiv" [a, b] = Just "(bi_natDiv ${a} ${b})"
 inlineText _ _ = Nothing
 
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
--- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
+-- `dt_def_locs_raw` 必须定义在报告器之前（报告器读它）；空表写成 `""`。
 -- `usesFloat` / `usesTrace` / `usesObs` / `usesHost` 为 False 时对应 helper 不出现：
 -- 不用 Float / tracing / 观测 / 宿主原语的程序 runtime 逐字节稳定（产物身份与缓存
 -- 都依赖这一点）；`usesHost` 为 False 时产物也不链接 `unix.cmxa`。
@@ -2108,7 +2117,7 @@ dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched usesEff =
   in dtRuntime
     ++ (if usesEffRt then dtEffRuntime else "")
     ++ (if usesFloat then dtFloatRuntime else "")
-    ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
+    ++ (if locs == "" then "let dt_def_locs_raw = \"\"\n" else "let dt_def_locs_raw = ${locs}\n")
     ++ dtReporterRuntimeWith usesEffRt
     ++ (if usesSched then dtSchedRuntime else "")
     ++ (if usesHost then dtHostRuntime else "")
@@ -2204,7 +2213,8 @@ let dtp_substTemplate tmpl xs =
 -- `miDefLocs`；两条路径的拼接顺序不同，所以这里把行**按文本排序**再拼接——
 -- 全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。
 export dtDefLocTable : (String -> String) -> (String -> String) -> List (String, String, Int) -> String
-dtDefLocTable norm unitOf rows = strConcatMany (sortLocRows (map (locRowOf norm unitOf) rows))
+dtDefLocTable norm unitOf rows =
+  ocamlString (strConcatMany (sortLocRows (map (locRowOf norm unitOf) rows)))
 
 sortLocRows : List String -> List String
 sortLocRows rows = sortBy (\a, b => a <= b) rows
@@ -2215,7 +2225,7 @@ locRowOf norm unitOf row =
     name = firstOf row
     file = firstOf (secondOf row)
     line = secondOf (secondOf row)
-  in "  (${ocamlString "${unitOf name}.${valueName name}"}, (${ocamlString name}, ${ocamlString "${norm file}:${strFromInt line}"}));\n"
+  in "${unitOf name}.${valueName name}\n${name}\n${norm file}:${strFromInt line}\n"
 
 -- ---------------------------------------------------------------
 -- 生成状态
