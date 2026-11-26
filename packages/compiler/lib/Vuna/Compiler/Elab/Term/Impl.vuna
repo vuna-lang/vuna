@@ -54,6 +54,15 @@ branchBinderOpaque ec ctx i =
       in r
     Nothing => False
 
+-- | 构造子分支的诊断字段名：record 用声明的字段名（telescope 里是合成名），
+-- 其余用显式 binder 名。
+ctorFieldLabels : DtData -> DtCtor -> List String
+ctorFieldLabels dd ctor =
+  if dtDataIsRecord dd then
+    map dtFieldName (dtDataFields dd)
+  else
+    ctorExplicitNames (dtCtorType ctor)
+
 export elabConAltFuel : Int -> List (String, Term) -> Ctx -> Ec -> DtData -> List Value -> Value -> Value -> String -> List Pat -> Span -> Expr -> Check (CaseAlt, Ec)
 elabConAltFuel fuel globals ctx ec dd idxs scrutVal expected cname args psp body =
   if fuel <= 0 then
@@ -62,7 +71,7 @@ elabConAltFuel fuel globals ctx ec dd idxs scrutVal expected cname args psp body
     case findCtorIn cname (dtDataCtors dd) of
       Nothing => tcErr2 psp (UnknownConstructorInCase (ctorDisplayName cname) (dtDataName dd)) (ctorDisplayName cname) (dtDataName dd)
       Just ctor =>
-        Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan psp) (bindCtorTele ctx (dtCtorType ctor) args)) (
+        Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan psp) (bindCtorTele (ctorDisplayName cname) (ctorFieldLabels dd ctor) ctx (dtCtorType ctor) args)) (
             \p =>
               case p of
                 (branchCtx, binders, leftover) =>

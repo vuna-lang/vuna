@@ -20,7 +20,7 @@ import Base.Data.Vec as Vec
 export data TcErr(..) : Nat -> Type where
   -- arity 0
   BoolCaseRestriction : TcErr 0
-  CaseBranchTooFewArgs : TcErr 0
+  CaseBranchTooFewArgs : String -> String -> TcErr 2
   CaptureFuel : TcErr 0
   CatchAllNotLast : TcErr 0
   ClauseTooManyPatterns : TcErr 0
@@ -151,7 +151,7 @@ export data TcErr(..) : Nat -> Type where
 -- | 诊断码派生：tcCode。
 export tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
-tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
+tcCode (CaseBranchTooFewArgs _ _) = "TC_CaseBranchTooFewArgs"
 tcCode CaptureFuel = "TC_CaptureFuel"
 tcCode CatchAllNotLast = "TC_CatchAllNotLast"
 tcCode ClauseTooManyPatterns = "TC_ClauseTooManyPatterns"
@@ -265,7 +265,7 @@ tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 -- | 消息模板：tcTemplate。
 export tcTemplate : {n : Nat} -> TcErr n -> String
 tcTemplate BoolCaseRestriction = "case on Bool accepts only True, False, or variable patterns"
-tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
+tcTemplate (CaseBranchTooFewArgs _ _) = "case branch for constructor <0> is missing fields: <1>"
 tcTemplate CaptureFuel =
   "linear capture check ran out of reduction fuel (program rejected conservatively)"
 tcTemplate CatchAllNotLast = "catch-all branch must come last"
@@ -425,8 +425,8 @@ tcChunk0 =
       (tcTemplate (AxiomWithDefinition ""))
       "axiom 不能带定义体",
     TcEntry
-      (tcCode CaseBranchTooFewArgs)
-      (tcTemplate CaseBranchTooFewArgs)
+      (tcCode (CaseBranchTooFewArgs "" ""))
+      (tcTemplate (CaseBranchTooFewArgs "" ""))
       "case 分支的实参少于构造子字段",
     TcEntry
       (tcCode CaptureFuel)

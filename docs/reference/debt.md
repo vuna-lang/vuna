@@ -175,7 +175,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D93 · C | `Elab` 的选择性重导出门面已删除：子模块即公开面，没有「门面只重导出部分公开名」的封装 | `Elab/*.vuna`、`packages/compiler/vuna.toml` 的 `[export]`；[compiler.md](compiler.md) | 后续 |
 | D116 · ⚠️C | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍 | `Vuna.Fmt.Decl`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 | 后续 |
 | D126 · ⚠️B | `kill` 插件的命令只停路由层：`vuna dev …` / `vuna web …` 由产品入口发现插件后经 `processRunIn` 起子进程（`vuna-dev` / `vuna-web`），信号不转发——杀掉 `vuna` 会把真正在跑的插件进程留成孤儿（仍在 accept / 仍占 socket） | `packages/cli/lib/Vuna/Cli.vuna`（`dispatch` 的 `processRunIn`）；`packages/cli/test/corpus/obs-cdp/smoke.sh`（`spawn_serve`）；复现：起 `vuna dev obs serve --cdp unix:$PWD/s /tmp/t.jsonl` 后 `kill $!`，`pgrep -f "vuna-dev dev obs serve"` 仍在 | 后续（插件命令用 exec 替换进程，或路由层转发 SIGTERM/SIGINT） |
-| D119 · C | 记录模式（`Ctx items env refs d`）的子模式个数与字段数不一致时报 `TC_CaseBranchTooFewArgs`：诊断已指回源模式，但模板没有参数，消息里没有记录名与缺失字段名 | `Elab/Match.vuna`（`ctorHeadSpan`）、`Elab/Case.vuna`（`bindCtorGo`）；夹具 `dt_err/137_record_pattern_few_fields` | 后续（消息载荷） |
 
 ## 效应统一（Eff 已贯通）
 

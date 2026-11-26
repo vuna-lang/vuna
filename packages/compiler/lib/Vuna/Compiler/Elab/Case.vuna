@@ -11,6 +11,7 @@ module Vuna.Compiler.Elab.Case where
 -- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。精化路径只有两条：
 -- 先降级成模式矩阵，或直接走规范形。
 import Base.Data.List as List
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -283,7 +284,7 @@ branchAfterUnify ec branchCtx refs =
 export branchVerdict : Ctx -> Ec -> List Value -> DtCtor -> Check BranchVerdict
 branchVerdict ctx ec idxs ctor =
   Vuna.Compiler.Base.Common.bind
-    (bindCtorTele ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))))
+    (bindCtorTele (dtCtorName ctor) (ctorExplicitNames (dtCtorType ctor)) ctx (dtCtorType ctor) (wildArgs (ctorExplicitArity (dtCtorType ctor))))
     (
       \p =>
         case p of
@@ -368,11 +369,11 @@ allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth =
 -- 这条路径只服务**规范形** case（每个构造子一个分支、子模式全是变量/通配）。
 -- 嵌套模式在 `checkCase` 里先降级成模式矩阵（`Elab.Match.multiToCaseExpr`），因此这里
 -- 遇到非变量子模式只可能是内部错误，报 `NestedPatterns`。
-export bindCtorTele : Ctx -> Term -> List Pat -> Check (Ctx, List Binder, List Pat)
-bindCtorTele ctx ty subpats = bindCtorGo ctx ty subpats []
+export bindCtorTele : String -> List String -> Ctx -> Term -> List Pat -> Check (Ctx, List Binder, List Pat)
+bindCtorTele cname fields ctx ty subpats = bindCtorGo cname fields ctx ty subpats []
 
-bindCtorGo : Ctx -> Term -> List Pat -> List Binder -> Check (Ctx, List Binder, List Pat)
-bindCtorGo ctx ty subpats acc =
+bindCtorGo : String -> List String -> Ctx -> Term -> List Pat -> List Binder -> Check (Ctx, List Binder, List Pat)
+bindCtorGo cname fields ctx ty subpats acc =
   case ty of
     TPi name implicit rig dom cod =>
       let
@@ -382,22 +383,28 @@ bindCtorGo ctx ty subpats acc =
           -- 隐式族参数只服务类型层，用带前缀的新名字绑定，避免和用户模式变量同名造成遮蔽。
           famName = "${name}#fam"
           ctx2 = ctxBindValue famName domVal ctx
-        in bindCtorGo ctx2 cod subpats (binderOfPair (famName, Rig0) :: acc)
+        in bindCtorGo cname fields ctx2 cod subpats (binderOfPair (famName, Rig0) :: acc)
       else
         case subpats of
-          [] => ErrC (tcMsg CaseBranchTooFewArgs [])
+          [] => ErrC (tcMsg (CaseBranchTooFewArgs "" "") [cname, String.join ", " fields])
           p :: rest =>
             case p of
-              PVar pname psp => bindCtorField ctx rig domVal cod pname (spanAtName pname (nodeRefSpan psp)) rest acc
-              PWild psp => bindCtorField ctx rig domVal cod "_" (nodeRefSpan psp) rest acc
+              PVar pname psp => bindCtorField cname (drop 1 fields) ctx rig domVal cod pname (spanAtName pname (nodeRefSpan psp)) rest acc
+              PWild psp => bindCtorField cname (drop 1 fields) ctx rig domVal cod "_" (nodeRefSpan psp) rest acc
               _ => tcErr0 (patSpan p) NestedPatterns
     _ => OkC (ctx, reverse acc, subpats)
 
-bindCtorField : Ctx -> Rig -> Value -> Term -> String -> Span -> List Pat -> List Binder -> Check (Ctx, List Binder, List Pat)
-bindCtorField ctx rig domVal cod binderName binderSp rest acc =
+-- | 构造子 telescope 的显式字段名（隐式 binder 不算模式实参）。
+export ctorExplicitNames : Term -> List String
+ctorExplicitNames (TPi name implicit _ _ cod) =
+  if implicit then ctorExplicitNames cod else (::) name (ctorExplicitNames cod)
+ctorExplicitNames _ = []
+
+bindCtorField : String -> List String -> Ctx -> Rig -> Value -> Term -> String -> Span -> List Pat -> List Binder -> Check (Ctx, List Binder, List Pat)
+bindCtorField cname fields ctx rig domVal cod binderName binderSp rest acc =
   let
     ctx2 = ctxBindValue binderName domVal ctx
-  in bindCtorGo ctx2 cod rest (Binder binderName rig binderSp :: acc)
+  in bindCtorGo cname fields ctx2 cod rest (Binder binderName rig binderSp :: acc)
 
 -- 构造子结果索引的新鲜实例（可达性分析 / 分支合一用）。
 freshTeleVals : List (String, Rig) -> Int -> Int -> List Value
