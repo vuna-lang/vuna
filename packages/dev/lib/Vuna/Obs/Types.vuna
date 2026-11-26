@@ -335,13 +335,16 @@ vunaEventVocabulary =
     "vuna.sample.mem"
   ]
 
--- | 名字是否是 §3.3 的已知 `vuna.*` 事件。前缀放行：`vuna.mark.*`（动态标记）与
+-- | 名字是否是 §3.3 的已知 `vuna.*` 事件。前缀放行：`vuna.mark.*`（动态标记）、
+-- `vuna.pass.*`（pass 表生成，真源 `Vuna.Ir.Passes.allPassNames`）与
 -- `vuna.tool.iface.miss.`（带模块名的接口失配归因）；非 `vuna.` 前缀一律放行。
 export isKnownVunaEventName : String -> Bool
 isKnownVunaEventName name =
   if not (startsWith "vuna." name) then
     True
   else if startsWith "vuna.mark." name then
+    True
+  else if startsWith "vuna.pass." name then
     True
   else if startsWith "vuna.tool.iface.miss." name then True else memName name vunaEventVocabulary
 

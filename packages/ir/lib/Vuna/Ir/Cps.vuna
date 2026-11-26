@@ -22,6 +22,7 @@ import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Ir.Model
+import Vuna.Ir.Passes
 import Vuna.Ir.Tail
 import Vuna.Ir.Analysis
 
@@ -1646,7 +1647,7 @@ mStepsDef d = d
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs =
-  case cpsDefs defs of
+  case Passes.passSpan Passes.irCps (\_ => cpsDefs defs) of
     Err msg => Err msg
     Ok ds =>
       let
@@ -1654,7 +1655,12 @@ cpsDefsMachine defs =
         -- 签名只有直接风格里才有，机器 pass 会改写这些体；读 CPS 输出等于让分类依赖
         -- 改写的偶然结果。
         handlerNames = collectHandleOpsDefs 100000 defs
-      in case annotateDefs (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs handlerNames (cpsFuelOfDefs ds) ds)))) of
+        handlers =
+          Passes.passSpan Passes.irMachineHandlers (\_ => mDefs handlerNames (cpsFuelOfDefs ds) ds)
+        marked = Passes.passSpan Passes.irMachineMark (\_ => map mMarkedDef handlers)
+        applied = Passes.passSpan Passes.irMachineApply (\_ => map mApplysDef marked)
+        stepped = Passes.passSpan Passes.irMachineSteps (\_ => map mStepsDef applied)
+      in case Passes.passSpan Passes.irTailAnnotate (\_ => annotateDefs stepped) of
         Err msg => Err msg
         Ok annotated => Ok annotated
 
