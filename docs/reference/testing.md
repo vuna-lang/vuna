@@ -354,8 +354,10 @@ steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 （`repl` / `lsp`）、执行产物（`build.sh` / `prog` / `vuna run` / `vuna test`）、另一个二进制
 （`seed`）、多进程 store 互斥（`fetch` / `add` / `pin` / `store` / `clean`）、CLI 渲染文本与
 `--json` / SARIF 文档形状。这些逐个登记在 `test/suite/process-bound.txt`（
-`文件<TAB>子命令<TAB>原因`），由 `nix/checks/lib/steps-inproc.sh` 校验：`packages/*/test/steps`
-里出现未登记的文件名就失败；登记数超过 `nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。
+`文件<TAB>子命令<TAB>原因[<TAB>进程绑定组]`），由 `nix/checks/lib/steps-inproc.sh` 校验：
+`packages/*/test/steps` 里出现未登记的文件名就失败；**进程绑定组**数超过
+`nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。按主题拆开的 steps 文件共用
+原组名（第 4 列），只增加调度粒度、不扩大 process-bound 面。
 
 已知边界：增量会话的 `dtIncrementalCheckedCore` 只汇总 loader + `dtProgWarnings`，
 **不跑**全量尾部的 `warnUnusedDefsIn`；所以负例的 check 一律走全量（`InProc.checkFile`），
@@ -537,11 +539,12 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   `corpus/pure_cross/`（family `pure-cross`）是三端**共享语义**的唯一来源：每份程序配一个
   `.out`，`--backend all` 时对拍 OCaml / wasm / native 的输出；新增共享能力先加夹具，再
   实现两个后端（一侧缺失即失败）。`35_eff_*`–`50_eff_*` 覆盖 resume / abort / 嵌套
-  handler / return 改类型 / 宿主 console / 深递归；`105*_native_*.steps` 按主题拆成六个 case，
-  只保留 native 机制（`105a_native_shape` 产物形状 / label 唯一性 / 确定性 / trap 文本 / arena /
-  栈传参，`105b_native_effects` 动作入口与库机器，`105c_native_host` 宿主效应与进程边界，
+  handler / return 改类型 / 宿主 console / 深递归；`105*_native_*.steps` 按主题拆成多个
+  case（重 case 继续按子主题拆，便于分片/并行调度），只保留 native 机制
+  （`105a_native_shape` 产物形状 / label 唯一性 / 确定性 / trap 文本 / arena / 栈传参，
+  `105b_native_effects` 动作入口与库机器，`105c1a`–`105c3b_native_host` 宿主效应与进程边界，
   `105d_native_gc` GC 与内存，`105e_native_tco` 尾调用 / 闭包 / 标量代码生成，
-  `105f_native_artifacts` 产物文件集 / 增量 / 宿主失败面）；
+  `105f1a`–`105f3b_native_artifacts` 产物文件集 / 增量 / 宿主失败面）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
   行宽、trap、拒绝面、`--target` 校验、2000 次 perform 与能力拒绝面）；它同时探
   `wasm-opt` 是否存在，并锁 `--wasm-opt 0`（`build.sh` 不含 `wasm-opt`）与默认 `-O3`

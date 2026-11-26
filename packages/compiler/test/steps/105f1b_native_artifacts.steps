@@ -1,0 +1,18 @@
+# matrix: effect-native
+# 105f1b) native 深目录删除与大文件读取。
+
+# 9u) 深目录递归删除：每层栈帧有下界守卫——400 层 trap（exit 2），不再 SIGSEGV（139）。
+run: sh -c 'p="$TMPDIR/deep-tree"; rm -rf "$p"; i=0; while [ $i -lt 400 ]; do p="$p/d"; i=$((i+1)); done; mkdir -p "$p"'
+run: sh -c 'd="$TMPDIR/deeptree"; mkdir -p "$d/app"; printf "[package]\nname = \"deeptree\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Fs as EffFs\nimport Base.Effect.Core as Eff\n\nmain : Eff [FsOp] Int\nmain = fsRemoveTree \"$TMPDIR/deep-tree\"\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/deeptree-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/deeptree-out/bin/deeptree" 2>&1'
+exit: 2
+out-contains: directory tree too deep
+
+# 9w) 大文件读取：没有固定缓冲上界（12 MiB > 8 MiB 旧上界），按 stat 尺寸一次分配再读到 EOF。
+run: sh -c 'dd if=/dev/zero of="$TMPDIR/big-read.dat" bs=1024 count=12288 2>/dev/null'
+run: sh -c 'd="$TMPDIR/bigread"; mkdir -p "$d/app"; printf "[package]\nname = \"bigread\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/big-read.dat\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/bigread-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/bigread-out/bin/bigread" 2>&1'
+out-equals: 12582912
+
