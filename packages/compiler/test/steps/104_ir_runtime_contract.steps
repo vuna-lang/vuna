@@ -22,10 +22,10 @@ file-contains: $TMPDIR/p/out-bool/Main.ml print_endline (dt_show_bool (v_main))
 run: "$VUNA" compile "$TMPDIR/p/float.vuna" "$TMPDIR/p/out-float"
 file-contains: $TMPDIR/p/out-float/Main.ml print_endline (string_of_float (v_main))
 
-# 裸符号（`IrRt`）：未内联的内建按运行时常量表输出，不做内联（`strAt` 是值形态、arity 2）。
+# 字符串读取（`strAt`）：饱和应用走 `IrRtApp` → 后端内联模板（越界返回 -1）。
 run: sh -c 'printf "%s\n" "main : Int" "main = strAt \"abc\" 1" > "$TMPDIR/p/at.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/at.vuna" "$TMPDIR/p/out-at"
-file-contains: $TMPDIR/p/out-at/Main.ml ((dtp_strAt "abc") 1)
+file-contains: $TMPDIR/p/out-at/Main.ml String.unsafe_get b k
 
 # 位运算：`irInlineArity` 用内建名（`bitAnd`…），饱和应用走 `IrRtApp` → 内联模板。
 run: sh -c 'printf "%s\n" "main : Int" "main = bitAnd 6 3" > "$TMPDIR/p/bit.vuna"'

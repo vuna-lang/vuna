@@ -148,3 +148,122 @@ annotateAlt fuel arityOf tail alt =
 annotateAltMaybe : Int -> (String -> Maybe Int) -> Bool -> Maybe IrAlt -> Maybe IrAlt
 annotateAltMaybe fuel arityOf tail Nothing = Nothing
 annotateAltMaybe fuel arityOf tail (Just alt) = Just (annotateAlt fuel arityOf tail alt)
+
+-- ---------------------------------------------------------------
+-- TMC（tail modulo cons）候选
+-- ---------------------------------------------------------------
+--
+-- OCaml 的 `[@tail_mod_cons]` 把「构造子字段位置上的自递归」编译成单遍原地构造
+-- （OCaml stdlib 的 `List.map` / `List.init` 就是这样写的）：既不吃深栈的 GC 扫描，
+-- 也不用 reverse 复制一遍。只有 OCaml 后端用这条注解；判定放在这里是因为它与尾位置
+-- 同一套「结果位置」规则。
+--
+-- 判据：函数体里自引用的每一次出现都必须落在**结果位置**——尾调用，或构造子的
+-- **最后一个字段**（可连续套构造子）——且至少出现一次后者（否则注解没有意义）。
+-- 不满足的形状（自引用当值用、在 lambda 里、在非末字段、在实参里）一律返回 False。
+-- | 单递归定义是否是 TMC 候选（供 OCaml 后端决定是否加 `[@tail_mod_cons]`）。
+export tmcCandidate : IrDef -> Bool
+tmcCandidate (IrExternDef _ _ _ _) = False
+tmcCandidate (IrDef name _ _ _ body _ _ _) =
+  let
+    -- 定义体是「λ 包住函数体」：剥掉外层 λ，函数体才是结果位置。
+    core = tmcStripLams body
+  in case tmcProbe (64 + 16 * irSize core) name True False core of
+    (ok, ctorField) => ok && ctorField
+
+tmcStripLams : Ir -> Ir
+tmcStripLams (IrLam _ _ body) = tmcStripLams body
+tmcStripLams ir = ir
+
+-- | `(ok, hasCtorField)`：自引用是否都合法、是否至少有一次在构造子末字段。
+tmcProbe : Int -> String -> Bool -> Bool -> Ir -> (Bool, Bool)
+tmcProbe fuel self tail dest ir =
+  if fuel <= 0 then
+    (True, False)
+  else
+    case ir of
+      IrVar _ => (True, False)
+      IrInt _ => (True, False)
+      IrStr _ => (True, False)
+      IrBool _ => (True, False)
+      IrFloatLit _ => (True, False)
+      IrRt _ => (True, False)
+      IrEffBind _ _ _ => (True, False)
+      IrGlobal name => if name == self then if tail || dest then (True, dest) else (False, False) else (True, False)
+      -- 已有尾标记（native / wasm 的 pass 会加）：按结果位置继续。
+      IrTail inner => tmcProbe (fuel - 1) self True dest inner
+      IrCast _ _ inner => tmcProbe (fuel - 1) self tail dest inner
+      IrApp _ _ _ => tmcApp (fuel - 1) self tail dest ir
+      IrCtor _ _ _ args => tmcCtorArgs (fuel - 1) self (tail || dest) args
+      IrProj base _ _ _ => tmcProbe (fuel - 1) self False False base
+      IrRecord _ _ fields => tmcFields (fuel - 1) self (map (\f => secondOf f) fields)
+      IrRecUpd base _ fields _ => tmcAnd2 (fuel - 1) self (tmcProbe (fuel - 1) self False False base) (tmcFields (fuel - 1) self (map (\f => secondOf f) fields))
+      IrRtApp _ args => tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) args)
+      IrConcatMany parts => tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) parts)
+      IrLet _ scrut body => tmcAnd2 (fuel - 1) self (tmcProbe (fuel - 1) self False False scrut) (tmcProbe (fuel - 1) self tail dest body)
+      IrLam _ _ body => tmcProbe (fuel - 1) self False False body
+      IrIf c t el => tmcAnd3 (fuel - 1) self (tmcProbe (fuel - 1) self False False c) (tmcProbe (fuel - 1) self tail dest t) (tmcProbe (fuel - 1) self tail dest el)
+      IrCase _ _ scrut alts => tmcAnd2 (fuel - 1) self (tmcProbe (fuel - 1) self False False scrut) (tmcAlts (fuel - 1) self tail dest alts)
+      IrNatCase scrut fresh zero succ catch => tmcAnd3 (fuel - 1) self (tmcProbe (fuel - 1) self False False scrut) (tmcAltM (fuel - 1) self tail dest zero) (tmcAnd2 (fuel - 1) self (tmcAltM (fuel - 1) self tail dest succ) (tmcAltM (fuel - 1) self tail dest catch))
+      IrEffThunk _ _ _ _ prim => tmcProbe (fuel - 1) self False False prim
+
+-- 应用脊：`f a1 a2` 是 `IrApp (IrApp f a1) a2`；头是自引用时整条脊就是一次自调用。
+tmcApp : Int -> String -> Bool -> Bool -> Ir -> (Bool, Bool)
+tmcApp fuel self tail dest ir =
+  case spineOf fuel ir [] of
+    (head, args) =>
+      case head of
+        IrGlobal name =>
+          if name == self then
+            case tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) args) of
+              (okArgs, _) => (okArgs && (tail || dest), dest)
+          else
+            tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) args)
+        _ =>
+          tmcAnd2
+            (fuel - 1)
+            self
+            (tmcProbe (fuel - 1) self False False head)
+            (tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) args))
+
+spineOf : Int -> Ir -> List Ir -> (Ir, List Ir)
+spineOf fuel ir acc =
+  if fuel <= 0 then
+    (ir, acc)
+  else
+    case ir of
+      IrApp _ f a => spineOf (fuel - 1) f (a :: acc)
+      _ => (ir, acc)
+
+-- 构造子字段：只有**最后一个**字段是 TMC 的目的地（可继续套构造子）。
+tmcCtorArgs : Int -> String -> Bool -> List Ir -> (Bool, Bool)
+tmcCtorArgs fuel self dest args =
+  case reverse args of
+    [] => (True, False)
+    last :: revRest =>
+      case tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self False False a) revRest) of
+        (okRest, _) =>
+          case tmcProbe (fuel - 1) self False dest last of
+            (okLast, lastField) => (okRest && okLast, lastField)
+
+tmcFields : Int -> String -> List Ir -> (Bool, Bool)
+tmcFields fuel self fields =
+  tmcEach (fuel - 1) self (map (\f => tmcProbe (fuel - 1) self False False f) fields)
+
+tmcAlts : Int -> String -> Bool -> Bool -> List IrAlt -> (Bool, Bool)
+tmcAlts fuel self tail dest alts =
+  tmcEach (fuel - 1) self (map (\a => tmcProbe (fuel - 1) self tail dest (irAltBodyOf a)) alts)
+
+tmcAltM : Int -> String -> Bool -> Bool -> Maybe IrAlt -> (Bool, Bool)
+tmcAltM fuel self tail dest Nothing = (True, False)
+tmcAltM fuel self tail dest (Just alt) = tmcProbe (fuel - 1) self tail dest (irAltBodyOf alt)
+
+tmcEach : Int -> String -> List (Bool, Bool) -> (Bool, Bool)
+tmcEach fuel self [] = (True, False)
+tmcEach fuel self (p :: rest) = tmcAnd2 fuel self p (tmcEach (fuel - 1) self rest)
+
+tmcAnd2 : Int -> String -> (Bool, Bool) -> (Bool, Bool) -> (Bool, Bool)
+tmcAnd2 fuel self a b = (firstOf a && firstOf b, secondOf a || secondOf b)
+
+tmcAnd3 : Int -> String -> (Bool, Bool) -> (Bool, Bool) -> (Bool, Bool) -> (Bool, Bool)
+tmcAnd3 fuel self a b c = tmcAnd2 fuel self (tmcAnd2 fuel self a b) c
