@@ -84,6 +84,40 @@ splitGraph (f :: rest) =
 stripMl : String -> String
 stripMl name = substring 0 (byteLength name - 3) name
 
+-- | 输出文件对应的编译单元名（去 `.ml`）；与 `splitGraph` 的单元名同源。
+export splitUnitOfFile : SplitFile -> String
+splitUnitOfFile f = stripMl (splitName f)
+
+-- | 只保留从根单元（运行时 + 入口）沿 `splitDeps` 可达的文件。
+--
+-- 依赖表是**渲染期累积**的（值引用 / 构造子 / 类型声明 / record label / List 桥接），
+-- 所以闭包正好是 OCaml 链接需要的单元集合；整模块不可达 = 代码与模块初始化都进不了
+-- 产物（启动只支付真正用到的部分）。
+export pruneSplitFiles : List String -> List SplitFile -> List SplitFile
+pruneSplitFiles roots files =
+  let
+    graph = splitGraph files
+    edgeCount = foldl (\acc, p => acc + length (secondOf p)) 0 graph
+    budget = 8 + 4 * length roots + edgeCount
+    graphT = HashMap.insertAll graph (HashMap.fromList [])
+    kept = pruneNames budget roots graphT (HashMap.fromList []) []
+  in filter (\f => memName (splitUnitOfFile f) kept) files
+
+pruneNames : Int -> List String -> HashMap String (List String) -> HashMap String Bool -> List String -> List String
+pruneNames fuel [] _ seen acc = acc
+pruneNames fuel (n :: rest) graph seen acc =
+  if fuel <= 0 then
+    acc
+  else if HashMap.member n seen then
+    pruneNames (fuel - 1) rest graph seen acc
+  else
+    let
+      deps =
+        case HashMap.lookup n graph of
+          Just ds => ds
+          Nothing => []
+    in pruneNames (fuel - 1) (append rest deps) graph (HashMap.insert n True seen) (n :: acc)
+
 -- 按直接依赖分层。graph 是拓扑序（依赖在前），一遍扫描即可算出所有层的 depth：
 --   depth(unit) = 1 + max(depth(dep))；无依赖 depth = 0；dep 不在 graph 里按 depth 0 计。
 -- 层内保持 graph 顺序（确定），层间按 depth 升序。

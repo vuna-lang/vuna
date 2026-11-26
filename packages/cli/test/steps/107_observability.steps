@@ -87,7 +87,7 @@ exit: 0
 out-equals: 1
 
 # 依赖单元经接口复用（摘要路径）时 `#line` 也不能丢：先把 base 的接口烤热，再 compile。
-run: sh -c 'd="$TMPDIR/warmdep"; mkdir -p "$d/app"; printf "[package]\nname = \"warmdep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\n\nmain : Int\nmain = 0\n" > "$d/app/Main.vuna"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; "$VUNA" compile "$d" "$TMPDIR/warmdep-split" >/dev/null 2>&1; grep -lE "^# [0-9]+ \"[^\"]*[.]vuna\"" "$TMPDIR/warmdep-split/"*.ml | grep -v "/Main[.]ml$" | head -1'
+run: sh -c 'd="$TMPDIR/warmdep"; mkdir -p "$d/app"; printf "[package]\nname = \"warmdep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.List as List\n\nmain : Int\nmain = List.lengthInt [1, 2, 3]\n" > "$d/app/Main.vuna"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; "$VUNA" compile "$d" "$TMPDIR/warmdep-split" >/dev/null 2>&1; grep -lE "^# [0-9]+ \"[^\"]*[.]vuna\"" "$TMPDIR/warmdep-split/"*.ml | grep -v "/Main[.]ml$" | head -1'
 exit: 0
 out-contains: .ml
 
