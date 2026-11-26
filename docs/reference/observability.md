@@ -201,7 +201,7 @@ obsSample     : String -> Int -> (Int -> a) -> a
 ```
 
 叶子原语是无 `Eff` 的薄包装；`obsSpanEff` 只组合已有 `Eff` 动作（begin/end token +
-`finally`），没有 `runPure`，满足隐藏效果守卫。`Base.Trait.Show` 的 `dbgShow` 走
+`finally`），没有 `runPure`，满足隐藏效果守卫。`Base.Data.Log` 的 `dbgShow` 走
 `log! "debug"`（文本日志，见 [logging.md](logging.md)）。
 
 ### 4.3 内置宏（无需 import）

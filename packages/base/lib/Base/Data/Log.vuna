@@ -13,6 +13,8 @@ module Base.Data.Log where
 
 import Base.Data.Bool
 import Base.Data.Int
+-- `dbgShow` 走 `DebugShow`（blanket 实例在 Show）。
+import Base.Trait.Show
 
 -- | 当前调用是否会被输出（级别阈值 + scope 过滤都通过）。需要自行判断实参开销时用它。
 export logOn : Int -> String -> Bool
@@ -41,3 +43,14 @@ logDebug scope text = logAt 3 scope text
 -- | `trace` 级（4）。
 export logTrace : String -> String -> Int
 logTrace scope text = logAt 4 scope text
+
+-- | 调试打印：把 `debugShow x` 交给内置宏 `log! "debug"`（受 `VUNA_LOG` 阈值 /
+-- `VUNA_LOG_SCOPE` 门控，带时间戳写 stderr）后返回 `x`；值语义不变，只用于调试。
+-- 放在本模块而不是 `Base.Trait.Show`：`dbgShow` 引用文本日志 runtime，而 Prelude
+-- 会导入 `Show`——放在 `Show` 会让每个程序（含纯程序）都链接日志 runtime。
+-- 见 docs/reference/debugging.md §3。
+export dbgShow : DebugShow a => a -> a
+dbgShow x =
+  let
+    _ = log! "debug" (debugShow x)
+  in x
