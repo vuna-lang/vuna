@@ -366,9 +366,9 @@ in
     script = ./compiler-growth-pkg.sh;
   };
 
-  # 前端增长率门槛：合成 2000/4000/8000 个同形定义，相邻档的
-  # `vuna.parse.lex` / `vuna.parse.syntax`（来自 trace，按进程 CPU 占比折算）与
-  # `fmt --check` CPU 时间比有上界。
+  # 前端增长率门槛：合成 2000/4000/8000 个同形定义。`fmt --check` 的 CPU 时间按相邻档
+  # ≤2.5×；trace 的 `vuna.parse.lex` / `vuna.parse.syntax` 聚合了整个 base 闭包的解析
+  # （固定成本 + 16MB minor heap 的回收台阶），只断言 2000→8000 的 4x 窗口 ≤8×。
   # 与 compiler-growth 互补：那边看整条 check（前端只占几个百分点），这边直接看前端读数。
   vuna-frontend-growth = vunaCheck {
     name = "vuna-frontend-growth";

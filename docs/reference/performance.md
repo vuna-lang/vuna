@@ -409,7 +409,8 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 * 前端整体约占冷 `check` 的 **6%**（0.32 s / 5.3 s）：减少**次数**（债 D88 剩余的那一次
   复用）比加快单次解析收益更直接。
 
-增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义，相邻档 ≤2.5×；本机）：
+增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义；`fmt --check` 相邻档 ≤2.5×，
+trace span 看 2000→8000 的 4x 窗口 ≤8×；本机）：
 
 | N | `parse.lex` | `parse.syntax` | `fmt --check`（改前 → 改后） |
 | --- | --- | --- | --- |
@@ -418,7 +419,9 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 | 8000 | 25.7 ms | 18.3 ms | 168 → 154 ms |
 
 表里是墙钟读数；门槛按 **CPU** 判定（trace span 用同一进程窗口的 CPU / 墙钟比折算，
-`fmt --check` 直接取子进程 user+sys），避免并发构建时把等 CPU 的时间算进增长率。
+`fmt --check` 直接取子进程 user+sys），避免并发构建时把等 CPU 的时间算进增长率。trace 的
+`vuna.parse.lex` / `vuna.parse.syntax` 按 span 名聚合，包含整个 base 闭包的固定解析成本，
+且 2000→4000 会跨过 minor heap 的回收台阶；相邻档因此只作诊断，硬门槛是 4x 窗口与 fmt。
 
 **注释只扫一遍**：`Frontend.Lexer` 现在有两条入口——token 路径（`lexChars`，不分配注释）
 与注释路径（`lexSourceWithComments`，一次扫描同时给出 token 与注释）。旧实现另有
