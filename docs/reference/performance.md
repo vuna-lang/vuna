@@ -369,6 +369,33 @@ n²（≈4×）的下界。
 **10 s 绝对上限**（本机读数的 ~27×）抓这一类：`MSt.msUsed` 退回按活续延线性扫描时，
 同一形状的 native 读数从 0.37 s 级掉到分钟级。
 
+### 5.5 Nat 字面量（终止性分析的输入折回）
+
+Nat 字面量在精化期展开成 `Zero` / `Succ` 链（[debt.md](debt.md) D24），链长等于字面量。
+终止性分析读精化产物：入口把 `Term` 翻成分析表达式时，若保留链的逐层 `EApp` 形状，
+前向器重写与调用图收集的成本按链长平方增长。`Elab/Termination/ElabInput.convExpr` 在入口
+先走 `natChainValue` 把链折回 `EInt`（非链立即返回），分析层因此只看到常量。
+`Int` 字面量本来就是 `TInt`，不走这条路径。
+
+`main : Nat = N` 的冷 `check`（每档独立空 store，2 次取小；100k 档只跑 1 次）：
+
+| N | 修前 | 修后 |
+| --- | --- | --- |
+| 1 000 | 204 ms | 143 ms |
+| 10 000 | 573 ms | 150 ms |
+| 20 000 | 1 608 ms | 154 ms |
+| 40 000 | 5 708 ms | 170 ms |
+| 100 000 | 37 290 ms | 221 ms |
+
+修前 10k → 100k 是 65×（10× 输入），20k → 40k 单档 3.5×，≈n²；修后 100k 只比 1k 高约
+80 ms（折回本身的 O(链长) 成本加固定开销）。用户面在同一开发 store（热）：`check
+packages/base/test/Thread.vuna` 49.9 s → 0.45 s，`vuna test packages/base` 84 s → ≈3 s；
+冷 store 下 `vuna test packages/base` 175 s → ≈3 s。`VUNA_OBS=1` 的对照是 `vuna.term`
+35.2 s / 总 35.37 s，其余阶段合计 <40 ms。
+
+门槛：`nix/checks/compiler-growth.sh` 的 `nat N=10k/20k/40k` 探针（每档独立空 store）。
+保留链形状时逐档约 ×4，折回后 ≈×1.0–1.2。
+
 ## 6. `check packages/base` 的阶段构成
 
 一次采样的量级（具体 ms 随版本 / 机器变化，用于定位优先序）：

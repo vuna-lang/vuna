@@ -252,12 +252,18 @@ stripGo _ body acc = (acc, body)
 -- ---------------------------------------------------------------
 -- 表达式翻译
 -- ---------------------------------------------------------------
+-- Nat 字面量在精化期是 `Zero` / `Succ` 链；分析层只当它是常量，入口先折回 `EInt`
+-- （`natChainValue` 沿链折一次，非链立即返回）。不折回时每个字面量都变成同等深度的
+-- `EApp` 树，前向器重写与调用图收集会按链长平方增长。
+convExpr : ConvCtx -> Term -> Expr
+convExpr cc t =
+  case natChainValue t of
+    Just n => EInt n (detachedNodeRef cc.ccSpan)
+    Nothing => convGo cc t []
+
 -- 单函数 + 实参累加器：递归只沿 `Term` 子项下降（`TApp` 的函数/实参、`TLam` 的体、
 -- `case` 的分支体…）。实参表里存的是**已翻译**的 `Expr`，不把 `Term` 列表当参数传下去，
 -- 否则终止性分析看不到结构下降（`List Expr` 与输入项无关）。
-convExpr : ConvCtx -> Term -> Expr
-convExpr cc t = convGo cc t []
-
 convGo : ConvCtx -> Term -> List Expr -> Expr
 convGo cc t acc =
   case t of
