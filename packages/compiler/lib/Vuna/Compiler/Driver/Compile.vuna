@@ -176,11 +176,11 @@ compileToDirGiven inputs ctx entry printResult outDir =
     else
       compileToDirNormal inputs ctx entry printResult outDir
 
--- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
+-- 模块 → 接口地址（依赖哈希表与接口重建用）：闭包扫描已经算好。
 modHashPair : ClosureMod -> (String, String)
 modHashPair m = (m.cmName, m.cmAddr)
 
--- 摘要路径的 split（**不读 split 缓存**）：接口可用 ⇒ 摘要路径（干净模块 + 依赖接口），
+-- 摘要路径的 split：接口可用 ⇒ 摘要路径（干净模块 + 依赖接口），
 -- 否则全量。抽出来供正常路径与审计路径共用，保证两条路径的「摘要分支」完全一致。
 -- 构建路径的 codegen 口径：**只用同一套（全量）**。
 --
@@ -197,43 +197,15 @@ summarySplitParts ctx Nothing entry printResult = dtSplitProjectParts ctx entry 
 
 -- | 构建（codegen）入口：两级输入寻址。
 --
--- 1. **快 key**（`splitInOf`）：源闭包 + 依赖身份 + 编译器指纹；命中
---    `objects/splitptr/<快 key>` 就直接读语义 blob（未改动源码 = 零精化）；
--- 2. **语义 key**（`splitIdentityOf`）：本包 `pkgIfaceHash` + `pkgImplHash` + 布局摘要 +
---    依赖身份 + 产物口径；`blobs/<语义 key>` 是产物真身。注释变更 ⇒ 快 key 变、语义 key
---    不变 ⇒ 精化一次、codegen 复用；行移动 ⇒ 布局摘要变 ⇒ 重建（运行时位置表正确）。
+-- 构建（codegen）入口：精化一次 → 写接口 → 生成 split 文件 → 落盘。
 compileToDirNormal : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 compileToDirNormal inputs ctx entry printResult outDir =
-  do
-    let
-      fast = splitInOf inputs.siMods
-    in do
-      ptr <- readSplitPointer fast
-      case ptr of
-        Just sem =>
-          do
-            cached <- readSplitBlob sem
-            case cached of
-              Just files =>
-                do
-                  let
-                    _ = log! "debug" "split-pointer-hit cache-path=hit"
-                  in do
-                    n <- writeCompiledNormalized ctx outDir files
-                    pure (
-                        case n of
-                          ErrC e => ErrC e
-                          OkC count => OkC (count, [])
-                      )
-              Nothing => rebuildSplit inputs ctx entry printResult outDir fast
-        Nothing => rebuildSplit inputs ctx entry printResult outDir fast
+  rebuildSplit inputs ctx entry printResult outDir
 
--- 快指针未命中：精化一次 → 写接口（返回模块摘要）→ 语义 key → blob 命中则复用，
--- 否则 codegen + 写 blob + 写快指针。
-rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Int, List Diagnostic))
-rebuildSplit inputs ctx entry printResult outDir fast =
+rebuildSplit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
+rebuildSplit inputs ctx entry printResult outDir =
   do
-    -- 同包干净模块的接口读一次：codegen 的语义 key 与写回都用这份表。
+    -- 同包干净模块的接口读一次：codegen 与写回都用这份表。
     cleanR <- ownCleanInfoWith ctx inputs.siClosure
     let
       clean =
@@ -253,43 +225,14 @@ rebuildSplit inputs ctx entry printResult outDir fast =
               shadow <- writeIfaceShadowWithClean ctx checked (Just inputs.siClosure) clean
               case shadow of
                 ErrC e => pure (ErrC e)
-                OkC modules =>
+                OkC _ =>
                   do
-                    tag <- cacheTagEff
-                    let
-                      -- 入口-only 包没有可写的模块面（`modules=[]`），语义 key 无从谈起：
-                      -- 退回源输入 key（正确优先，放弃这类包的注释复用）。
-                      sem =
-                        case modules of
-                          [] => fast
-                          _ => splitIdentityOf ctx printResult tag modules inputs.siMods.cmKind inputs.siMods.cmDeps
-                    in do
-                      cached <- readSplitBlob sem
-                      case cached of
-                        Just files =>
-                          do
-                            _ <- writeSplitPointer fast sem
-                            _ <- rootKeepEff ctx [fast, sem]
-                            let
-                              _ = log! "debug" "split-identity-hit cache-path=hit"
-                            in do
-                              n <- writeCompiledNormalized ctx outDir files
-                              pure (
-                                  case n of
-                                    ErrC e => ErrC e
-                                    OkC count => OkC (count, checked.checkedWarnings)
-                                )
-                        Nothing =>
-                          do
-                            _ <- writeSplitBlobAt sem canon
-                            _ <- writeSplitPointer fast sem
-                            _ <- rootKeepEff ctx [fast, sem]
-                            n <- writeCompiledNormalized ctx outDir canon
-                            pure (
-                                case n of
-                                  ErrC e => ErrC e
-                                  OkC count => OkC (count, checked.checkedWarnings)
-                              )
+                    n <- writeCompiledNormalized ctx outDir canon
+                    pure (
+                        case n of
+                          ErrC e => ErrC e
+                          OkC count => OkC (count, checked.checkedWarnings)
+                      )
 
 -- 审计（`VUNA_IFACE_AUDIT=1`）：同一进程分别走摘要路径与全量路径，codegen 产物逐字节比较；
 -- 一致才落盘，不一致报 `iface-audit-mismatch` 且**不写任何缓存/接口**。
@@ -313,29 +256,18 @@ auditCompile inputs ctx entry printResult outDir =
                   files = firstOf p
                   checked = secondOf p
                   canon = canonicalTopo files
-                  fast = splitInOf inputs.siMods
                 in do
                   shadow <- writeIfaceShadowWith ctx checked (Just inputs.siClosure)
                   case shadow of
                     ErrC e => pure (ErrC e)
-                    OkC modules =>
+                    OkC _ =>
                       do
-                        tag <- cacheTagEff
-                        let
-                          sem =
-                            case modules of
-                              [] => fast
-                              _ => splitIdentityOf ctx printResult tag modules inputs.siMods.cmKind inputs.siMods.cmDeps
-                        in do
-                          _ <- writeSplitBlobAt sem canon
-                          _ <- writeSplitPointer fast sem
-                          _ <- rootKeepEff ctx [fast, sem]
-                          n <- writeCompiledNormalized ctx outDir canon
-                          pure (
-                              case n of
-                                ErrC e => ErrC e
-                                OkC count => OkC (count, checked.checkedWarnings)
-                            )
+                        n <- writeCompiledNormalized ctx outDir canon
+                        pure (
+                            case n of
+                              ErrC e => ErrC e
+                              OkC count => OkC (count, checked.checkedWarnings)
+                          )
 
 -- 内容相同就不写：`build-id` 这类小文件反复重写会改 mtime，影响 `diff -r` 与增量判定。
 writeFileIfChanged : Member nFs FsOp r => String -> String -> Eff r Nat
@@ -350,9 +282,7 @@ writeFileIfChanged path content =
       fsWriteFile path content
 
 -- 把**已规范拓扑序**的 split 文件写入 outDir 并写 build.sh。
--- 调用方保证 files 已过 `canonicalTopo`：命中路径的 blob 在写侧就规范化了，未命中路径
--- 在写 blob 前规范化。build.sh 的层/顺序因此不在热路径重算：`canonicalTopo` 只在写侧
--- 跑一次。
+-- 调用方保证 files 已过 `canonicalTopo`；build.sh 的层/顺序因此不在热路径重算。
 writeCompiledNormalized : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List SplitFile -> Eff r (Check Int)
 writeCompiledNormalized ctx outDir files =
   do
@@ -815,7 +745,7 @@ depPackageCount ctx = length (depPackageList ctx)
 -- 缺失时现 parse 一次并写回 —— 冷启动只付一次 parse，之后不再 parse 依赖包。
 -- ---------------------------------------------------------------
 ifaceObjectCodec : String
-ifaceObjectCodec = "module-iface 5"
+ifaceObjectCodec = "module-iface 6"
 
 export record PkgEntry(..) where
   peName : String
@@ -1734,7 +1664,7 @@ storeCheckPayload ctx dig outcome =
     _ <- storeObjectWriteEff "check-outcome" checkResultCodec dig (encCheckOutcome outcome)
     rootKeepEff ctx [dig]
 
--- 包级缓存判定的输入摘要（纯数据；key 由 `checkInOf` / `splitInOf` 换算成对象地址）。
+-- 包级缓存判定的输入摘要（纯数据；key 由 `checkInOf` / `buildViewKeyOf` 换算成对象地址）。
 --
 -- `cmKind` = `exe`（可执行包入口）/ `lib:<namesHash>`（库包导出面）。`cmVer` 是
 -- 「编译器版本 + 指纹」：换二进制即整套判定换代。
@@ -2170,7 +2100,7 @@ resyncCleanSources sources clean =
   map (
       \m =>
         case lookupPair (miNameOf m) sources of
-          Just si => ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miImplHashOf m) (miDepHashesOf m) (miImportsOf m) (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m) (miRecordsOf m) (miPreparedOf m) (miCachedOf m) (miDefLocsOf m)
+          Just si => ModuleIface (miNameOf m) (miPackageOf m) si (miIfaceHashOf m) (miDepHashesOf m) (miImportsOf m) (miImplicitImportsOf m) (miExportsOf m) (miFixitiesOf m) (miDeclsOf m) (miRecordsOf m) (miPreparedOf m) (miCachedOf m) (miDefLocsOf m)
           Nothing => m
     ) clean
 
@@ -2470,30 +2400,10 @@ auditCheckLib wantWarnings ctx mods names =
         ErrC e => pure (ErrC e)
         OkC _ => checkAndShadow ctx (pure summary)
 
--- ---------------------------------------------------------------
--- codegen 产物的缓存判定：**输入寻址的 split blob 存在性**。
---
--- `blobs/<splitIn>`：`splitIn` 由包名 + kind + 三项输入摘要 +
--- 编译器指纹算出，同一输入同一路径；命中判定就是文件存在，写侧重算结果覆盖同一路径。
--- ---------------------------------------------------------------
--- | split 输入摘要的 schema（结构变化必须 bump；旧 blob 自然失效）。
-splitNodeSchema : String
-splitNodeSchema = "vuna-split-node 2"
+-- | build 视图 key 的 schema（结构变化必须 bump；旧视图自然失效）。
+buildViewSchema : String
+buildViewSchema = "vuna-build-view 1"
 
--- | split 载荷的编码版本（`Store` 的 codec 段）。
--- 载荷是 `canonicalTopo` 后的规范拓扑序。命中路径直接按
--- 载荷顺序写产物，不再重算规范化。
-splitCacheCodec : String
-splitCacheCodec = "split-files 2"
-
--- | blob 的 framing tag（schema + 编译器指纹）。
-splitBlobTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
-splitBlobTag =
-  do
-    tag <- cacheTagEff
-    pure "${splitNodeSchema}/${tag}"
-
--- | split 节点的输入摘要：源闭包 / 依赖身份 / 版本+指纹+printResult。
 -- | 一次 build 命令共用的 split 输入：闭包扫描 / 依赖接口 / 输入摘要。
 --
 -- 三者由同一次 `ifaceModsEff`（整包源扫描 + 逐模块头解析 + 地址分配）派生。`build` 的
@@ -2513,11 +2423,10 @@ splitInputsOf ctx entry printResult =
     fp <- compilerFingerprint
     let
       srcHash = closureHashOf sources 0
-      verHash = textHash (splitNodeSchema ++ vunaVersion) + fp
+      verHash = textHash (buildViewSchema ++ vunaVersion) + fp
       prHash = if printResult then 1 else 0
-      -- **产物口径**必须进判定 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
-      -- （实测 runtime 的 defloc 表在两条路径下长度不同）。只用源码/依赖摘要当 key 会让
-      -- 「先全量、后摘要」两次构建复用同一 blob 却覆盖不同内容。mode 因此进 kind。
+      -- **产物口径**必须进视图 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
+      -- （实测 runtime 的 defloc 表在两条路径下长度不同）。mode 因此进 kind。
       mode =
         case depIfaces of
           Just _ => "s"
@@ -2525,85 +2434,10 @@ splitInputsOf ctx entry printResult =
       kind = "${mode}:${if printResult then "pr1" else "pr0"}"
     in pure (SplitInputs closure depIfaces (checkModsOf (contextPackageName ctx) kind "" (hashText srcHash) (depIdentitiesHash deps) (hashText (verHash + prHash)) (releaseFlagOf ctx)))
 
--- | blob 路径：内容寻址（`<cache>/blobs/<digest>`）。
-splitBlobPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
-splitBlobPath digest =
-  do
-    base <- cacheBase
-    pure "${base}/blobs/${digest}"
-
--- | 写 blob 到**输入寻址**路径（key 由 `splitInOf` 给出，不再由内容哈希决定）：
--- 同一个输入永远同一个路径，命中判定就是「文件存在」。
-writeSplitBlobAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List SplitFile -> Eff r Int
-writeSplitBlobAt digest files =
-  do
-    let
-      payload = encTop encSplitFiles files
-      -- 路径是**输入**地址；framing 头里记**内容**地址，读侧才能发现篡改。
-      contentDigest = payloadDigest payload
-    in do
-      tag <- splitBlobTag
-      path <- splitBlobPath digest
-      base <- cacheBase
-      _ <- storeEnsureDirEff "${base}/blobs"
-      storeWriteIfChangedAsEff tag splitCacheCodec contentDigest path payload
-
--- | split 的输入摘要：包 + kind + 三个闭包摘要 + 编译器指纹（与 check 判定同口径）。
-splitInOf : CheckMods -> String
-splitInOf m =
-  addrOf ["split", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
-
--- ---------------------------------------------------------------
--- 产物身份（代码即内容）：快 key → 语义 key 的指针 + 语义 blob。
---
--- `splitIdentityOf` 看本包接口面 / 产物面 / 布局（span 行号）、依赖身份、产物口径与
--- 编译器 tag，不看本包源字节：注释变更不换语义 key（复用 codegen），行移动换布局摘要
--- （重建位置表），`opaque`/`abstract` 体变更换 `pkgImplHash`（只换本包产物），
--- 依赖包变化换 `deps`（产物文件集含依赖单元）。
--- ---------------------------------------------------------------
-splitPtrKind : String
-splitPtrKind = "splitptr"
-
-splitPtrCodec : String
-splitPtrCodec = "split-pointer 1"
-
-readSplitPointer : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe String)
-readSplitPointer fast =
-  do
-    saved <- storeObjectReadEff splitPtrKind splitPtrCodec fast
-    pure (
-        case saved of
-          Just sem => if sem == "" then Nothing else Just sem
-          Nothing => Nothing
-      )
-
-writeSplitPointer : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-writeSplitPointer fast sem = storeObjectWriteEff splitPtrKind splitPtrCodec fast sem
-
-defLocLine : PackageContext -> (String, String, Int) -> String
-defLocLine ctx p =
-  "${firstOf p}|${dropPrefixMeta "${contextDir ctx}/" (firstOf (secondOf p))}|${strFromInt (secondOf (secondOf p))}"
-
--- 布局摘要：排序后的模块 × 定义位置（相对包目录的文件 + startLine）。产物里的
--- `dt_def_locs` 由它决定；与源字节/注释/绝对路径无关。
-layoutDigestOf : PackageContext -> List ModuleIface -> String
-layoutDigestOf ctx modules =
-  addrOf
-    ("split-layout" :: concatMap (\m => map (\p => "${miNameOf m}|${defLocLine ctx p}") (miDefLocsOf m)) (sortModuleIfaces modules))
-
--- | 语义 key：本包接口面 / 产物面 / 布局（span 行号）+ **产物口径**（摘要 / 全量、
---   printResult）+ **依赖身份** + 编译器 tag。
---
--- 依赖身份必须进 key：产物文件集包含依赖包的单元，只改依赖包（本包源码不变）时
--- 语义 key 若不换，`split-identity-hit` 会复用含旧依赖单元的 blob。产物口径同理：
--- 摘要路径与全量路径的 runtime defloc 表不同。
-splitIdentityOf : PackageContext -> Bool -> String -> List ModuleIface -> String -> String -> String
-splitIdentityOf ctx printResult tag modules kind deps =
-  let
-    pkg = contextPackageName ctx
-    pr = if printResult then "1" else "0"
-  in addrOf
-    ["split-identity", splitNodeSchema, pkg, pr, kind, deps, pkgIfaceHashOfModules pkg modules, pkgImplHashOfModules pkg modules, layoutDigestOf ctx modules, tag]
+-- | build 视图的输入摘要：包 + kind + 三个闭包摘要 + 编译器指纹（与 check 判定同口径）。
+buildViewKeyOf : CheckMods -> String
+buildViewKeyOf m =
+  addrOf ["build-view", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
 
 -- | 链接工具链身份：视图里放的是**链接产物**，它由生成的 .ml 与链接工具链共同决定。
 -- `views/bin` 的 key 因此 = 产物输入摘要 + 工具链身份；统一 store 下不会把别的工具链
@@ -2638,47 +2472,10 @@ export buildViewAddrOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess
 buildViewAddrOf inputs =
   do
     tool <- toolchainIdEff
-    pure (addrOf ["view-bin", splitInOf inputs.siMods, tool])
+    pure (addrOf ["view-bin", buildViewKeyOf inputs.siMods, tool])
 
 -- | check 的判定摘要：四个输入摘要 + 包 + kind。存在即「判过」。
 checkInOf : CheckMods -> String
 checkInOf m =
   addrOf
     ["check-outcome", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
-
--- | 写 blob（内容不变就不写：同一产物被多次构建复用时零写放大）。
--- 调用方传入**已规范化**的列表：digest 与产物顺序都按规范序取，原始 codegen 顺序不落盘。
-writeSplitBlob : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List SplitFile -> Eff r String
-writeSplitBlob files =
-  do
-    let
-      payload = encTop encSplitFiles files
-      digest = payloadDigest payload
-    in do
-      tag <- splitBlobTag
-      path <- splitBlobPath digest
-      base <- cacheBase
-      _ <- storeEnsureDirEff "${base}/blobs"
-      _ <- storeWriteIfChangedAsEff tag splitCacheCodec digest path payload
-      pure digest
-
--- | 读 blob：framing 全量校验（**重算**载荷内容地址，不只是比对头声明）+ 内容地址比对
--- 通过才解码；任何不符 ⇒ Nothing（重算并重写同一路径）。
---
--- split 载荷没有 iface 那种逐字段语义自证，所以不能走
--- `storeReadAsEff`（只比头里的地址字符串，同长度载荷篡改会静默进入解码器 → 损坏的
--- codegen 产物）。重算成本是 `contentAddress` 的预折叠 + SHA-256（~2.2 ms/MB），
--- 只在 split 命中路径付一次；载荷中部的单字节篡改因此真正被拒绝。
-readSplitBlob : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List SplitFile))
-readSplitBlob digest =
-  do
-    tag <- splitBlobTag
-    path <- splitBlobPath digest
-    -- 路径是输入地址；framing 头记内容地址，`storeReadEff` 重算并校验
-    -- （截断/篡改必须被拒绝，不能把坏载荷当产物写出去）。
-    payload <- storeReadEff tag splitCacheCodec path
-    pure (
-        case payload of
-          Just bytes => decSplitFilesComplete bytes
-          Nothing => Nothing
-      )

@@ -102,8 +102,7 @@ PriorityQueue / Sort，三档合成探针，只测 OCaml 后端产物的运行�
   0.58 s user（≈345 MB/s），`contentAddress` 200 MB = 1.09 s user（≈180 MB/s）。也就是说钱花在
   **逐字节的预哈希/SHA** 与「百万级小分片」本身，不在拼接那一遍；把 `encTag`/`encInt`/`encStr`/
   `encList` 的分片**合并回单个原子串**反而从 7.02 s 变成 7.08 s（3 轮，user）。因此增量摘要
-  不会省下可测的时间，不做；这条线要动就动"两次哈希"（`hashParts` 与 `implHashOfParts`
-  对几乎相同的载荷各编码+各哈希一遍），那是缓存身份设计，不是局部优化。
+  不会省下可测的时间，不做；这条线不再有"两次哈希"：接口只算一份 `miIfaceHash`。
 - **提高 OCaml 优化级别 / 内联阈值**（`build.sh` 的 `FLAGS`）：本机 `ocamlopt` 的
   `-config` 是 `flambda: false`，`-O3` 因此是**空操作**——同一源码 `-O3` 与默认产物
   **逐字节相同**（25,458,312 B，编译 CPU 12.66 s vs 12.63 s）。`-inline 10` 让编译

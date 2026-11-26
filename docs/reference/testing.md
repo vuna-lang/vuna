@@ -202,7 +202,7 @@ end:
 - 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
 - 父进程只预热一次 `vuna check packages/base`（需要时 `check .`），worker 不各自 warmIfaces。
-- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface|splitptr`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。

@@ -16,10 +16,9 @@ exit: 0
 file-exists: $TMPDIR/dt-build-pkg/.output/Main.ml
 file-exists: $TMPDIR/dt-build-pkg/.output/build.sh
 file-absent: $TMPDIR/dt-build-pkg/.output/bin
-# 第二次 --no-compile：先删掉任意一个单元缓存文件强制重算，产物必须逐字节一致
-# （单元 key / split 串接顺序与命中集合无关；缓存条目按本次程序校验后复用）。
+# 第二次 --no-compile：另换输出目录重建，产物必须逐字节一致
+# （split 串接顺序稳定；产物按规范拓扑序生成）。
 run: sh -c 'cd "$TMPDIR/dt-build-pkg/.output" && sha256sum *.ml build.sh | sort > "$TMPDIR/split-a.sha"'
-run: sh -c 'f=$(find "$TMPDIR/store-nocompile/units" -name "*.unit" | head -1); [ -n "$f" ] && rm -f "$f"'
 run: VUNA_STORE="$TMPDIR/store-nocompile" "$VUNA" build --no-compile --out "$TMPDIR/dt-build-b" "$TMPDIR/dt-build-pkg" 2>&1
 exit: 0
 run: sh -c 'cd "$TMPDIR/dt-build-b" && sha256sum *.ml build.sh | sort | diff -u "$TMPDIR/split-a.sha" -'

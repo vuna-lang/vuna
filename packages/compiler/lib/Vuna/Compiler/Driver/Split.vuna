@@ -269,8 +269,8 @@ convergedWithin fuel graph memo =
     in if sameDepthTable memo next then True else convergedWithin (fuel - 1) graph (HashMap.fromList next)
 
 -- 把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
--- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
--- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
+-- 排序）。`SplitFile` 的列表顺序不能随生成路径变化，build.sh 的层/顺序不能因此漂移
+-- （否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
 --
 -- 三处叠加的 O(n²) 必须避开：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 排序每次
 -- 比较重算 SHA-256 的 `unitTieKey`；③ 排序结果按名在 `files` 里线性找文件。做法：
@@ -376,38 +376,15 @@ normalizeFileDeps : HashMap String Int -> SplitFile -> SplitFile
 normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie ties (splitDeps f))
 
 -- ---------------------------------------------------------------
--- 载荷编码（split 缓存 / 单元缓存共用）
+-- 规范编码（audit 对拍签名）
 -- ---------------------------------------------------------------
--- `SplitFile` 是 codegen 的输出模型（文件名 + 文本 + 直接依赖单元名）。落盘走这里：
--- 文本本身就是产物，显式编码后逐字节稳定，且能被 `Store` 的
--- 内容地址覆盖。
+-- `SplitFile` 是 codegen 的输出模型（文件名 + 文本 + 直接依赖单元名）。显式编码后逐字节
+-- 稳定，供 `VUNA_IFACE_AUDIT` 比较两条路径的产物。
 --
 -- | `SplitFile` 的规范编码：名字 / 文本 / 依赖表。
 export encSplitFile : SplitFile -> List String -> List String
 encSplitFile f acc = encStr f.splitName (encStr f.splitText (encList encStr f.splitDeps acc))
 
-decSplitFile : Int -> Cur -> Maybe (SplitFile, Cur)
-decSplitFile fuel c =
-  do
-    p1 <- decStr (fuel - 1) c
-    p2 <- decStr (fuel - 1) (secondOf p1)
-    p3 <- decList decStr (fuel - 1) (secondOf p2)
-    pure (SplitFile (firstOf p1) (firstOf p2) (firstOf p3), secondOf p3)
-
--- | `List SplitFile` 的规范编码（split 缓存载荷）。
+-- | `List SplitFile` 的规范编码（audit 对拍签名）。
 export encSplitFiles : List SplitFile -> List String -> List String
 encSplitFiles fs acc = encList encSplitFile fs acc
-
--- | 整串解析 `List SplitFile`（split 缓存载荷入口）。
-export decSplitFilesComplete : String -> Maybe (List SplitFile)
-decSplitFilesComplete s =
-  case decList decSplitFile (strLength s) (curOf s) of
-    Nothing => Nothing
-    Just (fs, rest) => if curAtEnd rest then Just fs else Nothing
-
--- | 整串解析单个 `SplitFile`（单元缓存载荷入口）。
-export decSplitFileComplete : String -> Maybe SplitFile
-decSplitFileComplete s =
-  case decSplitFile (strLength s) (curOf s) of
-    Nothing => Nothing
-    Just (f, rest) => if curAtEnd rest then Just f else Nothing

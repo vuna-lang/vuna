@@ -8,9 +8,6 @@ exit: 0
 # 对象地址集合一致（只比相对路径，不比含绝对路径的载荷）。
 run: sh -c 'S="$TMPDIR/det"; find "$S/store-a/objects" -type f | sed "s|$S/store-a/||" | sort > "$S/addr-a"; find "$S/store-b/objects" -type f | sed "s|$S/store-b/||" | sort > "$S/addr-b"; diff -u "$S/addr-a" "$S/addr-b"'
 exit: 0
-# split blob 地址集合一致。
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-a/blobs" -type f | sed "s|$S/store-a/||" | sort > "$S/blob-a"; find "$S/store-b/blobs" -type f | sed "s|$S/store-b/||" | sort > "$S/blob-b"; diff -u "$S/blob-a" "$S/blob-b"'
-exit: 0
 # 生成源码逐字节一致（build.sh 里的相对路径也已归一）。
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-b"'
 exit: 0
@@ -21,7 +18,7 @@ run: sh -c 'S="$TMPDIR/det"; mkdir -p "$S/home-a" "$S/home-b" "$S/tmp-a" "$S/tmp
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/objects" -type f | sed "s|$S/store-a2/||" | sort > "$S/addr-a2"; find "$S/store-b2/objects" -type f | sed "s|$S/store-b2/||" | sort > "$S/addr-b2"; diff -u "$S/addr-a2" "$S/addr-b2"'
 exit: 0
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/blobs" -type f | sed "s|$S/store-a2/||" | sort > "$S/blob-a2"; find "$S/store-b2/blobs" -type f | sed "s|$S/store-b2/||" | sort > "$S/blob-b2"; diff -u "$S/blob-a2" "$S/blob-b2"; diff -r "$S/out-a2" "$S/out-b2"'
+run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a2" "$S/out-b2"'
 exit: 0
 
 # 编译器身份：取可执行文件旁 `build-id`（源码闭包）与 `cache-tag`（二进制）的内容，
@@ -31,8 +28,6 @@ exit: 0
 run: sh -c 'H=$(dirname "$(dirname "$VUNA")"); test -f "$H/build-id" || { echo "missing $H/build-id"; exit 3; }; test -f "$H/cache-tag" || { echo "missing $H/cache-tag"; exit 3; }; test -f "$H/bin/vuna-compiler" || { echo "missing $H/bin/vuna-compiler"; exit 3; }; S="$TMPDIR/det"; rm -rf "$S/x"; mkdir -p "$S/x/bin"; cp "$VUNA" "$S/x/bin/vuna"; cp "$H/bin/vuna-compiler" "$S/x/bin/vuna-compiler"; cp "$H/build-id" "$S/x/build-id"; cp "$H/cache-tag" "$S/x/cache-tag"; touch -d "2020-01-01" "$S/x/bin/vuna" "$S/x/bin/vuna-compiler"; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" check "$S/a" >/dev/null 2>&1 || exit 1; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" build --no-compile --out "$S/out-x" "$S/a" >/dev/null 2>&1 || exit 2'
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; find "$S/store-x/objects" -type f | sed "s|$S/store-x/||" | sort > "$S/addr-x"; diff -u "$S/addr-a" "$S/addr-x"'
-exit: 0
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-x/blobs" -type f | sed "s|$S/store-x/||" | sort > "$S/blob-x"; diff -u "$S/blob-a" "$S/blob-x"'
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-x"'
 exit: 0

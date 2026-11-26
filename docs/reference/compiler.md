@@ -157,9 +157,9 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Driver.SplitGen` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miImplHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/module-iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf`、`pkgImplHashOf` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/module-iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 判定 = `objects/check-outcome/<checkIn>` 存在性，build 判定 = `objects/splitptr/<splitIn>` → `blobs/<splitIdentity>`（没有查询图/会话索引）；依赖接口按地址读（缺任一个 ⇒ 回退全量）、依赖身份取 `objects/pkg-iface`、接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；`checkIn`/`splitIn`/`splitIdentity` 的输入见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`checkViaGraph`、`splitIdentityOf`、`buildMetaText`、`metaUpToDate` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 判定 = `objects/check-outcome/<checkIn>` 存在性，默认 build 命中 `views/bin/<buildViewKey>`、显式 `--out` 走目录 `meta`（没有查询图/会话索引）；依赖接口按地址读（缺任一个 ⇒ 回退全量）、依赖身份取 `objects/pkg-iface`、接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；`checkIn`/`buildViewKey` 的输入见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`checkViaGraph`、`buildViewKeyOf`、`buildMetaText`、`metaUpToDate` |
 | `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），落在 `objects/tool-context/<addr>`；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContext`、`toolContextSchema`、`toolContextCodec` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Target` | 非 OCaml 目标的后端驱动：检查 + lowering，把 `IrProgram` 编码后交独立进程 `vuna-target-<t>`（`--ir` / `--out` / `--print` / `--diag`），产物缓存见 `Driver.TargetCache`；不 import 任何后端实现 | `compileBackend`、`dispatch` |
@@ -231,7 +231,7 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 - **模块级接口**：`Driver.Iface.ModuleIface`，每模块一个对象
   `objects/module-iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
   装载、逐项校验；模块顺序单独存 `objects/module-order/<包摘要>`。设计、字段、失效判定与
-  `ifaceHash`/`implHash` 口径见 [cache.md](cache.md)。
+  `ifaceHash` 口径见 [cache.md](cache.md)。
 
 ### 数据流
 

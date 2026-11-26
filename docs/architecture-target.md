@@ -117,8 +117,8 @@
 | D2 | 效应一次性续延；单一操作语义（CBV）；宿主交互走事件队列 | 两套操作语义会让差分测试与两端复用同时失效 | 外壳与 runtime 承担全部循环与事件分发 |
 | D3 | 原生后端用**保守根集 + 分代标记-清扫**：沿 `rbp` 链整帧扫根，年轻代按分配预算先收、整堆按连续次数与晋升压力触发。wasm 后端用 WasmGC（宿主 tracing GC） | 续延已由库机器执行，机器状态全是堆/栈上的普通值，没有栈拷贝；对非移动 GC 来说保守扫根已经足够，逐 call 栈图/槽 kind 只会引入漏根风险。深递归按扫栈成本抬阈值（[performance.md](reference/performance.md)「槽 kind 分布」）。Perceus RC 仍不做：dup/drop 需要精确指针与生命周期，且可变单元的环收不了 | 非移动老代 → 仍有内部碎片、不压缩；写屏障点分散在模块与运行时（可变单元 / cleanup / list 原地改接）；移动/压缩要等精确指针与槽 kind 全部可判定（debt D125） |
 | D4 | 宏终局是 typed macro / elaborator reflection，先做 AST→AST | 声明式宏够用一阵，reflection 才是终态 | 精化器要成为稳定库值；LSP 必须能跑宏并支持超时取消 |
-| D5 | 内容寻址身份停在"依赖按哈希固定 + 包身份接线"：`identityHash` 进 manifest/registry/pin/fetch/check，不做分发服务器 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash`·`implHash` / `identityHash` 三者从一开始就分开**；依赖类型语言还需要 iface/impl 双摘要（包级 `pkgIfaceHash` / `pkgImplHash`），因此 D11 是它的前提；分发真实性仍是非目标 |
-| D11 | 引入 `opaque` / `abstract` 定义修饰符 | 让 iface/impl 双摘要真正生效：`ifaceHash` 不含不展开体（不影响下游精化），`implHash` 含它（只影响产物） | 多一个语言特性，用户要理解"能不能展开"的差别 |
+| D5 | 内容寻址身份停在"依赖按哈希固定 + 包身份接线"：`identityHash` 进 manifest/registry/pin/fetch/check，不做分发服务器 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash` / `identityHash` 三者分开**；依赖身份只需包级 `pkgIfaceHash`；分发真实性仍是非目标 |
+| D11 | 引入 `opaque` / `abstract` 定义修饰符 | 控制下游可见性：`ifaceHash` 不含不展开体，因此改 `opaque` 体不影响下游精化 | 多一个语言特性，用户要理解"能不能展开"的差别；产物缓存移除后不再有 `implHash` |
 | D12 | 摘要只固定**不可变源**：`git`+`rev` / `url` 必填 `hash`，`path` 依赖不写摘要 | 完整性（取源）与新鲜度（判脏）是两条链：新鲜度已由 `siHash` → `miIfaceHash` → `miDepHashes` 负责，改依赖源码不该动上游 manifest | `path` 依赖不可复现；发布前必须转成 `git`/`url` |
 | D13 | 一个依赖图内同一包名只能出现一次（无版本号共存） | 无版本命名空间，规则最简；包名只参与"同包可见"判定 | 无法共存同名包的两个版本，只能改名/分叉 |
 | D14 | registry = 内容寻址对象集 + **可选**静态索引；无服务器、无账户、无签名 | 当前无 TLS 能力；网络/账户不进 TCB 或 seed；传输外置给 `git`/`curl`/Nix | 来源可信性由用户选定的 URL 决定；无撤销；索引只是便利层 |
@@ -180,7 +180,7 @@
 | --- | --- |
 | 哈希格式 | 编码 roundtrip；同输入跨进程/跨机器同摘要 |
 | 输入寻址对象库 | 新旧路径 audit 差分（同诊断、同产物）；clean/gc 作用域互不误删 |
-| 内容寻址身份 | 依赖身份 = 依赖包 `pkgIfaceHash`；产物身份 = `pkgImplHash` + 布局摘要；同源跨目录地址一致；注释变更不脏依赖方/不重跑 codegen；`opaque` 体变更只换本包产物 |
+| 内容寻址身份 | 依赖身份 = 依赖包 `pkgIfaceHash`；构建视图 key = 源闭包 + 依赖身份 + 编译器/链接工具链身份；同源跨目录地址一致；注释变更不脏依赖方 |
 | IR | OCaml-via-IR 与直连 Core 的产物逐字节一致 |
 | wasm / native | 与 OCaml 产物行为差分一致 |
 | 宏 / DSL | 展开后 span 覆盖完整 + 格式化幂等 + 工具可跳转 |

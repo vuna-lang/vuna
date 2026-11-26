@@ -135,7 +135,7 @@ commands =
       GDeps
       "清空缓存族 / 包对象族"
       "vuna store clean [--dry-run] [--store|--packages|--gc|--all]"
-      [boolFlag "dry-run" "只报数量", boolFlag "store" "清理缓存族（objects/<kind>、blobs、views/bin、.tmp）", boolFlag "packages" "清理包对象族（objects/pkg、pkgs、tmp）", boolFlag "gc" "配合 --packages：只删未被 roots 引用的对象", boolFlag "all" "等价 --store --packages"]
+      [boolFlag "dry-run" "只报数量", boolFlag "store" "清理缓存族（objects/<kind>、views/bin、.tmp）", boolFlag "packages" "清理包对象族（objects/pkg、pkgs、tmp）", boolFlag "gc" "配合 --packages：只删未被 roots 引用的对象", boolFlag "all" "等价 --store --packages"]
       ["不带 flag 时只清缓存族。"],
     topCmd ["repl"] GService "交互式 REPL" "vuna repl [FILE|DIR|MODULE]" [] [],
     subCmd

@@ -23,8 +23,8 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 ```text
                     ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
-   objects/module-iface|check-outcome|tool-context|module-order|pkg-iface|splitptr
-   blobs/<splitIdentity>   views/bin/<splitIn>   roots/<project>/<digest>
+   objects/module-iface|check-outcome|tool-context|module-order|pkg-iface
+   views/bin/<buildViewKey>   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
         │ test scheduler：父进程解析 store、预热一次  │
@@ -49,7 +49,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 ### 2.2 为什么可以共用
 
-- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface|splitptr`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节；日常 `check`/`build` 与测试并发写不会互相覆盖。
 - 编译器身份在 `ver` 输入里：身份取自产物 `build-id` 的内容，同源同身份——日常 CLI 与测试
   用**不同源码**构建的二进制地址不同，不会读错；同源的不同副本则共享对象。

@@ -132,7 +132,7 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
    口径：接口载荷里的**依赖表值是模块对象地址 `cmAddr`（含编译器标签）**，不是 iface
    哈希——跨编译器比较 payload 会看到依赖项整体变化，那不代表哈希漂移；判定哈希是否变了
-   要比 `miIfaceHash` / `miImplHash` 本身，或用 `checks.vuna-iface-selftest`。
+   要比 `miIfaceHash` 本身，或用 `checks.vuna-iface-selftest`。
 9. **导出面落在入口闭包外（已修，同一类的第二个实例）**：`Driver.IrDump` / `Ir.Render` 被列进
    compiler 的 `[export]`，但入口 `app/Main.vuna` 没 import ⇒ `iface-skip partial`（covered=118/120）
    ⇒ 每轮补一遍 lib check、包接口写不出去（依赖方只能回退全量）。冷 `check packages/compiler`

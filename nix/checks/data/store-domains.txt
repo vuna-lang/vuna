@@ -5,6 +5,5 @@ check-outcome
 tool-context
 module-order
 pkg-iface
-splitptr
 pkg
 target-out

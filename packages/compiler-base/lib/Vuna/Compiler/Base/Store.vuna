@@ -5,7 +5,7 @@ module Vuna.Compiler.Base.Store where
 --
 -- 缓存字节不能是「本编译器内存表示」的函数（随字段顺序 / 运行时版本漂移），
 -- 损坏时也不能只能靠宿主异常——语言里没有 try/catch，进程只能崩。
--- 因此 `check` / `split` / `split-units` / `ast` / `iface` 五类载荷一律走这一层：
+-- 因此 check 判定、模块接口、身份记录、工具会话、后端产物与包对象一律走这一层：
 --
 -- 格式（framing v2）：
 --

@@ -128,7 +128,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| DR-01 · ⚠️D | `Compile.vuna` 的 `splitModsOf` / `summarySplitParts`：`mode=s/f` 进 split key，产物是「输入 + store 热度」的函数（D112 疑源） | `Driver/Compile.vuna`（split 身份路径） | 后续（需设计） |
 | DR-02 · D | `Dt.dtProjectDecls` vs codegen 的 `topoModules`：两套模块排序；起点键还是模块名哈希 | `Driver/Dt.vuna`、`Driver/SplitGen.vuna` | 后续 |
 | DR-04 · A | `CompilerCli.vuna` 的 `stdoutIsTty`：走隐藏原语，绕过 `ConsoleOp` 行 | `Driver/CompilerCli.vuna` | 后续 |
 | DR-05 · B | `CompilerCli.vuna` + `Capabilities.vuna`：native 目标没有 entry 能力检查 | `Driver/CompilerCli.vuna`、`Base/Capabilities.vuna` | 后续 |
@@ -138,7 +137,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | DR-14 · C | `Compile.vuna` 的哈希折叠：`acc*1000003+h`、63-bit 相加与 SHA 口径并存 | `Driver/Compile.vuna` | 后续 |
 | DR-15 · C | `Compile.vuna` 的 `toolchainIdEff`：取不到就回落常量 `"none"` | `Driver/Compile.vuna` | 后续 |
 | DR-16 · D | 模块接口必须携带 `miDecls`（已 Loader-resolved 的源码 AST）：record 语法降级仍工作在源码层，依赖方要这份上下文；接口无法瘦身，增量边界被语法耦合（终止性已改读精化产物，不再需要 `miDecls`） | `Driver/Iface.vuna`、`Driver/Cache.vuna`、`Elab/Records` | 后续 |
-| A06 · ⚠️D | split 的 cache key 编入 `mode=s/f`：摘要路径与全量路径产出不同字节，产物是「输入 + store 热度」的函数 | 同 DR-01；`Driver/Compile.vuna` | 后续（需设计） |
 | DR-17 · ⚠️D | 产物缓存 key 只含**编译器二进制**身份（`cache-tag`），不含后端插件（`vuna-target-native` / `vuna-target-wasm`）身份：只改后端插件时缓存命中，`vuna compile` 会静默复用旧后端生成的 `.s` / 二进制 | `Loader/Fingerprint.vuna`（`cacheTagEff` 读编译器可执行文件旁的 `cache-tag`）、`Driver/Compile.vuna`（`tag <- cacheTagEff`）；复现：只改 `packages/target-native` 后重建 `.#vuna`，再编译 `bench/programs/t1/scalar_cmp`，产物与换一个空 `VUNA_STORE` 的不同 | 后续（插件身份进 key） |
 
 ## 工具、构建与验证
@@ -217,7 +215,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
    IR 类型槽选择性填充（D109）、CPS 机器级类型只有 `IrTyOpaque`（不再清空）。
 5. **失败路径伪造值**：`EInt 0`（`Elab/Match.litPatExpr`）、
    `TC_NoInstanceFound` 掩盖预算耗尽（EC-34）。
-6. **缓存口径分裂**：`mode=s/f` 进 key（DR-01 / A06）、两套模块排序（DR-02）、
+6. **缓存口径分裂**：两套模块排序（DR-02）、
    `acc*1000003+h` 与 SHA-256 两种哈希口径（DR-14）、cacheTag 回落（LD-23）、
    iface 必须携带源码 AST（DR-16）。
 

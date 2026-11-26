@@ -167,7 +167,7 @@ M = Int
 ```
 
 - opaque 定义体在**下游模块**的 deftbl 中不出现：跨包接口路径不会 delta 展开它，
-  `ifaceHash` 只含名字 + 类型，`implHash` 才含体；
+  `ifaceHash` 只含名字 + 类型，不含体；
 - 定义模块自身仍需要体来检查/生成代码；`transparent` 是显式默认，等价于不写；
 - `abstract` 已可解析（`abstract f : T` / `export abstract f : T`）：定义体在**本模块内**也
   不可展开（seal）；`opaque` 只对下游隐藏，定义模块仍可展开。

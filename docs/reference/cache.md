@@ -27,9 +27,9 @@
 
 | 层 | 是什么 | 在哪 |
 | --- | --- | --- |
-| **payload** | 对象字节（接口载荷、check 判定、split 产物、工具会话载荷） | `objects/<kind>/<摘要>`、`blobs/<splitIdentity>` |
-| **judgment** | 「这个输入算过了吗」= 输入摘要的地址是否存在 | `objects/check-outcome/<checkIn>`、`objects/splitptr/<splitIn>` |
-| **path / view** | 给人看的渲染，不是身份 | `views/bin/<splitIn>/`、`views/testbin/<testBin>/`、`<pkg>/.output` 符号链接 |
+| **payload** | 对象字节（接口载荷、check 判定、工具会话载荷） | `objects/<kind>/<摘要>` |
+| **judgment** | 「这个输入算过了吗」= 输入摘要的地址是否存在 | `objects/check-outcome/<checkIn>` |
+| **path / view** | 给人看的渲染，不是身份 | `views/bin/<buildViewKey>/`、`views/testbin/<testBin>/`、`<pkg>/.output` 符号链接 |
 
 路径可以变（视图、`.output`、`--out DIR`），身份不变（摘要）。
 
@@ -37,19 +37,17 @@
 
 ```
 $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store
-  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 5；带实例/方法 span）。
+  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 6；带实例/方法 span）。
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
   objects/module-order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
   objects/check-outcome/<checkIn>   # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
   objects/tool-context/<工具会话地址>  # LSP / REPL / vuna map 的会话载荷
   objects/pkg-iface/<key>           # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
-  objects/splitptr/<快 splitIn>     # 产物快指针：源输入 → 语义产物身份（注释复用 codegen）
   objects/target-out/<键>           # 后端产物（`target-out 1`）：文件表 + 诊断，
                                     # 键 = irHash + target + 后端二进制身份 + print
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
-  blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
-  views/bin/<视图摘要>/             # 构建视图（产物真身，含 .complete；key = splitIn + 链接工具链）
+  views/bin/<视图摘要>/             # 构建视图（产物真身，含 .complete；key = buildViewKey + 链接工具链）
   views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
   roots/<项目摘要>/.project         # 项目绝对目录（GC 据此清理已消失的项目根）
@@ -62,7 +60,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 类 | 域 | 生命周期 |
 | --- | --- | --- |
-| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` `target-out` + `blobs` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
+| 缓存 | `module-iface` `check-outcome` `tool-context` `target-out` + `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
 | 身份与决策记录 | `module-order` / `pkg-iface` | 承载确定性或产物身份；GC 不淘汰，仅显式 `clean --store` 清理 |
 | 源对象 | `pkg` / `pkgs` | 取来的源；`clean --packages` 管理，删了要重新 fetch |
 
@@ -75,14 +73,14 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
 | 包级 `check` | `objects/check-outcome/<checkIn>` 存在且可解码 | 精化一次；结果（含**失败**与诊断列表）写回 + 登记 roots |
-| 包级 `build`（快路径） | `objects/splitptr/<splitIn>` → 语义 blob | 精化一次再按语义 key 判 |
-| 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
+| 包级 `build`（默认视图） | `views/bin/<buildViewKey>` 存在且 `.complete` 匹配 + `metaUpToDate` | 精化 + codegen + 链接，成功后发布视图 |
+| 包级 `build`（显式 `--out`） | 输出目录的 `meta` 与当前输入一致 | 精化 + codegen + 链接 |
 | 依赖模块接口 | 按地址读 `objects/module-iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
 | 依赖身份 | `objects/pkg-iface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
 | 工具会话（LSP/REPL/`map`） | `objects/tool-context/<addr>` 存在 | 重建会话载荷 |
 | 后端产物（`--target native\|wasm`） | `objects/target-out/<键>` 存在且可解码 | 起后端插件，读回产物与诊断 |
 
-`checkIn` / `splitIn` 的输入（缺一不可）：
+`checkIn` / `buildViewKey` 的输入（缺一不可）：
 
 - 包名 + kind（`exe` / `lib:<导出面摘要>` / `pr0|pr1`）；
 - `manifest` = **语义**清单投影（包名、`[export]`、依赖的 alias/source/hash）；
@@ -92,13 +90,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要 + 该根源闭包摘要）；
 - `ver` = 编译器身份（见下节「编译器身份」）；
 - `flags` = 语义开关（`release` / `debug`：release 的 debug-only 构造诊断不同，必须进地址）。
-
-`splitIdentity`（产物身份）的输入：包名 + `pr0|pr1` + 产物口径（摘要 `s` / 全量 `f`）+
-依赖身份（`deps`）+ `pkgIfaceHash` + `pkgImplHash` + 布局摘要（排序后的定义名/相对文件/
-startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语义 key，行移动换布局摘要，
-`opaque`/`abstract` 体变更换 `pkgImplHash`；依赖包源码变化换 `deps`（产物文件集包含依赖
-单元），摘要 / 全量两条路径的 runtime defloc 表不同所以产物口径必须区分。快指针
-`objects/splitptr/<splitIn>` 只是「源输入 → 语义产物」的别名，不是身份。
 
 ## 编译器身份
 
@@ -122,7 +113,7 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
 ### 缓存命名空间（`cache-tag`）
 
 `build-id` 只由**源码闭包**决定：同一份源码由不同 seed 构建出的二进制仍共享 `build-id`
-（旋转窗口内两者并不保证行为一致）。接口摘要、模块顺序、split blob 等缓存对象如果只按
+（旋转窗口内两者并不保证行为一致）。接口摘要、模块顺序、构建视图等缓存对象如果只按
 `build-id` 寻址，就可能把旧二进制写的结果当成本二进制的。
 
 因此缓存键另有一层**二进制身份** `cache-tag`：`nix/build/packages.nix` 在构建
@@ -168,7 +159,7 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
 | --- | --- | --- |
 | seed rotation 两遍 | 各自全新的临时根 | 共享缓存会让 runtime 位置表路径归一不同、fixed point 假失败 |
 | growth / bench 探针 | 每档空根 | 预热根会把读数磨平 |
-| suite（`vuna-run-tests`） | `~/.vuna/test-store` | `52_cache_framing` 会故意截断 blob/接口对象；共用会打回所有开发缓存 |
+| suite（`vuna-run-tests`） | `~/.vuna/test-store` | `52_cache_framing` 会故意截断接口对象；共用会打回所有开发缓存 |
 | nix 沙箱（checks / packages） | `$TMPDIR` | 宿主 store 不可见，`HOME=/homeless-shelter` 天然回落 |
 
 ## 哈希命名（定稿）
@@ -177,8 +168,7 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
 | --- | --- | --- |
 | `contentHash` | 文件 `(相对路径, 字节)` | 完整性、包对象地址、manifest `hash` |
 | `ifaceHash` / `miIfaceHash` / `hashOfIface` | 下游可见语义面（span/path、`opaque`/`abstract` 体排除） | 逻辑指纹：依赖失效 |
-| `implHash` / `miImplHash` | 产物面（含 `opaque`/`abstract` 体，不含 span） | 产物身份 |
-| `pkgIfaceHash` / `pkgImplHash` | 模块摘要按名排序聚合 | 包接口身份 / 包产物身份 |
+| `pkgIfaceHash` | 模块摘要按名排序聚合 | 包接口身份（依赖身份） |
 | `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（manifest `identity` / registry / `vuna deps pin`；不参与缓存失效） |
 
 ## 正确性
@@ -196,8 +186,8 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
   不是正确性问题——这是整套设计的核心性质（包对象族是例外：删了要重新 fetch）。
 - **坏字节进不了解码器**：`Base.Store` 的 framing（magic / tag / codec / 长度 / 内容地址）先校验，
   不符即 `Nothing`；调用方按 miss 处理。输入寻址的 blob 用 `storeReadAsEff` 比对期望地址。
-- **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；产物身份
-  另把本包 `miDefLocs` 计入布局摘要，行移动必然重建。
+- **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；构建视图
+  key 含源闭包、依赖身份、编译器身份与链接工具链身份。
 - **模块顺序与缓存状态无关**：split 串接顺序取 import 图的拓扑序，拓扑排序的**起点**
   先按 `(名字内容键, 名字)` 全序排好 —— loader 的模块列表顺序（新加载者前插、预置模块
   在尾）不进语义，同一模块集合在冷/热 store、不同入口下都得到同一份顺序与 split 分层。
@@ -208,7 +198,7 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
   摘要）+ 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**；没有读-改-写，并发
   check/build 不会丢 root。GC 扫所有项目目录里 digest 文件名的并集——A 不需要知道 B
   的存在。读取侧也接受单文件布局（`roots/<项目>` 是文件时先读 digest 列表）。
-- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna deps fetch` 取到包后。
+- 登记的时机：check 判定 marker 提交后、build 视图发布后、`vuna deps fetch` 取到包后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
     布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉。它只缩小保留集，不影响正确性。
@@ -221,7 +211,7 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
 
 ## 并发边界（views）
 
-- **views/bin**：同一 `splitIn` 的构建用 `mkdir` 锁（`$VUNA_STORE/.tmp/lock-bin-<digest>`）串行化。
+- **views/bin**：同一 `buildViewKey` 的构建用 `mkdir` 锁（`$VUNA_STORE/.tmp/lock-bin-<digest>`）串行化。
   持锁者**直接在最终视图路径构建**（codegen 里的绝对路径保持稳定）；成功后用原子写提交
   `.complete`（内容 = digest），失败则删 partial view 再放锁。等锁者轮询 `.complete`，
   拿不到锁且超时才报错。显式 `--out` 不经过视图锁。
@@ -240,8 +230,6 @@ split 生成顺序按实际依赖图规范化（`canonicalTopo`：层 = 1 + max(
 | `check-store stable=N/M` | 诊断落盘前的稳定性检查（M 条里 N 条 Stable） |
 | `check-store write=N` | 诊断载荷写盘返回（0 = 内容未变，1 = 写入） |
 | `check-cache=skip volatile` | 结果含 Volatile/绝对路径诊断 ⇒ 不落盘，下次重算 |
-| `split-pointer-hit` | build 命中快指针（源码未改动，零精化） |
-| `split-identity-hit` | 精化后命中语义产物 blob（注释类改动复用 codegen） |
 | `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `objects/pkg-iface` 还是 manifest 回退 |
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 没覆盖 `[export].modules` 的全部模块（判据只看导出面，见 `writeIfaceShadow.exportedOwnOf`；日志带 `closure=`/`required=`/`covered=`/`missing=`），不写接口，等库面那遍写全 |
@@ -282,7 +270,6 @@ split 生成顺序按实际依赖图规范化（`canonicalTopo`：层 = 1 + max(
 | 哈希格式 | 编码 roundtrip；固定输入金标；跨目录/跨环境同摘要 | `64_infra`（`pkg-canon-rt` / `pkg-identity-*` / `pkg-golden`）、`78_determinism`（双目录 + TZ/LANG/HOME/TMPDIR 矩阵） |
 | 对象库 | 新旧路径 audit 差分；clean/gc 互不误删；对象读写有 span | `44c2` / `44m` / `44q`（check 与 compile 两条 audit）、`59` / `70` / `75` / `77`、`107_observability` |
 | 依赖身份 | 依赖方只消费 `pkgIfaceHash`；依赖未重跑不假命中 | `79_dep_identity`（注释 / 透明体 / opaque / 冷热 store / build 快指针） |
-| 产物身份 | `pkgImplHash` + 布局；注释/行移动/opaque/abstract 的边界 | `80_code_identity`（本包 + 跨包 q 的 splitptr） |
 | 包身份 | `identityHash` 进 manifest/registry/pin/fetch/check | `67` / `68` / `69` / `81` / `64_infra` |
 | 单一根 | 换目录/换 worktree 同一输入直接命中；项目根可裁剪；默认根 = `~/.vuna/store`；视图 key 含链接工具链 | `76_store_shared` |
 
