@@ -116,6 +116,7 @@ family / tier / matrix 词汇、`VUNA_OBS` 自采样、错误码枚举文档生�
 | `--shard i/N` | 把选中 case 按耗时均分成 N 份、只跑第 i 份（`dev suite`；CI 并行分片） |
 | `--filter` / `--select` / `--ignore` / `--only` / `--tier` / `--matrix` / `--backend` | 可重复筛选（按命令声明） |
 | `--release` | 发布构建；只对构建类命令合法 |
+| `--explain` | 逐模块输出 `hit` / `stale:<原因>`（`check` / `build`；文本格式） |
 | `--wasm-opt 0..3` | wasm 产物的 binaryen 优化级别（只对 `build` 合法；默认 3，`0` = 只汇编不优化） |
 
 **没有第二条全局旗标通路**：每条命令在命令表里声明自己接受的 flag；不属于该命令的

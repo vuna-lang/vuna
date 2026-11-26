@@ -87,6 +87,7 @@ record CliOpts where
   optFailFast : Bool
   optTarget : String
   optWasmOpt : Int
+  optExplain : Bool
 
 defaultCliOpts : CliOpts
 defaultCliOpts =
@@ -108,10 +109,15 @@ defaultCliOpts =
     False
     "ocaml"
     3
+    False
 
 -- | 在已有 opts 上打开 release 模式（`--release`）。
 markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
+
+-- | 打开逐模块增量原因报告（`--explain`）。
+markExplain : CliOpts -> CliOpts
+markExplain o = { o | optExplain = True }
 
 -- | 设置 wasm 产物的 binaryen 优化级别（`--wasm-opt N`，0 表示不优化）。
 markWasmOpt : Int -> CliOpts -> CliOpts
@@ -138,6 +144,7 @@ markTarget t o =
     o.optFailFast
     t
     o.optWasmOpt
+    o.optExplain
 
 -- | 强制「格式由命令行显式给出」（机器格式的单文档契约用；成员 manifest 不得改格式）。
 -- 位构造而非记录更新：记录更新在该位置触发当前精化器的 erased binder 问题。
@@ -161,6 +168,7 @@ markFormatExplicit o =
     o.optFailFast
     o.optTarget
     o.optWasmOpt
+    o.optExplain
 
 -- 显式 state 辅助：把不改 opts 的动作结果带回（退出码 + 当前 CliOpts）。
 withOpts : {r : Row} -> CliOpts -> Eff r Int -> Eff r (Int, CliOpts)
@@ -264,6 +272,7 @@ applyManifestOpts (Just pkg) o =
     o.optFailFast
     o.optTarget
     o.optWasmOpt
+    o.optExplain
 
 -- --fail-fast：只显示首条诊断（与 --max-errors 取较小者语义）。
 maxErrorsOf : CliOpts -> Int
@@ -515,7 +524,7 @@ runCompilerCliFor prog args =
         case secondOf stripped of
           Just f => f
           Nothing => if detectedLang == "en" then if tty then "human" else "short" else "human"
-      opts = CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args) (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args) (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax) (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args) (hasFailFast args) "ocaml" 3
+      opts = CliOpts fmt detectedLang (hasLangFlag args) (hasDenyWarnings args) (hasDenyWarnings args || hasShowWarnings args) (hasFormatFlag args) (hasDenyWarnings args || hasShowWarnings args) (hasDenyWarnings args) (secondOf strippedMax) (secondOf strippedContinue) [] (envRel == "1") (hasShowCascade args) (hasWithSources args) (hasFailFast args) "ocaml" 3 False
     in if anyHelp (firstOf strippedContinue) then
       helpFor prog
     else
@@ -877,6 +886,7 @@ compilePkgDir printResult dir outDir o =
 checkArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> CliOpts -> Eff r (Int, CliOpts)
 checkArgs prog [] o = withOpts o (usageErr prog)
 checkArgs prog ("--release" :: rest) o = checkArgs prog rest (markRelease o)
+checkArgs prog ("--explain" :: rest) o = checkArgs prog rest (markExplain o)
 checkArgs prog (arg :: rest) o =
   if startsWith "-" arg then
     withOpts o (removedFlag prog arg)
@@ -928,10 +938,11 @@ checkSpawnArgs o dir =
     cascadeArgs = if o.optShowCascade then ["--show-cascade"] else []
     sourceArgs = if o.optWithSources then ["--with-sources"] else []
     failFastArgs = if o.optFailFast then ["--fail-fast"] else []
+    explainArgs = if o.optExplain then ["--explain"] else []
     maxArgs = if o.optMaxErrors > 0 then ["--max-errors", strFromInt o.optMaxErrors] else []
   in append
     base3
-    (append langArgs (append maxArgs (append cascadeArgs (append sourceArgs failFastArgs))))
+    (append langArgs (append maxArgs (append cascadeArgs (append sourceArgs (append failFastArgs explainArgs)))))
 
 -- 机器格式（json/sarif）的判定：这些格式要求 stdout **恰好一份**文档。
 isMachineFormat : String -> Bool
@@ -1049,9 +1060,24 @@ checkPackageSeq pkg code o =
     r <- checkPackageCode pkg wantWarnings o1
     pure (if firstOf r > code then firstOf r else code, secondOf r)
 
+printExplainLines : Member nConsole ConsoleOp r => List String -> Eff r Int
+printExplainLines [] = pure 0
+printExplainLines (l :: rest) =
+  do
+    _ <- consolePrint "${l}\n"
+    printExplainLines rest
+
+printExplainEff : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Eff r Int
+printExplainEff pkg =
+  do
+    lines <- explainPackageEff pkg
+    printExplainLines lines
+
 checkPackageCode : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Package -> Bool -> CliOpts -> Eff r (Int, CliOpts)
 checkPackageCode pkg wantWarnings o =
   do
+    _ <-
+      if o.optExplain && not (isMachineFormat o.optDiagFormat) then printExplainEff pkg else pure 0
     r <- checkPackage o.optRelease wantWarnings pkg
     case r of
       ErrC e => checkPackageErr pkg e o
@@ -1159,6 +1185,7 @@ buildParse prog noCompile out dir pkg args o =
   case args of
     [] => buildRun noCompile (defaultDir dir) out pkg o
     "--no-compile" :: rest => buildParse prog True out dir pkg rest o
+    "--explain" :: rest => buildParse prog noCompile out dir pkg rest (markExplain o)
     "--release" :: rest => buildParse prog noCompile out dir pkg rest (markRelease o)
     "--wasm-opt" :: rest =>
       case rest of
@@ -1371,6 +1398,15 @@ wasmBuildScript optLevel =
 
 buildOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Int, CliOpts)
 buildOne noCompile multiOut outM pkg o =
+  if o.optExplain then
+    do
+      _ <- if isMachineFormat o.optDiagFormat then pure 0 else printExplainEff pkg
+      buildOneGo noCompile multiOut outM pkg o
+  else
+    buildOneGo noCompile multiOut outM pkg o
+
+buildOneGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Int, CliOpts)
+buildOneGo noCompile multiOut outM pkg o =
   if o.optTarget == "wasm" then
     buildWasmOne noCompile outM pkg o
   else if o.optTarget == "native" then

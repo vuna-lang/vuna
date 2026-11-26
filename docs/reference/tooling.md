@@ -163,6 +163,11 @@ CLI 统一使用 0 / 1 / 2 三档：
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 error finding 或 warning 超过 `max-warnings`；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
 | 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败） |
 
+`vuna check --explain` / `vuna build --explain` 在文本输出前逐模块打印一行
+`explain <包> <模块> hit|stale:<原因>`；当前原因取检查路径的判据（`no-iface` =
+地址没读到接口，`reexport-dirty` = 重导出链上有脏模块）。依赖递归构建另打
+`dep-build=<pkg>`。机器格式（json/sarif）下不打印，避免污染单文档通道。
+
 约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。`vuna build` / `vuna compile` 的入口能力告警（`UN_TargetEffectUnavailable`）走同一条显示与退出码策略；`--deny-warnings` 失败时按「编译失败不留产物」删除输出目录。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 可能不完整**：`-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）会让**本包**模块全部重新精化（依赖包仍复用模块接口），代价是该次 check 从「接口命中 ~ms」回到「本包精化秒级」；普通 `vuna check` 不显示 warning（没有检查结果重放）。
 
 约定之外：`vuna search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
