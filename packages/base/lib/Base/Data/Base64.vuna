@@ -1,5 +1,7 @@
 -- | Base64（RFC 4648 标准字母表，带 `=` padding）。输入/输出都是字节（`String` 是字节串）。
 -- | 解码是严格的：长度不是 4 的倍数、字母表之外、padding 出现在中间或超过两个都返回 `Nothing`。
+-- 编码一次 `strPack` 收口（每 3 字节只产生 4 个字节码，不构造"每组一个 String"）；
+-- 解码按索引扫描，不经过 `strUnpack` / 分组列表。
 module Base.Data.Base64 where
 
 import Base.Data.Bits
@@ -7,7 +9,6 @@ import Base.Data.Bool
 import Base.Data.Int
 import Base.Data.List
 import Base.Data.Maybe
-import Base.Data.Nat
 import Base.Internal.Operator
 import Base.Trait.Eq
 import Base.Trait.Num
@@ -15,7 +16,7 @@ import Base.Trait.Ord
 
 -- | 编码字节序列（每项 0..255）。
 export base64Encode : List Int -> String
-base64Encode bs = strConcatMany (map encodeGroup (groups 3 bs))
+base64Encode bs = strPack (reverse (encodeGroups bs []))
 
 -- | 编码字节串。
 export base64EncodeString : String -> String
@@ -25,101 +26,102 @@ base64EncodeString s = base64Encode (strUnpack s)
 export base64Decode : String -> Maybe (List Int)
 base64Decode s =
   let
-    bs = strUnpack s
     n = strLength s
-    pads = paddingCount bs n
   in if n == 0 then
     Just []
-  else if n - n / 4 * 4 == 0 && pads <= 2 then
-    case sequenceMaybe (map decodeDigit (take (n - pads) bs)) of
-      Nothing => Nothing
-      Just vs =>
-        case sequenceMaybe (map decodeGroup (groups 4 (append vs (zeroBytes pads)))) of
-          Nothing => Nothing
-          Just chunks => Just (reverse (drop pads (reverse (concatMap (\c => c) chunks))))
+  else if n - n / 4 * 4 == 0 then
+    let
+      pads = paddingCount s n
+    in if pads <= 2 then decodeGroups s 0 (n / 4) pads (n / 4 + 1) [] else Nothing
   else
     Nothing
 
--- | 末尾 `=` 的个数（0..2）。
-paddingCount : List Int -> Int -> Int
-paddingCount bs n =
-  if n == 0 then
-    0
-  else if at bs (n - 1) == 61 then if n >= 2 && at bs (n - 2) == 61 then 2 else 1 else 0
-
--- | 字节序列按 `k` 个一组切分（末组可能不足）。
-groups : Int -> List Int -> List (List Int)
-groups k xs = map (\i => take k (drop (i * k) xs)) (range 0 ((listLen xs + k - 1) / k))
-
--- | 元素个数（`Int`）。
-listLen : List Int -> Int
-listLen xs = natToInt (length xs)
-
--- | 定点取值；越界返回 -1（不会与合法字节冲突）。
-at : List Int -> Int -> Int
-at xs i =
-  case drop i xs of
-    x :: _ => x
-    [] => -1
-
--- | `k` 个零字节。
-zeroBytes : Int -> List Int
-zeroBytes k = map (\_ => 0) (range 0 k)
-
--- | 一组（1..3 个字节）编码成 4 个字符（不足时补 `=`）。
-encodeGroup : List Int -> String
-encodeGroup [] = ""
-encodeGroup [x] = strConcatMany [encodeDigit (shr32 x 2), encodeDigit (shl32 (band x 3) 4), "=="]
-encodeGroup [x, y] =
-  strConcatMany
-    [encodeDigit (shr32 x 2), encodeDigit (bor (shl32 (band x 3) 4) (shr32 y 4)), encodeDigit (shl32 (band y 15) 2), "="]
-encodeGroup [x, y, z] =
-  strConcatMany
-    [encodeDigit (shr32 x 2), encodeDigit (bor (shl32 (band x 3) 4) (shr32 y 4)), encodeDigit (bor (shl32 (band y 15) 2) (shr32 z 6)), encodeDigit (band z 63)]
-encodeGroup _ = ""
-
--- | 6-bit 值 → 标准字母表字符。
-encodeDigit : Int -> String
-encodeDigit n =
+-- | 6-bit 值 → 标准字母表字节。
+b64Byte : Int -> Int
+b64Byte n =
   if n < 26 then
-    strPack [65 + n]
+    65 + n
   else if n < 52 then
-    strPack [71 + n]
-  else if n < 62 then strPack [48 + n - 52] else if n == 62 then "+" else "/"
+    71 + n
+  else if n < 62 then
+    48 + n - 52
+  else
+    case n of
+      62 => 43
+      _ => 47
 
--- | 标准字母表字符 → 6-bit 值；非法字符返回 `Nothing`。
-decodeDigit : Int -> Maybe Int
-decodeDigit c =
+-- | 内部：逐组编码（输入按 3 字节分组；`acc` 是逆序输出字节）。
+encodeGroups : List Int -> List Int -> List Int
+encodeGroups [] acc = acc
+encodeGroups (x :: rest) acc =
+  case rest of
+    [] =>
+      let
+        o0 = b64Byte (shr32 x 2)
+        o1 = b64Byte (shl32 (band x 3) 4)
+      in 61 :: 61 :: o1 :: o0 :: acc
+    y :: rest2 =>
+      case rest2 of
+        [] =>
+          let
+            o0 = b64Byte (shr32 x 2)
+            o1 = b64Byte (bor (shl32 (band x 3) 4) (shr32 y 4))
+            o2 = b64Byte (shl32 (band y 15) 2)
+          in 61 :: o2 :: o1 :: o0 :: acc
+        z :: rest3 =>
+          let
+            o0 = b64Byte (shr32 x 2)
+            o1 = b64Byte (bor (shl32 (band x 3) 4) (shr32 y 4))
+            o2 = b64Byte (bor (shl32 (band y 15) 2) (shr32 z 6))
+            o3 = b64Byte (band z 63)
+          in encodeGroups rest3 (o3 :: o2 :: o1 :: o0 :: acc)
+
+-- | 内部：末尾 `=` 的个数（0..2）。
+paddingCount : String -> Int -> Int
+paddingCount s n =
+  if strAt s (n - 1) == 61 then if n >= 2 && strAt s (n - 2) == 61 then 2 else 1 else 0
+
+-- | 内部：逐 4 字符组解码；最后一组按 padding 少产出 1..2 个字节。
+decodeGroups : String -> Int -> Int -> Int -> Int -> List Int -> Maybe (List Int)
+decodeGroups s g groups pads fuel acc =
+  if fuel <= 0 then
+    Nothing
+  else if g >= groups then
+    Just (reverse acc)
+  else
+    let
+      i = g * 4
+      lastGroup = g == groups - 1
+      a = decodeDigitOrNeg (strAt s i)
+      b = decodeDigitOrNeg (strAt s (i + 1))
+      c = if lastGroup && pads >= 2 then 0 else decodeDigitOrNeg (strAt s (i + 2))
+      d = if lastGroup && pads >= 1 then 0 else decodeDigitOrNeg (strAt s (i + 3))
+    in if a < 0 || b < 0 || c < 0 || d < 0 then
+      Nothing
+    else
+      let
+        b0 = bor (shl32 a 2) (shr32 b 4)
+        b1 = bor (shl32 (band b 15) 4) (shr32 c 2)
+        b2 = bor (shl32 (band c 3) 6) d
+        k = if lastGroup then 3 - pads else 3
+        acc2 =
+          case k of
+            3 => b2 :: b1 :: b0 :: acc
+            2 => b1 :: b0 :: acc
+            _ => b0 :: acc
+      in decodeGroups s (g + 1) groups pads (fuel - 1) acc2
+
+-- | 标准字母表字节 → 6-bit 值；非法字符返回 `-1`（不会与合法值冲突）。
+decodeDigitOrNeg : Int -> Int
+decodeDigitOrNeg c =
   if c >= 65 && c <= 90 then
-    Just (c - 65)
+    c - 65
   else if c >= 97 && c <= 122 then
-    Just (c - 71)
+    c - 71
   else if c >= 48 && c <= 57 then
-    Just (c + 4)
+    c + 4
   else
     case c of
-      43 => Just 62
-      47 => Just 63
-      _ => Nothing
-
--- | 4 个 6-bit 值 → 3 个字节。
-decodeGroup : List Int -> Maybe (List Int)
-decodeGroup [a, b, c, d] =
-  Just
-    [mask8 (bor (shl32 a 2) (shr32 b 4)), mask8 (bor (shl32 (band b 15) 4) (shr32 c 2)), mask8 (bor (shl32 (band c 3) 6) d)]
-decodeGroup _ = Nothing
-
--- | 全部成功才成功；结果按输入顺序（内部逆序累积，最后翻转一次）。
-sequenceMaybe : List (Maybe a) -> Maybe (List a)
-sequenceMaybe ms =
-  case foldl step (Just []) ms of
-    Nothing => Nothing
-    Just xs => Just (reverse xs)
-
--- | `sequenceMaybe` 的一步。
-step : Maybe (List a) -> Maybe a -> Maybe (List a)
-step Nothing m = Nothing
-step (Just xs) m =
-  case m of
-    Nothing => Nothing
-    Just x => Just (x :: xs)
+      43 => 62
+      47 => 63
+      _ => -1

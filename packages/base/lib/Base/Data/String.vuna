@@ -1,4 +1,4 @@
--- | 字符串工具。长度以 UTF-8 字节计（`Nat`）；底层只使用字符串原语（`strUnpack` / `strPack` / `strLength` / `strConcatMany` / `strSubstring` / `++`，以及 `Hashable` 用的 `strHash`）与 [Base.Data.List]。`split` 用显式 fuel 计步（上界 `2*len(text)+len(sep)+2`），使 `splitAcc` / `skipSep` 的互递归满足终止性检查；空分隔符退化为逐字符切分。`Eq` / `Ord` / `Hashable` / `Semigroup` / `Monoid` 实例落在本模块。
+-- | 字符串工具。长度以 UTF-8 字节计（`Nat`）；底层只使用字符串原语（`strAt` / `strLength` / `strSubstring` / `strConcatMany` / `++`，以及 `Hashable` 用的 `strHash`）与 [Base.Data.List]。`split` / `trim` / `contains` / `parseInt` / `parseNat` 都按**字节索引**扫描，不建 `List Int` 中间链（`strUnpack` / `strPack` 只留给真正需要字节列表的调用方）；`split` 用显式 fuel 计步（上界 `2*len(text)+len(sep)+2`）满足终止性检查，空分隔符退化为逐字节切分。`Eq` / `Ord` / `Hashable` / `Semigroup` / `Monoid` 实例落在本模块。
 module Base.Data.String where
 
 import Base.Data.List
@@ -21,35 +21,41 @@ import Base.Internal.Operator
 export byteLength : String -> Nat
 byteLength s = natFromInt (strLength s)
 
--- | 按分隔符切分，分隔符本身不保留；空分隔符退化为逐字符切分。用显式 fuel 计步（`2*len(text)+len(sep)+2`）让终止性可证。
+-- | 按分隔符切分，分隔符本身不保留；空分隔符退化为逐字节切分。用显式 fuel 计步
+-- （`2*len(text)+len(sep)+2`）让扫描循环满足终止性检查；按索引扫描，不经过 `List Int`。
 export split : String -> String -> List String
 split sep text =
-  if strLength sep == 0 then
-    map (\c => strPack [c]) (strUnpack text)
+  let
+    lt = strLength text
+    ls = strLength sep
+  in if ls == 0 then
+    splitChars text 0 lt (2 * lt + 2) []
   else
-    splitAcc (strUnpack sep) (strUnpack text) (2 * strLength text + strLength sep + 2) [] []
+    splitSep sep text 0 0 lt ls (2 * lt + ls + 2) []
 
--- | 内部：`split` 的扫描循环——每次消费一个字符，命中分隔符时交给 `skipSep`；`fuel` 每步减一保证终止。
-splitAcc : List Int -> List Int -> Int -> List Int -> List String -> List String
-splitAcc sep [] fuel acc parts = reverse (strPack (reverse acc) :: parts)
-splitAcc sep (chars@(c :: rest)) fuel acc parts =
+-- | 内部：空分隔符的逐字节切分。
+splitChars : String -> Int -> Int -> Int -> List String -> List String
+splitChars s i n fuel acc =
   if fuel <= 0 then
-    reverse (strPack (reverse acc) :: parts)
-  else if _startsWithChars sep chars then
-    skipSep sep chars (fuel - 1) (length sep) [] (strPack (reverse acc) :: parts)
-  else
-    splitAcc sep rest (fuel - 1) (c :: acc) parts
+    reverse acc
+  else if i >= n then reverse acc else splitChars s (i + 1) n (fuel - 1) (strSubstring i 1 s :: acc)
 
--- | 内部：`split` 命中分隔符后逐个跳过 `n` 个字符，然后回到 `splitAcc`。
-skipSep : List Int -> List Int -> Int -> Int -> List Int -> List String -> List String
-skipSep sep [] fuel n acc parts = reverse (strPack (reverse acc) :: parts)
-skipSep sep (chars@(c :: rest)) fuel n acc parts =
+-- | 内部：`split` 的扫描循环。`start` 是当前段起点，`i` 是扫描位置；命中分隔符时
+-- 收下当前段并跳到分隔符之后。
+splitSep : String -> String -> Int -> Int -> Int -> Int -> Int -> List String -> List String
+splitSep sep text start i n ls fuel acc =
   if fuel <= 0 then
-    reverse (strPack (reverse acc) :: parts)
-  else if n <= 0 then
-    splitAcc sep chars (fuel - 1) acc parts
+    reverse (strSubstring start (n - start) text :: acc)
+  else if i >= n then
+    reverse (strSubstring start (n - start) text :: acc)
+  else if _sepAt sep text i n ls then
+    splitSep sep text (i + ls) (i + ls) n ls (fuel - 1) (strSubstring start (i - start) text :: acc)
   else
-    skipSep sep rest (fuel - 1) (n - 1) acc parts
+    splitSep sep text start (i + 1) n ls (fuel - 1) acc
+
+-- | 内部：`text` 从 `i` 起是否匹配整个分隔符。
+_sepAt : String -> String -> Int -> Int -> Int -> Bool
+_sepAt sep text i n ls = i + ls <= n && sameBytes i sep text 0 ls ls
 
 -- | 用 `sep` 连接字符串列表（一次 `strConcatMany` 单遍分配，避免逐段拼接的 O(n²) 拷贝）。
 export join : String -> List String -> String
@@ -72,19 +78,53 @@ unlines xs = strConcatMany (map (\x => "${x}\n") xs)
 
 -- | 去掉左侧空白（空格 / `\t` / `\n` / `\r`）。
 export trimLeft : String -> String
-trimLeft s = strPack (_dropSpace (strUnpack s))
+trimLeft s = trimLeftGo s 0 (strLength s) (strLength s + 1)
+
+-- | 内部：从左端起找到第一个非空白字节。
+trimLeftGo : String -> Int -> Int -> Int -> String
+trimLeftGo s i n fuel =
+  if fuel <= 0 then
+    strSubstring i (n - i) s
+  else if i >= n then
+    strSubstring i (n - i) s
+  else if _isSpace (strAt s i) then trimLeftGo s (i + 1) n (fuel - 1) else strSubstring i (n - i) s
 
 -- | 去掉右侧空白。
 export trimRight : String -> String
-trimRight s = strPack (reverse (_dropSpace (reverse (strUnpack s))))
+trimRight s = trimRightGo s (strLength s - 1) (strLength s + 1)
+
+-- | 内部：从右端起找到最后一个非空白字节。
+trimRightGo : String -> Int -> Int -> String
+trimRightGo s i fuel =
+  if fuel <= 0 then
+    strSubstring 0 (i + 1) s
+  else if i < 0 then
+    strSubstring 0 (i + 1) s
+  else if _isSpace (strAt s i) then trimRightGo s (i - 1) (fuel - 1) else strSubstring 0 (i + 1) s
 
 -- | 去掉两端空白。
 export trim : String -> String
 trim s = trimLeft (trimRight s)
 
--- | `text` 是否包含子串 `needle`。
+-- | `text` 是否包含子串 `needle`（按索引逐位置试前缀，不经过 `List Int`）。
 export contains : String -> String -> Bool
-contains needle text = _containsChars (strUnpack needle) (strUnpack text)
+contains needle text =
+  let
+    ln = strLength needle
+    lt = strLength text
+  in _containsAt needle text 0 ln lt (lt + 1)
+
+-- | 内部：从 `i` 起逐位置试匹配；`fuel` 只用于终止性检查。
+_containsAt : String -> String -> Int -> Int -> Int -> Int -> Bool
+_containsAt needle text i ln lt fuel =
+  if fuel <= 0 then
+    False
+  else if i + ln > lt then
+    False
+  else if sameBytes i needle text 0 ln ln then
+    True
+  else
+    _containsAt needle text (i + 1) ln lt (fuel - 1)
 
 -- | `text` 是否以 `prefix` 开头（逐字节比较，不经 `List Int`）。
 export startsWith : String -> String -> Bool
@@ -124,21 +164,41 @@ substring start len s = strSubstring (natToInt start) (natToInt len) s
 -- | 十进制非负整数解析：只接受 `[+]?[0-9]+`；空串、负号、非数字、溢出 → `Nothing`。
 export parseNat : String -> Maybe Nat
 parseNat s =
-  case strUnpack s of
-    [] => Nothing
-    43 :: rest => _natDigits rest
-    cs => _natDigits cs
+  let
+    n = strLength s
+  in if n == 0 then
+    Nothing
+  else if strAt s 0 == 43 then
+    if n == 1 then Nothing else _natDigits s 1 n (n + 1)
+  else
+    _natDigits s 0 n (n + 1)
+
+-- | 内部：非负数字串（索引扫描）→ `Nat`；空数字段、非数字或溢出给 `Nothing`。
+_natDigits : String -> Int -> Int -> Int -> Maybe Nat
+_natDigits s i n fuel =
+  if fuel <= 0 then
+    Nothing
+  else if i >= n then
+    Nothing
+  else
+    case _digitsToInt s i n 0 (n - i + 1) of
+      Nothing => Nothing
+      Just v => Just (natFromInt v)
 
 -- | 十进制整数解析：只接受 `[+-]?[0-9]+`；空串、非数字、溢出 → `Nothing`。
 export parseInt : String -> Maybe Int
 parseInt s =
-  case strUnpack s of
-    [] => Nothing
-    [45] => Nothing
-    45 :: rest => _digitsToNegInt rest 0
-    [43] => Nothing
-    43 :: rest => _digitsToInt rest 0
-    cs => _digitsToInt cs 0
+  let
+    n = strLength s
+  in if n == 0 then
+    Nothing
+  else
+    let
+      c = strAt s 0
+    in case c of
+      45 => if n == 1 then Nothing else _digitsToNegInt s 1 n 0 (n + 1)
+      43 => if n == 1 then Nothing else _digitsToInt s 1 n 0 (n + 1)
+      _ => _digitsToInt s 0 n 0 (n + 1)
 
 -- | `parseInt` 的默认值版：解析失败给 `d`。
 export parseIntOr : Int -> String -> Int
@@ -147,66 +207,47 @@ parseIntOr d s =
     Nothing => d
     Just n => n
 
--- | 内部：非负数字串 → `Nat`；空串或含非数字给 `Nothing`。
-_natDigits : List Int -> Maybe Nat
-_natDigits [] = Nothing
-_natDigits cs =
-  case _digitsToInt cs 0 of
-    Nothing => Nothing
-    Just n => Just (natFromInt n)
-
 -- | 内部：`min_int`（没有 `-2^62` 的字面量，用减法构造）。
 _minInt : Int
 _minInt = 0 - 4611686018427387903 - 1
 
 -- | 内部：逐位累加非负十进制数；超过 max_int 或遇到非数字给 `Nothing`。
-_digitsToInt : List Int -> Int -> Maybe Int
-_digitsToInt [] acc = Just acc
-_digitsToInt (c :: rest) acc =
-  if c < 48 || c > 57 then
+_digitsToInt : String -> Int -> Int -> Int -> Int -> Maybe Int
+_digitsToInt s i n acc fuel =
+  if fuel <= 0 then
     Nothing
+  else if i >= n then
+    Just acc
   else
     let
-      d = c - 48
-    in if acc > (4611686018427387903 - d) / 10 then Nothing else _digitsToInt rest (acc * 10 + d)
+      c = strAt s i
+    in if c < 48 || c > 57 then
+      Nothing
+    else
+      let
+        d = c - 48
+      in if acc > (4611686018427387903 - d) / 10 then Nothing else _digitsToInt s (i + 1) n (acc * 10 + d) (fuel - 1)
 
 -- | 内部：逐位累加负数（`acc` 保持负号）；低于 min_int 或遇到非数字给 `Nothing`。
-_digitsToNegInt : List Int -> Int -> Maybe Int
-_digitsToNegInt [] acc = Just acc
-_digitsToNegInt (c :: rest) acc =
-  if c < 48 || c > 57 then
+_digitsToNegInt : String -> Int -> Int -> Int -> Int -> Maybe Int
+_digitsToNegInt s i n acc fuel =
+  if fuel <= 0 then
     Nothing
+  else if i >= n then
+    Just acc
   else
     let
-      d = c - 48
-    in if acc < (_minInt + d) / 10 then Nothing else _digitsToNegInt rest (acc * 10 - d)
+      c = strAt s i
+    in if c < 48 || c > 57 then
+      Nothing
+    else
+      let
+        d = c - 48
+      in if acc < (_minInt + d) / 10 then Nothing else _digitsToNegInt s (i + 1) n (acc * 10 - d) (fuel - 1)
 
 -- | 内部：空格 / `\t` / `\n` / `\r` 的字节判定。
 _isSpace : Int -> Bool
 _isSpace c = c == 32 || c == 9 || c == 10 || c == 13
-
--- | 内部：去掉字符列表左侧的空白。
-_dropSpace : List Int -> List Int
-_dropSpace [] = []
-_dropSpace (c :: rest) = if _isSpace c then _dropSpace rest else c :: rest
-
--- | 内部：字符列表版本的前缀判定。
-_startsWithChars : List Int -> List Int -> Bool
-_startsWithChars [] text = True
-_startsWithChars (p :: prest) text =
-  case text of
-    [] => False
-    t :: trest => p == t && _startsWithChars prest trest
-
--- | 内部：字符列表版本的子串判定（逐位置试前缀）。
-_containsChars : List Int -> List Int -> Bool
-_containsChars needle text =
-  if _startsWithChars needle text then
-    True
-  else
-    case text of
-      [] => False
-      c :: rest => _containsChars needle rest
 
 -- primitive 没有构造子：实例体写内建运算符，由编译器特化，不会自递归。
 instance Eq String where
