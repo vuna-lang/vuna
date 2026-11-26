@@ -446,7 +446,9 @@ splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs norm
                 ErrC e => ErrC e
                 OkC mainFile =>
                   let
-                    files = SplitFile "${runtimeUnit}.ml" runtimeText [] :: SplitFile "${deflocsUnit}.ml" deflocsText [runtimeUnit] :: append moduleFiles [mainFile]
+                    -- 只落盘入口可达的单元：不可达模块既不编译也不链接，产物的代码页
+                    -- 与模块初始化都只支付真正用到的部分。
+                    files = pruneSplitFiles [runtimeUnit, deflocsUnit, splitUnitOfFile mainFile] (SplitFile "${runtimeUnit}.ml" runtimeText [] :: SplitFile "${deflocsUnit}.ml" deflocsText [runtimeUnit] :: append moduleFiles [mainFile])
                   in case checkSplitNames files of
                     ErrC e => ErrC e
                     OkC _ =>
