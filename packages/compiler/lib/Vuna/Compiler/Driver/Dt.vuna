@@ -915,23 +915,26 @@ dtMainInfo ctx entry =
           OkC loaded =>
             case elabProgram ((firstOf loaded)) of
               ErrC e => ErrC e
-              OkC p =>
-                case findMainDef (secondOf p) of
-                  Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
-                  Just mainDef =>
-                    if mainActionKind (dtDefType mainDef) == "Eff" then
-                      OkC (MainInfo "Eff" (mainRowTags (dtDefType mainDef)))
-                    else
-                      case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
-                        VNeutral n =>
-                          case n of
-                            NGlobal g sp =>
-                              case sp of
-                                [] => mainInfoForName g
-                                _ => OkC (MainInfo "Other" [])
-                            _ => OkC (MainInfo "Other" [])
-                        _ => OkC (MainInfo "Other" [])
+              OkC p => mainInfoOfDefs entry (secondOf p)
       )
+
+mainInfoOfDefs : String -> List DtDef -> Check MainInfo
+mainInfoOfDefs entry defs =
+  case findMainDef defs of
+    Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
+    Just mainDef =>
+      if mainActionKind (dtDefType mainDef) == "Eff" then
+        OkC (MainInfo "Eff" (mainRowTags (dtDefType mainDef)))
+      else
+        case force (HashMap.fromList (defTableOf defs)) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+          VNeutral n =>
+            case n of
+              NGlobal g sp =>
+                case sp of
+                  [] => mainInfoForName g
+                  _ => OkC (MainInfo "Other" [])
+              _ => OkC (MainInfo "Other" [])
+          _ => OkC (MainInfo "Other" [])
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String
@@ -1794,6 +1797,68 @@ materializedOwn pkg parts ifaces =
   let
     ourNames = map moduleNameOf (filter (\m => modulePackageOf m == pkg) (secondOf parts))
   in filter (\mi => memName (miNameOf mi) ourNames) ifaces
+
+-- | `vuna test` 会对这些 `main` 类别求值并比较返回值；`Eff` 走编译运行，其余不执行。
+isPureTestKind : String -> Bool
+isPureTestKind kind = kind == "String" || kind == "Int" || kind == "Nat" || kind == "Bool"
+
+maybeIfaces : Maybe (List ModuleIface) -> List ModuleIface
+maybeIfaces mm = fromMaybe [] mm
+
+-- 测试判据：类别决定是否求值；纯 main 的值文本由 `evalDtMain` 渲染。
+testEntryOutcome : String -> DtProgram -> Check (String, String)
+testEntryOutcome entry prog =
+  case mainInfoOfDefs entry (dtProgDefs prog) of
+    ErrC e => ErrC e
+    OkC info =>
+      if isPureTestKind info.miKind then
+        case evalDtMain prog of
+          ErrC e => ErrC e
+          OkC out => OkC (info.miKind, out)
+      else
+        OkC (info.miKind, "")
+
+-- 无依赖接口：入口闭包全量精化一次（`dtEvalFile` 的同一条加载/密封/精化路径）。
+dtEvalTestEntryFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (String, String))
+dtEvalTestEntryFull ctx entry =
+  do
+    partsR <- dtLoadPartsForCheck ctx entry
+    pure (
+        case partsR of
+          ErrC e => ErrC e
+          OkC resolved =>
+            let
+              parts = secondOf resolved
+              decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
+            in Vuna.Compiler.Base.Common.bind (elabProgramFull decls) (\prog => testEntryOutcome entry prog)
+      )
+
+-- | 测试入口的一次精化：依赖包与干净同包模块从接口合并，只精化入口本身；同时给出
+-- `main` 的类别与纯 main 的值文本（非纯 main 不执行，值文本为空）。`vuna test` 用它
+-- 替代「判类别一次 + 求值/编译再一次」的两次全量精化。
+--
+-- 依赖接口是 all-or-nothing（`depIfacesOfWith` 缺一个就返回 `Nothing`）：没有依赖摘要
+-- 时走全量装配，一次精化入口闭包；同包干净模块缺失只是少预置几个模块，走增量即可。
+export dtEvalTestEntry : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Maybe (List ModuleIface) -> Maybe (List ModuleIface) -> Eff r (Check (String, String))
+dtEvalTestEntry ctx entry Nothing _ = dtEvalTestEntryFull ctx entry
+dtEvalTestEntry ctx entry (Just depIfaces) cleanIfacesM =
+  let
+    cleanIfaces = maybeIfaces cleanIfacesM
+  in do
+    partsR <- dtLoadPartsIncremental ctx entry depIfaces cleanIfaces
+    pure (
+        case partsR of
+          ErrC e => ErrC e
+          OkC resolved =>
+            let
+              pkgName = contextPackageName ctx
+              deps = materializedDeps pkgName (secondOf resolved) depIfaces
+              clean = materializedOwn pkgName (secondOf resolved) cleanIfaces
+            in case dtIncrementalCheckedCore ctx resolved deps clean Nothing True of
+              ErrC e => ErrC e
+              OkC (_, Nothing, _) => icInternal "test-entry-package"
+              OkC (_, Just checked, _) => testEntryOutcome entry checked.checkedProgram
+      )
 
 dtLoadPartsWithIfaces : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List ModuleIface -> Eff r (Check (List Diagnostic, List Decl, List Module))
 dtLoadPartsWithIfaces ctx entry ifaces =
