@@ -4248,8 +4248,12 @@ build program printResult =
                       -- 两遍：第一遍的 β 归约 / 内联会让更多小定义变成可内联形状。
                       inlinedOnce = Inline.inlineDefs recNames cpsLsr
                       inlined = Inline.inlineDefs recNames (firstOf inlinedOnce)
+                      -- 内联/β 归约留下的 let 回到语句位置，标量选择才能继续内联。
+                      cpsFloated = Inline.floatDefs (firstOf inlined)
+                      -- 循环体内的标量公共子表达式：同一次迭代里重复的纯标量树只算一次。
+                      cpsCse = Inline.cseDefs cpsFloated
                       -- 尾位置内联：把互递归 SCC 沿定义序单向展开成自递归。
-                      tailInlined = Inline.inlineTailDefs recNames (firstOf inlined)
+                      tailInlined = Inline.inlineTailDefs recNames cpsCse
                       cps1 = Inline.simplifyDefs (firstOf tailInlined)
                       -- 尾位置 if 合并：同目标的两个尾调用只差标量常量的实参，合成一次
                       -- 调用 + 值选择（`tco_unrotated` 的 flag 分派不再每轮条件分支）。

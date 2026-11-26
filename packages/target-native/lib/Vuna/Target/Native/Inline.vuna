@@ -588,6 +588,10 @@ findDef : String -> List IrDef -> Maybe IrDef
 findDef _ [] = Nothing
 findDef n (d :: rest) = if irDefName d == n then Just d else findDef n rest
 
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt x (y :: rest) = if x == y then True else memInt x rest
+
 memStr : String -> List String -> Bool
 memStr _ [] = False
 memStr s (x :: rest) = if s == x then True else memStr s rest
@@ -1574,3 +1578,362 @@ sameArgs : List Ir -> List Ir -> Bool
 sameArgs [] [] = True
 sameArgs (a :: moreA) (b :: moreB) = sameArg a b && sameArgs moreA moreB
 sameArgs _ _ = False
+
+-- ---------------------------------------------------------------
+-- let 外提（内联/β 归约留下的 let 回到语句位置）
+-- ---------------------------------------------------------------
+-- | 把严格上下文（应用实参 / 构造子字段）里的 `let` 提出来：`acc + (let x = K in b)`
+--   变成 `let x = K in acc + b`，标量选择才能继续内联。不跨 `if` / `case` 分支与
+--   lambda 提（那些位置不一定求值）。
+export floatDefs : List IrDef -> List IrDef
+floatDefs defs = map floatDef defs
+
+floatDef : IrDef -> IrDef
+floatDef (IrExternDef name ty sym span) = IrExternDef name ty sym span
+floatDef (IrDef nm ar deps ty body recOk guard span) =
+  IrDef nm ar deps ty (floatIr body) recOk guard span
+
+floatIr : Ir -> Ir
+floatIr (IrApp ty f a) = floatApp ty (floatIr f) (floatIr a)
+floatIr (IrRtApp sym args) = floatRtApp sym (map floatIr args)
+floatIr (IrLet bs scrut body) = IrLet bs (floatIr scrut) (floatIr body)
+floatIr (IrIf c t e) = IrIf (floatIr c) (floatIr t) (floatIr e)
+floatIr (IrCase ty k scrut alts) = IrCase ty k (floatIr scrut) (map floatAlt alts)
+floatIr (IrNatCase scrut f z s c) =
+  IrNatCase (floatIr scrut) f (floatAltM z) (floatAltM s) (floatAltM c)
+floatIr (IrCtor fam ctor ty args) = floatCtor fam ctor ty (floatArgsLift args)
+floatIr (IrRecord fam ty fields) = floatRecord fam ty (floatFieldsLift fields)
+floatIr (IrProj base fam field ty) = IrProj (floatIr base) fam field ty
+floatIr (IrRecUpd base fam fields ty) =
+  IrRecUpd (floatIr base) fam (firstOf (floatFieldsLift fields)) ty
+floatIr (IrCast from to inner) = IrCast from to (floatIr inner)
+floatIr (IrTail inner) = IrTail (floatIr inner)
+floatIr (IrConcatMany parts) = floatArgsConcat (floatArgsLift parts)
+floatIr (IrLam bs rt body) = IrLam bs rt (floatIr body)
+floatIr ir = ir
+
+floatApp : Maybe (IrTy, IrTy) -> Ir -> Ir -> Ir
+floatApp ty (IrLet bs scrut body) a = IrLet bs scrut (floatIr (IrApp ty body a))
+floatApp ty f (IrLet bs scrut body) = IrLet bs scrut (floatIr (IrApp ty f body))
+floatApp ty f a = IrApp ty f a
+
+floatAlt : IrAlt -> IrAlt
+floatAlt alt = IrAlt alt.irAltCtor alt.irAltBinders (floatIr alt.irAltBody)
+
+floatAltM : Maybe IrAlt -> Maybe IrAlt
+floatAltM Nothing = Nothing
+floatAltM (Just alt) = Just (floatAlt alt)
+
+floatRtApp : String -> List Ir -> Ir
+floatRtApp sym args = floatRtGo (irSizeList args + 1) sym args
+
+floatRtGo : Int -> String -> List Ir -> Ir
+floatRtGo fuel sym args =
+  if fuel <= 0 then
+    IrRtApp sym args
+  else
+    case firstLetArg args of
+      Just (bs, scrut, args2) => IrLet bs scrut (floatRtGo (fuel - 1) sym args2)
+      Nothing => IrRtApp sym args
+
+firstLetArg : List Ir -> Maybe (List IrBinder, Ir, List Ir)
+firstLetArg [] = Nothing
+firstLetArg (a :: rest) =
+  case a of
+    IrLet bs scrut body => Just (bs, scrut, body :: rest)
+    _ =>
+      case firstLetArg rest of
+        Just (bs, scrut, rest2) => Just (bs, scrut, a :: rest2)
+        Nothing => Nothing
+
+floatArgsLift : List Ir -> (List Ir, List (List IrBinder, Ir))
+floatArgsLift xs = floatArgsGo xs []
+
+floatArgsGo : List Ir -> List (List IrBinder, Ir) -> (List Ir, List (List IrBinder, Ir))
+floatArgsGo [] lets = ([], lets)
+floatArgsGo (x :: rest) lets =
+  case x of
+    IrLet bs scrut body =>
+      let
+        p = floatArgsGo rest ((bs, scrut) :: lets)
+      in (body :: firstOf p, secondOf p)
+    _ =>
+      let
+        p = floatArgsGo rest lets
+      in (x :: firstOf p, secondOf p)
+
+wrapLetsIr : List (List IrBinder, Ir) -> Ir -> Ir
+wrapLetsIr [] ir = ir
+wrapLetsIr (p :: rest) ir = IrLet (firstOf p) (secondOf p) (wrapLetsIr rest ir)
+
+floatCtor : String -> String -> Maybe (List IrTy) -> (List Ir, List (List IrBinder, Ir)) -> Ir
+floatCtor fam ctor ty p = wrapLetsIr (secondOf p) (IrCtor fam ctor ty (firstOf p))
+
+floatRecord : String -> Maybe IrTy -> (List (String, Ir), List (List IrBinder, Ir)) -> Ir
+floatRecord fam ty p = wrapLetsIr (secondOf p) (IrRecord fam ty (firstOf p))
+
+floatArgsConcat : (List Ir, List (List IrBinder, Ir)) -> Ir
+floatArgsConcat p = wrapLetsIr (secondOf p) (IrConcatMany (firstOf p))
+
+floatFieldsLift : List (String, Ir) -> (List (String, Ir), List (List IrBinder, Ir))
+floatFieldsLift fields = floatFieldsGo fields []
+
+floatFieldsGo : List (String, Ir) -> List (List IrBinder, Ir) -> (List (String, Ir), List (List IrBinder, Ir))
+floatFieldsGo [] lets = ([], lets)
+floatFieldsGo (p :: rest) lets =
+  case secondOf p of
+    IrLet bs scrut body =>
+      let
+        q = floatFieldsGo rest ((bs, scrut) :: lets)
+      in ((firstOf p, body) :: firstOf q, secondOf q)
+    _ =>
+      let
+        q = floatFieldsGo rest lets
+      in ((firstOf p, secondOf p) :: firstOf q, secondOf q)
+
+-- ---------------------------------------------------------------
+-- 循环体内的标量公共子表达式消除
+-- ---------------------------------------------------------------
+-- | 同一次迭代里出现多次的纯标量树只算一次：在体首绑一条 `let`，把重复子树换成
+--   变量。只收自由变量全在函数形参里、大小 ≥ 5 且可重复求值的表达式；体太大时
+--   整条跳过（线性计数的最坏代价按体规模放大）。
+binderIds : List IrBinder -> List Int
+binderIds [] = []
+binderIds (b :: rest) = b.irBinderId :: binderIds rest
+
+export cseDefs : List IrDef -> List IrDef
+cseDefs defs = map cseDef defs
+
+cseDef : IrDef -> IrDef
+cseDef (IrExternDef name ty sym span) = IrExternDef name ty sym span
+cseDef (IrDef nm ar deps ty body recOk guard span) =
+  let
+    body1 =
+      case body of
+        IrLam bs rt inner =>
+          if irSize inner > 512 then
+            body
+          else
+            case findCse (binderIds bs) inner inner of
+              Just (key, expr) =>
+                let
+                  b = IrBinder (Synthetic.backendBinderId 500) (IrBUser "__cse") False Nothing
+                in IrLam bs rt (IrLet [b] expr (replaceCse key b inner))
+              Nothing => body
+        _ => body
+  in IrDef nm ar deps ty body1 recOk guard span
+
+findCse : List Int -> Ir -> Ir -> Maybe (String, Ir)
+findCse params whole (ir@(IrRtApp _ _)) =
+  case cseKey params ir of
+    Just key => if countCse key whole >= 2 then Just (key, ir) else Nothing
+    Nothing => Nothing
+findCse params whole (IrLam _ _ body) = findCse params whole body
+findCse params whole (IrLet _ scrut body) =
+  case findCse params whole scrut of
+    Just hit => Just hit
+    Nothing => findCse params whole body
+findCse params whole (IrApp _ f a) =
+  case findCse params whole f of
+    Just hit => Just hit
+    Nothing => findCse params whole a
+findCse params whole (IrIf c t e) =
+  case findCse params whole c of
+    Just hit => Just hit
+    Nothing =>
+      case findCse params whole t of
+        Just hit => Just hit
+        Nothing => findCse params whole e
+findCse params whole (IrCase _ _ scrut alts) = findCseAlts params whole scrut alts
+findCse params whole (IrNatCase scrut _ z s c) =
+  case findCse params whole scrut of
+    Just hit => Just hit
+    Nothing =>
+      case findCseAltM params whole z of
+        Just hit => Just hit
+        Nothing =>
+          case findCseAltM params whole s of
+            Just hit => Just hit
+            Nothing => findCseAltM params whole c
+findCse params whole (IrCtor _ _ _ args) = findCseList params whole args
+findCse params whole (IrRecord _ _ fields) = findCseFields params whole fields
+findCse params whole (IrProj base _ _ _) = findCse params whole base
+findCse params whole (IrRecUpd base _ fields _) =
+  case findCse params whole base of
+    Just hit => Just hit
+    Nothing => findCseFields params whole fields
+findCse params whole (IrCast _ _ inner) = findCse params whole inner
+findCse params whole (IrTail inner) = findCse params whole inner
+findCse params whole (IrConcatMany parts) = findCseList params whole parts
+findCse params whole (IrEffThunk _ _ _ _ prim) = findCse params whole prim
+findCse _ _ _ = Nothing
+
+findCseList : List Int -> Ir -> List Ir -> Maybe (String, Ir)
+findCseList _ _ [] = Nothing
+findCseList params whole (x :: rest) =
+  case findCse params whole x of
+    Just hit => Just hit
+    Nothing => findCseList params whole rest
+
+findCseFields : List Int -> Ir -> List (String, Ir) -> Maybe (String, Ir)
+findCseFields _ _ [] = Nothing
+findCseFields params whole (p :: rest) =
+  case findCse params whole (secondOf p) of
+    Just hit => Just hit
+    Nothing => findCseFields params whole rest
+
+findCseAlts : List Int -> Ir -> Ir -> List IrAlt -> Maybe (String, Ir)
+findCseAlts params whole scrut alts =
+  case findCse params whole scrut of
+    Just hit => Just hit
+    Nothing => findCseAltsGo params whole alts
+
+findCseAltsGo : List Int -> Ir -> List IrAlt -> Maybe (String, Ir)
+findCseAltsGo _ _ [] = Nothing
+findCseAltsGo params whole (a :: rest) =
+  case findCse params whole a.irAltBody of
+    Just hit => Just hit
+    Nothing => findCseAltsGo params whole rest
+
+findCseAltM : List Int -> Ir -> Maybe IrAlt -> Maybe (String, Ir)
+findCseAltM _ _ Nothing = Nothing
+findCseAltM params whole (Just a) = findCse params whole a.irAltBody
+
+-- | 候选键：只收自由变量都在函数形参里、可重复求值、大小 ≥ 5 的标量树。
+cseKey : List Int -> Ir -> Maybe String
+cseKey params ir =
+  if irSize ir >= 5 && allVarsIn params ir && totalScalar ir then exprKey ir else Nothing
+
+allVarsIn : List Int -> Ir -> Bool
+allVarsIn params (IrVar b) = memInt b.irBinderId params
+allVarsIn _ (IrInt _) = True
+allVarsIn _ (IrBool _) = True
+allVarsIn _ (IrFloatLit _) = True
+allVarsIn _ (IrStr _) = True
+allVarsIn params (IrRtApp _ args) = allVarsInList params args
+allVarsIn params (IrCast _ _ inner) = allVarsIn params inner
+allVarsIn _ _ = False
+
+allVarsInList : List Int -> List Ir -> Bool
+allVarsInList _ [] = True
+allVarsInList params (x :: rest) = if allVarsIn params x then allVarsInList params rest else False
+
+totalScalar : Ir -> Bool
+totalScalar (IrRtApp sym args) =
+  if isDivLike sym then
+    divisorSafe args && allTotal args
+  else
+    memStr sym scalarArgSyms && allTotal args
+totalScalar (IrCast _ _ inner) = totalScalar inner
+totalScalar _ = False
+
+allTotal : List Ir -> Bool
+allTotal [] = True
+allTotal (x :: rest) = if totalScalar x || isLit x then allTotal rest else False
+
+isLit : Ir -> Bool
+isLit (IrInt _) = True
+isLit (IrBool _) = True
+isLit (IrVar _) = True
+isLit _ = False
+
+altBodiesOf : List IrAlt -> List Ir
+altBodiesOf [] = []
+altBodiesOf (a :: rest) = a.irAltBody :: altBodiesOf rest
+
+fieldExprs : List (String, Ir) -> List Ir
+fieldExprs [] = []
+fieldExprs (p :: rest) = secondOf p :: fieldExprs rest
+
+replaceFieldsCse : String -> IrBinder -> List (String, Ir) -> List (String, Ir)
+replaceFieldsCse _ _ [] = []
+replaceFieldsCse key b (p :: rest) =
+  (firstOf p, replaceCse key b (secondOf p)) :: replaceFieldsCse key b rest
+
+-- | 结构键（只覆盖标量树：变量 / 字面量 / 白名单运行时叶子）。
+exprKey : Ir -> Maybe String
+exprKey (IrVar b) = Just ("v" ++ strFromInt b.irBinderId)
+exprKey (IrInt n) = Just ("i" ++ strFromInt n)
+exprKey (IrBool b) = Just (if b then "b1" else "b0")
+exprKey (IrRtApp sym args) =
+  case allKeys args of
+    Just ks => Just ("o" ++ sym ++ "(" ++ join "," ks ++ ")")
+    Nothing => Nothing
+exprKey _ = Nothing
+
+allKeys : List Ir -> Maybe (List String)
+allKeys [] = Just []
+allKeys (x :: rest) =
+  case exprKey x of
+    Just k =>
+      case allKeys rest of
+        Just ks => Just (k :: ks)
+        Nothing => Nothing
+    Nothing => Nothing
+
+countCse : String -> Ir -> Int
+countCse key (ir@(IrRtApp _ _)) =
+  (if exprKey ir == Just key then 1 else 0) + sumCount key (childrenOf ir)
+countCse key ir = sumCount key (childrenOf ir)
+
+sumCount : String -> List Ir -> Int
+sumCount _ [] = 0
+sumCount key (x :: rest) = countCse key x + sumCount key rest
+
+childrenOf : Ir -> List Ir
+childrenOf (IrLam _ _ body) = [body]
+childrenOf (IrLet _ scrut body) = [scrut, body]
+childrenOf (IrApp _ f a) = [f, a]
+childrenOf (IrIf c t e) = [c, t, e]
+childrenOf (IrCase _ _ scrut alts) = scrut :: altBodiesOf alts
+childrenOf (IrNatCase scrut _ z s c) = scrut :: altBodies [z, s, c]
+childrenOf (IrCtor _ _ _ args) = args
+childrenOf (IrRecord _ _ fields) = fieldExprs fields
+childrenOf (IrProj base _ _ _) = [base]
+childrenOf (IrRecUpd base _ fields _) = base :: fieldExprs fields
+childrenOf (IrRtApp _ args) = args
+childrenOf (IrCast _ _ inner) = [inner]
+childrenOf (IrTail inner) = [inner]
+childrenOf (IrConcatMany parts) = parts
+childrenOf (IrEffThunk _ _ _ _ prim) = [prim]
+childrenOf _ = []
+
+altBodies : List (Maybe IrAlt) -> List Ir
+altBodies [] = []
+altBodies (Nothing :: rest) = altBodies rest
+altBodies ((Just a) :: rest) = a.irAltBody :: altBodies rest
+
+replaceCse : String -> IrBinder -> Ir -> Ir
+replaceCse key b (ir@(IrRtApp sym args)) =
+  if exprKey ir == Just key then IrVar b else IrRtApp sym (map (replaceCse key b) args)
+replaceCse key b (IrLam bs rt body) = IrLam bs rt (replaceCse key b body)
+replaceCse key b (IrLet bs scrut body) = IrLet bs (replaceCse key b scrut) (replaceCse key b body)
+replaceCse key b (IrApp ty f a) = IrApp ty (replaceCse key b f) (replaceCse key b a)
+replaceCse key b (IrIf c t e) = IrIf (replaceCse key b c) (replaceCse key b t) (replaceCse key b e)
+replaceCse key b (IrCase ty k scrut alts) =
+  IrCase ty k (replaceCse key b scrut) (map (replaceAltCse key b) alts)
+replaceCse key b (IrNatCase scrut f z s c) =
+  IrNatCase
+    (replaceCse key b scrut)
+    f
+    (replaceAltMCse key b z)
+    (replaceAltMCse key b s)
+    (replaceAltMCse key b c)
+replaceCse key b (IrCtor fam ctor ty args) = IrCtor fam ctor ty (map (replaceCse key b) args)
+replaceCse key b (IrRecord fam ty fields) = IrRecord fam ty (replaceFieldsCse key b fields)
+replaceCse key b (IrProj base fam field ty) = IrProj (replaceCse key b base) fam field ty
+replaceCse key b (IrRecUpd base fam fields ty) =
+  IrRecUpd (replaceCse key b base) fam (replaceFieldsCse key b fields) ty
+replaceCse key b (IrCast from to inner) = IrCast from to (replaceCse key b inner)
+replaceCse key b (IrTail inner) = IrTail (replaceCse key b inner)
+replaceCse key b (IrConcatMany parts) = IrConcatMany (map (replaceCse key b) parts)
+replaceCse key b (IrEffThunk fam ctor ty arity prim) =
+  IrEffThunk fam ctor ty arity (replaceCse key b prim)
+replaceCse _ _ ir = ir
+
+replaceAltCse : String -> IrBinder -> IrAlt -> IrAlt
+replaceAltCse key b alt = IrAlt alt.irAltCtor alt.irAltBinders (replaceCse key b alt.irAltBody)
+
+replaceAltMCse : String -> IrBinder -> Maybe IrAlt -> Maybe IrAlt
+replaceAltMCse _ _ Nothing = Nothing
+replaceAltMCse key b (Just alt) = Just (replaceAltCse key b alt)
