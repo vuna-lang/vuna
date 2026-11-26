@@ -2011,7 +2011,7 @@ warnUnusedDefsTbl keep [] usedTbl = []
 warnUnusedDefsTbl keep (d :: rest) usedTbl =
   let
     name = dtDefName d
-    skip = keep name || name == "main" || startsWith "_" name || startsWith "$" name
+    skip = keep name || lastSeg name == "main" || startsWith "_" name || startsWith "$" name
   in if skip then
     warnUnusedDefsTbl keep rest usedTbl
   else if HashMap.member name usedTbl then
