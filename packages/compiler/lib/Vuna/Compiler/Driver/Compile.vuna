@@ -1536,13 +1536,20 @@ cleanPass depTbl (m :: rest) cleanRev acc =
       p = cleanPass depTbl rest cleanRev acc
     in (m :: firstOf p, secondOf p)
 
+-- 写接口时把 `miDefLocs` 的文件路径归一成与 CWD 无关的形式（与 codegen 的
+-- `SplitGen.splitLocPath` 同一套前缀规则）。接口会被别的包读走，存原始路径会让
+-- `#line` 归一失败。
+ifaceLocNorm : PackageContext -> String -> String
+ifaceLocNorm ctx = locationPathUnder (map rootDir (contextRoots ctx)) (contextDir ctx)
+
 -- 单模块接口写回：LSP 每次成功请求后只写「当前模块」的接口对象。语义与整包 ifaceOfPackage
 -- 一致（见 `Iface.ifaceOfModule`）；有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
 export toolWriteModuleIface : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff r (Check ModuleIface)
 toolWriteModuleIface ctx tool clean checked name si =
   do
     let
-      miResult = ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name
+      norm = ifaceLocNorm ctx
+      miResult = ifaceOfModule (contextPackageName ctx) si tool.tcDepHashes checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram norm name
     in do
       case miResult of
         ErrC e => pure (ErrC e)
@@ -1571,7 +1578,8 @@ toolWriteModuleIfaceCold ctx checked name si =
     clean <- cleanIfacesOrEmpty ctx
     depTbl <- depIfaceHashTable ctx
     let
-      miResult = ifaceOfModule (contextPackageName ctx) si depTbl checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram name
+      norm = ifaceLocNorm ctx
+      miResult = ifaceOfModule (contextPackageName ctx) si depTbl checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram norm name
     in do
       case miResult of
         ErrC e => pure (ErrC e)
@@ -2187,7 +2195,7 @@ writeIfaceShadowGo ctx checked pre clean =
           -- 完整性判据 = 导出面（不是 lib 根全部文件）。
           required = exportedOwnOf ctx own
         in do
-          case ifaceOfPackage (contextPackageName ctx) sources depTbl checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram of
+          case ifaceOfPackage (contextPackageName ctx) sources depTbl checked.checkedInherited clean checked.checkedModules checked.checkedEntryDecls checked.checkedProgram (ifaceLocNorm ctx) of
             ErrC e =>
               do
                 let
@@ -2425,8 +2433,9 @@ splitInputsOf ctx entry printResult =
       srcHash = closureHashOf sources 0
       verHash = textHash (buildViewSchema ++ vunaVersion) + fp
       prHash = if printResult then 1 else 0
-      -- **产物口径**必须进视图 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
-      -- （实测 runtime 的 defloc 表在两条路径下长度不同）。mode 因此进 kind。
+      -- **产物口径**必须进视图 key：摘要路径（依赖接口齐全）与全量路径产出的代码
+      -- 仍不完全相同——接口载荷的 canonical 编码丢掉 `TLam` 的 slot（binder 类型注解），
+      -- 依赖单元的 lambda 少注解。`#line` / defloc 路径已统一（见 Iface.restoreDefLocsSpans）。
       mode =
         case depIfaces of
           Just _ => "s"

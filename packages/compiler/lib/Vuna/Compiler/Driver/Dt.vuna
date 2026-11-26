@@ -407,7 +407,7 @@ dtCheckSourceWithIfaces ctx label source ifaces =
                   case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
                     ErrC e => ErrC e
                     OkC resolved =>
-                      case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+                      case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
                         ErrC e => ErrC e
                         OkC deps =>
                           case dtCheckOursParts ctx resolved deps of
@@ -497,7 +497,7 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
                   case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered of
                     ErrC e => ErrC e
                     OkC resolved =>
-                      case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+                      case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
                         ErrC e => ErrC e
                         OkC deps =>
                           let
@@ -1714,13 +1714,13 @@ dtSplitProjectIncremental ctx entry printResult depIfaces cleanIfaces =
         let
           pkgName = contextPackageName ctx
           parts = secondOf resolved
-          cleanOwn = materializedOwn pkgName parts cleanIfaces
-          -- 增量路径的干净模块 `DtDef` 来自接口载荷（span 不在载荷里），codegen 的位置表
-          -- 用接口持久化的 `miDefLocs` 补行；全量路径的 defs 自带 span，补行表为空。
-          extraDefLocs = concatMap miDefLocsOf cleanOwn
-        in case dtIncrementalChecked ctx resolved (materializedDeps pkgName parts depIfaces) cleanOwn of
+          cleanOwn = materializedOwn pkgName parts (restoreDefLocsSpans cleanIfaces)
+          -- 接口载荷不存 `DtDef` 的 span；恢复定义前按 `miDefLocs` 贴回，codegen 的
+          -- `#line` 与全量路径一致（依赖包的单元同样需要）。
+          depsOwn = materializedDeps pkgName parts (restoreDefLocsSpans depIfaces)
+        in case dtIncrementalChecked ctx resolved depsOwn cleanOwn of
           ErrC e => pure (ErrC e)
-          OkC checked => dtGenerateIncremental ctx entry parts checked printResult extraDefLocs
+          OkC checked => dtGenerateIncremental ctx entry parts checked printResult []
 
 moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
@@ -1829,7 +1829,7 @@ dtCheckPackageWithIfacesParts ctx entry ifaces =
         case partsR of
           ErrC e => ErrC e
           OkC resolved =>
-            case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+            case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
               ErrC e => ErrC e
               OkC deps => dtCheckOursParts ctx resolved deps
       )
@@ -1872,7 +1872,7 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
         case partsR of
           ErrC e => ErrC e
           OkC resolved =>
-            case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+            case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
               ErrC e => ErrC e
               OkC deps => dtCheckOursParts ctx resolved deps
       )
@@ -1889,16 +1889,9 @@ dtSplitProjectWithIfaces ctx entry printResult ifaces =
       case partsR of
         ErrC e => pure (ErrC e)
         OkC resolved =>
-          case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
+          case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
             ErrC e => pure (ErrC e)
-            OkC deps =>
-              dtSplitPartsOursWith
-                ctx
-                entry
-                (secondOf resolved)
-                deps
-                printResult
-                (concatMap miDefLocsOf ifaces)
+            OkC deps => dtSplitPartsOursWith ctx entry (secondOf resolved) deps printResult []
     _ <- obsMarkEff "vuna.codegen.split"
     pure r
 
