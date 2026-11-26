@@ -1,7 +1,7 @@
-# store-isolated: 断言包状态目录，使用 case 私有 store。
+# store-isolated: 断言包状态目录与 build-meta，使用 case 私有 store。
 # areas: compiler-core, compiler-frontend
 # 119) 包状态目录：默认 `<包目录>/.vuna`；`VUNA_PKG_STATE` 重定向；只读源码树没有重定向时
-#      必须显式失败（不回退共享 store）。
+#      必须显式失败（不回退共享 store）。build-meta 带二进制身份（cache-tag），源列表按名排序。
 run: sh -c 'P="$TMPDIR/state-default"; mkdir -p "$P/app"; printf "[package]\nname = \"state-default\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 1\n" > "$P/app/Main.vuna"; "$VUNA" check "$P"'
 exit: 0
 file-exists: $TMPDIR/state-default/.vuna
@@ -20,3 +20,13 @@ file-exists: $TMPDIR/state-ro-alt
 run: sh -c 'if [ "$(id -u)" -eq 0 ]; then echo "skip .vuna read-only probe (root)"; exit 0; fi; P="$TMPDIR/state-ro-bare"; mkdir -p "$P/app"; printf "[package]\nname = \"state-ro-bare\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 3\n" > "$P/app/Main.vuna"; chmod 500 "$P"; out=$("$VUNA" check "$P" 2>&1); code=$?; chmod 700 "$P"; echo "$out"; if [ "$code" -eq 0 ]; then echo "FAIL: read-only package accepted without VUNA_PKG_STATE"; exit 1; fi'
 exit: 0
 out-contains: .vuna
+
+#      同一二进制换缓存身份不得判「新鲜」。
+run: sh -c 'P="$TMPDIR/meta-pkg"; mkdir -p "$P/lib" "$P/app"; printf "[package]\nname = \"meta-pkg\"\n" > "$P/vuna.toml"; printf "module Z where\n\nexport z : Int\nz = 1\n" > "$P/lib/Z.vuna"; printf "module A where\n\nexport a : Int\na = 1\n" > "$P/lib/A.vuna"; printf "import A\n\nmain : Int\nmain = a\n" > "$P/app/Main.vuna"; "$VUNA" build "$P"'
+exit: 0
+run: sh -c 'M="$TMPDIR/meta-pkg/.output/build-meta.json"; H=$(dirname "$(dirname "$VUNA")"); tag=$(cat "$H/cache-tag"); grep -q "\"schema\":2" "$M"; grep -q "\"compiler\":\"$tag\"" "$M"; grep -q "{\"name\":\"A\",\"hash\":[0-9]*},{\"name\":\"Z\",\"hash\":[0-9]*}" "$M"'
+exit: 0
+run: sh -c 'P="$TMPDIR/meta-pkg"; out=$(VUNA_CACHE_TAG=probe-tag "$VUNA" build "$P" 2>&1); echo "$out"; case "$out" in *"up to date"*) echo "FAIL: stale build-meta accepted under new cache tag"; exit 1;; esac'
+exit: 0
+run: sh -c 'grep -q "\"compiler\":\"probe-tag\"" "$TMPDIR/meta-pkg/.output/build-meta.json"'
+exit: 0

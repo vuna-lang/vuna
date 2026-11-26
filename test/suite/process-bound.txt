@@ -107,3 +107,5 @@
 118_derived_bool_literal.steps	compile	cli-text
 31_fmt_parallel.steps	fmt	parallel-worker-file-io
 115_lint_parallel.steps	lint	parallel-worker-file-io
+
+119_pkg_state.steps	check,build	cli-text;fs-permissions;binary-identity;artifact-exec
