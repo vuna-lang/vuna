@@ -25,7 +25,10 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   逐段 `write` 到 stderr 后 exit 2。
 - 入口打印：`print_int` / `print_bool` / `print_str`（栈上 itoa / 原样字节 + 换行）。
 - 对象与分配：`alloc`（`rdi` = payload 字节数 → `rax` = 对象地址；尺寸类空闲链 → bump →
-  新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）在块头上打 `leaf` 标志。变体对象
+  新段，越界 trap OOM）；`alloc_fast` 是同一语义的叶子快入口（尺寸类 / 空闲链 / bump /
+  计数都在函数内，多线程、GC 阈值、预算或段满时 `jmp alloc`）；编译器对 16 / 32 字节类
+  的小对象在调用点直接内联 bump，其余分配走 `alloc_fast`；`alloc_leaf`（字符串 / Float）
+  在块头上打 `leaf` 标志。变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 效应叶子：`@vuna@prim_mrefNew` / `@vuna@prim_mrefRead` / `@vuna@prim_mrefWrite`
@@ -147,6 +150,9 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   清扫按段线性走块头（空闲块保留自己的块头）。
 - **尺寸类**：块大小向上取整到 2 的幂（16 B … 64 MiB），清扫把死块挂回对应类的链表，
   分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
+  小对象的调用点内联版本同样先弹同尺寸类链表，表空才 bump；每轮把块数记进 `gc_since`。
+  内联点的前提检查（多线程 / GC 阈值 / 预算 / stress）任一失败就跳 `alloc_fast`，语义与
+  慢路径一致；代价是分配密集程序的 `.s` 文本变大（hashmap / sorting 到 +26%）。
 - **根集**：
   1. **栈帧**：沿 `rbp` 链逐帧扫 `[上一帧 rbp + 16, rbp + 16)`，帧内每个机器字都按
      候选指针保守判断；入口 `rbp = 0` 终止。GC 自己的帧也按整帧扫，入口先把通用寄存器

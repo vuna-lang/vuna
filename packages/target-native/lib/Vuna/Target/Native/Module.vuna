@@ -44,6 +44,7 @@ import Vuna.Target.Native.Params
 import Vuna.Target.Native.Range
 import Vuna.Target.Native.Regs
 import Vuna.Target.Native.Repr
+import Vuna.Target.Native.Gc
 import Vuna.Target.Native.Runtime
 import Vuna.Target.Native.Select
 import Vuna.Target.Native.Specialize
@@ -2704,17 +2705,20 @@ genLamValue fuel st bs body =
                         let
                           staticLabel = nativeStaticClosureLabel lamName arity
                           st2 = { st1 | fgLams = lams, fgStatics = append st1.fgStatics (append stF.fgStatics [NativeClosure staticLabel lamName arity]) }
-                          st3 = { st2 | fgNextLabel = stF.fgNextLabel }
+                          st3 = { st2 | fgNextLabel = if st2.fgNextLabel > stF.fgNextLabel then st2.fgNextLabel else stF.fgNextLabel }
                         in NOk ([ILea Rax staticLabel], st3)
                       else
                         let
-                          allocP = genAlloc st1 (2 + ncap)
+                          -- 闭包体是独立函数，但 `.L` 标签是文件局部的：父函数的
+                          -- 分配快路径要排在闭包体用掉的标签之后。
+                          stAlloc = { st1 | fgNextLabel = if st1.fgNextLabel > stF.fgNextLabel then st1.fgNextLabel else stF.fgNextLabel }
+                          allocP = genAlloc stAlloc (2 + ncap)
                           obj = firstOf (secondOf allocP)
                           st2 = secondOf (secondOf allocP)
                           bodyIns = append (firstOf allocP) (append (storeCloCode obj lamName) (append (storeCloArity obj arity) (append (storeCapsAt obj 0 caps) (getLocal obj))))
                           st3 = { st2 | fgLams = lams, fgStatics = append st2.fgStatics stF.fgStatics }
                           -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
-                          st4 = { st3 | fgNextLabel = stF.fgNextLabel }
+                          st4 = { st3 | fgNextLabel = if st3.fgNextLabel > stF.fgNextLabel then st3.fgNextLabel else stF.fgNextLabel }
                         in NOk (bodyIns, st4)
                   )
             )
@@ -2757,20 +2761,97 @@ getObjField : Int -> Int -> List Instr
 getObjField obj off =
   [IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff obj)), IMov (OpReg Rax) (OpMem Rdx off)]
 
+-- | 小对象（16 / 32 字节尺寸类）的 bump 快路径：(class 字节数, 空闲链表下标)。
+inlineAllocClass : Int -> Maybe (Int, Int)
+inlineAllocClass payload =
+  if payload <= 8 then Just (16, 0) else if payload <= 24 then Just (32, 1) else Nothing
+
 -- | 分配 `slots` 个 8 字节槽的对象；返回 (分配指令, 对象槽)。
+--   尺寸类已知的小对象在调用点直接 bump；多线程 / GC 阈值 / 预算 / 空闲链 / 段满
+--   任一不成立都落回 `alloc_fast`（再落回 `alloc`）。
 genAlloc : FGen -> Int -> (List Instr, Int, FGen)
 genAlloc st slots =
   let
     slotP = freshSlot st
     obj = firstOf slotP
     st1 = secondOf slotP
-    instrs =
-      [
-        IMov (OpReg Rdi) (OpImm (8 * slots)),
-        ICall (nativeRtLabel "alloc"),
-        IMov (OpMem Rbp (nativeSlotOff obj)) (OpReg Rax)
-      ]
-  in (instrs, obj, st1)
+    payload = 8 * slots
+  in case inlineAllocClass payload of
+    Nothing =>
+      let
+        instrs =
+          [
+            IMov (OpReg Rdi) (OpImm payload),
+            ICall (nativeRtLabel "alloc_fast"),
+            IMov (OpMem Rbp (nativeSlotOff obj)) (OpReg Rax)
+          ]
+      in (instrs, obj, st1)
+    Just (cls, idx) =>
+      let
+        idx0 = st1.fgNextLabel
+        lSlow = nativeJumpLabel idx0
+        lDone = nativeJumpLabel (idx0 + 1)
+        lDoneBudget = nativeJumpLabel (idx0 + 2)
+        lBump = nativeJumpLabel (idx0 + 3)
+        lCount = nativeJumpLabel (idx0 + 4)
+        -- 空闲链优先：直接弹出同尺寸类块，不走慢路径。
+        instrs =
+          [
+            IMov (OpReg Rdi) (OpImm payload),
+            IMov (OpReg Rax) (OpRip nativeHeapPtrLabel),
+            IMov (OpReg Rdx) (OpReg Rax),
+            IBinReg "add" Rdx (OpImm cls),
+            ICmp (OpReg Rdx) (OpRip nativeArenaEndLabel),
+            IJcc "ja" lSlow,
+            IMov (OpReg R9) (OpRip gcSinceLabel),
+            IBinReg "add" R9 (OpImm cls),
+            ICmp (OpReg R9) (OpRip gcThresholdLabel),
+            IJcc "ja" lSlow,
+            IMov (OpReg R9) (OpRip nativeThreadCountLabel),
+            ITest R9 R9,
+            IJcc "jnz" lSlow,
+            IMov (OpReg R9) (OpRip gcStressLabel),
+            ITest R9 R9,
+            IJcc "jnz" lSlow,
+            IMov (OpReg R10) (OpRip nativeMemLimitLabel),
+            ITest R10 R10,
+            IJcc "jz" lDoneBudget,
+            IMov (OpReg R9) (OpRip gcLiveLabel),
+            IBinReg "add" R9 (OpRip gcSinceLabel),
+            IBinReg "add" R9 (OpImm cls),
+            ICmp (OpReg R9) (OpReg R10),
+            IJcc "ja" lSlow,
+            ILabel lDoneBudget,
+            ILea Rdx nativeFreeTableLabel,
+            IBinReg "add" Rdx (OpImm (8 * idx)),
+            IMov (OpReg Rax) (OpMem Rdx 0),
+            ITest Rax Rax,
+            IJcc "jz" lBump,
+            IMov (OpReg R9) (OpMem Rax 8),
+            IMov (OpMem Rdx 0) (OpReg R9),
+            IMov (OpMem Rax 0) (OpImm cls),
+            IJmp lCount,
+            ILabel lBump,
+            IMov (OpReg Rax) (OpRip nativeHeapPtrLabel),
+            IMov (OpReg Rdx) (OpReg Rax),
+            IBinReg "add" Rdx (OpImm cls),
+            IMov (OpMem Rax 0) (OpImm cls),
+            IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx),
+            IMov (OpReg R9) (OpRip nativeCurSegLabel),
+            IMov (OpMem R9 16) (OpReg Rdx),
+            ILabel lCount,
+            IMov (OpReg R9) (OpRip gcSinceLabel),
+            IBinReg "add" R9 (OpImm cls),
+            IMov (OpRip gcSinceLabel) (OpReg R9),
+            IBinReg "add" Rax (OpImm nativeBlockHeaderBytes),
+            IJmp lDone,
+            ILabel lSlow,
+            ICall (nativeRtLabel "alloc_fast"),
+            ILabel lDone,
+            IMov (OpMem Rbp (nativeSlotOff obj)) (OpReg Rax)
+          ]
+        st2 = { st1 | fgNextLabel = idx0 + 5 }
+      in (instrs, obj, st2)
 
 storeSlotFields : Int -> Int -> List Int -> List Instr
 storeSlotFields obj idx [] = []

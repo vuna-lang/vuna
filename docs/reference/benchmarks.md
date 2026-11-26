@@ -772,7 +772,9 @@ T3 读数里的大头是「高阶参数在调用点只被当成未知闭包」�
 4. **纯标量体放宽内联**：全由变量 / 字面量 / 白名单标量叶子组成的体上限 16 → 64
    （`mix8` / `mk8` 这类多参算术直接展开，不再走 8 参调用与栈实参）；
 5. **let 外提 + 循环内标量 CSE**：内联/β 归约留在实参位置的 `let` 回到语句位置，
-   同一次迭代里重复的纯标量树只算一次（`micro_overapply` 的两次取模只做一次）。
+   同一次迭代里重复的纯标量树只算一次（`micro_overapply` 的两次取模只做一次）；
+6. **小对象分配快路径**：16 / 32 字节尺寸类在调用点直接弹空闲链或 bump（前提不成立跳
+   `alloc_fast` → `alloc`），字符串 / 大对象仍走慢路径。
 
 同机 A/B（`--target native --runs 5 --warmup 2`，比值对同一窗口的手写 C）：
 
@@ -791,6 +793,13 @@ T3 读数里的大头是「高阶参数在调用点只被当成未知闭包」�
 T3 的 9 条非基线用例里 6 条进入 1.2x C 以内。剩余：`micro_record_dispatch` 的投影
 head 仍是动态应用（2.2x）、`closure_pipeline` 的闭包表逐轮 fold（4.6x）、`closures`
 要建 200k 的 List 而 C 对照直接循环（16.7x，vs-C 不是同形状对照）。
+
+分配快路径的同机 A/B（`--target native --runs 5`，CPU 中位数）：`gc_array_churn`
+157 → 145 ms（-7.6%）、`gc_low_live` 224 → 207 ms（-7.2%）、`sorting` 39.2 → 35.5 ms
+（-8.6%）、`array` 15.9 → 14.9 ms（-6.3%）、`queue` 7.4 → 6.9 ms（-4.4%）、
+`records` 17.8 → 16.8 ms（-3.7%）；`closures` / `hashmap` / `list_recursion` 在噪声内。
+代价是 `.s` 文本：`closures` +8%、`records` +12%、`hashmap` +26%、`sorting` +25%
+（ELF 二进制 +0–13%），artifacts 检查会把这些记成 WARN。
 
 ### 1.7 T11 线程 / 同步
 
