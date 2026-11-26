@@ -622,6 +622,9 @@ zonkTermFuel fuel ec depth t =
       TMk c args => TMk c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
       TCase s alts => TCase (zonkTermFuel (fuel - 1) ec depth s) (map (\alt => zonkAltFuel (fuel - 1) ec depth alt) alts)
       TIf c th el => TIf (zonkTermFuel (fuel - 1) ec depth c) (zonkTermFuel (fuel - 1) ec depth th) (zonkTermFuel (fuel - 1) ec depth el)
+      TProj b c tele i n => TProj (zonkTermFuel (fuel - 1) ec depth b) c tele i n
+      TRecUpd b c tele fs body => TRecUpd (zonkTermFuel (fuel - 1) ec depth b) c tele fs (zonkTermFuel (fuel - 1) ec depth body)
+      TRecord c args => TRecord c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
       _ => t
 
 zonkAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
