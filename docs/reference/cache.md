@@ -282,6 +282,8 @@ split 生成顺序按实际依赖图规范化（`canonicalTopo`：层 = 1 + max(
   变了还没重跑）时，回退值是 `manifest:<toml 摘要>:<根源闭包摘要>`。源闭包在回退里，
   所以依赖方先跑也不会复用旧判定；代价是依赖**未重跑**时注释变更也会多一次 miss。
   依赖重跑后身份回到 `iface:<pkgIfaceHash>`，注释不敏感的增量性质恢复。
+- **显式 `--no-compile --out` 不命中视图**：它每次重跑 codegen（没有 `splitptr` 别名）；
+  默认 `build` 仍由 `views/bin` 的源输入视图命中。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），
