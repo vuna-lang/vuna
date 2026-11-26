@@ -165,7 +165,9 @@ dtCheckWithProgramParts ctx entry =
 
 export dtCheckLibraryWithProgramParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check (List Diagnostic, CheckedPackage))
 dtCheckLibraryWithProgramParts ctx names =
-  dtCheckPartsWithProgram (contextPackageName ctx) (dtLoadModulesParts ctx names)
+  do
+    r <- dtCheckPartsWithProgram (contextPackageName ctx) (dtLoadModulesParts ctx names)
+    pure (addUnusedWarns (unusedWarnsForLibrary ctx) r)
 
 dtCheckPartsWithProgram : {r : Row} -> String -> Eff r (Check (List Diagnostic, List Decl, List Module)) -> Eff r (Check (List Diagnostic, CheckedPackage))
 dtCheckPartsWithProgram pkg loaded =
@@ -1618,7 +1620,7 @@ dtCheckPackageIncrementalParts ctx entry depIfaces cleanIfaces =
           OkC resolved =>
             case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
               ErrC e => ErrC e
-              OkC checked => OkC (checked.checkedWarnings, checked)
+              OkC checked => OkC (addUnusedWarnsPair (unusedWarnsForPackage ctx) (checked.checkedWarnings, checked))
       )
 
 -- codegen 的 split 层要求模块列表按依赖序（外部依赖在前）。增量路径的 loader 列表是
@@ -1831,7 +1833,7 @@ dtCheckPackageWithIfacesParts ctx entry ifaces =
           OkC resolved =>
             case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
               ErrC e => ErrC e
-              OkC deps => dtCheckOursParts ctx resolved deps
+              OkC deps => Vuna.Compiler.Base.Common.bind (dtCheckOursParts ctx resolved deps) (\p => OkC (addUnusedWarnsPair (unusedWarnsForPackage ctx) p))
       )
 
 dtLoadModulesPartsIncremental : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff r (Check (List Diagnostic, List Decl, List Module))
@@ -1861,7 +1863,7 @@ dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces =
           OkC resolved =>
             case dtIncrementalChecked ctx resolved (materializedDeps (contextPackageName ctx) (secondOf resolved) depIfaces) (materializedOwn (contextPackageName ctx) (secondOf resolved) cleanIfaces) of
               ErrC e => ErrC e
-              OkC checked => OkC (checked.checkedWarnings, checked)
+              OkC checked => OkC (addUnusedWarnsPair (unusedWarnsForLibrary ctx) (checked.checkedWarnings, checked))
       )
 
 export dtCheckLibraryPackageWithIfacesParts : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List ModuleIface -> Eff r (Check (List Diagnostic, CheckedPackage))
@@ -1874,7 +1876,7 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces =
           OkC resolved =>
             case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) (restoreDefLocsSpans ifaces)) of
               ErrC e => ErrC e
-              OkC deps => dtCheckOursParts ctx resolved deps
+              OkC deps => Vuna.Compiler.Base.Common.bind (dtCheckOursParts ctx resolved deps) (\p => OkC (addUnusedWarnsPair (unusedWarnsForLibrary ctx) p))
       )
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
@@ -1979,10 +1981,15 @@ dtSplitProjectParts ctx entry printResult =
 -- ---------------------------------------------------------------
 -- | 入口检查后收集未引用定义的 UN_UnusedDefinition 告警（返回值交给驱动层输出）。
 warnUnusedDefsIn : List DtDef -> List Diagnostic
-warnUnusedDefsIn defs =
+warnUnusedDefsIn defs = warnUnusedDefsKeeping (\_ => False) defs
+
+-- | 同上，`keep name = True` 的定义豁免（库包按 `[export].modules` 豁免）。
+-- 引用集合仍用**传入的全部 defs**：导出定义引用的内部 helper 不能被误报。
+warnUnusedDefsKeeping : (String -> Bool) -> List DtDef -> List Diagnostic
+warnUnusedDefsKeeping keep defs =
   let
     used = concatMap dtDefGlobalNames defs
-  in warnUnusedDefsGo defs used
+  in warnUnusedDefsTbl keep defs (HashMap.ofNames used)
 
 -- 定义出现的外部名字（body + type；Maybe 为空则跳过）。
 -- | 定义体/类型里引用的外部名字。
@@ -1999,23 +2006,85 @@ maybeTermGlobals (Just t) = termGlobalNames t
 -- 判定是**集合成员**：`used` 只用来查「这个定义名是否被别人引用」。这里若用
 -- `memName` 线性扫全表，`UN_UnusedDefinition` 一次几千条时是 O(n²)（合成 8000 定义
 -- 实测尾部 ~800 ms）。入口建一次名字表 ⇒ 每项 O(1)，输出顺序不变。
-warnUnusedDefsGo : List DtDef -> List String -> List Diagnostic
-warnUnusedDefsGo defs used = warnUnusedDefsTbl defs (HashMap.ofNames used)
-
-warnUnusedDefsTbl : List DtDef -> HashMap String Bool -> List Diagnostic
-warnUnusedDefsTbl [] usedTbl = []
-warnUnusedDefsTbl (d :: rest) usedTbl =
+warnUnusedDefsTbl : (String -> Bool) -> List DtDef -> HashMap String Bool -> List Diagnostic
+warnUnusedDefsTbl keep [] usedTbl = []
+warnUnusedDefsTbl keep (d :: rest) usedTbl =
   let
     name = dtDefName d
-    skip = name == "main" || startsWith "_" name || startsWith "$" name
+    skip = keep name || name == "main" || startsWith "_" name || startsWith "$" name
   in if skip then
-    warnUnusedDefsTbl rest usedTbl
+    warnUnusedDefsTbl keep rest usedTbl
   else if HashMap.member name usedTbl then
-    warnUnusedDefsTbl rest usedTbl
+    warnUnusedDefsTbl keep rest usedTbl
   else
     case dtDefSpan d of
-      Just sp => (::) (warnDiagAtMod (\x => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) x) sp (UnusedDefinition name) [name]) (warnUnusedDefsTbl rest usedTbl)
-      Nothing => warnUnusedDefsTbl rest usedTbl
+      Just sp => (::) (warnDiagAtMod (\x => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) x) sp (UnusedDefinition name) [name]) (warnUnusedDefsTbl keep rest usedTbl)
+      Nothing => warnUnusedDefsTbl keep rest usedTbl
+
+-- ---------------------------------------------------------------
+-- 按包面收敛未使用定义告警（库包按 `[export].modules` 豁免）
+-- ---------------------------------------------------------------
+-- | 本包在 `checkedModules` 里的模块名。
+ownModuleNamesOf : String -> List Module -> List String
+ownModuleNamesOf pkg mods = map moduleNameOf (filter (\m => modulePackageOf m == pkg) mods)
+
+-- | 属于本包的定义：模块前缀在本包模块表里，或入口声明（前缀为空）。
+packageDefsOf : String -> List Module -> List DtDef -> List DtDef
+packageDefsOf pkg mods defs =
+  let
+    own = "" :: ownModuleNamesOf pkg mods
+  in filter (\d => memName (prefixOfName (dtDefName d)) own) defs
+
+-- | 本包 `[export]` 的模块面；`Nothing` = 没有导出表（等于全部模块对外）。
+pkgExportedModulesOf : PackageContext -> Maybe (List String)
+pkgExportedModulesOf ctx =
+  case findRootByName (contextPackageName ctx) (contextRoots ctx) of
+    Nothing => Nothing
+    Just r => r.rootExports
+
+findRootByName : String -> List Root -> Maybe Root
+findRootByName _ [] = Nothing
+findRootByName n (r :: rest) = if rootName r == n then Just r else findRootByName n rest
+
+-- | 本包的公开定义名：`[export].modules` 里各模块的导出条目（`target` = 定义处名）。
+-- 没有 `[export]` 表时视为全部模块公开。
+pkgExportedNamesOf : PackageContext -> List Module -> List String
+pkgExportedNamesOf ctx mods =
+  let
+    publicMods =
+      case pkgExportedModulesOf ctx of
+        Nothing => map moduleNameOf mods
+        Just names => names
+    entries = concatMap moduleExportsOf (filter (\m => memName (moduleNameOf m) publicMods) mods)
+  in map exportTargetName entries
+
+exportTargetName : ExportEntry -> String
+exportTargetName e = e.target
+
+-- | 给检查结果追加未使用定义告警（纯后处理）。
+addUnusedWarnsPair : (List Module -> List DtDef -> List Diagnostic) -> (List Diagnostic, CheckedPackage) -> (List Diagnostic, CheckedPackage)
+addUnusedWarnsPair f p =
+  let
+    checked = secondOf p
+    warns = append (firstOf p) (f checked.checkedModules (dtProgDefs checked.checkedProgram))
+  in (warns, { checked | checkedWarnings = warns })
+
+addUnusedWarns : (List Module -> List DtDef -> List Diagnostic) -> Check (List Diagnostic, CheckedPackage) -> Check (List Diagnostic, CheckedPackage)
+addUnusedWarns f r = Vuna.Compiler.Base.Common.bind r (\p => OkC (addUnusedWarnsPair f p))
+
+-- | 入口包的未使用定义告警（只看本包定义）。
+unusedWarnsForPackage : PackageContext -> List Module -> List DtDef -> List Diagnostic
+unusedWarnsForPackage ctx mods defs =
+  warnUnusedDefsIn (packageDefsOf (contextPackageName ctx) mods defs)
+
+-- | 库包的未使用定义告警：导出面（`[export].modules` 的导出条目）里的定义豁免；
+-- 导出模块内部的私有 helper 仍然报。
+unusedWarnsForLibrary : PackageContext -> List Module -> List DtDef -> List Diagnostic
+unusedWarnsForLibrary ctx mods defs =
+  let
+    own = packageDefsOf (contextPackageName ctx) mods defs
+    pub = pkgExportedNamesOf ctx mods
+  in warnUnusedDefsKeeping (\n => memName n pub) own
 
 -- 恢复式检查（仅入口文件）：单遍精化，定义体/实例体的错误逐条收集（失败定义回滚后
 -- 跳过），不再重跑整程序。签名 / data / trait / 实例头阶段的错误仍是硬错误。
