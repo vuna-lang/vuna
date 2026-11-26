@@ -21,6 +21,9 @@ import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
 import Base.Data.Unit
 import Base.Data.List as List
+import Base.Container.HashMap as HashMap
+import Base.Container.MutRef
+import Base.Effect.Mut
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
@@ -209,8 +212,8 @@ mismatchMessage (Just expected) actual =
 
 -- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
 -- 物化视图由 `vuna deps fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
-loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> Dependency -> Eff r (Check Package)
-loadStoreDependency fuel stack dep =
+loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r, Member MutOp r => MutRef (HashMap String Package) -> Int -> List (String, String) -> Dependency -> Eff r (Check Package)
+loadStoreDependency memo fuel stack dep =
   case depHashOf dep of
     Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
     Just hash =>
@@ -226,7 +229,7 @@ loadStoreDependency fuel stack dep =
               text <- fsReadFile "${dir}/.complete"
               if text == digest then
                 do
-                  pkgR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+                  pkgR <- loadPackageWalk memo fuel stack (Just (depAliasOf dep)) dir
                   case pkgR of
                     ErrC e => pure (ErrC e)
                     OkC pkg =>
@@ -282,8 +285,8 @@ verifyPathHashEff dep dir =
                   detail = "declared ${expected}, actual ${actual}"
                 in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
-loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> String -> List Dependency -> Eff r (Check (List Package))
-loadDependencyList fuel stack baseDir deps =
+loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r, Member MutOp r => MutRef (HashMap String Package) -> Int -> List (String, String) -> String -> List Dependency -> Eff r (Check (List Package))
+loadDependencyList memo fuel stack baseDir deps =
   if fuel <= 0 then
     pure (icFuel "pkg")
   else
@@ -291,12 +294,12 @@ loadDependencyList fuel stack baseDir deps =
       [] => pure (OkC [])
       dep :: rest =>
         do
-          depR <- loadOneDependency (fuel - 1) stack baseDir dep
+          depR <- loadOneDependency memo (fuel - 1) stack baseDir dep
           case depR of
             ErrC e => pure (ErrC e)
             OkC dependency =>
               do
-                restR <- loadDependencyList (fuel - 1) stack baseDir rest
+                restR <- loadDependencyList memo (fuel - 1) stack baseDir rest
                 pure (
                     case restR of
                       ErrC e => ErrC e
@@ -304,15 +307,15 @@ loadDependencyList fuel stack baseDir deps =
                   )
 
 -- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。
-loadOneDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> String -> Dependency -> Eff r (Check Package)
-loadOneDependency fuel stack baseDir dep =
+loadOneDependency : Member nFs FsOp r, Member nEnv EnvOp r, Member MutOp r => MutRef (HashMap String Package) -> Int -> List (String, String) -> String -> Dependency -> Eff r (Check Package)
+loadOneDependency memo fuel stack baseDir dep =
   case depSourceOf dep of
     DepPath rel =>
       do
         let
           dir = joinPath baseDir rel
         in do
-          depR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+          depR <- loadPackageWalk memo fuel stack (Just (depAliasOf dep)) dir
           case depR of
             ErrC e => pure (ErrC e)
             OkC dependency =>
@@ -326,11 +329,29 @@ loadOneDependency fuel stack baseDir dep =
                       case idR of
                         ErrC e => pure (ErrC e)
                         OkC _ => pure (OkC dependency)
-    DepGit url rev => loadStoreDependency fuel stack dep
-    DepUrl url => loadStoreDependency fuel stack dep
+    DepGit url rev => loadStoreDependency memo fuel stack dep
+    DepUrl url => loadStoreDependency memo fuel stack dep
 
-loadPackageWalk : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (String, String) -> Maybe String -> String -> Eff r (Check Package)
-loadPackageWalk fuel stack depName dir =
+-- 依赖图展开的 memo：同一个目录（diamond 依赖 / 多个父包共享）只读一次 `vuna.toml`。
+-- 键是 `normalizeDir` 后的目录；循环检测在查 memo **之前**（同一目录在不同 stack 下
+-- 仍要能判环），memo 只存成功结果。
+emptyPackageMemo : HashMap String Package
+emptyPackageMemo = HashMap.fromList []
+
+memoLookup : {r : Row} -> {w : Member MutOp r} -> MutRef (HashMap String Package) -> String -> Eff r (Maybe Package)
+memoLookup memo dir =
+  do
+    tbl <- MutRef.read memo
+    pure (HashMap.lookup dir tbl)
+
+memoInsert : {r : Row} -> {w : Member MutOp r} -> MutRef (HashMap String Package) -> String -> Package -> Eff r Unit
+memoInsert memo dir pkg =
+  do
+    tbl <- MutRef.read memo
+    MutRef.write memo (HashMap.insert dir pkg tbl)
+
+loadPackageWalk : Member nFs FsOp r, Member nEnv EnvOp r, Member MutOp r => MutRef (HashMap String Package) -> Int -> List (String, String) -> Maybe String -> String -> Eff r (Check Package)
+loadPackageWalk memo fuel stack depName dir =
   if fuel <= 0 then
     pure (icFuel "pkg")
   else
@@ -340,25 +361,32 @@ loadPackageWalk fuel stack depName dir =
       pure (pkgInvalid (cycleMessage normalized depName stack))
     else
       do
-        manifestR <- loadManifestAt "${normalized}/vuna.toml"
-        case manifestR of
-          ErrC e => pure (ErrC e)
-          OkC manifest =>
-            case manifest.manifestName of
-              Nothing => pure (pkgPath0 manifest.manifestPath NotPackage)
-              Just _ =>
-                let
-                  name = manifestNameString manifest
-                in if dependencyNameOk depName name then
-                  do
-                    dependencyR <- loadDependencyList (fuel - 1) ((normalized, name) :: stack) normalized manifest.manifestDependencies
-                    pure (
-                        case dependencyR of
-                          ErrC e => ErrC e
-                          OkC dependencies => OkC (Package manifest dependencies normalized)
-                      )
-                else
-                  pure (pkgInvalid (mismatchMessage depName name))
+        cached <- memoLookup memo normalized
+        case cached of
+          Just pkg => if dependencyNameOk depName (packageName pkg) then pure (OkC pkg) else pure (pkgInvalid (mismatchMessage depName (packageName pkg)))
+          Nothing =>
+            do
+              manifestR <- loadManifestAt "${normalized}/vuna.toml"
+              case manifestR of
+                ErrC e => pure (ErrC e)
+                OkC manifest =>
+                  case manifest.manifestName of
+                    Nothing => pure (pkgPath0 manifest.manifestPath NotPackage)
+                    Just _ =>
+                      let
+                        name = manifestNameString manifest
+                      in if dependencyNameOk depName name then
+                        do
+                          dependencyR <- loadDependencyList memo (fuel - 1) ((normalized, name) :: stack) normalized manifest.manifestDependencies
+                          case dependencyR of
+                            ErrC e => pure (ErrC e)
+                            OkC dependencies =>
+                              do
+                                let pkg = Package manifest dependencies normalized
+                                _ <- memoInsert memo normalized pkg
+                                pure (OkC pkg)
+                      else
+                        pure (pkgInvalid (mismatchMessage depName name))
 
 -- ---------------------------------------------------------------- 包名唯一性
 -- 包名不是纯标签，它参与语义判定：`Loader.rootAllows` 的「同包永远可见」
@@ -408,16 +436,19 @@ pkgFuelBound = 1048576
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 export loadPackage : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Package)
 loadPackage dir =
-  do
-    packageR <- loadPackageWalk pkgFuelBound [] Nothing dir
-    pure (
-        case packageR of
-          ErrC e => ErrC e
-          OkC package =>
-            case checkUniquePackageNames [package] of
-              ErrC e => ErrC e
-              OkC _ => OkC package
-      )
+  withMutRef emptyPackageMemo (
+      \memo =>
+        do
+          packageR <- loadPackageWalk memo pkgFuelBound [] Nothing dir
+          pure (
+              case packageR of
+                ErrC e => ErrC e
+                OkC package =>
+                  case checkUniquePackageNames [package] of
+                    ErrC e => ErrC e
+                    OkC _ => OkC package
+            )
+    )
 
 -- ---------------------------------------------------------------- workspace
 loadMembers : Member nFs FsOp r, Member nEnv EnvOp r => String -> List String -> Eff r (Check (List Package))
