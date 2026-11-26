@@ -1,0 +1,44 @@
+# matrix: effect-native
+# 105f3b) native Nat 别名、scratch/线程 runtime 按需、循环旋转。
+
+# 9s5) `Nat.plus` / `Nat.mult` / `Nat.fromIntClamp` 的零参别名在调用点展开，
+#      与饱和乘法一起内联进标量树：热点循环里没有 `call rt_nat_*`。
+run: sh -c 'd="$TMPDIR/natinline"; mkdir -p "$d/app"; printf "[package]\nname = \"natinline\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\nloop : Nat -> Int -> Nat\nloop acc n = if n <= 0 then acc else loop (Nat.plus acc (Nat.mult (Nat.fromIntClamp n) (Nat.fromIntClamp 3))) (n - 1)\n\nmain : String\nmain = show (Nat.toInt (loop Zero 100))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/natinline-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/natinline-n/bin/natinline"'
+out-equals: "15150"
+file-contains: $TMPDIR/natinline-n/Main.s cmova
+run: sh -c '! grep -q "cmovno" "$TMPDIR/natinline-n/Main.s"'
+exit: 0
+run: sh -c '! grep -q "call rt_nat_mul" "$TMPDIR/natinline-n/Main.s"'
+exit: 0
+run: sh -c '! grep -q "call rt_nat_add" "$TMPDIR/natinline-n/Main.s"'
+exit: 0
+
+# 13) 入口 scratch 按需：纯 print 程序只用 `init_tcb`（不 mmap 8.4 MiB scratch），
+#     可达代码有宿主叶子时改发 `init_tcb_scratch`。
+run: sh -c 'd="$TMPDIR/noscratch"; mkdir -p "$d/app"; printf "[package]\nname = \"noscratch\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"hi\"\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/noscratch-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/noscratch-out/runtime.s rt_init_tcb
+run: sh -c '! grep -q "rt_init_tcb_scratch" "$TMPDIR/noscratch-out/runtime.s"'
+exit: 0
+run: sh -c 'd="$TMPDIR/scratchfs"; mkdir -p "$d/app"; printf "[package]\nname = \"scratchfs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"/dev/null\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/scratchfs-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/scratchfs-out/runtime.s rt_init_tcb_scratch
+
+# 14) 入口线程运行时按需：分配型程序经堆锁到达 `rt_safepoint`，不等于使用了线程；
+#     只有 spawn / join / mutex / condvar 这类原语才发 `init_threads`。
+run: sh -c 'd="$TMPDIR/nothreads"; mkdir -p "$d/app"; printf "[package]\nname = \"nothreads\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.String as String\n\nmain : Int\nmain = strLength (strFromInt 42)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/nothreads-out" "$d"'
+exit: 0
+run: sh -c '! grep -rq "call rt_init_threads" "$TMPDIR/nothreads-out"'
+exit: 0
+
+# 9s6) 自递归循环体旋转：入口跳到条件检查，回边就是条件分支本身（循环体内不再有
+#      无条件 `jmp` 回边）。
+run: sh -c 'd="$TMPDIR/looprot"; mkdir -p "$d/app"; printf "[package]\nname = \"looprot\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Int -> Int\nloop acc n = if n <= 0 then acc else loop (acc + n) (n - 1)\n\nmain : Int\nmain = loop 0 1000\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/looprot-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/looprot-n/bin/looprot"'
+out-equals: 500500
+run: sh -c 'grep -c "jmp .L" "$TMPDIR/looprot-n/Main.s"'
+out-equals: 1
+

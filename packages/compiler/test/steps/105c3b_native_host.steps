@@ -1,0 +1,11 @@
+# matrix: effect-native
+# 105c3b) native 自带栈：40 万层非尾递归。
+
+# 9u7) 自带栈：40 万层非尾递归在 `ulimit -s 8192`（默认 8 MiB）下仍能跑完。
+#      生成的二进制启动时 mmap 自己的栈（512 MiB 虚拟，按需提交），不依赖宿主栈上限。
+run: sh -c 'd="$TMPDIR/deepstack"; mkdir -p "$d/app"; printf "[package]\nname = \"deepstack\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Int as Int\n\nsumTo : Int -> Int\nsumTo n = if n <= 0 then 0 else n + sumTo (n - 1)\n\nmain : Int\nmain = sumTo 400000\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/deepstack-out" "$d"'
+exit: 0
+run: sh -c 'ulimit -s 8192 && exec "$TMPDIR/deepstack-out/bin/deepstack"'
+exit: 0
+out-equals: 80000200000
+

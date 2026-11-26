@@ -1,0 +1,22 @@
+# matrix: effect-native
+# 105f3a) native Bool 选择与 magic 除法。
+
+# 9s3) 物化 Bool 选择不发分支：`if b then 1 else 0` 直接复用 0/1 槽，累加回到内联 `add`。
+run: sh -c 'd="$TMPDIR/bselect"; mkdir -p "$d/app"; printf "[package]\nname = \"bselect\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Int -> Bool -> Int -> Int\nloop acc b n = if n <= 0 then acc else loop (acc + (if b then 1 else 0)) (n < 5) (n - 1)\n\nmain : Int\nmain = loop 0 True 100\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/bselect-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/bselect-n/bin/bselect"'
+out-equals: 4
+run: sh -c 'grep -Eq "  setl [a-z0-9]+" "$TMPDIR/bselect-n/Main.s"'
+exit: 0
+run: sh -c '! grep -q "call rt_add" "$TMPDIR/bselect-n/Main.s"'
+exit: 0
+
+# 9s4) 非 2 幂常量除法走 magic 乘法（含负数与 63-bit 边界），不再 `cqo` + `idiv`。
+run: sh -c 'd="$TMPDIR/magicdiv"; mkdir -p "$d/app"; printf "[package]\nname = \"magicdiv\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.String as String\n\nmain : String\nmain =\n  show (4611686018427387903 / 1000) ++ \" \" ++ show ((0 - 4611686018427387903 - 1) / 1000)\n  ++ \" \" ++ show (123456789 / 5) ++ \" \" ++ show ((0 - 123456789) / 5)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/magicdiv-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/magicdiv-n/bin/magicdiv"'
+out-equals: "4611686018427387 -4611686018427387 24691357 -24691357"
+file-contains: $TMPDIR/magicdiv-n/Main.s imul
+run: sh -c '! grep -q "idiv" "$TMPDIR/magicdiv-n/Main.s"'
+exit: 0
+

@@ -1,0 +1,33 @@
+# matrix: effect-native
+# 105f1a) native 产物文件集与 build.sh 增量。
+
+# 105f) native 后端：产物文件集、增量构建与宿主失败面。
+#     模块切分后的文件集、build.sh 增量、深目录删除、非 try 宿主符号失败、大文件读取、
+#     浮点字面量与浮点比较、标量选择/常量除法/零参别名、循环体旋转。
+# 11) 文件集按模块切分：改一个模块只重写该模块的 `.s`，其它模块与 runtime 逐字节不变。
+run: sh -c 'd="$TMPDIR/loc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"loc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-a" "$d"'
+exit: 0
+file-exists: $TMPDIR/loc-a/Util.s
+file-exists: $TMPDIR/loc-a/Main.s
+file-exists: $TMPDIR/loc-a/runtime.s
+run: sh -c 'd="$TMPDIR/loc"; printf "module Util where\n\nexport answer : Int\nanswer = if 1 == 1 then 42 else 0\n" > "$d/lib/Util.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-b" "$d"'
+exit: 0
+run: sh -c 'cmp "$TMPDIR/loc-a/Main.s" "$TMPDIR/loc-b/Main.s" && cmp "$TMPDIR/loc-a/runtime.s" "$TMPDIR/loc-b/runtime.s"'
+exit: 0
+run: sh -c '! cmp -s "$TMPDIR/loc-a/Util.s" "$TMPDIR/loc-b/Util.s"'
+exit: 0
+
+# 12) build.sh 增量：内容哈希不变就不重编，改一个模块只重编该模块；产物仍可运行。
+run: sh -c 'd="$TMPDIR/inc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"inc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
+out-contains: native-build: compiled 3 of 3
+run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
+out-contains: native-build: compiled 0 of 3
+run: "$TMPDIR/inc-out/bin/inc" 2>&1
+out-equals: 42
+run: sh -c 'd="$TMPDIR/inc"; printf "module Util where\n\nexport answer : Int\nanswer = if 1 == 1 then 41 else 0\n" > "$d/lib/Util.vuna"; timeout 120 "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d" && cd "$TMPDIR/inc-out" && sh build.sh'
+out-contains: native-build: compiled 1 of 3
+run: "$TMPDIR/inc-out/bin/inc" 2>&1
+out-equals: 42
+

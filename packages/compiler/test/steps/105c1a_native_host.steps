@@ -1,0 +1,29 @@
+# matrix: effect-native
+# 105c1a) native 宿主入参 / 环境 / cwd / clock、bracket、fs 全族。
+
+# 105c) native 后端：宿主效应、进程边界与资源限制。
+#     argv / env / cwd / clock、bracket 清理、fs 全族与失败路径、内存预算、总超时、
+#     spawn 的进程组与 argv 边界、自带栈、核数钉住、限制类 env 不外传。
+# 9o) 宿主入参/环境/目录/时钟：argv 不含 argv[0]，envp 键值扫描，cwd/execPath 非空，
+#     sleep 后时间不倒退；结果 2+5+1+1+1 = 10。
+run: sh -c 'd="$TMPDIR/hostargs"; mkdir -p "$d/app"; printf "[package]\nname = \"hostargs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Args as EffArgs\nimport Base.Effect.Clock as EffClock\nimport Base.Effect.Env as EffEnv\nimport Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.String as String\n\nmain : Eff [ArgsOp, ClockOp, EnvOp] Int\nmain = do\n  args <- argsGetArgs\n  home <- envGetEnv \"VUNA_TEST_ENV\"\n  cwd <- envGetCwd\n  exe <- envExecPath\n  t0 <- clockNow\n  _ <- clockSleepMicros 1000\n  t1 <- clockNow\n  pure (length args + strLength home + (if strLength cwd > 0 then 1 else 0) + (if strLength exe > 0 then 1 else 0) + (if t1 >= t0 then 1 else 0))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/hostargs-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_TEST_ENV=hello "$TMPDIR/hostargs-out/bin/hostargs" one two 2>&1'
+exit: 0
+out-equals: 10
+
+# 9p) bracket/finally：cleanup 登记表 push/pop（正常路径；abort 不运行，与 wasm 同边界）。
+run: sh -c 'd="$TMPDIR/bracket"; mkdir -p "$d/app"; printf "[package]\nname = \"bracket\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Data.Int as Int\n\nmain : Int\nmain = runPure (bracket (pure 7) (\\\\_ => pure 0) (\\\\r => pure (r * 6)))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/bracket-out" "$d"'
+exit: 0
+run: "$TMPDIR/bracket-out/bin/bracket" 2>&1
+out-equals: 42
+
+# 9q) 宿主 fs：建/写/读/原子写/目录列举（排序）/stat/rename/symlink/递归删除。
+#     a="hello"(5) + b="atomic"(6) + entries 2 + isDir 1 + exists 1 + size 5 + mtime 1 = 21。
+run: sh -c 'd="$TMPDIR/fsops"; mkdir -p "$d/app"; printf "[package]\nname = \"fsops\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Data.Bool as Bool\nimport Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\nimport Base.Data.Int as Int\nimport Base.Data.List as List\nimport Base.Data.Maybe as Maybe\nimport Base.Data.Nat as Nat\nimport Base.Data.String as String\n\ndir : String\ndir = \"$TMPDIR/fs-tree\"\n\nmain : Eff [FsOp] Int\nmain = do\n  _ <- fsRemoveTree dir\n  _ <- fsMakeDir dir\n  _ <- fsWriteFile (dir ++ \"/a.txt\") \"hello\"\n  _ <- fsWriteFileAtomic (dir ++ \"/b.txt\") \"atomic\"\n  a <- fsReadFile (dir ++ \"/a.txt\")\n  b <- fsReadFile (dir ++ \"/b.txt\")\n  entries <- fsReadDir dir\n  isd <- fsIsDirectory dir\n  ex <- fsFileExists (dir ++ \"/a.txt\")\n  sz <- fsFileSize (dir ++ \"/a.txt\")\n  mt <- fsFileMtime (dir ++ \"/a.txt\")\n  _ <- fsRename (dir ++ \"/b.txt\") (dir ++ \"/c.txt\")\n  _ <- fsSymlink (dir ++ \"/a.txt\") (dir ++ \"/link\")\n  _ <- fsRemoveFile (dir ++ \"/c.txt\")\n  _ <- fsRemoveTree dir\n  pure (strLength a + strLength b + length entries + (if isd then 1 else 0) + (if ex then 1 else 0) + maybe 0 (\\\\n => natToInt n) sz + maybe 0 (\\\\_ => 1) mt)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/fsops-out" "$d"'
+exit: 0
+run: "$TMPDIR/fsops-out/bin/fsops" 2>&1
+out-equals: 21
+run: sh -c 'test ! -e "$TMPDIR/fs-tree" && echo cleaned'
+out-equals: cleaned
+

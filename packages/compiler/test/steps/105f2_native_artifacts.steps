@@ -1,0 +1,66 @@
+# matrix: effect-native
+# 105f2) native 浮点产物：字面量常量、溢出 inf、表达式树、比较/选择、循环参数拆箱。
+
+# 9ao) 浮点字面量是 `.rodata` 里的 `.double` 常量：使用点只发一条 `lea`，
+#     不再走「整数装盒 + `float_from_int` + `float_div`」。
+#     长字面量与 `-0.0` 与 OCaml 后端逐字一致（十进制 → double 的舍入由汇编器做）。
+run: sh -c 'd="$TMPDIR/flitn"; mkdir -p "$d/app"; printf "[package]\nname = \"flitn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show (1.5 + (0.0 - 0.25)) ++ \" \" ++ show (0.0 - 0.0) ++ \" \" ++ show 1.2345678901234567890123456789\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/flitn-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitn-n/bin/flitn"'
+out-equals: "1.25 0. 1.23456789012"
+file-contains: $TMPDIR/flitn-n/Main.s .double 1.5
+file-contains: $TMPDIR/flitn-n/Main.s .double 1.2345678901234567890123456789
+run: sh -c 'd="$TMPDIR/flitn"; "$VUNA" build --out "$TMPDIR/flitn-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitn-o/bin/flitn"'
+out-equals: "1.25 0. 1.23456789012"
+
+# 9ao2) 超出 double 范围的字面量：gas 不接受溢出的十进制常量，后端改发 `inf`
+#      （与 OCaml 把同样的字面量读成 `inf` 一致）。
+run: sh -c 'd="$TMPDIR/flitinf"; mkdir -p "$d/app"; printf "[package]\nname = \"flitinf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show %s.0\n" "$(printf "9%.0s" $(seq 1 400))" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/flitinf-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitinf-n/bin/flitinf"'
+out-equals: "inf"
+file-contains: $TMPDIR/flitinf-n/Main.s .double inf
+run: sh -c 'd="$TMPDIR/flitinf"; "$VUNA" build --out "$TMPDIR/flitinf-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/flitinf-o/bin/flitinf"'
+out-equals: "inf"
+
+# 9ao3) 浮点表达式树整棵在 `xmm` 上算完，只有根装盒一次：产物里没有逐运算的
+#      `call rt_float_*`，`sqrt` / `abs` 也展开成 `sqrtsd` 与按位清符号位。
+run: sh -c 'd="$TMPDIR/ftree"; mkdir -p "$d/app"; printf "[package]\nname = \"ftree\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain = show (1.5 + sqrt (abs (0.0 - 4.0)) * 0.25 - 0.5)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/ftree-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftree-n/bin/ftree"'
+out-equals: "1.5"
+file-contains: $TMPDIR/ftree-n/Main.s sqrtsd
+run: sh -c 'grep -c "call rt_float_" "$TMPDIR/ftree-n/Main.s" | tr -d " " | grep -q "^0$"'
+exit: 0
+run: sh -c 'd="$TMPDIR/ftree"; "$VUNA" build --out "$TMPDIR/ftree-o" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftree-o/bin/ftree"'
+out-equals: "1.5"
+
+# 9ao4) 浮点比较与条件选择并进 floatTree：两支都是字面量时用 `cmp…sd` 得到掩码、
+#       再用按位指令选值（`andpd`；两侧都非零时补 `andnpd` + `orpd`），整棵树仍只
+#       装箱一次，不再调用 `rt_float_lt` / `rt_float_add`。
+run: sh -c 'd="$TMPDIR/ftreecmp"; mkdir -p "$d/app"; printf "[package]\nname = \"ftreecmp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base\nimport Base.Data.Float as Float\nimport Base.Data.String as String\n\nmain : String\nmain =\n  let\n    x = 1.0 + 0.5\n  in show (x + (if x < 2.0 then 3.0 else 4.0))\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/ftreecmp-n" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/ftreecmp-n/bin/ftreecmp"'
+out-equals: "4.5"
+file-contains: $TMPDIR/ftreecmp-n/Main.s cmpltsd
+file-contains: $TMPDIR/ftreecmp-n/Main.s andnpd
+run: sh -c '! grep -q "call rt_float_" "$TMPDIR/ftreecmp-n/Main.s"'
+exit: 0
+
+# 9ao5) 浮点循环参数拆箱：循环参数槽存 raw `f64` 位，循环内不再每轮 `alloc_leaf`；
+#       只有退出时把结果装盒一次。
+run: sh -c 'd="$TMPDIR/floop"; mkdir -p "$d/app"; printf "[package]\nname = \"floop\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "loop : Float -> Int -> Float\nloop acc n = if n <= 0 then acc else loop (acc + 0.5) (n - 1)\n\nmain : Int\nmain = floatToIntTrunc (loop 0.0 10)\n" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/floop-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/floop-out/bin/floop"'
+out-equals: 5
+run: sh -c 'test "$(grep -c "call rt_alloc_leaf" "$TMPDIR/floop-out/Main.s")" -eq 1'
+exit: 0
+run: sh -c 'grep -q "xmm8" "$TMPDIR/floop-out/Main.s"'
+exit: 0
+
