@@ -158,9 +158,11 @@ jobs:
       cache-size: 2G
 
   # 必需的汇总检查：跑计划里剩下的部分，并把 suite shard 的结论一并收进来。
+  # `!cancelled()`：needs 失败也照常跑（用 precondition 报结论），但 concurrency
+  # 取消这次运行时不留下一个失败 check。
   gates:
     needs: [detect, suite]
-    if: always()
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/_check.yml
     with:
       group: gates
