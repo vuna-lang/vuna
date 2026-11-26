@@ -122,6 +122,7 @@ record Block where
 isTerminator : Instr -> Bool
 isTerminator (IJmp _) = True
 isTerminator (IJmpReg _) = True
+isTerminator (IJmpMem _) = True
 isTerminator (IJcc _ _) = True
 isTerminator IRet = True
 isTerminator _ = False
@@ -175,12 +176,28 @@ labelIndexOf p =
     (ILabel l) :: _ => [(l, firstOf p)]
     _ => []
 
+-- | 全函数跳转表的目标（`IQuadLabel` 标签 → 块序号，升序去重）。
+-- `IJmpMem` 的后继取这组目标做过近似：只可能少清，不会清掉活值。
+-- 不要把它标成「无后继」——那会丢掉 arm1 的活值。
+tableTargetsOf : List Block -> HashMap String Int -> List Int
+tableTargetsOf blocks labels =
+  foldl (\acc, b => mergeUnion acc (blockTableTargets labels b)) [] blocks
+
+blockTableTargets : HashMap String Int -> Block -> List Int
+blockTableTargets labels b =
+  foldl (\acc, i => mergeUnion acc (instrTableTarget labels i)) [] b.blkInstrs
+
+instrTableTarget : HashMap String Int -> Instr -> List Int
+instrTableTarget labels (IQuadLabel l) = maybeToList (HashMap.lookup l labels)
+instrTableTarget _ _ = []
+
 -- | 块的后继序号。
-succIndices : HashMap String Int -> Int -> Block -> List Int
-succIndices labels i b =
+succIndices : HashMap String Int -> List Int -> Int -> Block -> List Int
+succIndices labels tableSuccs i b =
   case blockLast b of
     Just (IJmp l) => maybeToList (HashMap.lookup l labels)
     Just (IJmpReg _) => []
+    Just (IJmpMem _) => tableSuccs
     Just IRet => []
     Just (IJcc _ l) => append (maybeToList (HashMap.lookup l labels)) [i + 1]
     _ => [i + 1]
@@ -188,12 +205,14 @@ succIndices labels i b =
 -- | 有没有回边（尾递归循环 / 普通循环）：同一帧会被再次使用。
 hasBackwardEdge : List Block -> HashMap String Int -> Bool
 hasBackwardEdge blocks labels =
-  foldl (
+  let
+    tableSuccs = tableTargetsOf blocks labels
+  in foldl (
       \acc, p =>
         let
           i = firstOf p
           b = secondOf p
-        in if acc then True else foldl (\hit, j => if hit || j <= i then True else hit) False (succIndices labels i b)
+        in if acc then True else foldl (\hit, j => if hit || j <= i then True else hit) False (succIndices labels tableSuccs i b)
     ) False (zipIdxFrom 0 blocks)
 
 -- ---------------------------------------------------------------
@@ -205,37 +224,37 @@ blockUses b = foldl (\acc, i => mergeUnion acc (instrSlotReads i)) [] b.blkInstr
 blockDefs : Block -> List Int
 blockDefs b = foldl (\acc, i => mergeUnion acc (instrSlotWrites i)) [] b.blkInstrs
 
-succLive : HashMap String Int -> HashMap Int (List Int) -> Int -> Block -> List Int
-succLive labels live i b =
+succLive : HashMap String Int -> List Int -> HashMap Int (List Int) -> Int -> Block -> List Int
+succLive labels tableSuccs live i b =
   foldl (
       \acc, j =>
         case HashMap.lookup j live of
           Just s => mergeUnion acc s
           Nothing => acc
-    ) [] (succIndices labels i b)
+    ) [] (succIndices labels tableSuccs i b)
 
 -- | 一轮：**逆块序**重算 live_in（后向数据流逆序传播时直链一轮到底，只有回边要重扫）。
-liveStep : HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> (HashMap Int (List Int), Bool)
-liveStep labels blocks uses defs live =
+liveStep : HashMap String Int -> List Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> (HashMap Int (List Int), Bool)
+liveStep labels tableSuccs blocks uses defs live =
   foldl (
       \accP, p =>
         let
           i = firstOf p
           b = secondOf p
           cur = firstOf accP
-          newIn = mergeUnion (withDefault (atIdx i uses) []) (mergeDiff (succLive labels cur i b) (withDefault (atIdx i defs) []))
+          newIn = mergeUnion (withDefault (atIdx i uses) []) (mergeDiff (succLive labels tableSuccs cur i b) (withDefault (atIdx i defs) []))
           oldIn = withDefault (HashMap.lookup i cur) []
         in if newIn == oldIn then accP else (HashMap.insert i newIn cur, True)
     ) (live, False) (reverse (zipIdxFrom 0 blocks))
 
-liveFix : Int -> HashMap String Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Maybe (HashMap Int (List Int))
-liveFix fuel labels blocks uses defs live =
+liveFix : Int -> HashMap String Int -> List Int -> List Block -> List (List Int) -> List (List Int) -> HashMap Int (List Int) -> Maybe (HashMap Int (List Int))
+liveFix fuel labels tableSuccs blocks uses defs live =
   if fuel <= 0 then
     Nothing
   else
     let
-      p = liveStep labels blocks uses defs live
-    in if secondOf p then liveFix (fuel - 1) labels blocks uses defs (firstOf p) else Just (firstOf p)
+      p = liveStep labels tableSuccs blocks uses defs live
+    in if secondOf p then liveFix (fuel - 1) labels tableSuccs blocks uses defs (firstOf p) else Just (firstOf p)
 
 -- ---------------------------------------------------------------
 -- 循环携带的槽
@@ -260,21 +279,23 @@ loopCarriedSlots instrs =
   let
     blocks = blocksOf instrs
     labels = labelMapOf blocks
+    tableSuccs = tableTargetsOf blocks labels
     uses = map blockUsesBeforeDef blocks
     defs = map blockDefs blocks
     init = HashMap.fromList (map (\p => (firstOf p, [])) (zipIdxFrom 0 blocks))
-    headers = loopHeaders blocks labels
-  in case liveFix 64 labels blocks uses defs init of
+    headers = loopHeaders blocks labels tableSuccs
+  in case liveFix 64 labels tableSuccs blocks uses defs init of
     Nothing => []
     Just live =>
       foldl (\acc, i => mergeUnion acc (withDefault (HashMap.lookup i live) [])) [] headers
 
-loopHeaders : List Block -> HashMap String Int -> List Int
-loopHeaders blocks labels =
-  nubInts (concatMap (\p => backTargets labels (firstOf p) (secondOf p)) (zipIdxFrom 0 blocks))
+loopHeaders : List Block -> HashMap String Int -> List Int -> List Int
+loopHeaders blocks labels tableSuccs =
+  nubInts
+    (concatMap (\p => backTargets labels tableSuccs (firstOf p) (secondOf p)) (zipIdxFrom 0 blocks))
 
-backTargets : HashMap String Int -> Int -> Block -> List Int
-backTargets labels i b = filter (\j => j <= i) (succIndices labels i b)
+backTargets : HashMap String Int -> List Int -> Int -> Block -> List Int
+backTargets labels tableSuccs i b = filter (\j => j <= i) (succIndices labels tableSuccs i b)
 
 nubInts : List Int -> List Int
 nubInts [] = []
@@ -344,8 +365,8 @@ emitClears ((i, died) :: rest) =
     clears = if staticSkip then [] else map clearSlot keep
   in i :: append clears (emitClears rest)
 
-emitBlock : HashMap Int Bool -> HashMap String Int -> HashMap Int (List Int) -> (Int, Block) -> List Instr
-emitBlock ptr labels live p =
+emitBlock : HashMap Int Bool -> HashMap String Int -> List Int -> HashMap Int (List Int) -> (Int, Block) -> List Instr
+emitBlock ptr labels tableSuccs live p =
   let
     i = firstOf p
     b = secondOf p
@@ -353,7 +374,7 @@ emitBlock ptr labels live p =
     b.blkInstrs
   else
     let
-      out = succLive labels live i b
+      out = succLive labels tableSuccs live i b
     in emitClears (dyingPoints ptr out (reverse b.blkInstrs) [])
 
 -- ---------------------------------------------------------------
@@ -419,6 +440,7 @@ clearDeadSlots mayReenter slotCls instrs0 =
     instrs = dropDeadStores 4 instrs0
     blocks = blocksOf instrs
     labels = labelMapOf blocks
+    tableSuccs = tableTargetsOf blocks labels
   in if not (mayReenter || hasBackwardEdge blocks labels) then
     instrs
   else
@@ -427,6 +449,6 @@ clearDeadSlots mayReenter slotCls instrs0 =
       defs = map blockDefs blocks
       init = HashMap.fromList (map (\p => (firstOf p, [])) (zipIdxFrom 0 blocks))
       ptr = ptrMapOf slotCls
-    in case liveFix 64 labels blocks uses defs init of
+    in case liveFix 64 labels tableSuccs blocks uses defs init of
       Nothing => instrs
-      Just live => concatMap (emitBlock ptr labels live) (zipIdxFrom 0 blocks)
+      Just live => concatMap (emitBlock ptr labels tableSuccs live) (zipIdxFrom 0 blocks)
