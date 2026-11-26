@@ -1,0 +1,66 @@
+-- closed-adt-catch-all 的规则级回归：直接调 lint 入口，不经过 CLI。
+import Base
+import Base.Effect.Core
+import Base.Data.List as List
+import Base.Data.String as String
+import Vuna.Compiler.Base.Common
+import Vuna.Lint.Config
+import Vuna.Lint.Diagnostics
+import Vuna.Lint.Rules
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("closed-adt-catch-all failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "partial-case-reported" (memName "LN_ClosedAdtCatchAll" (codesOf partialCase)),
+    Pair "partial-case-missing" (contains "Green" (messagesOf partialCase)),
+    Pair "full-case-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf fullCase))),
+    Pair "non-ctor-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf intCase)))
+  ]
+
+codesOf : String -> List String
+codesOf source =
+  case closedAdtLint source of
+    OkC fs => map codeOf fs
+    ErrC _ => []
+
+messagesOf : String -> String
+messagesOf source =
+  case closedAdtLint source of
+    OkC fs => msgOf fs
+    ErrC _ => ""
+
+codeOf : Finding -> String
+codeOf f = f.findingCode
+
+msgOf : List Finding -> String
+msgOf [] = ""
+msgOf (f :: rest) = f.findingMessage ++ msgOf rest
+
+closedAdtLint : String -> Check (List Finding)
+closedAdtLint source =
+  case selectRules ["closed-adt-catch-all"] defaultLintConfig of
+    ErrC e => ErrC e
+    OkC cfg => lintSourceWithConfig cfg [] source
+
+partialCase : String
+partialCase =
+  "module Probe where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  _ => 0\n"
+
+fullCase : String
+fullCase =
+  "module Probe where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Green => 2\n  Blue => 3\n"
+
+intCase : String
+intCase = "module Probe where\n\npick : Int -> Int\npick n = case n of\n  0 => 0\n  _ => n\n"

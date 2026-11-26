@@ -138,3 +138,27 @@ exit: 1
 out-contains: A.vuna:4:7: [LN_LiteralIfChain]
 run: sh -c 'cd "$TMPDIR/lint-ws/a" && "$VUNA" lint lib/A.vuna 2>&1'
 exit: 0
+
+# closed-adt-catch-all：case 兜底代替本地 data 族未写构造子；默认关闭，--select 启用。
+run: sh -c 'printf "%s\n" "module Probe where" "" "data Color : Type where" "  Red : Color" "  Green : Color" "  Blue : Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_ClosedAdtCatchAll
+out-contains: Green
+out-contains: Blue
+# 全构造子覆盖：零 finding。
+run: sh -c 'printf "%s\n" "module Probe where" "" "data Color : Type where" "  Red : Color" "  Green : Color" "  Blue : Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  Green => 2" "  Blue => 3" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+# 非构造子匹配（Int 字面量）不报。
+run: sh -c 'printf "%s\n" "module Probe where" "" "pick : Int -> Int" "pick n = case n of" "  0 => 0" "  _ => n" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+# 源码抑制：disable-next-line 落在兜底分支所在行。
+run: sh -c 'printf "%s\n" "module Probe where" "" "data Color : Type where" "  Red : Color" "  Green : Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  -- vuna-lint: disable-next-line closed-adt-catch-all" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0

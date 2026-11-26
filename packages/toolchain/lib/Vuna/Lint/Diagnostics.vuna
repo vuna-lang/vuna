@@ -34,6 +34,8 @@ export data LintRule(..) : Type where
   TodoMarker : LintRule
   -- | `if True` / `if False` 常量条件（默认关闭，all 预设可选）。
   RedundantIf : LintRule
+  -- | case 的兜底分支代替了本地 `data` 族的未写构造子（默认关闭，遍历定义用）。
+  ClosedAdtCatchAll : LintRule
 
 -- | 规则的稳定符号（`LN_` 前缀 + 驼峰），文档与索引按它引用规则。
 export lintCode : LintRule -> String
@@ -44,6 +46,7 @@ lintCode PairSugar = "LN_PairSugar"
 lintCode NatLiteral = "LN_NatLiteral"
 lintCode TodoMarker = "LN_TodoMarker"
 lintCode RedundantIf = "LN_RedundantIf"
+lintCode ClosedAdtCatchAll = "LN_ClosedAdtCatchAll"
 
 -- | 规则的 kebab 短名，用于 CLI 与 finding 输出；与 `lintCode` 一一对应。
 export lintRule : LintRule -> String
@@ -54,6 +57,7 @@ lintRule PairSugar = "pair-sugar"
 lintRule NatLiteral = "nat-literal"
 lintRule TodoMarker = "todo-marker"
 lintRule RedundantIf = "redundant-if"
+lintRule ClosedAdtCatchAll = "closed-adt-catch-all"
 
 -- | 由 `LN_` code 反查 kebab 短名（gen-errors 与输出层按 code 反查时用）；未知 code 返回空串。
 export lintRuleCode : String -> String
@@ -70,7 +74,9 @@ lintRuleCode code =
     lintRule NatLiteral
   else if code == lintCode TodoMarker then
     lintRule TodoMarker
-  else if code == lintCode RedundantIf then lintRule RedundantIf else ""
+  else if code == lintCode RedundantIf then
+    lintRule RedundantIf
+  else if code == lintCode ClosedAdtCatchAll then lintRule ClosedAdtCatchAll else ""
 
 -- | 规则的消息模板；参数是被检查主体的描述，模板里用它插值。
 export lintMsg : LintRule -> String -> String
@@ -83,6 +89,7 @@ lintMsg PairSugar suggestion = "pair construction can be written as `${suggestio
 lintMsg NatLiteral suggestion = "nat construction can be written as `${suggestion}`"
 lintMsg TodoMarker marker = "comment contains `${marker}` marker"
 lintMsg RedundantIf branch = "conditional on a constant Bool can be simplified to `${branch}`"
+lintMsg ClosedAdtCatchAll detail = "catch-all hides missing constructor(s) of ${detail}"
 
 -- | 规则的修复动作描述（`vuna lint --explain` 与文档用）。
 export lintEdit : LintRule -> String
@@ -97,6 +104,7 @@ lintEdit NatLiteral =
   "把闭合 `Zero` / `Succ` 链改写为十进制 Nat 字面量（`Succ k` 等开放链不动）"
 lintEdit TodoMarker = "删除或处理注释里的 TODO / FIXME / XXX 标记"
 lintEdit RedundantIf = "把 `if True/False then a else b` 化简为对应分支"
+lintEdit ClosedAdtCatchAll = "补全本地 `data` 族缺的构造子分支，删除兜底分支"
 
 -- | 规则的一句话说明（文档用）。
 export lintDesc : LintRule -> String
@@ -114,6 +122,8 @@ lintDesc TodoMarker =
   "注释里的 TODO / FIXME / XXX 标记应在合入前处理；默认关闭，all 预设或 --select 启用。"
 lintDesc RedundantIf =
   "`if True` / `if False` 的常量条件可直接化简；默认关闭，all 预设或 --select 启用。"
+lintDesc ClosedAdtCatchAll =
+  "case 的兜底分支（`_` / 裸变量）代替了本地 `data` 族未写构造子；遍历定义应穷尽覆盖，默认关闭。"
 
 -- | 该规则是否可自动修复（可修复的规则会派生 `FX_` 修复码）。
 export lintFixable : LintRule -> Bool
@@ -124,6 +134,7 @@ lintFixable PairSugar = True
 lintFixable NatLiteral = True
 lintFixable TodoMarker = False
 lintFixable RedundantIf = True
+lintFixable ClosedAdtCatchAll = False
 
 -- | 规则的严重度：off 不参与扫描，warn 只报告，error 计入退出码。
 export data LintSeverity(..) : Type where
@@ -173,11 +184,21 @@ lintDefaultSeverity PairSugar = LintWarn
 lintDefaultSeverity NatLiteral = LintWarn
 lintDefaultSeverity TodoMarker = LintWarn
 lintDefaultSeverity RedundantIf = LintWarn
+lintDefaultSeverity ClosedAdtCatchAll = LintWarn
 
 -- | 全部规则（配置与默认预设的遍历源）。
 export lintAllRules : List LintRule
 lintAllRules =
-  [LiteralIfChain, DispatchLift, ListLiteral, PairSugar, NatLiteral, TodoMarker, RedundantIf]
+  [
+    LiteralIfChain,
+    DispatchLift,
+    ListLiteral,
+    PairSugar,
+    NatLiteral,
+    TodoMarker,
+    RedundantIf,
+    ClosedAdtCatchAll
+  ]
 
 -- | 规则是否属于 recommended 预设。
 export lintRecommended : LintRule -> Bool
@@ -188,6 +209,7 @@ lintRecommended PairSugar = True
 lintRecommended NatLiteral = True
 lintRecommended TodoMarker = False
 lintRecommended RedundantIf = False
+lintRecommended ClosedAdtCatchAll = False
 
 -- | 一条规则的文档条目：code、kebab 短名、说明、是否可修复与修复动作描述。
 export record LintEntry(..) where
@@ -247,5 +269,11 @@ lintAll =
       (lintRule RedundantIf)
       (lintDesc RedundantIf)
       (lintFixable RedundantIf)
-      (lintEdit RedundantIf)
+      (lintEdit RedundantIf),
+    LintEntry
+      (lintCode ClosedAdtCatchAll)
+      (lintRule ClosedAdtCatchAll)
+      (lintDesc ClosedAdtCatchAll)
+      (lintFixable ClosedAdtCatchAll)
+      (lintEdit ClosedAdtCatchAll)
   ]

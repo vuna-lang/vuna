@@ -171,6 +171,7 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_NatLiteral` | `nat-literal` | 是 | 表达式/类型/模式位置的闭合 `Zero` / `Succ` 链（`Succ k` 等开放链不动） |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
+| `LN_ClosedAdtCatchAll` | `closed-adt-catch-all` | 否 | case 的兜底分支代替了**同文件** `data` 族未写的构造子；默认关闭，`--select` / all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
 渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` / `pair-sugar` / `nat-literal`
@@ -297,6 +298,20 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   在 `--select nat-literal` 下可能吞掉模式 finding（`dedupFindings` 在配置过滤之前，见 §6）；
   默认推荐配置的多轮 `--fix` 会先把 case 提升成 clause，再在下一轮改写成字面量。
 
+### 3.6 `closed-adt-catch-all`
+
+- **触发**：同一个文件里声明的 `data` 族，`case` 的显式 `PCon` 分支全属该族、但仍缺构造子，
+  并且存在兜底分支（`_` 或裸变量）。finding 落在兜底分支上，消息列出缺失构造子。
+- **不触发**：显式分支覆盖全族（即使保留兜底）；分支里出现非本地族的构造子；模式是
+  字面量 / record（没有 `PCon`）；跨文件族（`List` / `Maybe` / `Bool` 等 canonical 族需要
+  类型信息，lint 不做）。
+- **为什么有用**：封闭 ADT 的遍历定义一旦用 `_` 兜底，新增构造子会静默降级；这条规则把
+  「漏写构造子」变成可见 finding。默认关闭，遍历类代码用
+  `--select closed-adt-catch-all` 或 `[lint] preset = "all"` 启用。
+- **不做自动修复**：每个缺失分支应写什么体无法安全生成。
+- **已知边界**：只覆盖 `case` 分支形态；函数多子句的反射兜底（`f _ = …`）尚未覆盖。
+  行级抑制 `-- vuna-lint: disable-next-line closed-adt-catch-all` 按兜底分支所在行生效。
+
 ## 4. 语料与测试
 
 原生 suite 的 `lint` / `fix` family（`test/suite.toml`，kind `lint` / `fix`）：
@@ -308,6 +323,10 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   右嵌套展平、左嵌套多轮、部分应用与既有元组不报、注释/跨行报告但不可修复；
   22 覆盖 `nat-literal`：构造子结果类型、签名、clause / 嵌套 case 模式、表达式与裸 `Zero`，
   以及开放链、`Nat.Zero`、裸 `Succ`、注释/跨行不误报）。
+
+`closed-adt-catch-all` 是 opt-in 规则，规则级回归在 `packages/toolchain/test/ClosedAdtCatchAll.vuna`
+（部分覆盖 / 全覆盖 / 非构造子匹配）；CLI 面在 `packages/cli/test/steps/39_lint_cli.steps`
+（`--select`、全覆盖零 finding、源码抑制）。
 - `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
@@ -355,6 +374,8 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   （[type-system.md](type-system.md)）；单 clause 函数直接体里的可提升 `case` 会先被
   `dispatch-lift` 整段覆盖，`--select nat-literal` 下其中的模式 finding 可能被吞掉
   （`dedupFindings` 在配置过滤之前），默认推荐配置的多轮 `--fix` 会先提升再改写。
+- **`closed-adt-catch-all` 只认同文件 `data` 族与 `case` 形态**：跨文件族、函数多子句的
+  反射兜底（`f _ = …`）不在判据内；规则默认关闭，先用于遍历定义的定向检查。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
