@@ -655,14 +655,8 @@ exportMarkerFollows : PState -> Bool
 exportMarkerFollows st =
   case peekTok st of
     PTok (TSym ":") _ => False
-    PTok (TIdent _) _ =>
-      case peekTok (advance st) of
-        PTok (TSym ":") _ => True
-        _ => True
-    PTok (TSym _) _ =>
-      case peekTok (advance st) of
-        PTok (TSym ":") _ => True
-        _ => True
+    PTok (TIdent _) _ => True
+    PTok (TSym _) _ => True
     PTok (TKw "data") _ => True
     PTok (TKw "record") _ => True
     PTok (TKw "trait") _ => True

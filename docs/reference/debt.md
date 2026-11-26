@@ -63,7 +63,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | FE-27 · C | `.` 一个语法被切在 lexer / parser / loader 三层：`a.b` 先合成单 token，parser 的字段后缀只处理独立点，loader 再拆；字段访问没有单一产生点，两条路径的 span / 诊断不同 | `Frontend/Lexer.vuna`（`collectIdent`）、`Frontend/Parser.vuna`（`parseFieldSuffix`）、`Loader/Resolve.vuna` | 后续 |
 | FE-29 · D | `Canonical/Ast` 的 `Import` / `FixityDecl` 有两份编码器（为绕 import 环，靠一条断言保持逐字节一致）；`ExportItem` 的 tag 已违反本模块「tag = 构造子声明顺序」的规则 | `Frontend/Canonical/Ast.vuna`（`encImportLike` / `encFixityLike` / `encExportItem`） | 后续 |
 | FE-30 · D | 依赖路径归一化两个口径：`Pkg.joinPath` 走 `normalizeDir`，`Manifest.resolveManifestPath` 只拼字符串；`./`、`a/../b`、尾 `/` 会产生两个字符串，而 store / 缓存键 / 循环检测都按字符串比较 | `Frontend/Manifest.vuna`、`Frontend/Packages/Pkg.vuna` | 后续 |
-| FE-31 · A | `exportMarkerFollows` 的 `TIdent` 分支两种结果都是 `True`（死分支）：手写 token lookahead 没有测试覆盖 | `Frontend/Parser.vuna` | 后续 |
 
 ## Loader
 
