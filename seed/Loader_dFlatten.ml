@@ -456,9 +456,16 @@ let v_computeExports = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_
 # 580 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_showCycle = (fun (name : string) (stack : string B_dData_dList.t_List) -> (Base_dSource.v_joinArrows (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (name, stack)))))
 
-# 605 "Vuna/Compiler/Loader/Flatten.vuna"
+# 600 "Vuna/Compiler/Loader/Flatten.vuna"
+let rec v_implicitPreludeEnabled = (fun (mc0 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__255, dtb__256) -> (if ((Frontend_dPackages_dPkg.v_rootName dtb__255) = mc1) then (dtb__255).Frontend_dPackages_dPkg.f_Root_rootImplicitPrelude else ((v_implicitPreludeEnabled dtb__256) mc1))
+  | B_dData_dList.C_List_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 613 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_implicitPreludeDeps = (fun (mc0 : string) (mc1 : (string, Frontend_dPackages_dPkg.t_Root) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__255, dtb__256) -> (match dtb__256 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__257, dtb__258) -> (match dtb__258 with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_Import_importName = "Prelude"; Frontend_dAst.f_Import_importIsQualified = false; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = Frontend_dAst.v_noNodeRef }, B_dData_dList.C_List_Nil))))
   | _ -> ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withAbsent Base_dDiag.C_NoSourceReason_NsPackageGraph)) ((Base_dDiagnostics_dRn.v_rnNoLoc1 (Base_dDiagnostics_dRn.C_RnErr_AmbiguousPrelude ((Base_dSource.v_joinArrows ((B_dData_dList.v_map (fun (c : (string, Frontend_dPackages_dPkg.t_Root) B_dData_dPair.t_Pair) -> (Frontend_dPackages_dPkg.v_rootName (B_dData_dPair.v_secondOf c)))) mc1))))) (Base_dSource.v_joinArrows ((B_dData_dList.v_map (fun (c : (string, Frontend_dPackages_dPkg.t_Root) B_dData_dPair.t_Pair) -> (Frontend_dPackages_dPkg.v_rootName (B_dData_dPair.v_secondOf c)))) mc1))))
 )
@@ -466,63 +473,63 @@ let v_implicitPreludeDeps = (fun (mc0 : string) (mc1 : (string, Frontend_dPackag
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 597 "Vuna/Compiler/Loader/Flatten.vuna"
+# 605 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_implicitPreludeFrom = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dModules.v_collectModuleFiles nFs) roots) "Prelude") importerPkg) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil)) (fun collected -> (let allowed = (B_dData_dPair.v_firstOf collected) in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_implicitPreludeDeps importerPkg) ((B_dData_dList.v_filter (fun (c : (string, Frontend_dPackages_dPkg.t_Root) B_dData_dPair.t_Pair) -> ((Frontend_dPackages_dPkg.v_rootName (B_dData_dPair.v_secondOf c)) <> importerPkg))) allowed)))))))
 
-# 588 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_implicitPrelude = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (currentName : string) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> (if (currentName = "Prelude") then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (if ((B_dData_dList.v_memName "Prelude") (Loader_dModules.v_importModuleNames imports)) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (((v_implicitPreludeFrom nFs) roots) importerPkg))))
+# 589 "Vuna/Compiler/Loader/Flatten.vuna"
+let v_implicitPrelude = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (currentName : string) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> (if (B_dData_dBool.v_not ((v_implicitPreludeEnabled roots) importerPkg)) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (if (currentName = "Prelude") then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (if ((B_dData_dList.v_memName "Prelude") (Loader_dModules.v_importModuleNames imports)) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))) else (((v_implicitPreludeFrom nFs) roots) importerPkg)))))
 
-# 615 "Vuna/Compiler/Loader/Flatten.vuna"
+# 623 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_withLayerCheck = (fun (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (project : Loader_dModules.t_Project) -> ((Base_dCommon.v_bind ((Loader_dLayers.v_checkProjectLayers roots) project)) (fun (_u : B_dData_dUnit.t_Unit) -> (Base_dDiag.C_Check_OkC (project)))))
 
-# 619 "Vuna/Compiler/Loader/Flatten.vuna"
+# 627 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_withImportSpan = (fun (imp : Frontend_dAst.t_Import) (e : Base_dDiag.t_Diagnostic) -> (if ((Base_dSource.v_spanFile (Frontend_dAst.v_importSpan imp)) = "") then e else ((Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_importSpan imp)) e)))
 
-# 624 "Vuna/Compiler/Loader/Flatten.vuna"
+# 632 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loaderFuel = 1048576
 
-# 650 "Vuna/Compiler/Loader/Flatten.vuna"
+# 658 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_nsTakeLocal = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__257, dtb__258) -> (if (mc0 <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (dtb__257, ((v_nsTakeLocal (mc0 - 1)) dtb__258))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (if (mc0 <= 0) then B_dData_dList.C_List_Nil else (B_dData_dList.C_List__x58__x58_ (dtb__259, ((v_nsTakeLocal (mc0 - 1)) dtb__260))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 641 "Vuna/Compiler/Loader/Flatten.vuna"
+# 649 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_pathPrefixOf = (fun (nFs : string) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (segs : string B_dData_dList.t_List) (n : int) -> (if (n < 1) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) B_dData_dMaybe.C_Maybe_Nothing) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dModules.v_collectModuleFiles nFs) roots) (Base_dSource.v_joinDots ((v_nsTakeLocal n) segs))) importerPkg) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil)) (fun collected -> (if (v_notEmpty (B_dData_dPair.v_firstOf collected)) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (Base_dSource.v_joinDots ((v_nsTakeLocal n) segs)); B_dData_dPair.f_Pair_second = n }))) else (((((v_pathPrefixOf nFs) roots) importerPkg) segs) (n - 1)))))))
 
-# 654 "Vuna/Compiler/Loader/Flatten.vuna"
+# 662 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_nsDropLocal = (fun (mc0 : int) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260) -> (if (mc0 <= 0) then (B_dData_dList.C_List__x58__x58_ (dtb__259, dtb__260)) else ((v_nsDropLocal (mc0 - 1)) dtb__260))
+  | B_dData_dList.C_List__x58__x58_ (dtb__261, dtb__262) -> (if (mc0 <= 0) then (B_dData_dList.C_List__x58__x58_ (dtb__261, dtb__262)) else ((v_nsDropLocal (mc0 - 1)) dtb__262))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 627 "Vuna/Compiler/Loader/Flatten.vuna"
+# 635 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_loadAll = (fun (nFs : string) (fuel : int) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (stack : string B_dData_dList.t_List) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> (if (fuel <= 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.v_icFuel "loader")) else (match imports with
   | B_dData_dList.C_List_Nil -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (modules)))
-  | B_dData_dList.C_List__x58__x58_ (dtb__261, dtb__262) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) modules) stack) dtb__261)) (fun modulesR -> (match modulesR with
-  | Base_dDiag.C_Check_ErrC (dtb__263) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__263)))
-  | Base_dDiag.C_Check_OkC (dtb__264) -> (((((((v_loadAll nFs) (fuel - 1)) roots) importerPkg) dtb__264) stack) dtb__262)
+  | B_dData_dList.C_List__x58__x58_ (dtb__263, dtb__264) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) modules) stack) dtb__263)) (fun modulesR -> (match modulesR with
+  | Base_dDiag.C_Check_ErrC (dtb__265) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__265)))
+  | Base_dDiag.C_Check_OkC (dtb__266) -> (((((((v_loadAll nFs) (fuel - 1)) roots) importerPkg) dtb__266) stack) dtb__264)
   | _ -> failwith "DT: impossible branch"
 )))
   | _ -> failwith "DT: impossible branch"
 )))
-# 658 "Vuna/Compiler/Loader/Flatten.vuna"
+# 666 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_loadModule = (fun (nFs : string) (fuel : int) (roots : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) (importerPkg : string) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (stack : string B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (let name = (Frontend_dAst.v_importName imp) in (if (fuel <= 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.v_icFuel "loader")) else (match ((Loader_dModules.v_findModule modules) name) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__265) -> (if (((Loader_dModules.v_moduleVisibleTo roots) importerPkg) dtb__265) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (modules))) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (v_withImportSpan imp)) (((Base_dDiagnostics_dLoader.v_ldErr2 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleNotExported (name, (Loader_dModules.v_modulePackageOf dtb__265)))) name) (Loader_dModules.v_modulePackageOf dtb__265)))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__267) -> (if (((Loader_dModules.v_moduleVisibleTo roots) importerPkg) dtb__267) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (modules))) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (v_withImportSpan imp)) (((Base_dDiagnostics_dLoader.v_ldErr2 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleNotExported (name, (Loader_dModules.v_modulePackageOf dtb__267)))) name) (Loader_dModules.v_modulePackageOf dtb__267)))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (if ((B_dData_dList.v_memName name) stack) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (v_withImportSpan imp)) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ImportCycle (((v_showCycle name) stack)))) ((v_showCycle name) stack)))) else (if (Loader_dModules.v_validModuleName name) then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dModules.v_findModuleFile nFs) roots) name) importerPkg) (Frontend_dAst.v_importSpan imp))) (fun foundR -> (match foundR with
-  | Base_dDiag.C_Check_ErrC (dtb__266) -> (match (imp).Frontend_dAst.f_Import_importAlias with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__266)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__267) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_pathPrefixOf nFs) roots) importerPkg) (Base_dSource.v_splitOnDot name)) ((B_dData_dList.v_length (Base_dSource.v_splitOnDot name)) - 1))) (fun prefixR -> (let nd_uscrut17 = prefixR in (match nd_uscrut17 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__268) -> (match dtb__268 with
-  | { B_dData_dPair.f_Pair_first = dtb__269; B_dData_dPair.f_Pair_second = dtb__270 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) modules) stack) { Frontend_dAst.f_Import_importName = dtb__269; Frontend_dAst.f_Import_importIsQualified = false; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_importSpan imp)) })) (fun modsR -> (match modsR with
-  | Base_dDiag.C_Check_ErrC (dtb__271) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__271)))
-  | Base_dDiag.C_Check_OkC (dtb__272) -> (match ((Loader_dModules.v_findModule dtb__272) dtb__269) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__266)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__273) -> (match (((Loader_dModules.v_walkNamespaceIndex dtb__272) dtb__269) ((v_nsDropLocal dtb__270) (Base_dSource.v_splitOnDot name))) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__266)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__274) -> (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) dtb__272) stack) { Frontend_dAst.f_Import_importName = dtb__274; Frontend_dAst.f_Import_importIsQualified = true; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_importSpan imp)) })
+  | Base_dDiag.C_Check_ErrC (dtb__268) -> (match (imp).Frontend_dAst.f_Import_importAlias with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__268)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__269) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_pathPrefixOf nFs) roots) importerPkg) (Base_dSource.v_splitOnDot name)) ((B_dData_dList.v_length (Base_dSource.v_splitOnDot name)) - 1))) (fun prefixR -> (let nd_uscrut17 = prefixR in (match nd_uscrut17 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__270) -> (match dtb__270 with
+  | { B_dData_dPair.f_Pair_first = dtb__271; B_dData_dPair.f_Pair_second = dtb__272 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) modules) stack) { Frontend_dAst.f_Import_importName = dtb__271; Frontend_dAst.f_Import_importIsQualified = false; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_importSpan imp)) })) (fun modsR -> (match modsR with
+  | Base_dDiag.C_Check_ErrC (dtb__273) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__273)))
+  | Base_dDiag.C_Check_OkC (dtb__274) -> (match ((Loader_dModules.v_findModule dtb__274) dtb__271) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__268)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__275) -> (match (((Loader_dModules.v_walkNamespaceIndex dtb__274) dtb__271) ((v_nsDropLocal dtb__272) (Base_dSource.v_splitOnDot name))) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__268)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__276) -> (((((((v_loadModule nFs) (fuel - 1)) roots) importerPkg) dtb__274) stack) { Frontend_dAst.f_Import_importName = dtb__276; Frontend_dAst.f_Import_importIsQualified = true; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_importSpan imp)) })
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -531,26 +538,26 @@ and v_loadModule = (fun (nFs : string) (fuel : int) (roots : Frontend_dPackages_
 )))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__266)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__268)))
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dDiag.C_Check_OkC (dtb__275) -> (let path = (B_dData_dPair.v_firstOf dtb__275) in (let root = (B_dData_dPair.v_secondOf dtb__275) in (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Loader.Flatten") then (((dtp_log_emit 3) "Vuna.Compiler.Loader.Flatten") ("parse-module=" ^ name)) else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_parseFileWithPath nFs) path) text)) (fun parsed -> (match parsed with
-  | Base_dDiag.C_Check_ErrC (dtb__276) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__276)))
-  | Base_dDiag.C_Check_OkC (dtb__277) -> (let sf = (B_dData_dPair.v_firstOf dtb__277) in (let surface = (B_dData_dPair.v_secondOf dtb__277) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports0 = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let imports = ((v_namespaceImportsOf imports0) reexports) in (match ((v_validateModuleHeader name) hdr) with
+  | Base_dDiag.C_Check_OkC (dtb__277) -> (let path = (B_dData_dPair.v_firstOf dtb__277) in (let root = (B_dData_dPair.v_secondOf dtb__277) in (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Loader.Flatten") then (((dtp_log_emit 3) "Vuna.Compiler.Loader.Flatten") ("parse-module=" ^ name)) else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_parseFileWithPath nFs) path) text)) (fun parsed -> (match parsed with
   | Base_dDiag.C_Check_ErrC (dtb__278) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__278)))
-  | Base_dDiag.C_Check_OkC (dtb__279) -> (match ((Loader_dModules.v_validateImports name) imports) with
+  | Base_dDiag.C_Check_OkC (dtb__279) -> (let sf = (B_dData_dPair.v_firstOf dtb__279) in (let surface = (B_dData_dPair.v_secondOf dtb__279) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports0 = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let imports = ((v_namespaceImportsOf imports0) reexports) in (match ((v_validateModuleHeader name) hdr) with
   | Base_dDiag.C_Check_ErrC (dtb__280) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__280)))
-  | Base_dDiag.C_Check_OkC (dtb__281) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) roots) (Frontend_dPackages_dPkg.v_rootName root)) name) imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_OkC (dtb__281) -> (match ((Loader_dModules.v_validateImports name) imports) with
   | Base_dDiag.C_Check_ErrC (dtb__282) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__282)))
-  | Base_dDiag.C_Check_OkC (dtb__283) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) (fuel - 1)) roots) (Frontend_dPackages_dPkg.v_rootName root)) modules) (B_dData_dList.C_List__x58__x58_ (name, stack))) ((B_dData_dList.v_append imports) dtb__283))) (fun modulesR -> (match modulesR with
+  | Base_dDiag.C_Check_OkC (dtb__283) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) roots) (Frontend_dPackages_dPkg.v_rootName root)) name) imports)) (fun implicitR -> (match implicitR with
   | Base_dDiag.C_Check_ErrC (dtb__284) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__284)))
-  | Base_dDiag.C_Check_OkC (dtb__285) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__285) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_OkC (dtb__285) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) (fuel - 1)) roots) (Frontend_dPackages_dPkg.v_rootName root)) modules) (B_dData_dList.C_List__x58__x58_ (name, stack))) ((B_dData_dList.v_append imports) dtb__285))) (fun modulesR -> (match modulesR with
   | Base_dDiag.C_Check_ErrC (dtb__286) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__286)))
-  | Base_dDiag.C_Check_OkC (dtb__287) -> (match (((((((v_computeExports dtb__285) name) hdr) imports2) decls) exports) reexports) with
+  | Base_dDiag.C_Check_OkC (dtb__287) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__287) imports) in (match (v_withSelectors decls) with
   | Base_dDiag.C_Check_ErrC (dtb__288) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__288)))
-  | Base_dDiag.C_Check_OkC (dtb__289) -> (let visible = fixities in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Loader_dModules.f_Module_moduleNameOf = name; Loader_dModules.f_Module_modulePackageOf = (Frontend_dPackages_dPkg.v_rootName root); Loader_dModules.f_Module_moduleImportsOf = imports2; Loader_dModules.f_Module_moduleImplicitImportsOf = dtb__283; Loader_dModules.f_Module_moduleDeclsOf = dtb__287; Loader_dModules.f_Module_moduleExportsOf = dtb__289; Loader_dModules.f_Module_moduleFixitiesOf = visible; Loader_dModules.f_Module_moduleReexportsOf = ((B_dData_dList.v_append ((Loader_dModules.v_reexportedImportNamesOfHeader imports2) hdr)) ((Loader_dModules.v_reexportedImportNames imports2) reexports)); Loader_dModules.f_Module_moduleOpaqueOf = ((v_opaqueNamesOf name) opacity); Loader_dModules.f_Module_moduleExportIndexOf = (Loader_dModules.v_exportIndexOf dtb__289); Loader_dModules.f_Module_moduleFixFactsOf = surface }, dtb__285))))))
+  | Base_dDiag.C_Check_OkC (dtb__289) -> (match (((((((v_computeExports dtb__287) name) hdr) imports2) decls) exports) reexports) with
+  | Base_dDiag.C_Check_ErrC (dtb__290) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__290)))
+  | Base_dDiag.C_Check_OkC (dtb__291) -> (let visible = fixities in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Loader_dModules.f_Module_moduleNameOf = name; Loader_dModules.f_Module_modulePackageOf = (Frontend_dPackages_dPkg.v_rootName root); Loader_dModules.f_Module_moduleImportsOf = imports2; Loader_dModules.f_Module_moduleImplicitImportsOf = dtb__285; Loader_dModules.f_Module_moduleDeclsOf = dtb__289; Loader_dModules.f_Module_moduleExportsOf = dtb__291; Loader_dModules.f_Module_moduleFixitiesOf = visible; Loader_dModules.f_Module_moduleReexportsOf = ((B_dData_dList.v_append ((Loader_dModules.v_reexportedImportNamesOfHeader imports2) hdr)) ((Loader_dModules.v_reexportedImportNames imports2) reexports)); Loader_dModules.f_Module_moduleOpaqueOf = ((v_opaqueNamesOf name) opacity); Loader_dModules.f_Module_moduleExportIndexOf = (Loader_dModules.v_exportIndexOf dtb__291); Loader_dModules.f_Module_moduleFixFactsOf = surface }, dtb__287))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -570,22 +577,22 @@ and v_loadModule = (fun (nFs : string) (fuel : int) (roots : Frontend_dPackages_
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 757 "Vuna/Compiler/Loader/Flatten.vuna"
+# 765 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_entryScopeOf = (fun (pkg : string) (path : string) -> (let name = (((B_dData_dList.v_foldl (fun (acc : string) (seg : string) -> seg)) path) ((B_dData_dString.v_split "/") path)) in (if ((B_dData_dString.v_endsWith ".vuna") name) then (((B_dData_dString.v_substring 0) ((B_dData_dNat.v_minus (B_dData_dString.v_byteLength name)) 5)) name) else (if (name = "") then pkg else name))))
 
-# 769 "Vuna/Compiler/Loader/Flatten.vuna"
+# 777 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProjectWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (preloaded : Loader_dModules.t_Module B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) entry)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) entry)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_parseFileWithPath nFs) entry) text)) (fun parsed -> (match parsed with
-  | Base_dDiag.C_Check_ErrC (dtb__290) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__290)))
-  | Base_dDiag.C_Check_OkC (dtb__291) -> (let sf = (B_dData_dPair.v_firstOf dtb__291) in (let surface = (B_dData_dPair.v_secondOf dtb__291) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut20 = hdr in (match nd_uscrut20 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((Loader_dModules.v_validateImports "<entry>") imports) with
   | Base_dDiag.C_Check_ErrC (dtb__292) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__292)))
-  | Base_dDiag.C_Check_OkC (dtb__293) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) "") imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_OkC (dtb__293) -> (let sf = (B_dData_dPair.v_firstOf dtb__293) in (let surface = (B_dData_dPair.v_secondOf dtb__293) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut20 = hdr in (match nd_uscrut20 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((Loader_dModules.v_validateImports "<entry>") imports) with
   | Base_dDiag.C_Check_ErrC (dtb__294) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__294)))
-  | Base_dDiag.C_Check_OkC (dtb__295) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__295))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
-  | Base_dDiag.C_Check_ErrC (dtb__296) -> (Base_dDiag.C_Check_ErrC (dtb__296))
-  | Base_dDiag.C_Check_OkC (dtb__297) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__297) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_OkC (dtb__295) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) "") imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_ErrC (dtb__296) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__296)))
+  | Base_dDiag.C_Check_OkC (dtb__297) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__297))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
   | Base_dDiag.C_Check_ErrC (dtb__298) -> (Base_dDiag.C_Check_ErrC (dtb__298))
-  | Base_dDiag.C_Check_OkC (dtb__299) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = dtb__299; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__295; Loader_dModules.f_Project_projectModules = dtb__297; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = fixities; Loader_dModules.f_Project_projectEntryName = ((v_entryScopeOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) entry); Loader_dModules.f_Project_projectEntryFacts = surface })
+  | Base_dDiag.C_Check_OkC (dtb__299) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__299) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_ErrC (dtb__300) -> (Base_dDiag.C_Check_ErrC (dtb__300))
+  | Base_dDiag.C_Check_OkC (dtb__301) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = dtb__301; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__297; Loader_dModules.f_Project_projectModules = dtb__299; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = fixities; Loader_dModules.f_Project_projectEntryName = ((v_entryScopeOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) entry); Loader_dModules.f_Project_projectEntryFacts = surface })
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
@@ -594,8 +601,8 @@ let v_loadProjectWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_d
 )))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Just (dtb__300) -> (match dtb__300 with
-  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__301; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__302; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__303; Frontend_dAst.f_ModDecl_modDeclExports = dtb__304; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__305; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__306; Frontend_dAst.f_ModDecl_modDeclRef = dtb__307 } -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__307))) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleHeaderInEntryFile (entry))) entry)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__302) -> (match dtb__302 with
+  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__303; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__304; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__305; Frontend_dAst.f_ModDecl_modDeclExports = dtb__306; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__307; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__308; Frontend_dAst.f_ModDecl_modDeclRef = dtb__309 } -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiag.v_onErrDiag (Base_dDiag.v_withFallbackSpan (Frontend_dAst.v_nodeRefSpan dtb__309))) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleHeaderInEntryFile (entry))) entry)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -603,32 +610,32 @@ let v_loadProjectWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_d
   | _ -> failwith "DT: impossible branch"
 ))))) else ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_EntryFileNotFound (entry))) entry))))))
 
-# 752 "Vuna/Compiler/Loader/Flatten.vuna"
+# 760 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProject = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> ((((v_loadProjectWithPreloaded nFs) ctx) entry) B_dData_dList.C_List_Nil))
 
-# 820 "Vuna/Compiler/Loader/Flatten.vuna"
+# 828 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProjectModulesWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (preloaded : Loader_dModules.t_Module B_dData_dList.t_List) -> (let entryImports = ((B_dData_dList.v_map (fun (n : string) -> { Frontend_dAst.f_Import_importName = n; Frontend_dAst.f_Import_importIsQualified = false; Frontend_dAst.f_Import_importAlias = B_dData_dMaybe.C_Maybe_Nothing; Frontend_dAst.f_Import_importRef = Frontend_dAst.v_noNodeRef })) names) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) entryImports)) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
-  | Base_dDiag.C_Check_ErrC (dtb__308) -> (Base_dDiag.C_Check_ErrC (dtb__308))
-  | Base_dDiag.C_Check_OkC (dtb__309) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryImports = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectImplicitImports = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectModules = dtb__309; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryName = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFacts = Frontend_dCst.v_emptyFixityFacts })
+  | Base_dDiag.C_Check_ErrC (dtb__310) -> (Base_dDiag.C_Check_ErrC (dtb__310))
+  | Base_dDiag.C_Check_OkC (dtb__311) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryImports = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectImplicitImports = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectModules = dtb__311; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryName = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFacts = Frontend_dCst.v_emptyFixityFacts })
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 817 "Vuna/Compiler/Loader/Flatten.vuna"
+# 825 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProjectModules = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> ((((v_loadProjectModulesWithPreloaded nFs) ctx) names) B_dData_dList.C_List_Nil))
 
-# 839 "Vuna/Compiler/Loader/Flatten.vuna"
+# 847 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProjectSourceWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (preloaded : Loader_dModules.t_Module B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((v_parseFileWithPathMode nFs) Frontend_dParser_dSupport.C_ParseMode_PmTool) label) source)) (fun parsed -> (match parsed with
-  | Base_dDiag.C_Check_ErrC (dtb__310) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__310)))
-  | Base_dDiag.C_Check_OkC (dtb__311) -> (let sf = (B_dData_dPair.v_firstOf dtb__311) in (let surface = (B_dData_dPair.v_secondOf dtb__311) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut19 = hdr in (match nd_uscrut19 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((Loader_dModules.v_validateImports "<entry>") imports) with
   | Base_dDiag.C_Check_ErrC (dtb__312) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__312)))
-  | Base_dDiag.C_Check_OkC (dtb__313) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) "") imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_OkC (dtb__313) -> (let sf = (B_dData_dPair.v_firstOf dtb__313) in (let surface = (B_dData_dPair.v_secondOf dtb__313) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut19 = hdr in (match nd_uscrut19 with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match ((Loader_dModules.v_validateImports "<entry>") imports) with
   | Base_dDiag.C_Check_ErrC (dtb__314) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__314)))
-  | Base_dDiag.C_Check_OkC (dtb__315) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__315))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
-  | Base_dDiag.C_Check_ErrC (dtb__316) -> (Base_dDiag.C_Check_ErrC (dtb__316))
-  | Base_dDiag.C_Check_OkC (dtb__317) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__317) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_OkC (dtb__315) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) "") imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_ErrC (dtb__316) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__316)))
+  | Base_dDiag.C_Check_OkC (dtb__317) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__317))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
   | Base_dDiag.C_Check_ErrC (dtb__318) -> (Base_dDiag.C_Check_ErrC (dtb__318))
-  | Base_dDiag.C_Check_OkC (dtb__319) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = dtb__319; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__315; Loader_dModules.f_Project_projectModules = dtb__317; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = fixities; Loader_dModules.f_Project_projectEntryName = ((v_entryScopeOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) label); Loader_dModules.f_Project_projectEntryFacts = surface })
+  | Base_dDiag.C_Check_OkC (dtb__319) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__319) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_ErrC (dtb__320) -> (Base_dDiag.C_Check_ErrC (dtb__320))
+  | Base_dDiag.C_Check_OkC (dtb__321) -> ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = dtb__321; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__317; Loader_dModules.f_Project_projectModules = dtb__319; Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = fixities; Loader_dModules.f_Project_projectEntryName = ((v_entryScopeOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) label); Loader_dModules.f_Project_projectEntryFacts = surface })
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
@@ -637,8 +644,8 @@ let v_loadProjectSourceWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPack
 )))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Just (dtb__320) -> (match dtb__320 with
-  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__321; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__322; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__323; Frontend_dAst.f_ModDecl_modDeclExports = dtb__324; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__325; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__326; Frontend_dAst.f_ModDecl_modDeclRef = dtb__327 } -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleHeaderInEntrySource (label))) label))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__322) -> (match dtb__322 with
+  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__323; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__324; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__325; Frontend_dAst.f_ModDecl_modDeclExports = dtb__326; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__327; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__328; Frontend_dAst.f_ModDecl_modDeclRef = dtb__329 } -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Base_dDiagnostics_dLoader.v_ldErr1 (Base_dDiagnostics_dLoader.C_LdDiag_ModuleHeaderInEntrySource (label))) label))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -646,25 +653,25 @@ let v_loadProjectSourceWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPack
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 835 "Vuna/Compiler/Loader/Flatten.vuna"
+# 843 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadProjectSource = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((((v_loadProjectSourceWithPreloaded nFs) ctx) label) source) B_dData_dList.C_List_Nil))
 
-# 889 "Vuna/Compiler/Loader/Flatten.vuna"
+# 897 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadModuleSourceWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (preloaded : Loader_dModules.t_Module B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((v_parseFileWithPathMode nFs) Frontend_dParser_dSupport.C_ParseMode_PmTool) label) source)) (fun parsed -> (match parsed with
-  | Base_dDiag.C_Check_ErrC (dtb__328) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__328)))
-  | Base_dDiag.C_Check_OkC (dtb__329) -> (let sf = (B_dData_dPair.v_firstOf dtb__329) in (let surface = (B_dData_dPair.v_secondOf dtb__329) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports0 = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut19 = hdr in (match nd_uscrut19 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__330) -> (match dtb__330 with
-  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__331; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__332; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__333; Frontend_dAst.f_ModDecl_modDeclExports = dtb__334; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__335; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__336; Frontend_dAst.f_ModDecl_modDeclRef = dtb__337 } -> (let imports = ((v_namespaceImportsOf imports0) reexports) in (match ((Loader_dModules.v_validateImports dtb__331) imports) with
-  | Base_dDiag.C_Check_ErrC (dtb__338) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__338)))
-  | Base_dDiag.C_Check_OkC (dtb__339) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__331) imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_ErrC (dtb__330) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__330)))
+  | Base_dDiag.C_Check_OkC (dtb__331) -> (let sf = (B_dData_dPair.v_firstOf dtb__331) in (let surface = (B_dData_dPair.v_secondOf dtb__331) in (let hdr = (sf).Frontend_dAst.f_SourceFile_sourceFileModDecl in (let imports0 = (sf).Frontend_dAst.f_SourceFile_sourceFileImports in (let fixities = (sf).Frontend_dAst.f_SourceFile_sourceFileFixities in (let decls = (sf).Frontend_dAst.f_SourceFile_sourceFileDecls in (let exports = (sf).Frontend_dAst.f_SourceFile_sourceFileExports in (let reexports = (sf).Frontend_dAst.f_SourceFile_sourceFileReexports in (let opacity = (sf).Frontend_dAst.f_SourceFile_sourceFileOpacity in (let nd_uscrut19 = hdr in (match nd_uscrut19 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__332) -> (match dtb__332 with
+  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__333; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__334; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__335; Frontend_dAst.f_ModDecl_modDeclExports = dtb__336; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__337; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__338; Frontend_dAst.f_ModDecl_modDeclRef = dtb__339 } -> (let imports = ((v_namespaceImportsOf imports0) reexports) in (match ((Loader_dModules.v_validateImports dtb__333) imports) with
   | Base_dDiag.C_Check_ErrC (dtb__340) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__340)))
-  | Base_dDiag.C_Check_OkC (dtb__341) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__341))) (fun modulesR -> (match modulesR with
+  | Base_dDiag.C_Check_OkC (dtb__341) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__333) imports)) (fun implicitR -> (match implicitR with
   | Base_dDiag.C_Check_ErrC (dtb__342) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__342)))
-  | Base_dDiag.C_Check_OkC (dtb__343) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__343) imports) in (match (v_withSelectors decls) with
+  | Base_dDiag.C_Check_OkC (dtb__343) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots ctx)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) preloaded) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__343))) (fun modulesR -> (match modulesR with
   | Base_dDiag.C_Check_ErrC (dtb__344) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__344)))
-  | Base_dDiag.C_Check_OkC (dtb__345) -> (match (((((((v_computeExports dtb__343) dtb__331) hdr) imports2) decls) exports) reexports) with
+  | Base_dDiag.C_Check_OkC (dtb__345) -> (let imports2 = ((Loader_dModules.v_normalizeImports dtb__345) imports) in (match (v_withSelectors decls) with
   | Base_dDiag.C_Check_ErrC (dtb__346) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__346)))
-  | Base_dDiag.C_Check_OkC (dtb__347) -> (let visible = fixities in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__341; Loader_dModules.f_Project_projectModules = (B_dData_dList.C_List__x58__x58_ ({ Loader_dModules.f_Module_moduleNameOf = dtb__331; Loader_dModules.f_Module_modulePackageOf = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Module_moduleImportsOf = imports2; Loader_dModules.f_Module_moduleImplicitImportsOf = dtb__341; Loader_dModules.f_Module_moduleDeclsOf = dtb__345; Loader_dModules.f_Module_moduleExportsOf = dtb__347; Loader_dModules.f_Module_moduleFixitiesOf = visible; Loader_dModules.f_Module_moduleReexportsOf = ((Loader_dModules.v_reexportedImportNames imports2) ((B_dData_dList.v_append dtb__333) reexports)); Loader_dModules.f_Module_moduleOpaqueOf = ((v_opaqueNamesOf dtb__331) opacity); Loader_dModules.f_Module_moduleExportIndexOf = (Loader_dModules.v_exportIndexOf dtb__347); Loader_dModules.f_Module_moduleFixFactsOf = surface }, dtb__343)); Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryName = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFacts = Frontend_dCst.v_emptyFixityFacts })))
+  | Base_dDiag.C_Check_OkC (dtb__347) -> (match (((((((v_computeExports dtb__345) dtb__333) hdr) imports2) decls) exports) reexports) with
+  | Base_dDiag.C_Check_ErrC (dtb__348) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__348)))
+  | Base_dDiag.C_Check_OkC (dtb__349) -> (let visible = fixities in ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_withLayerCheck (Frontend_dPackages_dPkg.v_contextRoots ctx)) { Loader_dModules.f_Project_projectEntryDecls = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryImports = imports2; Loader_dModules.f_Project_projectImplicitImports = dtb__343; Loader_dModules.f_Project_projectModules = (B_dData_dList.C_List__x58__x58_ ({ Loader_dModules.f_Module_moduleNameOf = dtb__333; Loader_dModules.f_Module_modulePackageOf = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Module_moduleImportsOf = imports2; Loader_dModules.f_Module_moduleImplicitImportsOf = dtb__343; Loader_dModules.f_Module_moduleDeclsOf = dtb__347; Loader_dModules.f_Module_moduleExportsOf = dtb__349; Loader_dModules.f_Module_moduleFixitiesOf = visible; Loader_dModules.f_Module_moduleReexportsOf = ((Loader_dModules.v_reexportedImportNames imports2) ((B_dData_dList.v_append dtb__335) reexports)); Loader_dModules.f_Module_moduleOpaqueOf = ((v_opaqueNamesOf dtb__333) opacity); Loader_dModules.f_Module_moduleExportIndexOf = (Loader_dModules.v_exportIndexOf dtb__349); Loader_dModules.f_Module_moduleFixFactsOf = surface }, dtb__345)); Loader_dModules.f_Project_projectEntryPkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFixities = B_dData_dList.C_List_Nil; Loader_dModules.f_Project_projectEntryName = (Frontend_dPackages_dPkg.v_contextPackageName ctx); Loader_dModules.f_Project_projectEntryFacts = Frontend_dCst.v_emptyFixityFacts })))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -683,25 +690,25 @@ let v_loadModuleSourceWithPreloaded = (fun (nFs : string) (ctx : Frontend_dPacka
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 885 "Vuna/Compiler/Loader/Flatten.vuna"
+# 893 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_loadModuleSource = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((((v_loadModuleSourceWithPreloaded nFs) ctx) label) source) B_dData_dList.C_List_Nil))
 
-# 957 "Vuna/Compiler/Loader/Flatten.vuna"
+# 965 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_fixitiesFromParsed = (fun (nFs : string) (mc0 : Frontend_dPackages_dPkg.t_PackageContext) (mc1 : Loader_dModules.t_Module B_dData_dList.t_List) (mc2 : string) (mc3 : Frontend_dAst.t_SourceFile) -> (match mc3 with
-  | { Frontend_dAst.f_SourceFile_sourceFileModDecl = dtb__348; Frontend_dAst.f_SourceFile_sourceFileImports = dtb__349; Frontend_dAst.f_SourceFile_sourceFileFixities = dtb__350; Frontend_dAst.f_SourceFile_sourceFileDecls = dtb__351; Frontend_dAst.f_SourceFile_sourceFileExports = dtb__352; Frontend_dAst.f_SourceFile_sourceFileReexports = dtb__353; Frontend_dAst.f_SourceFile_sourceFileOpacity = dtb__354 } -> (let imports = ((v_namespaceImportsOf dtb__349) dtb__353) in (let headerNames = (let nd_uscrut15 = dtb__348 in (match nd_uscrut15 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__361) -> (match dtb__361 with
-  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__362; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__363; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__364; Frontend_dAst.f_ModDecl_modDeclExports = dtb__365; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__366; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__367; Frontend_dAst.f_ModDecl_modDeclRef = dtb__368 } -> { B_dData_dPair.f_Pair_first = dtb__362; B_dData_dPair.f_Pair_second = dtb__362 }
+  | { Frontend_dAst.f_SourceFile_sourceFileModDecl = dtb__350; Frontend_dAst.f_SourceFile_sourceFileImports = dtb__351; Frontend_dAst.f_SourceFile_sourceFileFixities = dtb__352; Frontend_dAst.f_SourceFile_sourceFileDecls = dtb__353; Frontend_dAst.f_SourceFile_sourceFileExports = dtb__354; Frontend_dAst.f_SourceFile_sourceFileReexports = dtb__355; Frontend_dAst.f_SourceFile_sourceFileOpacity = dtb__356 } -> (let imports = ((v_namespaceImportsOf dtb__351) dtb__355) in (let headerNames = (let nd_uscrut15 = dtb__350 in (match nd_uscrut15 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__363) -> (match dtb__363 with
+  | { Frontend_dAst.f_ModDecl_modDeclName = dtb__364; Frontend_dAst.f_ModDecl_modDeclHasExportList = dtb__365; Frontend_dAst.f_ModDecl_modDeclExportItems = dtb__366; Frontend_dAst.f_ModDecl_modDeclExports = dtb__367; Frontend_dAst.f_ModDecl_modDeclReexports = dtb__368; Frontend_dAst.f_ModDecl_modDeclOpacity = dtb__369; Frontend_dAst.f_ModDecl_modDeclRef = dtb__370 } -> { B_dData_dPair.f_Pair_first = dtb__364; B_dData_dPair.f_Pair_second = dtb__364 }
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dMaybe.C_Maybe_Nothing -> { B_dData_dPair.f_Pair_first = mc2; B_dData_dPair.f_Pair_second = "" }
   | _ -> failwith "DT: impossible branch"
 )) in (let diagLabel = (B_dData_dPair.v_firstOf headerNames) in (let currentName = (B_dData_dPair.v_secondOf headerNames) in (match ((Loader_dModules.v_validateImports diagLabel) imports) with
-  | Base_dDiag.C_Check_ErrC (dtb__355) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__355)))
-  | Base_dDiag.C_Check_OkC (dtb__356) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots mc0)) (Frontend_dPackages_dPkg.v_contextPackageName mc0)) currentName) imports)) (fun implicitR -> (match implicitR with
   | Base_dDiag.C_Check_ErrC (dtb__357) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__357)))
-  | Base_dDiag.C_Check_OkC (dtb__358) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots mc0)) (Frontend_dPackages_dPkg.v_contextPackageName mc0)) mc1) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__358))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
-  | Base_dDiag.C_Check_ErrC (dtb__359) -> (Base_dDiag.C_Check_ErrC (dtb__359))
-  | Base_dDiag.C_Check_OkC (dtb__360) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__360; B_dData_dPair.f_Pair_second = ((v_dedupeFixitiesOf dtb__360) dtb__350) }))
+  | Base_dDiag.C_Check_OkC (dtb__358) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_implicitPrelude nFs) (Frontend_dPackages_dPkg.v_contextRoots mc0)) (Frontend_dPackages_dPkg.v_contextPackageName mc0)) currentName) imports)) (fun implicitR -> (match implicitR with
+  | Base_dDiag.C_Check_ErrC (dtb__359) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__359)))
+  | Base_dDiag.C_Check_OkC (dtb__360) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_loadAll nFs) v_loaderFuel) (Frontend_dPackages_dPkg.v_contextRoots mc0)) (Frontend_dPackages_dPkg.v_contextPackageName mc0)) mc1) B_dData_dList.C_List_Nil) ((B_dData_dList.v_append imports) dtb__360))) (fun modulesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match modulesR with
+  | Base_dDiag.C_Check_ErrC (dtb__361) -> (Base_dDiag.C_Check_ErrC (dtb__361))
+  | Base_dDiag.C_Check_OkC (dtb__362) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__362; B_dData_dPair.f_Pair_second = ((v_dedupeFixitiesOf dtb__362) dtb__352) }))
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
@@ -711,317 +718,317 @@ let v_fixitiesFromParsed = (fun (nFs : string) (mc0 : Frontend_dPackages_dPkg.t_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 945 "Vuna/Compiler/Loader/Flatten.vuna"
+# 953 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_fixitiesForSourceIn = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (modules0 : Loader_dModules.t_Module B_dData_dList.t_List) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((v_parseFileWithPathMode nFs) Frontend_dParser_dSupport.C_ParseMode_PmTool) label) source)) (fun parsed -> (match parsed with
-  | Base_dDiag.C_Check_ErrC (dtb__369) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__369)))
-  | Base_dDiag.C_Check_OkC (dtb__370) -> (((((v_fixitiesFromParsed nFs) ctx) modules0) label) (B_dData_dPair.v_firstOf dtb__370))
+  | Base_dDiag.C_Check_ErrC (dtb__371) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__371)))
+  | Base_dDiag.C_Check_OkC (dtb__372) -> (((((v_fixitiesFromParsed nFs) ctx) modules0) label) (B_dData_dPair.v_firstOf dtb__372))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 985 "Vuna/Compiler/Loader/Flatten.vuna"
+# 993 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_fixitiesForSource = (fun (nFs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_fixitiesForSourceIn nFs) ctx) B_dData_dList.C_List_Nil) label) source)) (fun pairR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pairR with
-  | Base_dDiag.C_Check_ErrC (dtb__371) -> (Base_dDiag.C_Check_ErrC (dtb__371))
-  | Base_dDiag.C_Check_OkC (dtb__372) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_secondOf dtb__372)))
+  | Base_dDiag.C_Check_ErrC (dtb__373) -> (Base_dDiag.C_Check_ErrC (dtb__373))
+  | Base_dDiag.C_Check_OkC (dtb__374) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_secondOf dtb__374)))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 1110 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1118 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_fixityOpsOf = (fun (mc0 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__373, dtb__374) -> (B_dData_dList.C_List__x58__x58_ ((dtb__373).Frontend_dAst.f_FixityDecl_fixityOp, (v_fixityOpsOf dtb__374)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__375, dtb__376) -> (B_dData_dList.C_List__x58__x58_ ((dtb__375).Frontend_dAst.f_FixityDecl_fixityOp, (v_fixityOpsOf dtb__376)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1074 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1082 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_visibleFixityOps = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) -> ((B_dData_dList.v_concatMap (fun (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__375) -> (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__375))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__377) -> (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__377))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))) imports))
 
-# 1127 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1135 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_anyNameSuffixIn = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__376, dtb__377) -> (if (if (dtb__376 = mc0) then true else ((B_dData_dString.v_endsWith ("." ^ mc0)) dtb__376)) then true else ((v_anyNameSuffixIn mc0) dtb__377))
+  | B_dData_dList.C_List__x58__x58_ (dtb__378, dtb__379) -> (if (if (dtb__378 = mc0) then true else ((B_dData_dString.v_endsWith ("." ^ mc0)) dtb__378)) then true else ((v_anyNameSuffixIn mc0) dtb__379))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1122 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1130 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_anyOpDeclared = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__378, dtb__379) -> (if ((v_anyNameSuffixIn dtb__378) mc1) then true else ((v_anyOpDeclared dtb__379) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__380, dtb__381) -> (if ((v_anyNameSuffixIn dtb__380) mc1) then true else ((v_anyOpDeclared dtb__381) mc1))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1147 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1155 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_traitMethodNames = (fun (mc0 : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__380, dtb__381) -> (B_dData_dList.C_List__x58__x58_ ((dtb__380).Frontend_dAst.f_TraitMethod_traitMethodName, (v_traitMethodNames dtb__381)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__382, dtb__383) -> (B_dData_dList.C_List__x58__x58_ ((dtb__382).Frontend_dAst.f_TraitMethod_traitMethodName, (v_traitMethodNames dtb__383)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1137 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1145 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_definedNamesOfDecl = (fun (mc0 : Frontend_dAst.t_Decl) -> (match mc0 with
-  | Frontend_dAst.C_Decl_DFun (dtb__382, dtb__383, dtb__384, dtb__385) -> (B_dData_dList.C_List__x58__x58_ (dtb__382, B_dData_dList.C_List_Nil))
-  | Frontend_dAst.C_Decl_DExtern (dtb__386, dtb__387, dtb__388, dtb__389) -> (B_dData_dList.C_List__x58__x58_ (dtb__386, B_dData_dList.C_List_Nil))
-  | Frontend_dAst.C_Decl_DAxiom (dtb__390, dtb__391, dtb__392) -> (B_dData_dList.C_List__x58__x58_ (dtb__390, B_dData_dList.C_List_Nil))
-  | Frontend_dAst.C_Decl_DSig (dtb__393, dtb__394, dtb__395, dtb__396) -> (B_dData_dList.C_List__x58__x58_ (dtb__393, B_dData_dList.C_List_Nil))
-  | Frontend_dAst.C_Decl_DInstance (dtb__397, dtb__398, dtb__399, dtb__400) -> B_dData_dList.C_List_Nil
-  | Frontend_dAst.C_Decl_DTrait (dtb__401, dtb__402, dtb__403, dtb__404, dtb__405) -> (B_dData_dList.C_List__x58__x58_ (dtb__401, (v_traitMethodNames dtb__404)))
-  | Frontend_dAst.C_Decl_DRecord (dtb__406, dtb__407, dtb__408, dtb__409, dtb__410, dtb__411, dtb__412, dtb__413) -> (B_dData_dList.C_List__x58__x58_ (dtb__406, B_dData_dList.C_List_Nil))
-  | Frontend_dAst.C_Decl_DData (dtb__414, dtb__415, dtb__416, dtb__417, dtb__418, dtb__419, dtb__420, dtb__421, dtb__422) -> (B_dData_dList.C_List__x58__x58_ (dtb__414, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DFun (dtb__384, dtb__385, dtb__386, dtb__387) -> (B_dData_dList.C_List__x58__x58_ (dtb__384, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DExtern (dtb__388, dtb__389, dtb__390, dtb__391) -> (B_dData_dList.C_List__x58__x58_ (dtb__388, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DAxiom (dtb__392, dtb__393, dtb__394) -> (B_dData_dList.C_List__x58__x58_ (dtb__392, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DSig (dtb__395, dtb__396, dtb__397, dtb__398) -> (B_dData_dList.C_List__x58__x58_ (dtb__395, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DInstance (dtb__399, dtb__400, dtb__401, dtb__402) -> B_dData_dList.C_List_Nil
+  | Frontend_dAst.C_Decl_DTrait (dtb__403, dtb__404, dtb__405, dtb__406, dtb__407) -> (B_dData_dList.C_List__x58__x58_ (dtb__403, (v_traitMethodNames dtb__406)))
+  | Frontend_dAst.C_Decl_DRecord (dtb__408, dtb__409, dtb__410, dtb__411, dtb__412, dtb__413, dtb__414, dtb__415) -> (B_dData_dList.C_List__x58__x58_ (dtb__408, B_dData_dList.C_List_Nil))
+  | Frontend_dAst.C_Decl_DData (dtb__416, dtb__417, dtb__418, dtb__419, dtb__420, dtb__421, dtb__422, dtb__423, dtb__424) -> (B_dData_dList.C_List__x58__x58_ (dtb__416, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1133 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1141 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_definedNamesOf = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__423, dtb__424) -> ((B_dData_dList.v_append (v_definedNamesOfDecl dtb__423)) (v_definedNamesOf dtb__424))
+  | B_dData_dList.C_List__x58__x58_ (dtb__425, dtb__426) -> ((B_dData_dList.v_append (v_definedNamesOfDecl dtb__425)) (v_definedNamesOf dtb__426))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1116 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1124 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_importProvidesDeclaredFixity = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__425) -> ((v_anyOpDeclared (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__425))) (v_definedNamesOf decls))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__427) -> ((v_anyOpDeclared (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__427))) (v_definedNamesOf decls))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1151 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1159 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_anyNameIn = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__426, dtb__427) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__426) mc0) then true else ((v_anyNameIn mc0) dtb__427))
+  | B_dData_dList.C_List__x58__x58_ (dtb__428, dtb__429) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__428) mc0) then true else ((v_anyNameIn mc0) dtb__429))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1104 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1112 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_importProvidesUsedFixity = (fun (sourceNames : (string, bool) B_dContainer_dHashMap.t_HashMap) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__428) -> ((v_anyNameIn sourceNames) (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__428)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__430) -> ((v_anyNameIn sourceNames) (v_fixityOpsOf (Loader_dModules.v_moduleFixitiesOf dtb__430)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1163 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1171 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_anyInstanceDecl = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__429, dtb__430) -> (match dtb__429 with
-  | Frontend_dAst.C_Decl_DInstance (dtb__431, dtb__432, dtb__433, dtb__434) -> true
-  | _ -> (v_anyInstanceDecl dtb__430)
+  | B_dData_dList.C_List__x58__x58_ (dtb__431, dtb__432) -> (match dtb__431 with
+  | Frontend_dAst.C_Decl_DInstance (dtb__433, dtb__434, dtb__435, dtb__436) -> true
+  | _ -> (v_anyInstanceDecl dtb__432)
 )
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1157 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1165 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_moduleDeclaresInstance = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imp : Frontend_dAst.t_Import) -> (match ((Loader_dModules.v_findModule modules) (Frontend_dAst.v_importName imp)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb__435) -> (v_anyInstanceDecl (Loader_dModules.v_moduleDeclsOf dtb__435))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__437) -> (v_anyInstanceDecl (Loader_dModules.v_moduleDeclsOf dtb__437))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1171 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1179 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_importRemovalEdit = (fun (imp : Frontend_dAst.t_Import) -> { Base_dDiag.f_DiagEdit_editSpan = (Frontend_dAst.v_importSpan imp); Base_dDiag.f_DiagEdit_editNewText = "" })
 
-# 1094 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1102 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_unusedImportDiag = (fun (imp : Frontend_dAst.t_Import) -> ((Base_dDiag.v_withSuggestion { Base_dDiag.f_Suggestion_suggestionTitle = ("remove unused import " ^ (imp).Frontend_dAst.f_Import_importName); Base_dDiag.f_Suggestion_suggestionApplicability = Base_dDiag.C_Applicability_MachineApplicable; Base_dDiag.f_Suggestion_suggestionEdits = (B_dData_dList.C_List__x58__x58_ ((v_importRemovalEdit imp), B_dData_dList.C_List_Nil)) }) (((Base_dDiagnostics_dWarning.v_warnDiagAt (Frontend_dAst.v_importSpan imp)) (Base_dDiagnostics_dWarning.C_WarnErr_UnusedImport ((imp).Frontend_dAst.f_Import_importName))) (B_dData_dVec.C_Vec__x58__x58_ ((imp).Frontend_dAst.f_Import_importName, B_dData_dVec.C_Vec_Nil)))))
 
-# 1183 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1191 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_expandGlobalName = (fun (n : string) -> (let nd_uscrut1 = (Frontend_dReserved.v_classify n) in (match nd_uscrut1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__436) -> (match dtb__436 with
-  | Frontend_dReserved.C_Reserved_RsFieldSel (dtb__437, dtb__438) -> (B_dData_dList.C_List__x58__x58_ (dtb__437, B_dData_dList.C_List_Nil))
-  | Frontend_dReserved.C_Reserved_RsDoIgnore (dtb__439) -> (B_dData_dList.C_List__x58__x58_ (dtb__439, B_dData_dList.C_List_Nil))
-  | Frontend_dReserved.C_Reserved_RsDoBind (dtb__440) -> (B_dData_dList.C_List__x58__x58_ (dtb__440, B_dData_dList.C_List_Nil))
-  | Frontend_dReserved.C_Reserved_RsOverCtor (dtb__441, dtb__442) -> dtb__442
+  | B_dData_dMaybe.C_Maybe_Just (dtb__438) -> (match dtb__438 with
+  | Frontend_dReserved.C_Reserved_RsFieldSel (dtb__439, dtb__440) -> (B_dData_dList.C_List__x58__x58_ (dtb__439, B_dData_dList.C_List_Nil))
+  | Frontend_dReserved.C_Reserved_RsDoIgnore (dtb__441) -> (B_dData_dList.C_List__x58__x58_ (dtb__441, B_dData_dList.C_List_Nil))
+  | Frontend_dReserved.C_Reserved_RsDoBind (dtb__442) -> (B_dData_dList.C_List__x58__x58_ (dtb__442, B_dData_dList.C_List_Nil))
+  | Frontend_dReserved.C_Reserved_RsOverCtor (dtb__443, dtb__444) -> dtb__444
   | _ -> (B_dData_dList.C_List__x58__x58_ (n, B_dData_dList.C_List_Nil))
 )
   | _ -> (B_dData_dList.C_List__x58__x58_ (n, B_dData_dList.C_List_Nil))
 )))
 
-# 1194 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1202 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_exportTargetOf = (fun (e : Loader_dModules.t_ExportEntry) -> (e).Loader_dModules.f_ExportEntry_target)
 
-# 1198 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1206 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_anyTargetIn = (fun (mc0 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__443, dtb__444) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__443) mc0) then true else ((v_anyTargetIn mc0) dtb__444))
+  | B_dData_dList.C_List__x58__x58_ (dtb__445, dtb__446) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__445) mc0) then true else ((v_anyTargetIn mc0) dtb__446))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1083 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1091 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_unusedImportWarningsGo = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) (mc3 : Frontend_dAst.t_Decl B_dData_dList.t_List) (mc4 : string B_dData_dList.t_List) (mc5 : Frontend_dAst.t_Import B_dData_dList.t_List) -> (match mc5 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__445, dtb__446) -> ((Base_dCommon.v_bind ((Loader_dModules.v_exportsOf mc0) (Frontend_dAst.v_importName dtb__445))) (fun (es : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (let used = (if (if (if (if ((B_dData_dList.v_memName (Frontend_dAst.v_importName dtb__445)) mc4) then true else ((v_anyTargetIn mc1) ((B_dData_dList.v_map v_exportTargetOf) es))) then true else (((v_importProvidesUsedFixity mc2) mc0) dtb__445)) then true else (((v_importProvidesDeclaredFixity mc3) mc0) dtb__445)) then true else ((v_moduleDeclaresInstance mc0) dtb__445)) in ((Base_dCommon.v_bind ((((((v_unusedImportWarningsGo mc0) mc1) mc2) mc3) mc4) dtb__446)) (fun (more : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((if used then more else (B_dData_dList.C_List__x58__x58_ ((v_unusedImportDiag dtb__445), more))))))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__447, dtb__448) -> ((Base_dCommon.v_bind ((Loader_dModules.v_exportsOf mc0) (Frontend_dAst.v_importName dtb__447))) (fun (es : Loader_dModules.t_ExportEntry B_dData_dList.t_List) -> (let used = (if (if (if (if ((B_dData_dList.v_memName (Frontend_dAst.v_importName dtb__447)) mc4) then true else ((v_anyTargetIn mc1) ((B_dData_dList.v_map v_exportTargetOf) es))) then true else (((v_importProvidesUsedFixity mc2) mc0) dtb__447)) then true else (((v_importProvidesDeclaredFixity mc3) mc0) dtb__447)) then true else ((v_moduleDeclaresInstance mc0) dtb__447)) in ((Base_dCommon.v_bind ((((((v_unusedImportWarningsGo mc0) mc1) mc2) mc3) mc4) dtb__448)) (fun (more : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((if used then more else (B_dData_dList.C_List__x58__x58_ ((v_unusedImportDiag dtb__447), more))))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1234 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1242 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_patRefNamesGo = (fun (mc0 : Frontend_dAst.t_Pat) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | Frontend_dAst.C_Pat_PRecord (dtb__447, dtb__448, dtb__449) -> ((v_fieldPatsGo dtb__448) (B_dData_dList.C_List__x58__x58_ (dtb__447, mc1)))
-  | Frontend_dAst.C_Pat_PStr (dtb__450, dtb__451) -> mc1
-  | Frontend_dAst.C_Pat_PInt (dtb__452, dtb__453) -> mc1
-  | Frontend_dAst.C_Pat_PCon (dtb__454, dtb__455, dtb__456) -> ((v_patRefNamesListGo dtb__455) (B_dData_dList.C_List__x58__x58_ (dtb__454, mc1)))
-  | Frontend_dAst.C_Pat_PWild (dtb__457) -> mc1
-  | Frontend_dAst.C_Pat_PAs (dtb__458, dtb__459, dtb__460) -> ((v_patRefNamesGo dtb__459) mc1)
-  | Frontend_dAst.C_Pat_PVar (dtb__461, dtb__462) -> mc1
+  | Frontend_dAst.C_Pat_PRecord (dtb__449, dtb__450, dtb__451) -> ((v_fieldPatsGo dtb__450) (B_dData_dList.C_List__x58__x58_ (dtb__449, mc1)))
+  | Frontend_dAst.C_Pat_PStr (dtb__452, dtb__453) -> mc1
+  | Frontend_dAst.C_Pat_PInt (dtb__454, dtb__455) -> mc1
+  | Frontend_dAst.C_Pat_PCon (dtb__456, dtb__457, dtb__458) -> ((v_patRefNamesListGo dtb__457) (B_dData_dList.C_List__x58__x58_ (dtb__456, mc1)))
+  | Frontend_dAst.C_Pat_PWild (dtb__459) -> mc1
+  | Frontend_dAst.C_Pat_PAs (dtb__460, dtb__461, dtb__462) -> ((v_patRefNamesGo dtb__461) mc1)
+  | Frontend_dAst.C_Pat_PVar (dtb__463, dtb__464) -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1243 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1251 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_patRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Pat B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__463, dtb__464) -> ((v_patRefNamesListGo dtb__464) ((v_patRefNamesGo dtb__463) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__465, dtb__466) -> ((v_patRefNamesListGo dtb__466) ((v_patRefNamesGo dtb__465) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1247 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1255 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_fieldPatsGo = (fun (mc0 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__465, dtb__466) -> ((v_fieldPatsGo dtb__466) ((v_patRefNamesGo (B_dData_dPair.v_secondOf dtb__465)) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__467, dtb__468) -> ((v_fieldPatsGo dtb__468) ((v_patRefNamesGo (B_dData_dPair.v_secondOf dtb__467)) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1231 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1239 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_patRefNames = (fun (p : Frontend_dAst.t_Pat) -> ((v_patRefNamesGo p) B_dData_dList.C_List_Nil))
 
-# 1258 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1266 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_exprRefNamesGo = (fun (mc0 : Frontend_dAst.t_Expr) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | Frontend_dAst.C_Expr_EInterp (dtb__467, dtb__468) -> ((v_interpPartRefNamesListGo dtb__467) mc1)
-  | Frontend_dAst.C_Expr_EDo (dtb__469, dtb__470) -> ((v_doStmtRefNamesListGo dtb__469) mc1)
-  | Frontend_dAst.C_Expr_ERecUpdate (dtb__471, dtb__472, dtb__473) -> ((v_exprRefNamesGo dtb__471) ((v_fieldExprsGo dtb__472) mc1))
-  | Frontend_dAst.C_Expr_ERecord (dtb__474, dtb__475, dtb__476) -> ((v_fieldExprsGo dtb__475) (B_dData_dList.C_List__x58__x58_ (dtb__474, mc1)))
-  | Frontend_dAst.C_Expr_EField (dtb__477, dtb__478, dtb__479) -> ((v_exprRefNamesGo dtb__477) mc1)
-  | Frontend_dAst.C_Expr_EIf (dtb__480, dtb__481, dtb__482, dtb__483) -> ((v_exprRefNamesGo dtb__480) ((v_exprRefNamesGo dtb__481) ((v_exprRefNamesGo dtb__482) mc1)))
-  | Frontend_dAst.C_Expr_ECase (dtb__484, dtb__485, dtb__486) -> ((v_exprRefNamesGo dtb__484) ((v_altRefNamesListGo dtb__485) mc1))
-  | Frontend_dAst.C_Expr_ELet (dtb__487, dtb__488, dtb__489, dtb__490) -> ((v_exprRefNamesGo dtb__488) ((v_bindRefNamesListGo dtb__487) mc1))
-  | Frontend_dAst.C_Expr_EPi (dtb__491, dtb__492, dtb__493, dtb__494, dtb__495, dtb__496) -> ((v_exprRefNamesGo dtb__494) ((v_exprRefNamesGo dtb__495) mc1))
-  | Frontend_dAst.C_Expr_EApp (dtb__497, dtb__498, dtb__499) -> ((v_exprRefNamesGo dtb__497) ((v_exprRefNamesListGo dtb__498) mc1))
-  | Frontend_dAst.C_Expr_ELam (dtb__500, dtb__501, dtb__502) -> ((v_exprRefNamesGo dtb__501) mc1)
-  | Frontend_dAst.C_Expr_EFloat (dtb__503, dtb__504) -> mc1
-  | Frontend_dAst.C_Expr_EStr (dtb__505, dtb__506) -> mc1
-  | Frontend_dAst.C_Expr_EInt (dtb__507, dtb__508) -> mc1
-  | Frontend_dAst.C_Expr_EVar (dtb__509, dtb__510) -> (B_dData_dList.C_List__x58__x58_ (dtb__509, mc1))
+  | Frontend_dAst.C_Expr_EInterp (dtb__469, dtb__470) -> ((v_interpPartRefNamesListGo dtb__469) mc1)
+  | Frontend_dAst.C_Expr_EDo (dtb__471, dtb__472) -> ((v_doStmtRefNamesListGo dtb__471) mc1)
+  | Frontend_dAst.C_Expr_ERecUpdate (dtb__473, dtb__474, dtb__475) -> ((v_exprRefNamesGo dtb__473) ((v_fieldExprsGo dtb__474) mc1))
+  | Frontend_dAst.C_Expr_ERecord (dtb__476, dtb__477, dtb__478) -> ((v_fieldExprsGo dtb__477) (B_dData_dList.C_List__x58__x58_ (dtb__476, mc1)))
+  | Frontend_dAst.C_Expr_EField (dtb__479, dtb__480, dtb__481) -> ((v_exprRefNamesGo dtb__479) mc1)
+  | Frontend_dAst.C_Expr_EIf (dtb__482, dtb__483, dtb__484, dtb__485) -> ((v_exprRefNamesGo dtb__482) ((v_exprRefNamesGo dtb__483) ((v_exprRefNamesGo dtb__484) mc1)))
+  | Frontend_dAst.C_Expr_ECase (dtb__486, dtb__487, dtb__488) -> ((v_exprRefNamesGo dtb__486) ((v_altRefNamesListGo dtb__487) mc1))
+  | Frontend_dAst.C_Expr_ELet (dtb__489, dtb__490, dtb__491, dtb__492) -> ((v_exprRefNamesGo dtb__490) ((v_bindRefNamesListGo dtb__489) mc1))
+  | Frontend_dAst.C_Expr_EPi (dtb__493, dtb__494, dtb__495, dtb__496, dtb__497, dtb__498) -> ((v_exprRefNamesGo dtb__496) ((v_exprRefNamesGo dtb__497) mc1))
+  | Frontend_dAst.C_Expr_EApp (dtb__499, dtb__500, dtb__501) -> ((v_exprRefNamesGo dtb__499) ((v_exprRefNamesListGo dtb__500) mc1))
+  | Frontend_dAst.C_Expr_ELam (dtb__502, dtb__503, dtb__504) -> ((v_exprRefNamesGo dtb__503) mc1)
+  | Frontend_dAst.C_Expr_EFloat (dtb__505, dtb__506) -> mc1
+  | Frontend_dAst.C_Expr_EStr (dtb__507, dtb__508) -> mc1
+  | Frontend_dAst.C_Expr_EInt (dtb__509, dtb__510) -> mc1
+  | Frontend_dAst.C_Expr_EVar (dtb__511, dtb__512) -> (B_dData_dList.C_List__x58__x58_ (dtb__511, mc1))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1275 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1283 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_exprRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Expr B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__511, dtb__512) -> ((v_exprRefNamesListGo dtb__512) ((v_exprRefNamesGo dtb__511) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__513, dtb__514) -> ((v_exprRefNamesListGo dtb__514) ((v_exprRefNamesGo dtb__513) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1279 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1287 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_fieldExprsGo = (fun (mc0 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__513, dtb__514) -> ((v_fieldExprsGo dtb__514) ((v_exprRefNamesGo (B_dData_dPair.v_secondOf dtb__513)) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__515, dtb__516) -> ((v_fieldExprsGo dtb__516) ((v_exprRefNamesGo (B_dData_dPair.v_secondOf dtb__515)) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1284 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1292 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_bindRefNamesGo = (fun (b : Frontend_dAst.t_Binding) (acc : string B_dData_dList.t_List) -> ((v_patRefNamesGo (b).Frontend_dAst.f_Binding_bindPat) ((v_bindingValueRefNames (b).Frontend_dAst.f_Binding_bindValue) ((v_bindingSigRefNames (b).Frontend_dAst.f_Binding_bindSig) acc))))
-# 1289 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1297 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_bindingValueRefNames = (fun (mc0 : Frontend_dAst.t_BindingValue) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | Frontend_dAst.C_BindingValue_BClauses (dtb__515) -> ((v_clauseRefNamesListGo dtb__515) mc1)
-  | Frontend_dAst.C_BindingValue_BVal (dtb__516) -> ((v_exprRefNamesGo dtb__516) mc1)
+  | Frontend_dAst.C_BindingValue_BClauses (dtb__517) -> ((v_clauseRefNamesListGo dtb__517) mc1)
+  | Frontend_dAst.C_BindingValue_BVal (dtb__518) -> ((v_exprRefNamesGo dtb__518) mc1)
   | _ -> failwith "DT: impossible branch"
 ))
-# 1294 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1302 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_bindingSigRefNames = (fun (mc0 : Frontend_dAst.t_BindingSig B_dData_dMaybe.t_Maybe) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__517) -> ((v_exprRefNamesGo (dtb__517).Frontend_dAst.f_BindingSig_sigType) mc1)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__519) -> ((v_exprRefNamesGo (dtb__519).Frontend_dAst.f_BindingSig_sigType) mc1)
   | B_dData_dMaybe.C_Maybe_Nothing -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1298 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_bindRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Binding B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__518, dtb__519) -> ((v_bindRefNamesListGo dtb__519) ((v_bindRefNamesGo dtb__518) mc1))
-  | B_dData_dList.C_List_Nil -> mc1
-  | _ -> failwith "DT: impossible branch"
-))
-# 1303 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_altRefNamesGo = (fun (alt : Frontend_dAst.t_Alt) (acc : string B_dData_dList.t_List) -> ((v_patRefNamesGo (alt).Frontend_dAst.f_Alt_altPat) ((v_exprRefNamesGo (alt).Frontend_dAst.f_Alt_altBody) acc)))
 # 1306 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_altRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Alt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__520, dtb__521) -> ((v_altRefNamesListGo dtb__521) ((v_altRefNamesGo dtb__520) mc1))
+and v_bindRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Binding B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__520, dtb__521) -> ((v_bindRefNamesListGo dtb__521) ((v_bindRefNamesGo dtb__520) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 1311 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_clauseRefNamesGo = (fun (clause : Frontend_dAst.t_LocalClause) (acc : string B_dData_dList.t_List) -> ((v_patRefNamesListGo (clause).Frontend_dAst.f_LocalClause_lcPats) ((v_exprRefNamesGo (clause).Frontend_dAst.f_LocalClause_lcBody) acc)))
+and v_altRefNamesGo = (fun (alt : Frontend_dAst.t_Alt) (acc : string B_dData_dList.t_List) -> ((v_patRefNamesGo (alt).Frontend_dAst.f_Alt_altPat) ((v_exprRefNamesGo (alt).Frontend_dAst.f_Alt_altBody) acc)))
 # 1314 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_clauseRefNamesListGo = (fun (mc0 : Frontend_dAst.t_LocalClause B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__522, dtb__523) -> ((v_clauseRefNamesListGo dtb__523) ((v_clauseRefNamesGo dtb__522) mc1))
+and v_altRefNamesListGo = (fun (mc0 : Frontend_dAst.t_Alt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__522, dtb__523) -> ((v_altRefNamesListGo dtb__523) ((v_altRefNamesGo dtb__522) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 1319 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_doStmtRefNamesGo = (fun (mc0 : Frontend_dAst.t_DoStmt) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | Frontend_dAst.C_DoStmt_DLet (dtb__524, dtb__525) -> ((v_bindRefNamesListGo dtb__524) mc1)
-  | Frontend_dAst.C_DoStmt_DExpr (dtb__526, dtb__527) -> ((v_exprRefNamesGo dtb__526) mc1)
-  | Frontend_dAst.C_DoStmt_DBind (dtb__528, dtb__529, dtb__530) -> ((v_patRefNamesGo dtb__528) ((v_exprRefNamesGo dtb__529) mc1))
-  | _ -> failwith "DT: impossible branch"
-))
-# 1324 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_doStmtRefNamesListGo = (fun (mc0 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__531, dtb__532) -> ((v_doStmtRefNamesListGo dtb__532) ((v_doStmtRefNamesGo dtb__531) mc1))
+and v_clauseRefNamesGo = (fun (clause : Frontend_dAst.t_LocalClause) (acc : string B_dData_dList.t_List) -> ((v_patRefNamesListGo (clause).Frontend_dAst.f_LocalClause_lcPats) ((v_exprRefNamesGo (clause).Frontend_dAst.f_LocalClause_lcBody) acc)))
+# 1322 "Vuna/Compiler/Loader/Flatten.vuna"
+and v_clauseRefNamesListGo = (fun (mc0 : Frontend_dAst.t_LocalClause B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__524, dtb__525) -> ((v_clauseRefNamesListGo dtb__525) ((v_clauseRefNamesGo dtb__524) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 1329 "Vuna/Compiler/Loader/Flatten.vuna"
-and v_interpPartRefNamesGo = (fun (mc0 : Frontend_dAst.t_InterpPart) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | Frontend_dAst.C_InterpPart_IPHole (dtb__533) -> ((v_exprRefNamesGo dtb__533) mc1)
-  | Frontend_dAst.C_InterpPart_IPText (dtb__534) -> mc1
+# 1327 "Vuna/Compiler/Loader/Flatten.vuna"
+and v_doStmtRefNamesGo = (fun (mc0 : Frontend_dAst.t_DoStmt) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | Frontend_dAst.C_DoStmt_DLet (dtb__526, dtb__527) -> ((v_bindRefNamesListGo dtb__526) mc1)
+  | Frontend_dAst.C_DoStmt_DExpr (dtb__528, dtb__529) -> ((v_exprRefNamesGo dtb__528) mc1)
+  | Frontend_dAst.C_DoStmt_DBind (dtb__530, dtb__531, dtb__532) -> ((v_patRefNamesGo dtb__530) ((v_exprRefNamesGo dtb__531) mc1))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1333 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1332 "Vuna/Compiler/Loader/Flatten.vuna"
+and v_doStmtRefNamesListGo = (fun (mc0 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__533, dtb__534) -> ((v_doStmtRefNamesListGo dtb__534) ((v_doStmtRefNamesGo dtb__533) mc1))
+  | B_dData_dList.C_List_Nil -> mc1
+  | _ -> failwith "DT: impossible branch"
+))
+# 1337 "Vuna/Compiler/Loader/Flatten.vuna"
+and v_interpPartRefNamesGo = (fun (mc0 : Frontend_dAst.t_InterpPart) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | Frontend_dAst.C_InterpPart_IPHole (dtb__535) -> ((v_exprRefNamesGo dtb__535) mc1)
+  | Frontend_dAst.C_InterpPart_IPText (dtb__536) -> mc1
+  | _ -> failwith "DT: impossible branch"
+))
+# 1341 "Vuna/Compiler/Loader/Flatten.vuna"
 and v_interpPartRefNamesListGo = (fun (mc0 : Frontend_dAst.t_InterpPart B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__535, dtb__536) -> ((v_interpPartRefNamesListGo dtb__536) ((v_interpPartRefNamesGo dtb__535) mc1))
+  | B_dData_dList.C_List__x58__x58_ (dtb__537, dtb__538) -> ((v_interpPartRefNamesListGo dtb__538) ((v_interpPartRefNamesGo dtb__537) mc1))
   | B_dData_dList.C_List_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1255 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1263 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_exprRefNames = (fun (e : Frontend_dAst.t_Expr) -> ((v_exprRefNamesGo e) B_dData_dList.C_List_Nil))
 
-# 1219 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1227 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_ctorRefNames = (fun (c : Frontend_dAst.t_Ctor) -> (v_exprRefNames (c).Frontend_dAst.f_Ctor_ctorType))
 
-# 1223 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1231 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_fieldRefNames = (fun (f : Frontend_dAst.t_Field) -> (v_exprRefNames (f).Frontend_dAst.f_Field_fieldType))
 
-# 1227 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1235 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_traitMethodRefNames = (fun (m : Frontend_dAst.t_TraitMethod) -> (v_exprRefNames (m).Frontend_dAst.f_TraitMethod_traitMethodType))
 
-# 1204 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1212 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_declRefNames = (fun (mc0 : Frontend_dAst.t_Decl) -> (match mc0 with
-  | Frontend_dAst.C_Decl_DFun (dtb__537, dtb__538, dtb__539, dtb__540) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_patRefNames) dtb__538)) (v_exprRefNames dtb__539))
-  | Frontend_dAst.C_Decl_DExtern (dtb__541, dtb__542, dtb__543, dtb__544) -> (v_exprRefNames dtb__543)
-  | Frontend_dAst.C_Decl_DAxiom (dtb__545, dtb__546, dtb__547) -> (v_exprRefNames dtb__546)
-  | Frontend_dAst.C_Decl_DSig (dtb__548, dtb__549, dtb__550, dtb__551) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__549)) (v_exprRefNames dtb__550))
-  | Frontend_dAst.C_Decl_DInstance (dtb__552, dtb__553, dtb__554, dtb__555) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__552)) ((B_dData_dList.v_append (v_exprRefNames dtb__553)) ((B_dData_dList.v_concatMap v_declRefNames) dtb__554)))
-  | Frontend_dAst.C_Decl_DTrait (dtb__556, dtb__557, dtb__558, dtb__559, dtb__560) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__558)) ((B_dData_dList.v_concatMap v_traitMethodRefNames) dtb__559))
-  | Frontend_dAst.C_Decl_DRecord (dtb__561, dtb__562, dtb__563, dtb__564, dtb__565, dtb__566, dtb__567, dtb__568) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_fieldRefNames) dtb__563)) dtb__564)
-  | Frontend_dAst.C_Decl_DData (dtb__569, dtb__570, dtb__571, dtb__572, dtb__573, dtb__574, dtb__575, dtb__576, dtb__577) -> ((B_dData_dList.v_append (v_exprRefNames dtb__571)) ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_ctorRefNames) dtb__572)) dtb__573))
+  | Frontend_dAst.C_Decl_DFun (dtb__539, dtb__540, dtb__541, dtb__542) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_patRefNames) dtb__540)) (v_exprRefNames dtb__541))
+  | Frontend_dAst.C_Decl_DExtern (dtb__543, dtb__544, dtb__545, dtb__546) -> (v_exprRefNames dtb__545)
+  | Frontend_dAst.C_Decl_DAxiom (dtb__547, dtb__548, dtb__549) -> (v_exprRefNames dtb__548)
+  | Frontend_dAst.C_Decl_DSig (dtb__550, dtb__551, dtb__552, dtb__553) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__551)) (v_exprRefNames dtb__552))
+  | Frontend_dAst.C_Decl_DInstance (dtb__554, dtb__555, dtb__556, dtb__557) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__554)) ((B_dData_dList.v_append (v_exprRefNames dtb__555)) ((B_dData_dList.v_concatMap v_declRefNames) dtb__556)))
+  | Frontend_dAst.C_Decl_DTrait (dtb__558, dtb__559, dtb__560, dtb__561, dtb__562) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_exprRefNames) dtb__560)) ((B_dData_dList.v_concatMap v_traitMethodRefNames) dtb__561))
+  | Frontend_dAst.C_Decl_DRecord (dtb__563, dtb__564, dtb__565, dtb__566, dtb__567, dtb__568, dtb__569, dtb__570) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_fieldRefNames) dtb__565)) dtb__566)
+  | Frontend_dAst.C_Decl_DData (dtb__571, dtb__572, dtb__573, dtb__574, dtb__575, dtb__576, dtb__577, dtb__578, dtb__579) -> ((B_dData_dList.v_append (v_exprRefNames dtb__573)) ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_ctorRefNames) dtb__574)) dtb__575))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1176 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1184 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_declGlobalNames = (fun (d : Frontend_dAst.t_Decl) -> ((B_dData_dList.v_concatMap v_expandGlobalName) (v_declRefNames d)))
 
-# 1045 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1053 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_unusedImportWarnings = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (imports : Frontend_dAst.t_Import B_dData_dList.t_List) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) (sourceDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (reexports : string B_dData_dList.t_List) -> ((Base_dObs.v_obsCheck "vuna.resolve.warn.names") (fun (_u : int) -> (let sourceRefs = ((B_dData_dList.v_concatMap v_declRefNames) sourceDecls) in (let interpRef = (if ((B_dData_dList.v_memName "interp") sourceRefs) then true else ((B_dData_dList.v_memName Base_dIntrinsics.v_interpMethodName) sourceRefs)) in (let names0 = ((B_dData_dList.v_concatMap v_declGlobalNames) decls) in (let names = (if interpRef then names0 else ((B_dData_dList.v_filter (fun (n : string) -> (n <> Base_dIntrinsics.v_interpMethodName))) names0)) in (let nameSet = (B_dContainer_dHashMap.v_ofNames names) in (let fixitySet = (B_dContainer_dHashMap.v_ofNames ((v_visibleFixityOps modules) imports)) in ((Base_dObs.v_obsCheck "vuna.resolve.warn.sources") (fun (_u : int) -> ((Base_dObs.v_obsCheck "vuna.resolve.warn.imports") (fun (_u : int) -> (let sourceNames = (B_dContainer_dHashMap.v_ofNames ((B_dData_dList.v_filter (fun (n : string) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) n) fixitySet))) sourceRefs)) in ((((((v_unusedImportWarningsGo modules) nameSet) sourceNames) decls) reexports) imports)))))))))))))))
 
-# 1031 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1039 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_resolveModuleGo = (fun (release : bool) (m : Loader_dModules.t_Module) (rest : Loader_dModules.t_Module B_dData_dList.t_List) (declsR : Frontend_dAst.t_Decl B_dData_dList.t_List Base_dDiag.t_Check) -> ((Base_dCommon.v_bind declsR) (fun (decls3 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (let modules2 = (B_dData_dList.C_List__x58__x58_ ({ Loader_dModules.f_Module_moduleNameOf = (Loader_dModules.v_moduleNameOf m); Loader_dModules.f_Module_modulePackageOf = (Loader_dModules.v_modulePackageOf m); Loader_dModules.f_Module_moduleImportsOf = (m).Loader_dModules.f_Module_moduleImportsOf; Loader_dModules.f_Module_moduleImplicitImportsOf = (m).Loader_dModules.f_Module_moduleImplicitImportsOf; Loader_dModules.f_Module_moduleDeclsOf = decls3; Loader_dModules.f_Module_moduleExportsOf = (m).Loader_dModules.f_Module_moduleExportsOf; Loader_dModules.f_Module_moduleFixitiesOf = (Loader_dModules.v_moduleFixitiesOf m); Loader_dModules.f_Module_moduleReexportsOf = (Loader_dModules.v_moduleReexportsOf m); Loader_dModules.f_Module_moduleOpaqueOf = (Loader_dModules.v_moduleOpaqueOf m); Loader_dModules.f_Module_moduleExportIndexOf = (m).Loader_dModules.f_Module_moduleExportIndexOf; Loader_dModules.f_Module_moduleFixFactsOf = (m).Loader_dModules.f_Module_moduleFixFactsOf }, rest)) in (let ns = ((Base_dObs.v_obsPure "vuna.resolve.ns") (fun (_u : int) -> ((((Loader_dResolve.v_namespacesOfWith release) modules2) decls3) (Loader_dModules.v_moduleAllImportsOf m)))) in ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.module") (fun (_u : int) -> ((((((Loader_dResolve.v_resolveProgram modules2) (Loader_dModules.v_moduleNameOf m)) (Loader_dModules.v_moduleNameOf m)) ns) (Loader_dModules.v_moduleAllImportsOf m)) decls3)))) (fun (d1 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.warn") (fun (_u : int) -> (((((v_unusedImportWarnings modules2) (m).Loader_dModules.f_Module_moduleImportsOf) d1) decls3) (Loader_dModules.v_moduleReexportsOf m))))) (fun (warns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { Loader_dModules.f_Module_moduleNameOf = (Loader_dModules.v_moduleNameOf m); Loader_dModules.f_Module_modulePackageOf = (Loader_dModules.v_modulePackageOf m); Loader_dModules.f_Module_moduleImportsOf = (m).Loader_dModules.f_Module_moduleImportsOf; Loader_dModules.f_Module_moduleImplicitImportsOf = (m).Loader_dModules.f_Module_moduleImplicitImportsOf; Loader_dModules.f_Module_moduleDeclsOf = d1; Loader_dModules.f_Module_moduleExportsOf = (m).Loader_dModules.f_Module_moduleExportsOf; Loader_dModules.f_Module_moduleFixitiesOf = (Loader_dModules.v_moduleFixitiesOf m); Loader_dModules.f_Module_moduleReexportsOf = (Loader_dModules.v_moduleReexportsOf m); Loader_dModules.f_Module_moduleOpaqueOf = (Loader_dModules.v_moduleOpaqueOf m); Loader_dModules.f_Module_moduleExportIndexOf = (m).Loader_dModules.f_Module_moduleExportIndexOf; Loader_dModules.f_Module_moduleFixFactsOf = (m).Loader_dModules.f_Module_moduleFixFactsOf }; B_dData_dPair.f_Pair_second = warns })))))))))))
 
-# 1017 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1025 "Vuna/Compiler/Loader/Flatten.vuna"
 let rec v_resolveModulesKeep = (fun (mc0 : bool) (mc1 : string B_dData_dList.t_List) (mc2 : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) (mc3 : Loader_dModules.t_Module B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__578, dtb__579) -> (if ((B_dData_dList.v_memName (Loader_dModules.v_moduleNameOf dtb__578)) mc1) then ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) mc2) dtb__579)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__578, (B_dData_dPair.v_firstOf p2))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p2) })))) else ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.reorder") (fun (_u : int) -> ((Loader_dFixity.v_reorderProgram ((Loader_dFixity.v_tableOf (dtb__578).Loader_dModules.f_Module_moduleFixFactsOf) mc2)) (Loader_dModules.v_moduleDeclsOf dtb__578))))) (fun (decls2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_resolveModuleGo mc0) dtb__578) dtb__579) ((Base_dObs.v_obsCheck "vuna.resolve.expand") (fun (_u : int) -> ((Loader_dExpand.v_expandDecls (Loader_dModules.v_moduleNameOf dtb__578)) decls2))))) (fun (p : (Loader_dModules.t_Module, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) mc2) dtb__579)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((B_dData_dPair.v_firstOf p), (B_dData_dPair.v_firstOf p2))); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dPair.v_secondOf p2)) })))))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__580, dtb__581) -> (if ((B_dData_dList.v_memName (Loader_dModules.v_moduleNameOf dtb__580)) mc1) then ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) mc2) dtb__581)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb__580, (B_dData_dPair.v_firstOf p2))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p2) })))) else ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.reorder") (fun (_u : int) -> ((Loader_dFixity.v_reorderProgram ((Loader_dFixity.v_tableOf (dtb__580).Loader_dModules.f_Module_moduleFixFactsOf) mc2)) (Loader_dModules.v_moduleDeclsOf dtb__580))))) (fun (decls2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_resolveModuleGo mc0) dtb__580) dtb__581) ((Base_dObs.v_obsCheck "vuna.resolve.expand") (fun (_u : int) -> ((Loader_dExpand.v_expandDecls (Loader_dModules.v_moduleNameOf dtb__580)) decls2))))) (fun (p : (Loader_dModules.t_Module, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) mc2) dtb__581)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((B_dData_dPair.v_firstOf p), (B_dData_dPair.v_firstOf p2))); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dPair.v_secondOf p2)) })))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1009 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1017 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_resolveProjectKeeping = (fun (mc0 : bool) (mc1 : string B_dData_dList.t_List) (mc2 : Loader_dModules.t_Project) -> (match mc2 with
-  | { Loader_dModules.f_Project_projectEntryDecls = dtb__580; Loader_dModules.f_Project_projectEntryImports = dtb__581; Loader_dModules.f_Project_projectImplicitImports = dtb__582; Loader_dModules.f_Project_projectModules = dtb__583; Loader_dModules.f_Project_projectEntryPkg = dtb__584; Loader_dModules.f_Project_projectEntryFixities = dtb__585; Loader_dModules.f_Project_projectEntryName = dtb__586; Loader_dModules.f_Project_projectEntryFacts = dtb__587 } -> (let projectFixities = ((v_dedupeFixitiesOf dtb__583) dtb__585) in ((Base_dCommon.v_bind (Loader_dFixity.v_checkUniqueFixities projectFixities)) (fun (fixes : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.reorder") (fun (_u : int) -> ((Loader_dFixity.v_reorderProgram ((Loader_dFixity.v_tableOf dtb__587) fixes)) dtb__580)))) (fun (decls2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.expand") (fun (_u : int) -> ((Loader_dExpand.v_expandDecls dtb__586) decls2)))) (fun (decls3 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.entry") (fun (_u : int) -> (((((Loader_dResolve.v_resolveEntry mc0) dtb__583) dtb__584) ((B_dData_dList.v_append dtb__581) dtb__582)) decls3)))) (fun (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.warn") (fun (_u : int) -> (((((v_unusedImportWarnings dtb__583) dtb__581) entryDecls) decls3) B_dData_dList.C_List_Nil)))) (fun (entryWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) fixes) dtb__583)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append entryWarns) (B_dData_dPair.v_secondOf p2)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = entryDecls; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p2) } })))))))))))))))
+  | { Loader_dModules.f_Project_projectEntryDecls = dtb__582; Loader_dModules.f_Project_projectEntryImports = dtb__583; Loader_dModules.f_Project_projectImplicitImports = dtb__584; Loader_dModules.f_Project_projectModules = dtb__585; Loader_dModules.f_Project_projectEntryPkg = dtb__586; Loader_dModules.f_Project_projectEntryFixities = dtb__587; Loader_dModules.f_Project_projectEntryName = dtb__588; Loader_dModules.f_Project_projectEntryFacts = dtb__589 } -> (let projectFixities = ((v_dedupeFixitiesOf dtb__585) dtb__587) in ((Base_dCommon.v_bind (Loader_dFixity.v_checkUniqueFixities projectFixities)) (fun (fixes : Frontend_dAst.t_FixityDecl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.reorder") (fun (_u : int) -> ((Loader_dFixity.v_reorderProgram ((Loader_dFixity.v_tableOf dtb__589) fixes)) dtb__582)))) (fun (decls2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.expand") (fun (_u : int) -> ((Loader_dExpand.v_expandDecls dtb__588) decls2)))) (fun (decls3 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.entry") (fun (_u : int) -> (((((Loader_dResolve.v_resolveEntry mc0) dtb__585) dtb__586) ((B_dData_dList.v_append dtb__583) dtb__584)) decls3)))) (fun (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.resolve.warn") (fun (_u : int) -> (((((v_unusedImportWarnings dtb__585) dtb__583) entryDecls) decls3) B_dData_dList.C_List_Nil)))) (fun (entryWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((v_resolveModulesKeep mc0) mc1) fixes) dtb__585)) (fun (p2 : (Loader_dModules.t_Module B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append entryWarns) (B_dData_dPair.v_secondOf p2)); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = entryDecls; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_firstOf p2) } })))))))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 997 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1005 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_resolveProject = (fun (project : Loader_dModules.t_Project) -> (((v_resolveProjectKeeping false) B_dData_dList.C_List_Nil) project))
 
-# 1001 "Vuna/Compiler/Loader/Flatten.vuna"
+# 1009 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_resolveProjectWith = (fun (release : bool) (project : Loader_dModules.t_Project) -> (((v_resolveProjectKeeping release) B_dData_dList.C_List_Nil) project))
