@@ -34,7 +34,9 @@
 #     与对应的 `*_cpu_ms`（user+sys；文本与二进制由 flake 固定工具链生成，大小跨机器
 #     可比；耗时只同机可比，负载波动时看 CPU）；
 #   * 基线只有一份 `bench/baselines/programs.json`（全部 target）；`--check` 只比本次
-#     实际跑的 target / benchmark，并报告 `new` / `missing`。
+#     实际跑的 target / benchmark，并报告 `new` / `missing`；
+#   * `--gate-ratio N` 是绝对门禁：逐个 case 用 CPU 中位数（含进程启动）比对手写 OCaml，
+#     超过阈值即 exit 1（与基线无关，见 `check_gate`）。
 set -euo pipefail
 
 RUNS=3
@@ -47,6 +49,8 @@ LIST=0
 JSON_OUT=""
 BASELINE=""
 CHECK=0
+GATE_RATIO=""
+GATE_SLACK=0.05
 ONLY=""
 TIER_FILTER=""
 C_REF=auto
@@ -86,6 +90,8 @@ options:
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
   --baseline FILE        基线 JSON（默认 bench/baselines/programs.json）
   --check                与基线对比；默认软告警（WARN），--strict 时 exit 1
+  --gate-ratio N         绝对门禁：逐 case 的 CPU 比值（含进程启动）超过 N 即 exit 1
+  --gate-slack N         near 区宽度（默认 0.05：阈值下方这么多倍内提示复核）
   --threshold N          WARN 阈值，百分比（默认 20）
   --fail-threshold N     FAIL 阈值，百分比（默认 50；超过即 exit 1）
   --artifact-threshold N 产物字节数 WARN 阈值，百分比（默认 20；0 关闭）
@@ -141,6 +147,10 @@ while [ $# -gt 0 ]; do
     --baseline) [ $# -ge 2 ] || die "--baseline needs a value"; BASELINE=$2; shift 2 ;;
     --baseline=*) BASELINE=${1#*=}; shift ;;
     --check) CHECK=1; shift ;;
+    --gate-ratio) [ $# -ge 2 ] || die "--gate-ratio needs a value"; GATE_RATIO=$2; shift 2 ;;
+    --gate-ratio=*) GATE_RATIO=${1#*=}; shift ;;
+    --gate-slack) [ $# -ge 2 ] || die "--gate-slack needs a value"; GATE_SLACK=$2; shift 2 ;;
+    --gate-slack=*) GATE_SLACK=${1#*=}; shift ;;
     --threshold) [ $# -ge 2 ] || die "--threshold needs a value"; THRESHOLD=$2; shift 2 ;;
     --threshold=*) THRESHOLD=${1#*=}; shift ;;
     --fail-threshold) [ $# -ge 2 ] || die "--fail-threshold needs a value"; FAIL_THRESHOLD=$2; shift 2 ;;
@@ -163,6 +173,12 @@ case $TIMEOUT_MIN_MS in ''|*[!0-9]*) die "--timeout-min-ms must be a non-negativ
 case $TIMEOUT_MAX_MS in ''|*[!0-9]*) die "--timeout-max-ms must be a non-negative integer" ;; esac
 case $PROBE_TIMEOUT_MS in ''|*[!0-9]*) die "--probe-timeout-ms must be a non-negative integer" ;; esac
 [ "$FAIL_THRESHOLD" -ge "$THRESHOLD" ] || die "--fail-threshold must be >= --threshold"
+if [ -n "$GATE_RATIO" ]; then
+  awk -v v="$GATE_RATIO" 'BEGIN { exit !(v ~ /^[0-9]+([.][0-9]+)?$/ && v + 0 > 0) }' \
+    || die "--gate-ratio must be a positive number"
+fi
+awk -v v="$GATE_SLACK" 'BEGIN { exit !(v ~ /^[0-9]+([.][0-9]+)?$/) }' \
+  || die "--gate-slack must be a non-negative number"
 case $TARGET in
   ocaml) TARGETS="vuna_ocaml" ;;
   native) TARGETS="native" ;;
@@ -735,26 +751,33 @@ run_bench() { # name
   done
 
   # 采样：每个样本由 timestat 一次给出墙钟 / CPU / 峰值 RSS。超时是硬失败（记 timeout），
-  # 不是慢：它说明实现已经越过该层允许的倍数。
-  local i
+  # 不是慢：它说明实现已经越过该层允许的倍数。奇数轮先跑被测后端：参照与被测在
+  # 同一次测量里交错，避免宿主负载的单调漂移系统性偏向先跑的一方。
+  local i phase phases
   for ((i = 0; i < RUNS; i++)); do
-    rc=0
-    take_sample "$name" ocaml_ref "$oprog" 1 || rc=$?
-    [ "$rc" -eq 0 ] || die "$name (ocaml_ref): timed sample failed (exit $SAMPLE_RC)"
-    if [ -n "$cprog" ]; then
-      # shellcheck disable=SC2086  # n= 可能是多个 argv（如 "5000 10000"）
-      take_sample "$name" c_ref "$creal" 1 $cn || die "$name (c_ref): timed sample failed (exit $SAMPLE_RC)"
-    fi
-    for t in $active; do
-      [ -n "${SKIP["$name:$t"]:-}" ] && continue
-      rc=0
-      take_sample "$name" "$t" "${PROGS[$t]}" "$repeat" || rc=$?
-      if [ "$rc" -eq 2 ]; then
-        SKIP["$name:$t"]=timeout
-        note "  $t timeout after ${RUN_TIMEOUT_MS}ms"
+    if [ $((i % 2)) -eq 0 ]; then phases="refs targets"; else phases="targets refs"; fi
+    for phase in $phases; do
+      if [ "$phase" = refs ]; then
+        rc=0
+        take_sample "$name" ocaml_ref "$oprog" 1 || rc=$?
+        [ "$rc" -eq 0 ] || die "$name (ocaml_ref): timed sample failed (exit $SAMPLE_RC)"
+        if [ -n "$cprog" ]; then
+          # shellcheck disable=SC2086  # n= 可能是多个 argv（如 "5000 10000"）
+          take_sample "$name" c_ref "$creal" 1 $cn || die "$name (c_ref): timed sample failed (exit $SAMPLE_RC)"
+        fi
         continue
       fi
-      [ "$rc" -eq 0 ] || die "$name ($t): timed run failed (exit $SAMPLE_RC)"
+      for t in $active; do
+        [ -n "${SKIP["$name:$t"]:-}" ] && continue
+        rc=0
+        take_sample "$name" "$t" "${PROGS[$t]}" "$repeat" || rc=$?
+        if [ "$rc" -eq 2 ]; then
+          SKIP["$name:$t"]=timeout
+          note "  $t timeout after ${RUN_TIMEOUT_MS}ms"
+          continue
+        fi
+        [ "$rc" -eq 0 ] || die "$name ($t): timed run failed (exit $SAMPLE_RC)"
+      done
     done
   done
   MED["$name:ocaml_ref"]=$(median_of ${WALLVALS["$name:ocaml_ref"]})
@@ -944,6 +967,9 @@ emit_json() {
   printf '    "runs": %s,\n' "$RUNS"
   printf '    "warmup": %s,\n' "$WARMUP"
   printf '    "target": "%s",\n' "$TARGET"
+  printf '    "gate_ratio": %s,\n' "$(case $GATE_RATIO in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_RATIO" ;; esac)"
+  printf '    "gate_slack": %s,\n' "$(case $GATE_SLACK in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_SLACK" ;; esac)"
+  printf '    "gate_metric": "cpu",\n'
   printf '    "stack_policy": "%s",\n' "$(json_escape "$STACK_POLICY")"
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
   printf '    "wasm_opt": "%s",\n' "$(json_escape "$WASM_OPT_VERSION")"
@@ -1316,9 +1342,51 @@ compare_baseline() {
   return 0
 }
 
+# 绝对门禁：逐 case 用 CPU 中位数比值（含进程启动）对手写 OCaml。与基线无关——
+# 阈值是目标而不是回归线，所以只看当前值。near 区不改退出码，只提示加采样复核。
+check_gate() {
+  case " $TARGETS " in
+    *" vuna_ocaml "*) ;;
+    *) note ""; note "-- 1.2x 门禁跳过：需要 --target ocaml / both / all"; return 0 ;;
+  esac
+  note ""
+  note "-- 绝对门禁（CPU 中位数，含进程启动；阈值 ${GATE_RATIO}x，near 宽度 ${GATE_SLACK}）"
+  printf '  %-16s %-5s %10s %10s  %s\n' benchmark tier cpu_ratio wall_ratio result
+  local name cur wall verdict passes=0 nears=0 fails=0
+  for name in "${ORDER[@]}"; do
+    if [ -n "${SKIP["$name:vuna_ocaml"]:-}" ]; then
+      printf '  %-16s %-5s %10s %10s  %s\n' "$name" "${BENCH_TIER[$name]}" "-" "-" \
+        "skipped(${SKIP["$name:vuna_ocaml"]})"
+      continue
+    fi
+    cur=${CPU_RATIO["$name:vuna_ocaml"]:-}
+    [ -n "$cur" ] || continue
+    wall=${RATIO["$name:vuna_ocaml"]:-"-"}
+    verdict=$(awk -v c="$cur" -v g="$GATE_RATIO" -v s="$GATE_SLACK" 'BEGIN {
+      if (c + 0 > g + 0) print "FAIL";
+      else if (c + 0 > g + 0 - s + 0) print "near";
+      else print "ok";
+    }')
+    case $verdict in
+      FAIL) fails=$((fails + 1)) ;;
+      near) nears=$((nears + 1)) ;;
+      *) passes=$((passes + 1)) ;;
+    esac
+    printf '  %-16s %-5s %10s %10s  %s\n' "$name" "${BENCH_TIER[$name]}" "${cur}x" "${wall}x" "$verdict"
+  done
+  note "summary: ok=$passes near=$nears fail=$fails"
+  if [ "$fails" -gt 0 ]; then
+    note "PERF-GATE-FAIL（$fails 项超过 ${GATE_RATIO}x）"
+    return 1
+  fi
+  note "PERF-GATE-OK"
+  return 0
+}
+
 if [ "$JSON_OUT" = "-" ]; then
   emit_json
   rc=0
+  if [ -n "$GATE_RATIO" ]; then check_gate >&2 || rc=1; fi
   if [ -n "$BASELINE" ]; then compare_baseline >&2 || rc=$?; fi
   exit $rc
 else
@@ -1333,6 +1401,7 @@ else
     note "json: $JSON_OUT"
   fi
   rc=0
+  if [ -n "$GATE_RATIO" ]; then check_gate || rc=1; fi
   if [ -n "$BASELINE" ]; then compare_baseline || rc=$?; fi
   exit $rc
 fi
