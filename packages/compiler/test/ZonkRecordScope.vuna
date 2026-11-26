@@ -1,0 +1,61 @@
+-- `zonkTerm` 必须下钻 record 的三个构造子：`TProj` / `TRecUpd` / `TRecord`。
+-- 它们是唯一「带子项却不匹配」的 Term 构造子；残留已解元变量会让接口校验拒收
+-- （静默丢增量），或在 force 时把卡住的元变量当语义结果。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Elab.Meta
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <- consolePrint ("zonkTerm skipped: " ++ join ", " xs ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "TProj" projOk,
+    Pair "TRecUpd-base" recUpdBaseOk,
+    Pair "TRecUpd-body" recUpdBodyOk,
+    Pair "TRecord" recordOk
+  ]
+
+-- 元变量 0 解成 `TInt 7`。
+ec : Ec
+ec = ecPutSols ecEmpty [(0, eval [] (TInt 7))]
+
+projOk : Bool
+projOk =
+  case zonkTerm ec 0 (TProj (TMeta 0) "R" [] 0 1) of
+    TProj (TInt 7) _ _ _ _ => True
+    _ => False
+
+recUpdBaseOk : Bool
+recUpdBaseOk =
+  case zonkTerm ec 0 (TRecUpd (TMeta 0) "R" [] [0] (TInt 1)) of
+    TRecUpd (TInt 7) _ _ _ _ => True
+    _ => False
+
+recUpdBodyOk : Bool
+recUpdBodyOk =
+  case zonkTerm ec 0 (TRecUpd (TInt 1) "R" [] [0] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TInt 7) => True
+    _ => False
+
+recordOk : Bool
+recordOk =
+  case zonkTerm ec 0 (TRecord "R" [(TMeta 0, RigOmega)]) of
+    TRecord _ [(TInt 7, _)] => True
+    _ => False
