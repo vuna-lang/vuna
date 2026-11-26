@@ -55,6 +55,7 @@ ONLY=""
 TIER_FILTER=""
 C_REF=auto
 TARGET=ocaml
+STORE_MODE=isolated
 # 运行超时：每个 case 用参照实现（手写 C / OCaml 里更快的那个）的实测时间推导，
 # 0 = 不限。`timeout_x` 的缺省按 tier 给（见 tier_timeout_x）。
 RUN_TIMEOUT_MS=0
@@ -80,6 +81,8 @@ options:
   --only NAME            只跑一个基准（可重复）
   --tier T               只跑某个机制层（如 t1；可重复）
   --c-ref MODE           手写 C 对照：auto（有 <name>.c 就跑，默认）/ on / off
+  --isolate-store        每次运行用 $WORK/store 的独立空对象库（默认；避免复用旧编译器产物）
+  --shared-store         复用调用方的 VUNA_STORE / ~/.vuna/store（快，但跨编译器改动会读到旧产物）
   --timeout-x N          golden 校验超时 = N × 参照实现耗时（默认按 tier：t5/t6/t10 为 5，其余 3）
   --timeout-min-ms N     超时下限（默认 1000）
   --timeout-max-ms N     超时上限（默认 30000）
@@ -126,6 +129,8 @@ while [ $# -gt 0 ]; do
     --only=*) ONLY="$ONLY ${1#*=}"; shift ;;
     --tier) [ $# -ge 2 ] || die "--tier needs a value"; TIER_FILTER="$TIER_FILTER $2"; shift 2 ;;
     --tier=*) TIER_FILTER="$TIER_FILTER ${1#*=}"; shift ;;
+    --isolate-store) STORE_MODE=isolated; shift ;;
+    --shared-store) STORE_MODE=shared; shift ;;
     --c-ref) [ $# -ge 2 ] || die "--c-ref needs a value"; C_REF=$2; shift 2 ;;
     --c-ref=*) C_REF=${1#*=}; shift ;;
     --no-c-ref) C_REF=off; shift ;;
@@ -328,6 +333,13 @@ mkdir -p "$TMPROOT" 2>/dev/null || true
 WORK=$(mktemp -d "$TMPROOT/vuna-perf.XXXXXX" 2>/dev/null) || die "cannot create temp dir under $TMPROOT (set TMPDIR)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
+
+# 对象库：默认每次运行用独立空 store。热 store 里可能留着**旧编译器**生成的
+# 模块接口 / split 产物，跨编译器改动后会被误用（runtime 文本、GC 参数都会是旧的），
+# 读数不可比。要快速迭代可以显式 --shared-store。
+if [ "$STORE_MODE" = isolated ]; then
+  export VUNA_STORE="$WORK/store"
+fi
 
 # 三指标采样器：一次运行同时给出墙钟 / CPU / 峰值 RSS。
 TIMESTAT=$WORK/timestat
@@ -970,6 +982,7 @@ emit_json() {
   printf '    "gate_ratio": %s,\n' "$(case $GATE_RATIO in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_RATIO" ;; esac)"
   printf '    "gate_slack": %s,\n' "$(case $GATE_SLACK in ''|*[!0-9.]*) printf 'null' ;; *) printf '%s' "$GATE_SLACK" ;; esac)"
   printf '    "gate_metric": "cpu",\n'
+  printf '    "store_mode": "%s",\n' "$STORE_MODE"
   printf '    "stack_policy": "%s",\n' "$(json_escape "$STACK_POLICY")"
   printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
   printf '    "wasm_opt": "%s",\n' "$(json_escape "$WASM_OPT_VERSION")"
