@@ -188,11 +188,11 @@ jobs:
   # flake check 的成员 check，单开只会在同一个 sha 上重复存一份同样内容的 Nix
   # store cache，挤占 cache 配额、把 flake-check 挤成冷构建。
 
-  # native 自举对真实工程仍不通（debt D89：check base 段错误）。先落地并持续报告，
-  # D89 关闭后删掉 continue-on-error 改成阻塞门禁。
+  # native 自举的 selfhost 已按成员逐包检查（进程隔离）；整仓单进程仍跑不完，本地用
+  # `--scope selfhost-stress` 取成本读数。先落地并持续报告，稳定后再删掉 continue-on-error。
   #
   # 只在定时 / 手动 / 带 backend 标签的 PR 上跑：native 后端在部分夹具上会挂住
-  # （D89 的续延栈复制），整轮成本 50 min 起步。放在 push 路径上只会占住 runner
+  # （延迟 answer 的 handler，debt D101），整轮成本高。放在 push 路径上只会占住 runner
   # 又被下一次 push 取消，既拿不到读数也拖慢反馈；`backend-check.sh` 另有单命令
   # 超时（VUNA_BACKEND_TIMEOUT），挂住的夹具按失败收口。
   backend-native:
@@ -218,4 +218,6 @@ jobs:
         # 20 条失败足以给出清单；不设上限会把 job 拖到 90 min 超时。
         env:
           VUNA_BACKEND_MAX_FAILS: 20
+          # 逐成员 selfhost 的并行度：每成员一个编译器进程（峰值 5–6 GiB），runner 16 GiB 跑 2 路。
+          VUNA_BACKEND_SELFHOST_JOBS: 2
         run: nix run .#backend-check -- --compiler native --scope all --jobs 8

@@ -49,11 +49,15 @@
 ```console
 nix build .#vuna-native --out-link result-native
 nix run .#backend-check -- --compiler native --scope selfhost
+nix run .#backend-check -- --compiler native --scope selfhost-stress
 nix run .#backend-check -- --compiler native --scope parity --target ocaml,native --jobs 8
 nix run .#backend-check -- --compiler native --scope corpus --jobs 8
 ```
 
-单条外部命令默认 240 s 上限（`VUNA_BACKEND_TIMEOUT`，`0` = 不限），超时按失败计。
+`selfhost` 按成员逐包检查（进程隔离，`VUNA_BACKEND_SELFHOST_JOBS` 默认 1；
+单成员 `VUNA_BACKEND_SELFHOST_TIMEOUT` 默认 1200 s，`0` = 不限）。`selfhost-stress` 是整仓
+单进程的**成本读数**：超时 / 无 json 记 skip，不阻塞。parity / corpus 的单条命令仍是
+`VUNA_BACKEND_TIMEOUT`（默认 240 s，`0` = 不限），超时按失败计。
 已有二进制时可以直接跑 runner，不必经 `nix run`：
 
 ```console
@@ -85,9 +89,13 @@ VUNA_ALT_NATIVE=<out>/bin/vuna-native bash nix/tools/backend-check.sh --compiler
 | native `check .`（文本格式，成员逐进程） | 通过，0 error | 402 s | 20 MB（父进程） | 15 个成员各自一个子进程 |
 | OCaml `check . --error-format json` | 通过，0 error | 76 s | 640 MB | — |
 
+逐成员形态（`selfhost` scope，`VUNA_BACKEND_SELFHOST_JOBS=2`，冷 store，`adbf25a` 的二进制）：
+16 个成员合计 **655 s**（`toolchain` 543 s 与 `dev` 503 s 并发），单成员峰值 RSS 见 §4.2 的
+5–6 GiB 档。
 单进程未完成不是算错：同一份源码逐包与文本格式都 0 error。它是**单堆规模**——所有成员的接口与
 中间态留在同一个堆里，后段 live 稳定在 10–11 GB（237 M 个对象，约 48 B/个），每次整堆回收都要
-重扫这张堆；148 次回收累计 749 s，占墙钟 83%（§4.3）。
+重扫这张堆；148 次回收累计 749 s，占墙钟 83%（§4.3）。门禁的 `selfhost` scope 用的是逐成员
+进程形态（与文本格式同构），单进程那一行只作为 `selfhost-stress` 的读数保留。
 
 ### 4.2 逐包（冷 store）
 
@@ -171,6 +179,8 @@ OCaml 的峰值按**进程树**计（`vuna` 把命令派给 `vuna-toolchain` 子
 ## 6. 门禁地位
 
 - `vuna-native` 与 `backend-check` **不在 `nix flake check` 里**：整轮成本远高于日常门禁。
+- `selfhost` scope 是**逐成员进程**：成员清单取根 `vuna.toml`，默认串行、单成员
+  1200 s 上限；整仓单进程只作为 `selfhost-stress` 的成本读数（超时记 skip，不进 `--scope all`）。
 - CI 只在每夜定时、手动 dispatch、带 `backend` 标签的 PR 上跑 `--scope all`，且 job 是
   `continue-on-error`（`.github/workflows/ci.yml` 的 `backend-native`）。
 - push 路径上的 native 覆盖由 `vuna-tests-native` 承担：suite 的 native 矩阵，181 个 case

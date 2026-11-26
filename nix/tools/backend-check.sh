@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # 跨编译器 conformance：用自举出来的 native 编译器跑 check 与夹具。
 #
-# 三个 scope（口径见 docs/reference/testing-checks.md「后端自举 conformance」）：
-#   selfhost  用该编译器检查整个仓库（workspace 根；机器格式诊断走进程内顺序检查）
-#   parity    packages/compiler/test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
-#   corpus    packages/*/test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
+# 四个 scope（口径见 docs/reference/testing-checks.md「后端自举 conformance」）：
+#   selfhost         逐成员 `check <member> --error-format json`（整仓 = 所有成员各查一遍）
+#   selfhost-stress  整仓单进程 `check . --error-format json`（堆规模读数，不阻塞：超时记 skip）
+#   parity           packages/compiler/test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
+#   corpus           packages/*/test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
 #
 # 用法:
-#   backend-check --compiler native [--scope selfhost,parity,corpus] [--jobs N]
+#   backend-check --compiler native [--scope selfhost,selfhost-stress,parity,corpus] [--jobs N]
 #                 [--target ocaml,wasm,native] [--filter PAT] [--compiler-bin PATH]
 #                 [--keep] [--list]
 #
 # 依赖 PATH：wasm-tools / node / cc / ocamlopt / jq / timeout（由 `nix run .#backend-check` 注入）。
-# 单条命令默认 240 s 上限（VUNA_BACKEND_TIMEOUT，0 = 不限）；超时按失败计。
+# 单条夹具命令默认 240 s 上限（VUNA_BACKEND_TIMEOUT）；selfhost 每个成员默认 1200 s
+# （VUNA_BACKEND_SELFHOST_TIMEOUT，0 = 不限）；超时按失败计（selfhost-stress 记 skip）。
+# selfhost 并行度是 VUNA_BACKEND_SELFHOST_JOBS（默认 1：native 单包峰值 RSS 5–6 GiB；
+# 内存允许时调大，与 parity / corpus 的 --jobs 独立）。
 # 失败达到 VUNA_BACKEND_MAX_FAILS（默认 0 = 不限）后停止派发剩余夹具：
-# 编译器整体坏掉时（D89）跑完几百条夹具没有额外信息，只会把 job 拖到超时。
+# 编译器整体坏掉时跑完几百条夹具没有额外信息，只会把 job 拖到超时。
 set -euo pipefail
 
 compiler=
@@ -28,7 +32,7 @@ keep=0
 list=0
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -88,15 +92,26 @@ alt=$compiler_bin
 
 export VUNA_BASE="$base"
 
-# 单条外部命令上限（秒，VUNA_BACKEND_TIMEOUT 覆盖，0 = 不限）：native 后端在部分
-# 夹具上会挂住（D89 的续延栈复制），没有超时整轮会被拖到 job 级 timeout，拿不到
-# 失败清单。超时的夹具按 FAIL 计，其它夹具继续跑。
+# 单条夹具命令上限（秒，VUNA_BACKEND_TIMEOUT 覆盖，0 = 不限）：native 后端在部分夹具上
+# 会挂住（延迟 answer 的 handler，debt D101），没有超时整轮会被拖到 job 级 timeout，
+# 拿不到失败清单。超时的夹具按 FAIL 计，其它夹具继续跑。
 cmd_timeout=${VUNA_BACKEND_TIMEOUT:-240}
+# selfhost 每个成员一条命令：native 单包在慢机 / 大包上可到 ~8.5 min；默认给 1200 s。
+selfhost_timeout=${VUNA_BACKEND_SELFHOST_TIMEOUT:-1200}
+# 每个成员一个编译器进程；native 侧单包峰值 RSS 5–6 GiB，默认串行（内存允许时调大）。
+selfhost_jobs=${VUNA_BACKEND_SELFHOST_JOBS:-1}
 run_limited() {
   if [ "$cmd_timeout" = 0 ]; then
     "$@"
   else
     timeout "$cmd_timeout" "$@"
+  fi
+}
+run_selfhost_limited() {
+  if [ "$selfhost_timeout" = 0 ]; then
+    "$@"
+  else
+    timeout "$selfhost_timeout" "$@"
   fi
 }
 
@@ -133,30 +148,99 @@ matches_filter() {
 }
 
 # ---------------------------------------------------------------------------
-# selfhost：整个 workspace 用该编译器自检
+# selfhost：workspace 的每个成员包各跑一次机器格式 check
 # ---------------------------------------------------------------------------
-run_selfhost() {
-  printf '== selfhost: %s check . (workspace root)\n' "$compiler"
-  local out="$work/selfhost.json" err="$work/selfhost.err" status=0 errors
-  ( cd "$repo" && run_limited "$alt" check "$repo" --error-format json >"$out" 2>"$err" ) || status=$?
+# 成员清单从 workspace 根的 `vuna.toml` 读（根只有 [workspace]，不是包）。成员共享调用方
+# 的对象库（VUNA_STORE），与文本格式按成员 spawn 同口径。逐成员而不是单进程：整仓单进程
+# 会让所有成员的接口与中间态留在同一个堆里（native 侧 live 集到 10 GB 量级），见
+# docs/reference/native-selfhost.md §4.1。
+workspace_members() {
+  sed -n 's/^[[:space:]]*members[[:space:]]*=[[:space:]]*\[\(.*\)\].*/\1/p' "$repo/vuna.toml" |
+    tr ',' '\n' |
+    sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+    sed '/^$/d'
+}
+
+selfhost_one() {
+  local member=$1 name out err status=0 start end ms errors
+  name=$(basename "$member")
+  out="$work/selfhost/$name.json"
+  err="$work/selfhost/$name.err"
+  start=$(date +%s%N)
+  ( cd "$repo" && run_selfhost_limited "$alt" check "$repo/$member" --error-format json >"$out" 2>"$err" ) || status=$?
+  end=$(date +%s%N)
+  ms=$(( (end - start + 500000) / 1000000 ))
   if [ ! -s "$out" ]; then
-    printf 'FAIL selfhost: no json document (exit %s)\n' "$status" >&2
-    sed -n '1,20p' "$err" >&2 || true
+    printf 'bad\t%s\t%s\tno json (exit %s)\n' "$name" "$ms" "$status" >>"$work/selfhost/results"
+    sed -n '1,10p' "$err" >"$work/selfhost/$name.log" 2>&1 || true
+    return 0
+  fi
+  errors=$(jq '[.diagnostics[] | select(.severity == "error")] | length' "$out" 2>/dev/null || echo 0)
+  if [ "$errors" != 0 ] || [ "$status" != 0 ]; then
+    printf 'bad\t%s\t%s\t%s error(s), exit %s\n' "$name" "$ms" "$errors" "$status" >>"$work/selfhost/results"
+    jq -r '.diagnostics[] | select(.severity == "error")
+           | "  \(.labels[0].span.file // "?"):\(.labels[0].span.start.line // 0): [\(.code)] \(.message)"' \
+      "$out" | head -20 >"$work/selfhost/$name.log" 2>/dev/null || true
+  else
+    printf 'ok\t%s\t%s\n' "$name" "$ms" >>"$work/selfhost/results"
+    rm -f "$out" "$err"
+  fi
+  return 0
+}
+
+run_selfhost() {
+  local members log
+  members=$(workspace_members)
+  if [ -z "$members" ]; then
+    printf 'FAIL selfhost: no workspace members in vuna.toml\n' >&2
     return 1
   fi
+  printf '== selfhost: %s check <member> --error-format json（%s 个成员，%s 路并行，单成员 %s s）\n' \
+    "$compiler" "$(printf '%s\n' "$members" | wc -l)" "$selfhost_jobs" "$selfhost_timeout"
+  mkdir -p "$work/selfhost"
+  : >"$work/selfhost/results"
+  printf '%s\n' "$members" |
+    xargs -d '\n' -P "$selfhost_jobs" -I{} bash -c 'selfhost_one "$1"' _ {} || true
+  printf 'selfhost members:\n'
+  sort -k2,2 "$work/selfhost/results" | while IFS=$'\t' read -r state name ms detail; do
+    printf '  %-4s %-16s %7s ms %s\n' "$state" "$name" "$ms" "$detail"
+  done
+  for log in "$work"/selfhost/*.log; do
+    [ -f "$log" ] || continue
+    printf 'FAIL selfhost/%s\n' "$(basename "$log" .log)" >&2
+    sed -n '1,20p' "$log" >&2
+  done
+  if grep -q '^bad' "$work/selfhost/results"; then
+    return 1
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# selfhost-stress：整仓单进程（机器格式的一份文档）——成本读数，不阻塞
+# ---------------------------------------------------------------------------
+# 单进程把整仓的接口与中间态留在同一个堆里（native 侧 live 集到 10 GB 量级），超时是常态。
+# 只有「真的报错」算失败；无 json（超时 / 崩溃）记 skip，读数照打。
+run_selfhost_stress() {
+  local out="$work/selfhost-stress.json" err="$work/selfhost-stress.err" status=0 start end ms errors
+  start=$(date +%s%N)
+  ( cd "$repo" && run_selfhost_limited "$alt" check "$repo" --error-format json >"$out" 2>"$err" ) || status=$?
+  end=$(date +%s%N)
+  ms=$(( (end - start + 500000) / 1000000 ))
+  if [ ! -s "$out" ]; then
+    printf 'selfhost-stress: 未完成（exit %s，%s ms）\n' "$status" "$ms"
+    sed -n '1,5p' "$err" >&2 || true
+    return 2
+  fi
   errors=$(jq '[.diagnostics[] | select(.severity == "error")] | length' "$out")
+  printf 'selfhost-stress: %s ms, %s error(s)\n' "$ms" "$errors"
   if [ "$errors" != 0 ]; then
-    printf 'FAIL selfhost: %s error diagnostic(s)\n' "$errors" >&2
     jq -r '.diagnostics[] | select(.severity == "error")
            | "  \(.labels[0].span.file // "?"):\(.labels[0].span.start.line // 0): [\(.code)] \(.message)"' \
       "$out" | head -20 >&2
     return 1
   fi
-  if [ "$status" != 0 ]; then
-    printf 'FAIL selfhost: exit %s with no diagnostics\n' "$status" >&2
-    return 1
-  fi
-  return 0
+  [ "$status" = 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -389,9 +473,9 @@ collect_jobs() {
   done < <(find $(corpus_roots) -name '*.out' | sort)
 }
 
-export repo base suite alt compiler targets work filter cmd_timeout
+export repo base suite alt compiler targets work filter cmd_timeout selfhost_timeout selfhost_jobs
 export max_fails fail_count_file stop_file
-export -f run_limited note_fail should_stop parity_one corpus_one corpus_entry jq_project matches_filter
+export -f run_limited run_selfhost_limited selfhost_one note_fail should_stop parity_one corpus_one corpus_entry jq_project matches_filter
 
 if [ "$list" = 1 ]; then
   printf 'compiler: %s (%s)\nscopes: %s\ntargets: %s\n' "$compiler" "$alt" "$scopes" "$targets"
@@ -405,6 +489,16 @@ status=0
 
 if needs selfhost; then
   if run_selfhost; then printf 'ok\tselfhost\n' >>"$results"; else printf 'bad\tselfhost\n' >>"$results"; status=1; fi
+fi
+
+if needs selfhost-stress; then
+  rc=0
+  run_selfhost_stress || rc=$?
+  case $rc in
+    0) printf 'ok\tselfhost-stress\n' >>"$results" ;;
+    2) printf 'skip\t-\t-\tstress:incomplete\n' >>"$results" ;;
+    *) printf 'bad\tselfhost-stress\n' >>"$results"; status=1 ;;
+  esac
 fi
 
 if needs parity; then

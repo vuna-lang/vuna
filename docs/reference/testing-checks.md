@@ -135,27 +135,31 @@ dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后�
 | --- | --- | --- |
 | `vuna-native` | `bin/vuna-native` + `bin/vuna-target-{native,wasm}` + `base/` | 原生可执行文件 + 它编非 OCaml 目标要用的后端插件（与产品 CLI 同构，插件按 `<exeDir>` 发现）；`build-id` = 编译器源码闭包身份，`cache-tag` = 二进制摘要 |
 
-runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
+runner 是 `nix run .#backend-check -- --compiler native`，四个 scope：
 
 | scope | 断言 |
 | --- | --- |
-| `selfhost` | `check . --error-format json` 在整仓（workspace 根）零 error 诊断、exit 0；机器格式走进程内顺序检查，避开文本格式对成员包的 `processSpawn` |
+| `selfhost` | workspace 的每个成员包各跑一次 `check <member> --error-format json`：零 error 诊断且 exit 0。成员清单取根 `vuna.toml` 的 `members`；每个成员独立进程，默认串行（native 单包峰值 RSS 5–6 GiB；`VUNA_BACKEND_SELFHOST_JOBS` 可调大） |
+| `selfhost-stress` | 整仓单进程 `check . --error-format json`：**成本读数**。报错算失败；超时 / 无 json 记 skip，不阻塞（整仓单堆的形状见 [native-selfhost.md](native-selfhost.md) §4.1） |
 | `parity` | `corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
 | `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
 
-`--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`
-只跑匹配的夹具，`--target` 收窄 parity 的输出目标。
+`--scope all` = `selfhost,parity,corpus`（不含 `selfhost-stress`），默认 `selfhost,parity`。
+`--jobs N` 控制 parity / corpus 的并行度，`--filter PAT` 只跑匹配的夹具，`--target` 收窄
+parity 的输出目标。selfhost 的并行度独立：`VUNA_BACKEND_SELFHOST_JOBS`（默认 `1`；内存允许时调大，单成员峰值 5–6 GiB；CI 设 `2`）。
 
 每条外部命令（编译器、`cc`、`node`、生成的程序）默认 240 s 上限
-（`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，其余夹具继续跑：
-单条命令挂住时按超时计入失败，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
-失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余夹具，
-其余记为 skip——编译器整体坏掉时清单已经很说明问题。
+（`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）；selfhost 的每个成员是单独一条命令，默认
+1200 s（`VUNA_BACKEND_SELFHOST_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，
+其余夹具继续跑：单条命令挂住时按超时计入失败，没有超时整轮会被拖到 job 级 timeout 而丢掉
+失败面。失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余
+夹具，其余记为 skip——编译器整体坏掉时清单已经很说明问题。
 
 ```console
 nix run .#backend-check -- --compiler native --scope parity --jobs 8
 nix run .#backend-check -- --compiler native --scope all --jobs 8
 nix run .#backend-check -- --compiler native --scope selfhost
+nix run .#backend-check -- --compiler native --scope selfhost-stress
 ```
 
 CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](native-runtime.md) §4）。
