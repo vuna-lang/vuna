@@ -164,6 +164,7 @@ Vuna_dTarget_dOcaml_dModel.ml
 Vuna_dTarget_dOcaml_dRender.ml
 Vuna_dTarget_dOcaml_dRuntime.ml
 Vuna_dTarget_dOcaml_dTerm.ml
+Vuna_deflocs.ml
 Vuna_runtime.ml
 build-id
 build.sh
