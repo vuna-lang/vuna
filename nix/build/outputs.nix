@@ -27,10 +27,34 @@ let
           ;
       };
 
-      # 门禁分组覆盖（nix/checks/groups.nix）：分组引用必须存在，且每个 check 至少进
-      # 一个门禁分组；`vuna` / `vuna-seed` / `vuna-compiler` 是构建产物，不要求分组。
+      # 门禁分组覆盖（nix/checks/groups.nix）：分组引用必须存在，每个 check 至少进
+      # 一个门禁分组，`.github/workflows/ci.yml` 的 group 输入必须是分组名；
+      # `vuna` / `vuna-seed` / `vuna-compiler` 是构建产物，不要求分组。
       groups = import ../checks/groups.nix;
+      groupNames = builtins.attrNames groups;
       prGates = import ../checks/pr-gates.nix;
+
+      # `.github/workflows/ci.yml` 的 `with: group:` 原样传给 `nix run .#ci -- <group>`
+      # （该文件不走 run-plan 分支），所以每个值都必须是 groups.nix 里的分组名；
+      # matrix 生成的值（`gate-shard-${{ matrix.shard }}`）按去掉表达式后的前缀匹配。
+      # 其它 workflow 的 `group:` 有的是 concurrency 名、有的配套 `gate-labels` 走
+      # run-plan（如 `gates`），不属于这个约束，这里只读 ci.yml。
+      ciWorkflowGroups = builtins.filter (m: m != null) (
+        map (
+          line:
+          let
+            m = builtins.match " {6,}group: +([^[:space:]]+)" line;
+          in
+          if m == null then null else builtins.head m
+        ) (pkgs.lib.splitString "\n" (builtins.readFile ../../.github/workflows/ci.yml))
+      );
+      ciWorkflowUnknownGroups = builtins.filter (
+        name:
+        let
+          prefix = builtins.head (pkgs.lib.splitString "\${" name);
+        in
+        !(builtins.any (g: g == name || (prefix != name && pkgs.lib.hasPrefix prefix g)) groupNames)
+      ) ciWorkflowGroups;
       refs = builtins.concatLists (
         map (g: groups.${g}) (
           [
@@ -110,6 +134,8 @@ let
           "分组引用了不存在的 package：${toString unknownPackages}"
         else if missing != [ ] then
           "check 未进入任何门禁分组（deep/gate/slices/suite/backends）：${toString missing}"
+        else if ciWorkflowUnknownGroups != [ ] then
+          "ci.yml 引用了不存在的门禁分组：${toString ciWorkflowUnknownGroups}"
         else if prGateMalformed != [ ] then
           "pr-gates 项必须是 check:<name> 或 package:<name>：${toString prGateMalformed}"
         else if prGateUnknownChecks != [ ] then
