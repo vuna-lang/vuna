@@ -881,7 +881,7 @@ encShared s acc =
   B.encList
     (B.encPair B.encStr (B.encList (B.encPair B.encInt B.encStr)))
     s.irSharedRecordFields
-    (B.encMaybe encListFam s.irSharedListFam (B.encBool s.irSharedUsesFloat (B.encBool s.irSharedUsesTrace (B.encBool s.irSharedUsesObs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedDefLocs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedUnboxed (B.encList (B.encPair B.encStr (B.encPair B.encStr encBools)) s.irSharedCtorShapes acc)))))))
+    (B.encMaybe encListFam s.irSharedListFam (B.encBool s.irSharedUsesFloat (B.encBool s.irSharedUsesTrace (B.encBool s.irSharedUsesObs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedDefLocs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedUnboxed (B.encList (B.encPair B.encStr (B.encPair B.encStr encBools)) s.irSharedCtorShapes (B.encBool s.irSharedUsesHost acc))))))))
 
 decShared : Int -> B.Cur -> Maybe (IrShared, B.Cur)
 decShared fuel c =
@@ -925,7 +925,13 @@ decShared7 : Int -> B.Cur -> List (String, List (Int, String)) -> Maybe IrListFa
 decShared7 fuel c recFields listFam usesFloat usesTrace usesObs defLocs unboxed =
   B.thenPair
     (decCtorShapes fuel c)
-    (\ctorShapes, c1 => Just (IrShared recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes, c1))
+    (\ctorShapes, c1 => decShared8 fuel c1 recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes)
+
+decShared8 : Int -> B.Cur -> List (String, List (Int, String)) -> Maybe IrListFam -> Bool -> Bool -> Bool -> List (String, String, Int) -> List (String, String, Int) -> List (String, String, List Bool) -> Maybe (IrShared, B.Cur)
+decShared8 fuel c recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes =
+  B.thenPair
+    (B.decBool fuel c)
+    (\usesHost, c1 => Just (IrShared recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes usesHost, c1))
 
 -- ---------------------------------------------------------------
 -- IrUnit / IrProgram

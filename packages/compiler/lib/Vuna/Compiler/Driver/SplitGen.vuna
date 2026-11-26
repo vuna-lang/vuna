@@ -343,6 +343,7 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
             shared.irSharedUsesFloat
             shared.irSharedUsesTrace
             shared.irSharedUsesObs
+            shared.irSharedUsesHost
         _ = log! "info" "cg-runtimeText-done"
       in splitProgramFiles
         env

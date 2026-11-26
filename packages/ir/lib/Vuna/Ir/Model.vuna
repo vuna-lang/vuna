@@ -395,7 +395,7 @@ export record IrListFam(..) where
 -- | 程序级共享元数据（与单元无关，Lowering 一次算好）。
 --
 -- 只保留后端渲染真正消费的表示决策结果：record 字段表、canonical List 族、
--- float / tracing / obs 开关与定义位置行。构造子形状、去装箱集合、类型参数槽都是
+-- float / tracing / obs / 宿主原语开关与定义位置行。构造子形状、去装箱集合、类型参数槽都是
 -- Lowering 内部的查表输入，不进 IR。
 export record IrShared(..) where
   -- | 用 OCaml record 表示的族 → 运行时字段表 `(字段序号, 字段源码名)`。
@@ -418,6 +418,9 @@ export record IrShared(..) where
   -- | 构造子形状：构造子名 → (族名, keep flags)。pass 把构造子应用/分支 pattern
   -- 改写成去装箱形式时需要它；Lowering 仍在项生成期用它做擦除与实参对齐。
   irSharedCtorShapes : List (String, String, List Bool)
+  -- | 程序是否用到需要 `unix.cmxa` 的原语（宿主 IO / 进程 / 网络 / 时钟 / 线程）。
+  -- 决定 `Vuna_runtime.ml` 是否追加 `dtHostRuntime`，以及产物是否链接 `unix.cmxa`。
+  irSharedUsesHost : Bool
 
 export irSharedUnboxedOf : String -> List (String, String, Int) -> Maybe (String, Int)
 irSharedUnboxedOf family [] = Nothing

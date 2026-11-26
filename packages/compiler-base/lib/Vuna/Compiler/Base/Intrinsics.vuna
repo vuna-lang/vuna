@@ -435,8 +435,8 @@ effMainRunName = "Base.Effect.Core.runMain"
 --   * `assert cond "msg" x`：debug-only；失败走 failwith（main 钩子渲染），release
 --     构建由 `Loader.Resolve` 拒绝；
 --   * `todo "msg"`：debug-only 的未实现占位，语义同 assert(False, msg)。
--- 用户面调试输出统一走内置宏 `log!`（见 `docs/reference/logging.md`）；`DebugShow` / `dbgShow`
--- 是 `Base.Trait.Show` 里基于 `log! "debug"` 的库层。
+-- 用户面调试输出统一走内置宏 `log!`（见 `docs/reference/logging.md`）；`DebugShow` 在
+-- `Base.Trait.Show`、`dbgShow` 在 `Base.Data.Log`（基于 `log! "debug"` 的库层）。
 -- ---------------------------------------------------------------
 -- ---------------------------------------------------------------
 -- 文本日志（`log!`）隐藏原语
@@ -1302,6 +1302,16 @@ floatIntrinsicNames =
     "bi_gt_float",
     "bi_ge_float"
   ]
+
+-- | 需要 OCaml `unix.cmxa` 的隐藏原语：宿主文件 / 进程 / 网络 / 时钟 / 线程。
+-- 只用于 OCaml 后端决定是否追加 `dtHostRuntime`（以及产物是否链接 `unix.cmxa`）；
+-- 多列无害（多链接一个库），少列会让生成程序编译失败。调度器原语不在内：调度器
+-- 运行时本身不依赖 Unix。
+export hostIntrinsicNames : List String
+hostIntrinsicNames =
+  append
+    ["effTimeUs", "effTimeUs_host", "@vuna@prim_eff_sleep", "@vuna@prim_eff_spawn", "@vuna@prim_eff_wait", "@vuna@prim_eff_runIn", "@vuna@prim_eff_execPath", "@vuna@host@sleep", "@vuna@host@fileMtime", "@vuna@host@fileSize", "@vuna@host@execPath", "@vuna@host@tryRunIn", "@vuna@host@tryReadFileRange", "@vuna@host@tryReadFile", "@vuna@host@tryWriteFile", "@vuna@host@tryWriteFileAtomic", "@vuna@host@tryReadDir", "@vuna@host@tryIsDirectory", "@vuna@host@tryMakeDir", "@vuna@host@tryRemoveFile", "@vuna@host@tryRemoveTree", "@vuna@host@tryRename", "@vuna@host@trySymlink", "@vuna@host@tryMakeDirExclusive", "@vuna@host@isTty", "@vuna@host@tryNetListen", "@vuna@host@tryNetPort", "@vuna@host@tryNetAccept", "@vuna@host@tryNetRecv", "@vuna@host@tryNetSend", "@vuna@host@tryNetClose", "@vuna@host@tryNetConnect", "@vuna@host@tryNetAcceptWithin", "@vuna@host@tryNetRecvWithin", "@vuna@host@tryNetSendWithin"]
+    threadIntrinsicNames
 
 -- | 名字 → 内建声明的查询表（由 `allIntrinsics` 一次性建好，供 `findIntrinsic` 用）。
 intrinsicTbl : HashMap String Intrinsic
