@@ -4,34 +4,29 @@
 run: sh -c 'S="$TMPDIR/di"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
 exit: 0
 
-# 依赖源码追加注释（语义面不变）⇒ 依赖方 check 命中。
+# 依赖源码追加注释（语义面不变）⇒ 依赖方复用干净模块。
 run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=hit
+out-contains: dep-identity=dep verdict=iface
 
-# 依赖 manifest 追加注释（非语义配置）⇒ 依赖方 check 命中。
+# 依赖 manifest 追加注释（非语义配置）⇒ 依赖方复用干净模块。
 run: sh -c 'S="$TMPDIR/di"; printf "\n# dep note\n" >> "$S/dep/vuna.toml"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=hit
 
-# 依赖的透明定义体变化（接口语义面变化）⇒ 依赖方 check 未命中。
+# 依赖的透明定义体变化（接口语义面变化）⇒ 依赖方重新精化。
 run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=miss
 
-# 依赖新增导出（接口变化）⇒ 依赖方未命中；随后只改 opaque 体 ⇒ 依赖方命中。
+# 依赖新增导出（接口变化）⇒ 依赖方重新精化；随后只改 opaque 体 ⇒ 依赖方复用。
 run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 7\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=miss
 
 run: sh -c 'S="$TMPDIR/di"; printf "module D where\n\n-- harmless note\nexport f : Int -> Int\nf x = 1\n\nexport opaque h : Int\nh = 8\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=hit
 
-# 接口身份摘要缺失（依赖还没写 summary）⇒ 回退 manifest 身份，仍能检查成功；依赖重跑后恢复命中。
-run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkg-iface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+# 接口身份摘要缺失（依赖还没写 summary）⇒ 回退 manifest 身份，仍能检查成功；依赖重跑后恢复复用。
+run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkg-summary"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
-out-contains: cache-path=hit
 
 # 热 store：依赖源码改了但依赖没重跑 ⇒ 依赖方必须重算并报错，不能假命中。
 # 回退身份含该根源闭包摘要，所以「依赖已 check 过」也挡不住源码变化。
@@ -41,7 +36,6 @@ exit: 0
 run: sh -c 'S="$TMPDIR/dsw"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 1
 out-contains: TC_TypeMismatch
-out-not-contains: cache-path=hit
 
 # 冷 store：依赖从未 check、依赖方先 check；随后改依赖源码仍必须重算。
 run: sh -c 'S="$TMPDIR/dsc"; rm -rf "$S"; mkdir -p "$S/dep/lib" "$S/mid/lib" "$S/mid/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$S/dep/vuna.toml"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n" > "$S/dep/lib/D.vuna"; printf "[package]\nname = \"mid\"\n[export]\nmodules = [\"M\"]\n\n[dependencies.dep]\npath = \"../dep\"\n" > "$S/mid/vuna.toml"; printf "module M where\n\nimport D\n\nexport g : Int\ng = f 1\n" > "$S/mid/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = g\n" > "$S/mid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1'
@@ -50,4 +44,3 @@ exit: 0
 run: sh -c 'S="$TMPDIR/dsc"; printf "module D where\n\nexport f : Int -> String\nf x = \"s\"\n" > "$S/dep/lib/D.vuna"; VUNA_LOG=debug VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 1
 out-contains: TC_TypeMismatch
-out-not-contains: cache-path=hit

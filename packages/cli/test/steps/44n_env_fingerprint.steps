@@ -10,7 +10,7 @@ exit: 0
 run: sh -c 'printf "\n# env probe\n[diagnostics]\nformat = \"short\"\n" >> "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
 run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/env-pkg/mid"'
 exit: 0
-out-contains: cache-path=hit
+out-contains: iface-write=
 # 语义变化（包名）：地址变化 ⇒ 重算并写回接口。
 run: sh -c 'sed -i "s/name = \"iface-audit-mid\"/name = \"iface-audit-mid2\"/" "$TMPDIR/env-pkg/mid/vuna.toml"; rm -rf "$TMPDIR/env-cache"'
 run: sh -c 'VUNA_STORE="$TMPDIR/env-store" TMPDIR="$TMPDIR/env-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/env-pkg/mid"'

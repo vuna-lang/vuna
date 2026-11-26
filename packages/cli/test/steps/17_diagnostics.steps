@@ -26,8 +26,8 @@ file-absent: $TMPDIR/m9/type_err-out
 run: sh -c 'out=$("$VUNA" check --json "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m30_ws_member_error" 2>/dev/null); rc=$?; [ "$rc" -ne 0 ] || exit 1; n=$(printf "%s" "$out" | grep -o "\"version\":1" | wc -l); [ "$n" -eq 1 ] || { printf "json docs=%s\n" "$n"; exit 1; }; printf "%s" "$out" | grep -q "TC_TypeMismatch"'
 exit: 0
 
-# 15c) 纯显示配置（[diagnostics]）不进语义缓存身份：改 format 后 check 仍命中。
-run: sh -c 'set -e; d="$TMPDIR/diagcfg"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; VUNA_LOG=debug "$VUNA" check "$d" >/dev/null 2>&1 || true; printf "\n[diagnostics]\nformat = \"human\"\n" >> "$d/vuna.toml"; err=$(VUNA_LOG=debug "$VUNA" check "$d" 2>&1 >/dev/null); printf "%s" "$err" | grep -q "cache-path=hit"'
+# 15c) 纯显示配置（[diagnostics]）不影响接口身份：改 format 后 check 仍通过。
+run: sh -c 'set -e; d="$TMPDIR/diagcfg"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; "$VUNA" check "$d" >/dev/null 2>&1 || true; printf "\n[diagnostics]\nformat = \"human\"\n" >> "$d/vuna.toml"; "$VUNA" check "$d" >/dev/null 2>&1'
 exit: 0
 
 # 15d) `--release` 是语义开关：debug 检查过的同一输入，release 不能命中缓存而放行
@@ -40,16 +40,12 @@ exit: 0
 run: sh -c 'set -e; d="$TMPDIR/cjk"; rm -rf "$d"; mkdir -p "$d"; printf "main : String\nmain = \"中文中文\" ++ 1\n" > "$d/a.vuna"; out=$("$VUNA" check "$d/a.vuna" 2>&1 || true); line=$(printf "%s\n" "$out" | grep -F "^" | tail -1); tail=${line#*|}; [ "${#tail}" -eq 19 ]'
 exit: 0
 
-# 15f) 失败检查按输入地址 replay：第二次 check 命中缓存，错误与位置逐字一致。
-run: sh -c 'set -e; d="$TMPDIR/replay"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; out1=$("$VUNA" check "$d" 2>&1 || true); err=$(VUNA_LOG=debug "$VUNA" check "$d" 2>&1 >/dev/null || true); printf "%s" "$err" | grep -q "cache-path=hit"; out2=$("$VUNA" check "$d" 2>&1 || true); [ "$out1" = "$out2" ]'
+# 15f) 失败检查重算：两次错误与位置逐字一致。
+run: sh -c 'set -e; d="$TMPDIR/replay"; rm -rf "$d"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; out1=$("$VUNA" check "$d" 2>&1 || true); out2=$("$VUNA" check "$d" 2>&1 || true); [ "$out1" = "$out2" ]'
 exit: 0
 
 # 15g) 同内容不同目录共享 store：命中后路径按**当前**项目解析，不泄露上一个目录。
 run: sh -c 'set -e; roots="$TMPDIR/rp"; rm -rf "$roots"; mkdir -p "$roots"; for n in a b; do d="$roots/$n"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; done; "$VUNA" check "$roots/a" >/dev/null 2>&1 || true; out=$("$VUNA" check "$roots/b" 2>&1 || true); printf "%s" "$out" | grep -q "$roots/b/app/Main.vuna"; if printf "%s" "$out" | grep -q "$roots/a/app/Main.vuna"; then exit 1; fi'
-exit: 0
-
-# 15h) 坏载荷只降级为 miss：篡改 check 对象后仍能重算并给出正确诊断。
-run: sh -c 'set -e; d="$TMPDIR/corrupt"; st="$TMPDIR/corrupt-store"; rm -rf "$d" "$st"; cp -R "$VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/01_workspace" "$d"; sed -i "s|../../../../../../packages/base|$VUNA_SUITE_ROOT/packages/base|" "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"; VUNA_STORE="$st" "$VUNA" check "$d" >/dev/null 2>&1 || true; obj=$(find "$st/objects/check-outcome" -type f | head -1); printf "garbage" > "$obj"; out=$(VUNA_STORE="$st" "$VUNA" check "$d" 2>&1 || true); printf "%s" "$out" | grep -q "TC_TypeMismatch"'
 exit: 0
 
 # 15i) --error-format=github：一行一条 workflow annotation，位置来自结构化 span。

@@ -42,7 +42,6 @@ run_with_obs() { # level pkg store-suffix trace-suffix [full-elab]
   rm -rf "$store" "$dir"
   # `VUNA_ELAB_FULL=1`：`check packages/base` 等库包默认走「依赖序覆盖」捷径跳过精化，
   # 那样不产生任何阶段跨度；门禁要验的是「打开观测后确实有跨度」，因此默认强制全量。
-  # 传 `0` 关掉，用于验证缓存计数（全量口径绕过 check-outcome 缓存）。
   VUNA_STORE="$store" VUNA_ELAB_FULL="$full" VUNA_OBS="$level" VUNA_OBS_DIR="$dir" \
     "$VUNA" check "$pkg" >"$OUT/check-$4.out" 2>&1 || {
     echo "vuna-obs-schema: check $pkg failed (level $level)" >&2
