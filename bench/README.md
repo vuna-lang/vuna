@@ -70,6 +70,12 @@
   `rss` 的绝对值，并提示 `default_stack_ok` 的变化。wasm 的净耗时不到地板两倍时（启动成本
   主导）绝对值行只作参考。宿主负载只污染墙钟，CPU 与 RSS 的口径不受影响，机器繁忙时以
   `cpu` 行为准。
+- `--gate-ratio N` 是**绝对门禁**（与基线无关）：逐个 case 用 **CPU 中位数**（`rusage`
+  user+sys，**含进程启动**）除对手写 OCaml，超过 N 即 `PERF-GATE-FAIL` 并 exit 1；阈值
+  下方 `--gate-slack`（默认 0.05）以内记为 `near`，只提示加 `--runs` 复核，不改退出码。
+  短用例（参照 1–5 ms）的进程启动占比高：`repeat=` 放大的是采样内耗时，不改变启动地板。
+- 采样顺序按轮交替（偶数轮先跑参照、奇数轮先跑被测）：参照与被测在同一次测量里交错，
+  避免宿主负载的单调漂移系统性偏向先跑的一方。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
   JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
@@ -87,6 +93,7 @@ nix run .#vuna-perf -- --target all --check            # 与 baselines/programs.
 nix run .#vuna-perf -- --only eff_tick --only eff_deep --only eff_bracket --check  # 效应子集
 nix run .#vuna-perf -- --only micro_apply --only micro_concat --target both --runs 5  # 原语级（ns/op）
 nix run .#vuna-perf -- --check --strict                # WARN 也 exit 1
+nix run .#vuna-perf -- --target ocaml --runs 9 --warmup 3 --gate-ratio 1.2  # 1.2x 绝对门禁
 nix run .#vuna-perf -- --target all --runs 5 --warmup 2 \
   --json bench/baselines/programs.json                 # 重新生成唯一一份程序基线
 ```
