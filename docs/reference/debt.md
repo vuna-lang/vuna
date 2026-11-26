@@ -171,7 +171,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | D91 · C | 互递归组的调用出现在 `let` / `case` 位置时，实参个数推断曾在部分形状上误报 `TC_TooManyArgs`；当前编译器上已知形状都走正确路径，原始触发用例未保留 | `compiler/test/corpus/term/12_let_case_call.vuna`、`Elab/Term/Impl.vuna`（应用脊椎的 `inferArgsGo`） | 后续（需要原始用例） |
 | D92 · C | 模式矩阵降级在个别嵌套模式 alt 上报无位置的假错 `TC_BranchTooFewArgs`（`:0:0`）；改写成层层 `case` 即通过 | `Elab/Match`（`ctorAltList` / `clausesForCtor`）、`Elab/Sig.kindDomains` | 后续 |
 | D93 · C | `Elab` 的选择性重导出门面已删除：子模块即公开面，没有「门面只重导出部分公开名」的封装 | `Elab/*.vuna`、`packages/compiler/vuna.toml` 的 `[export]`；[compiler.md](compiler.md) | 后续 |
-| D116 · ⚠️C | `fmt` 在 `export import M (T(..), ...)` 上会重复展开导出项：每跑一次列表翻倍 | `Vuna.Fmt.Decl`（import 渲染）；复现：给模块加一条含 `T(..)` 的 `export import`，连跑两次 | 后续 |
 | D126 · ⚠️B | `kill` 插件的命令只停路由层：`vuna dev …` / `vuna web …` 由产品入口发现插件后经 `processRunIn` 起子进程（`vuna-dev` / `vuna-web`），信号不转发——杀掉 `vuna` 会把真正在跑的插件进程留成孤儿（仍在 accept / 仍占 socket） | `packages/cli/lib/Vuna/Cli.vuna`（`dispatch` 的 `processRunIn`）；`packages/cli/test/corpus/obs-cdp/smoke.sh`（`spawn_serve`）；复现：起 `vuna dev obs serve --cdp unix:$PWD/s /tmp/t.jsonl` 后 `kill $!`，`pgrep -f "vuna-dev dev obs serve"` 仍在 | 后续（插件命令用 exec 替换进程，或路由层转发 SIGTERM/SIGINT） |
 
 ## 效应统一（Eff 已贯通）
