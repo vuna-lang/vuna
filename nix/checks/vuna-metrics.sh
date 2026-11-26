@@ -21,7 +21,7 @@ for f in "$OUT/fixture"/*.ml; do
   [ -e "$f" ] || continue
   name=${f##*/}
   case "$name" in
-    B_d*.ml|Prelude.ml|Vuna_runtime.ml) continue ;;
+    B_d*.ml|Prelude.ml|Vuna_runtime.ml|Vuna_deflocs.ml) continue ;;
   esac
   cp "$f" "$OUT/measure/"
   count=$((count + 1))

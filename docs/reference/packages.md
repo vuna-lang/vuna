@@ -53,8 +53,8 @@
   compiler 包自己的入口（与自举 stage-1 同一产物），在进程内调库实现 `check/build/compile`：
 
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
-    OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + 各模块 + `Main.ml` + `build.sh`），
-    成功静默；OUTDIR 必填；
+    OCaml，**逐模块**写到 OUTDIR（`Vuna_runtime.ml` + `Vuna_deflocs.ml` + 各模块 +
+    `Main.ml` + `build.sh`），成功静默；OUTDIR 必填；
   - `vuna check (<file.vuna> | <package-dir>)`：类型检查（不生成代码）；目录是 workspace
     根时**逐个检查所有成员**（成员错误不再被根 check 忽略）；文件带 `module` 头时按包上下文
     做**单库模块检查**（与编辑器打开该文件同一条链，告警只报本文件；包入口 `app/Main.vuna`

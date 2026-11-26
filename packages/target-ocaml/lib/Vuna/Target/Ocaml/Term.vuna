@@ -1315,6 +1315,10 @@ let dtp_try_net_send_within h s micros =
 -- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
 -- | 报告器文本。`usesEff` 决定是否带 `Effect.Unhandled` 分支：它引用
 -- `Perform` 效应构造子，而 `Perform` 只在 `dtEffRuntime` 里声明。
+--
+-- 位置表本身在程序自己的 `Vuna_deflocs.ml` 里，初始化时经 `dt_set_locs_raw` 写进这里的
+-- `dt_def_locs_raw_ref`：位置表随程序逐字节变化，留在本单元会让 `Vuna_runtime.cmx` 每个
+-- 程序都变，依赖它的所有单元随之重编。
 export dtReporterRuntimeWith : Bool -> String
 dtReporterRuntimeWith usesEff = """let rec dt_frame_parts parts =
   match parts with
@@ -1356,7 +1360,7 @@ let dt_def_loc_find key =
     match rest with
     | k :: d :: l :: tl -> if k = key then Some (d, l) else go tl
     | _ -> None
-  in go (String.split_on_char (Char.chr 10) dt_def_locs_raw)
+  in go (String.split_on_char (Char.chr 10) (!dt_def_locs_raw_ref))
 let dt_frame_label slot =
   match dt_slot_defname slot with
   | None -> None
@@ -2132,13 +2136,14 @@ inlineText "natMul" [a, b] = Just "(bi_natMul ${a} ${b})"
 inlineText "natDiv" [a, b] = Just "(bi_natDiv ${a} ${b})"
 inlineText _ _ = Nothing
 
--- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
--- `dt_def_locs_raw` 必须定义在报告器之前（报告器读它）；空表写成 `""`。
+-- 运行时文本 = 既有常量部分（`dtRuntime`） + 位置表引用 + 报告器 + 按需 helper。
+-- 位置表本身在 `Vuna_deflocs.ml`（`dtDefLocsUnit`），这里只留一个空引用 + setter：
+-- 本单元因此与程序定义表无关，同一 helper 集合下逐字节稳定。
 -- `usesFloat` / `usesTrace` / `usesObs` / `usesHost` 为 False 时对应 helper 不出现：
 -- 不用 Float / tracing / 观测 / 宿主原语的程序 runtime 逐字节稳定（产物身份与缓存
 -- 都依赖这一点）；`usesHost` 为 False 时产物也不链接 `unix.cmxa`。
-export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> String
-dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched usesEff =
+export dtRuntimeWith : Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> String
+dtRuntimeWith usesFloat usesTrace usesObs usesHost usesSched usesEff =
   let
     -- 观测 runtime 的 `dtp_obs_tid` 读调度器的当前任务槽，所以 obs 也带调度器。
     needsSched = usesSched || usesObs
@@ -2148,11 +2153,26 @@ dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched usesEff =
   in dtRuntime
     ++ (if usesEffRt then dtEffRuntime else "")
     ++ (if usesFloat then dtFloatRuntime else "")
-    ++ (if locs == "" then "let dt_def_locs_raw = \"\"\n" else "let dt_def_locs_raw = ${locs}\n")
+    ++ dtDefLocsRefRuntime
     ++ dtReporterRuntimeWith usesEffRt
     ++ (if needsSched then dtSchedRuntime else "")
     ++ (if usesHost then dtHostRuntime else "")
     ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")
+
+-- 位置表的接收端：`Vuna_deflocs.ml` 初始化时调用 `dt_set_locs_raw` 填入。
+dtDefLocsRefRuntime : String
+dtDefLocsRefRuntime = """let dt_def_locs_raw_ref : string ref = ref \"\"
+let dt_set_locs_raw (raw : string) : unit =
+  dt_def_locs_raw_ref := raw
+"""
+
+-- | 程序自己的定义位置表单元（`Vuna_deflocs.ml`）：初始化时写进 `Vuna_runtime.dt_set_locs_raw`。
+-- `locs` 是压平后的字符串字面量（空表写 `""`）。单独成单元后，程序变化只影响这个文件
+-- 与入口：`Vuna_runtime` 的 `.cmx` 可跨 case 复用。
+export dtDefLocsUnit : String -> String
+dtDefLocsUnit locs =
+  (if locs == "" then "let dt_def_locs_raw = \"\"\n" else "let dt_def_locs_raw = ${locs}\n")
+    ++ "let () = Vuna_runtime.dt_set_locs_raw dt_def_locs_raw\n"
 
 -- `strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的

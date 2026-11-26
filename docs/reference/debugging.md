@@ -46,8 +46,9 @@ vuna: runtime error: division by zero
 - 消息：`Failure m` 解包成 `m`（所以 `prim_fail` / `assert` / `todo` 的文案直接可见），
   其它异常用 `Printexc.to_string`。
 - 帧：`Printexc.Slot.name` → 生成代码里的 mangled 值名（如 `v_main`）→ 查
-  `Vuna_runtime.dt_def_locs_raw` 表（编译器生成，压平成一个字符串，每条 =
-  `键\n定义名\n相对路径:行\n`；只在异常报告路径扫描）；
+  `Vuna_deflocs.dt_def_locs_raw` 表（编译器生成，压平成一个字符串，每条 =
+  `键\n定义名\n相对路径:行\n`；只在异常报告路径扫描）。该单元初始化时写进
+  `Vuna_runtime.dt_set_locs_raw` 的空引用，因此位置表不改变 runtime 的 `.cmx`；
   最多打印 12 条命中帧，未命中帧（如 `Stdlib.failwith`）跳过。
 - 位置是**定义级**（span 起点行），不是表达式级；路径归一成模块根/包目录下的相对路径
   （`Base/Show.vuna:42`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。

@@ -196,6 +196,7 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 
 ```text
 Vuna_runtime
+Vuna_deflocs                                      （程序定义位置表；初始化时写进 runtime）
 B_dData_dPair ... B_dData_dString                 （vuna-base 模块，依赖序）
 Prelude
 Base_dCommon ... Base_dIntrinsics ...              （编译器内置层）
@@ -203,7 +204,10 @@ Base_dCommon ... Base_dIntrinsics ...              （编译器内置层）
 Main
 ```
 
-- `Vuna_runtime`：`Target.Ocaml.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时）。
+- `Vuna_runtime`：`Target.Ocaml.Term.dtRuntime`（`bi_*` / `dtp_*` 等运行时），只留位置表的
+  空引用与 `dt_set_locs`；`Vuna_deflocs`：`Target.Ocaml.Term.dtDefLocsUnit`（程序自己的
+  位置表，初始化时调用 `Vuna_runtime.dt_set_locs`）。两者分开，程序的表变化不会改变
+  runtime 的 `.cmx`。
 - 每个源码模块一个 `<Unit>.ml`（依赖序；OCaml 编译单元名 = 模块路径去掉包前缀后点转 `_d`，
   如 `Vuna.Compiler.Base.Intrinsics` → `Base_dIntrinsics.ml`、`Base.Data.List` →
   `B_dData_dList.ml`），文件头
