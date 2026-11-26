@@ -1,0 +1,7 @@
+# 关闭隐式 Prelude：本包模块只能使用显式 import 的名字。
+[package]
+name = "fix-113-no-implicit-prelude"
+implicit-prelude = false
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

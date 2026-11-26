@@ -38,6 +38,8 @@ export record Root where
   rootName : String
   rootExports : Maybe (List String)
   rootLayerRules : List Layer
+  -- | 本根对应包的模块是否自动注入 `Prelude`（来自 `[package] implicit-prelude`）。
+  rootImplicitPrelude : Bool
 
 -- 已解析的包：manifest、直接依赖（顺序同 [dependencies]）、包目录（已规范化）。
 export record Package(..) where
@@ -61,7 +63,7 @@ export record PackageContext where
   contextRelease : Bool
 
 export rootLayers : Root -> List Layer
-rootLayers (Root dir name exports layers) = layers
+rootLayers (Root dir name exports layers _) = layers
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 export rootPackage : Root -> String
@@ -86,6 +88,9 @@ packageExports package = package.packageManifest.manifestExports
 
 export packageLayers : Package -> List Layer
 packageLayers package = package.packageManifest.manifestLayers
+
+export packageImplicitPrelude : Package -> Bool
+packageImplicitPrelude package = package.packageManifest.manifestImplicitPrelude
 
 -- ---------------------------------------------------------------- 路径工具
 splitSlashChars : List Int -> List String -> List Int -> List String
@@ -559,6 +564,7 @@ dependencyRootOf package =
     (packageName package)
     (packageExports package)
     (packageLayers package)
+    (packageImplicitPrelude package)
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
 -- 包名唯一性由 `checkUniquePackageNames` 在加载期保证（同名 ⇒ 同目录），所以
@@ -581,7 +587,13 @@ export packageRoots : Package -> List Root
 packageRoots package =
   let
     selfName = packageName package
-    selfRoot = Root "${packageDir package}/lib" selfName Nothing (packageLayers package)
+    selfRoot =
+      Root
+        "${packageDir package}/lib"
+        selfName
+        Nothing
+        (packageLayers package)
+        (packageImplicitPrelude package)
   in case dependencyRoots [selfName] package.packageDependencies of
     (seen, roots) => selfRoot :: roots
 

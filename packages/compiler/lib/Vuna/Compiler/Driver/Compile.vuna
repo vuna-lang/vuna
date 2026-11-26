@@ -512,8 +512,10 @@ decPkgSummary payload =
     Just (h :: names, rest) => if curAtEnd rest then Just (PkgSummary names h) else Nothing
     Just ([], _) => Nothing
 
-pkgSummaryKeyOf : String -> String -> String -> String
-pkgSummaryKeyOf pkg srcClosure tag = addrOf ["pkg-summary", pkg, srcClosure, tag]
+pkgSummaryKeyOf : String -> String -> Bool -> String -> String
+pkgSummaryKeyOf pkg srcClosure implicitPrelude tag =
+  addrOf
+    ["pkg-summary", pkg, srcClosure, (if implicitPrelude then "prelude:1" else "prelude:0"), tag]
 
 readPkgSummaryAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (Maybe PkgSummary)
 readPkgSummaryAt root =
@@ -524,7 +526,7 @@ readPkgSummaryAt root =
       storeObjectReadEff
         pkgSummaryKind
         pkgSummaryCodec
-        (pkgSummaryKeyOf (rootName root) (strFromInt h) tag)
+        (pkgSummaryKeyOf (rootName root) (strFromInt h) (rootImplicitPrelude root) tag)
     pure (
         case payload of
           Nothing => Nothing
@@ -580,7 +582,7 @@ writePkgSummaryEff ctx modules =
         tag <- cacheTagEff
         let
           summary = PkgSummary (map miNameOf modules) (pkgIfaceHashOfModules (contextPackageName ctx) modules)
-          key = pkgSummaryKeyOf (contextPackageName ctx) (strFromInt h) tag
+          key = pkgSummaryKeyOf (contextPackageName ctx) (strFromInt h) r.rootImplicitPrelude tag
         in storeObjectWriteEff pkgSummaryKind pkgSummaryCodec key (encPkgSummary summary)
 
 metaPairText : (String, Int) -> String
@@ -685,9 +687,10 @@ manifestSemanticText (Just pkg) =
       case man.manifestExports of
         Nothing => ""
         Just xs => join "," xs
+    preludeText = if man.manifestImplicitPrelude then "true" else "false"
   in join
     "\n"
-    ((::) "name:${maybeSemanticText man.manifestName}" ((::) "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
+    ((::) "name:${maybeSemanticText man.manifestName}" ((::) "exports:${exportsText}" ((::) "implicit-prelude:${preludeText}" (map depSemanticText man.manifestDependencies))))
 
 -- 依赖优先的 DFS 后序 + 按包名去重（与 `Packages.Pkg.dependencyRoots` 同规则）。
 -- 直接依赖经单 clause 投影 `depPackagesOf` 取（SCT 认作结构子项），遍历本身是结构递归，
@@ -747,6 +750,7 @@ export record PkgEntry(..) where
   peDir : String
   peKey : String
   peEnv : String
+  peImplicitPrelude : Bool
 
 export record ClosureMod(..) where
   cmPkg : String
@@ -772,16 +776,26 @@ pkgTableEff ctx =
   do
     ownEnv <- packageEnvHash ctx
     let
-      own = PkgEntry (contextPackageName ctx) (contextDir ctx) (pkgKeyOf (contextPackageName ctx)) (strFromInt ownEnv)
+      own = PkgEntry (contextPackageName ctx) (contextDir ctx) (pkgKeyOf (contextPackageName ctx)) (strFromInt ownEnv) (contextImplicitPrelude ctx)
     in do
       deps <-
         mapEff (
             \p =>
               do
                 e <- packageEnvHash (packageContext p)
-                pure (PkgEntry (packageName p) (packageDir p) (pkgKeyOf (packageName p)) (strFromInt e))
+                pure (PkgEntry (packageName p) (packageDir p) (pkgKeyOf (packageName p)) (strFromInt e) (packageImplicitPrelude p))
           ) (depPackageList ctx)
       pure (own :: deps)
+
+-- | 无包上下文（ad-hoc）没有 manifest 可关，保持自动注入。
+contextImplicitPrelude : PackageContext -> Bool
+contextImplicitPrelude ctx =
+  case ctx.contextPackage of
+    Nothing => True
+    Just package => packageImplicitPrelude package
+
+pkgPreludePair : PkgEntry -> (String, Bool)
+pkgPreludePair entry = (entry.peName, entry.peImplicitPrelude)
 
 findPkgEntry : String -> List PkgEntry -> Maybe PkgEntry
 findPkgEntry _ [] = Nothing
@@ -835,9 +849,15 @@ closureModOf pe root p raw =
 -- 后置在地址里，而它在拓扑序里没有前驱 ⇒ 早于 Prelude 的模块算地址时它还没分配，
 -- 退化成 `ext:Prelude` 哨兵。哨兵/真实地址混用会让地址依赖遍历顺序（跨上下文不稳定，
 -- 实测 `check compiler` 与 `check .` 算出两套地址）。写进 header 后它就是正常边。
-appendPrelude : Bool -> ClosureMod -> ClosureMod
-appendPrelude hasPrelude m =
-  if hasPrelude && m.cmName /= "Prelude" && not (memName "Prelude" m.cmImports) then
+-- 每个模块只按**自己包的** `[package] implicit-prelude` 决定是否补边，与 loader 口径一致。
+appendPrelude : HashMap String Bool -> Bool -> ClosureMod -> ClosureMod
+appendPrelude preludeByPkg hasPrelude m =
+  let
+    enabled =
+      case HashMap.lookup m.cmPkg preludeByPkg of
+        Just b => b
+        Nothing => True
+  in if hasPrelude && enabled && m.cmName /= "Prelude" && not (memName "Prelude" m.cmImports) then
     ClosureMod
       m.cmPkg
       m.cmPkgKey
@@ -923,7 +943,8 @@ ifaceModsWithEff ctx pkgs =
     tb <- clockNow
     let
       hasPrelude = memName "Prelude" (map modNameOf mods0)
-      mods = map (appendPrelude hasPrelude) mods0
+      preludeByPkg = HashMap.fromList (map pkgPreludePair pkgs)
+      mods = map (appendPrelude preludeByPkg hasPrelude) mods0
       srcTbl = srcTblOf mods
       assigned = map (withAddr srcTbl) mods
     in do
@@ -968,7 +989,7 @@ rootPkgTableEff ctx =
       \r =>
         do
           env <- rootEnvHashOf (rootDir r)
-          pure (PkgEntry (rootName r) (rootDir r) (pkgKeyOf (rootName r)) (strFromInt env))
+          pure (PkgEntry (rootName r) (rootDir r) (pkgKeyOf (rootName r)) (strFromInt env) (rootImplicitPrelude r))
     ) (contextRoots ctx)
 
 -- | 某上下文的整个模块闭包接口（工具 / 单文件 / 测试会话用）。

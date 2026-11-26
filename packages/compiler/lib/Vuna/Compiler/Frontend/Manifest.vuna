@@ -2,7 +2,7 @@ module Vuna.Compiler.Frontend.Manifest where
 
 -- Vuna.Compiler.Frontend.Manifest：vuna.toml 的语义模型（包管理基础件）。
 -- 表约定：
---   [package]     name（包目录必填；workspace 根可省略形成虚拟根）
+--   [package]     name（包目录必填；workspace 根可省略形成虚拟根）/ implicit-prelude（可选，默认 true）
 --   [workspace]   members = ["stdlib", "app"]（可选）
 --   [export]      modules = ["Base.Data.List"]（可选；值必须是字符串数组）
 --   [diagnostics] format / warnings / max-errors / lang / deny-warnings（可选）
@@ -61,6 +61,8 @@ export record Manifest(..) where
   -- | 声明了 `[workspace]`：该目录是 workspace 根（可同时是包）。
   manifestIsWorkspace : Bool
   manifestExports : Maybe (List String)
+  -- | 本包模块是否自动注入依赖包的 `Prelude`（缺省为 `True`）；显式 import 不受影响。
+  manifestImplicitPrelude : Bool
   manifestDependencies : List Dependency
   manifestPath : String
   -- | `[diagnostics]`：渲染格式 / warnings 开关 / max-errors（可选；命令行 flag 优先）。
@@ -156,6 +158,11 @@ boolField path section key entries =
 orEmptyList : Maybe (List a) -> List a
 orEmptyList Nothing = []
 orEmptyList (Just xs) = xs
+
+-- | `[package] implicit-prelude` 缺省为 `True`。
+preludeEnabled : Maybe Bool -> Bool
+preludeEnabled Nothing = True
+preludeEnabled (Just b) = b
 
 -- ---------------------------------------------------------------- 层约束
 -- `[layers]` 的键是层名（模块前缀），值是字符串数组（该层允许直接依赖的层）。
@@ -264,7 +271,7 @@ checkOneEntry path (TomlEntry section key value line) =
   if sameSection section [] then
     pkgAt1 path line (UnexpectedTopLevelKey key) key
   else if sameSection section ["package"] then
-    if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
+    if key == "name" || key == "implicit-prelude" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
   else if sameSection section ["workspace"] then
     if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
   else if sameSection section ["export"] then
@@ -520,7 +527,7 @@ validateRootShape path entries Nothing members =
   else if members == [] then
     pkgPath0 path EmptyWorkspace
   else
-    checkRootSections path entries ["export", "layers", "dependencies"]
+    checkRootSections path entries ["package", "export", "layers", "dependencies"]
 
 checkRootSections : String -> List TomlEntry -> List String -> Check Int
 checkRootSections path entries [] = OkC 0
@@ -536,6 +543,7 @@ buildManifest path entries =
     _ <- checkEntries path entries
     layers <- collectLayers path entries []
     name <- stringField path ["package"] "name" entries
+    preludeField <- boolField path ["package"] "implicit-prelude" entries
     members <- stringListField path ["workspace"] "members" entries
     _ <- validateRootShape path entries name (orEmptyList members)
     exports <- stringListField path ["export"] "modules" entries
@@ -550,7 +558,7 @@ buildManifest path entries =
     _ <- validateDiagMax path diagMax
     _ <- validateDiagLang path diagLang
     pure
-      (Manifest name (orEmptyList members) (sectionPresent entries "workspace") exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
+      (Manifest name (orEmptyList members) (sectionPresent entries "workspace") exports (preludeEnabled preludeField) deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 export parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
@@ -614,7 +622,7 @@ validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
 
 export validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) =
+validateManifest (Manifest name members isWorkspace exports prelude deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) =
   do
     _ <- validateName isWorkspace members path name
     _ <- validateMembers path members
@@ -622,7 +630,7 @@ validateManifest (Manifest name members isWorkspace exports deps path diagFmt di
     _ <- validateDependencies path deps
     _ <- validateLayers path layers layers
     pure
-      (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
+      (Manifest name members isWorkspace exports prelude deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 export manifestDir : String -> String

@@ -582,16 +582,24 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 自动注入的 Prelude：从导入方所在包可见的依赖包取。
 -- 显式 import Prelude 时不再重复注入；Prelude 自身不注入（避免环）；当前包自己
 -- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
--- ad-hoc（importerPkg==""）同样是包上下文（base-only）：自动注入 base 的 Prelude；
--- 没有 base 依赖的包没有候选，于是不注入。
+-- `[package] implicit-prelude = false` 的包不注入（导入方包名对应根的开关）；
+-- 显式 import Prelude 仍有效。ad-hoc（importerPkg==""）同样按包上下文处理：
+-- 自动注入 base 的 Prelude；没有 base 依赖的包没有候选，于是不注入。
 export implicitPrelude : Member nFs FsOp r => List Root -> String -> String -> List Import -> Eff r (Check (List Import))
 implicitPrelude roots importerPkg currentName imports =
-  if currentName == "Prelude" then
+  if not (implicitPreludeEnabled roots importerPkg) then
+    pure (OkC [])
+  else if currentName == "Prelude" then
     pure (OkC [])
   else if memName "Prelude" (importModuleNames imports) then
     pure (OkC [])
   else
     implicitPreludeFrom roots importerPkg
+
+implicitPreludeEnabled : List Root -> String -> Bool
+implicitPreludeEnabled [] _ = True
+implicitPreludeEnabled (r :: rest) pkg =
+  if rootName r == pkg then r.rootImplicitPrelude else implicitPreludeEnabled rest pkg
 
 implicitPreludeFrom : Member nFs FsOp r => List Root -> String -> Eff r (Check (List Import))
 implicitPreludeFrom roots importerPkg =
