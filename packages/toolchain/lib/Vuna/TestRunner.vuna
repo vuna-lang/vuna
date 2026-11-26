@@ -1,17 +1,18 @@
 -- | 包内测试运行器：按 `main` 的返回类别跑测试，支持效果测试、超时与 workspace 聚合。
 --
--- 包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；类别由
--- `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。`String`
--- 核心求值后空串通过，`Int` / `Nat` 为 0 通过，`Bool` 为 True 通过，`Eff r a` 走
--- 「编译 + 运行」并按进程退出码判定（0 通过，失败的测试显式 `exit 1`）；其它
--- 返回类型明确失败，错误信息里写清支持的类型。编译 / 精化失败也按 FAIL 记录诊断，
--- 单测失败不中断其余测试。
+-- 包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；类别与纯值由
+-- `Vuna.Compiler.Driver.Dt.dtEvalTestEntry` 一次精化给出（同一份 DT 精化，不猜语法；
+-- 依赖包与干净同包模块走接口摘要，只精化入口）。`String` 核心求值后空串通过，
+-- `Int` / `Nat` 为 0 通过，`Bool` 为 True 通过，`Eff r a` 走「编译 + 运行」并按进程
+-- 退出码判定（0 通过，失败的测试显式 `exit 1`）；其它返回类型明确失败，错误信息里
+-- 写清支持的类型。编译 / 精化失败也按 FAIL 记录诊断，单测失败不中断其余测试。
 --
 -- 效果测试有单测超时：默认 120s，`VUNA_TEST_TIMEOUT` 覆盖（0 = 关闭，非数字回落
--- 默认）。实现是在私有临时目录里 `compileToDir` 测试入口；`compileToDir` 是进程内
--- 调用、不受外部超时，随后用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
--- 产物」两步，任一步超时记 FAIL 并清理。没有 `timeout` 命令时同一路径不加外部超时。
--- 纯测试走 `interpretFile`，终止性由核心求值器的 fuel 守卫保证。
+-- 默认）。实现是在私有临时目录里 `compileToDirGiven` 测试入口（复用入口检查已经
+-- 算好的闭包输入与依赖接口）；它在进程内调用、不受外部超时，随后用 coreutils
+-- `timeout` 包住「`sh build.sh` 链接」与「运行产物」两步，任一步超时记 FAIL 并清理。
+-- 没有 `timeout` 命令时同一路径不加外部超时。纯测试在入口精化后直接核心求值，
+-- 终止性由核心求值器的 fuel 守卫保证。
 --
 -- 入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文；测试模块与包内模块走
 -- 同一套模块可见性规则。`vuna test <workspace-root>` 对 workspace 里每个包各跑自己
@@ -30,7 +31,6 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Vuna.EffectRun
 import Vuna.Files
-import Vuna.Interp
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
 import Base.Effect.Env as EffEnv
@@ -388,36 +388,29 @@ printOutcome opts name (TestFailed message) us =
 timingText : TestOpts -> Int -> String
 timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
--- | 内部：单个测试——按 `main` 的返回类别选执行路径（`Eff` 走效果测试，其余核心求值
--- 后与期望值比较；未知类别给明确失败）。
+-- | 内部：单个测试——一次精化同时拿到 `main` 的类别与纯值，再按类别选执行路径
+-- （`Eff` 走编译 + 运行，其余与期望值比较；未知类别给明确失败）。
 runOneTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
 runOneTest ctx path name =
   do
-    kindR <- dtMainKind ctx path
-    case kindR of
+    inputs <- splitInputsOf ctx
+    cleanR <- ownCleanModulesWith ctx inputs.siClosure
+    mainR <- dtEvalTestEntry ctx path inputs.siDepIfaces cleanR
+    case mainR of
       ErrC e => pure (TestFailed (diagText e))
-      OkC kind =>
-        case kind of
-          "Eff" => runIOTest ctx path name
-          "String" =>
-            do
-              output <- interpretFile ctx path
-              pure (pureTest name output "\"\"")
-          "Int" =>
-            do
-              output <- interpretFile ctx path
-              pure (pureTest name output "0")
-          "Nat" =>
-            do
-              output <- interpretFile ctx path
-              pure (pureTest name output "0")
-          "Bool" =>
-            do
-              output <- interpretFile ctx path
-              pure (pureTest name output "True")
+      OkC r =>
+        let
+          kind = firstOf r
+          output = secondOf r
+        in case kind of
+          "Eff" => runIOTest inputs ctx path name
+          "String" => pure (pureTest name output "\"\"")
+          "Int" => pure (pureTest name output "0")
+          "Nat" => pure (pureTest name output "0")
+          "Bool" => pure (pureTest name output "True")
           _ => pure (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff r a` (exit code 0 = pass))")
 
--- | 内部：纯测试——`interpretFile` 的核心求值结果与期望值逐字比较。
+-- | 内部：纯测试——入口精化后的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> TestOutcome
 pureTest name output expected =
   if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
@@ -425,12 +418,12 @@ pureTest name output expected =
 -- | 内部：效果测试——`timeout` 命令存在且超时未关闭时包外部超时，否则同一路径不加
 -- 超时（`runIOTestTimed` 的 `secs <= 0` 分支）。退出码 0 通过；编译 / 链接失败按
 -- FAIL 记录诊断。
-runIOTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
-runIOTest ctx path name =
+runIOTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> String -> Eff r TestOutcome
+runIOTest inputs ctx path name =
   do
     secs <- testTimeoutSecs 0
     has <- hasTimeoutCmd 0
-    runIOTestTimed ctx path name (if secs <= 0 || not has then 0 else secs)
+    runIOTestTimed inputs ctx path name (if secs <= 0 || not has then 0 else secs)
 
 -- ---------------------------------------------------------------
 -- 效果测试的超时执行
@@ -475,12 +468,13 @@ runTimedCmd dir argv secs =
       pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
 -- | 内部：在 `dir` 里编译测试入口（`printResult = False`，只看退出码），再跑
--- `sh build.sh bin/vuna-test`；`compileToDir` 在进程内执行（不受外部超时），
--- `sh build.sh` 由 `timeout` 保护，失败 / 超时都给出 FAIL。
-buildTestBin : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> Int -> Eff r TestOutcome
-buildTestBin ctx path name dir secs =
+-- `sh build.sh bin/vuna-test`；`compileToDirGiven` 复用入口检查已经算好的闭包输入与
+-- 依赖接口，在进程内执行（不受外部超时），`sh build.sh` 由 `timeout` 保护，
+-- 失败 / 超时都给出 FAIL。
+buildTestBin : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> String -> String -> Int -> Eff r TestOutcome
+buildTestBin inputs ctx path name dir secs =
   do
-    compiled <- compileToDir ctx path False dir
+    compiled <- compileToDirGiven inputs ctx path False dir
     case compiled of
       ErrC e => pure (TestFailed (diagText e))
       OkC _ =>
@@ -495,13 +489,13 @@ buildTestBin ctx path name dir secs =
             )
 
 -- | 内部：有超时的效果测试——在私有临时目录编译并运行；失败 / 超时都清理。
-runIOTestTimed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Int -> Eff r TestOutcome
-runIOTestTimed ctx path name secs =
+runIOTestTimed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> String -> Int -> Eff r TestOutcome
+runIOTestTimed inputs ctx path name secs =
   do
     base <- tempBase 0
     now <- clockNow
     dir <- freshTempDir 1000 "${base}/vuna-test-${now}-${name}"
-    built <- buildTestBin ctx path name dir secs
+    built <- buildTestBin inputs ctx path name dir secs
     case built of
       TestPassed =>
         do
