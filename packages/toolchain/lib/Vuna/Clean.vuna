@@ -5,7 +5,7 @@
 --
 -- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface / check-outcome /
 --   tool-context / splitptr / target-out，以及身份记录 module-order / pkg-iface）、`blobs/`、
---   `units/`、`views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
+--   `views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
 -- - `--gc`：与 `--packages` 连用，只删包对象族里**未被引用**的对象；引用集是当前包与
@@ -80,13 +80,13 @@ cacheKindNames = ["module-iface", "check-outcome", "tool-context", "splitptr", "
 identityKindNames : List String
 identityKindNames = ["module-order", "pkg-iface"]
 
--- | 内部：缓存族的清理作用域：各 kind 目录 + `blobs` / `units` / 两类视图产物 / `.tmp`。
+-- | 内部：缓存族的清理作用域：各 kind 目录 + `blobs` / 两类视图产物 / `.tmp`。
 -- 不碰包对象族（`objects/pkg`）、`pkgs` 与 `roots`。
 cacheScopesOf : String -> List String
 cacheScopesOf root =
   append
     (map (\k => "${root}/objects/${k}") (append cacheKindNames identityKindNames))
-    ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
+    ["${root}/blobs", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
 
 -- | 内部：清缓存族（`--store`）：作用域见 [Vuna.Clean.cacheScopesOf]，`dry` 时只统计不删。
 cleanStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
@@ -394,17 +394,16 @@ allRootDigests =
     projects <- storeRootProjectListEff
     concatMapEff storeRootLoadEff projects
 
--- | 内部：缓存族里的全部文件：`objects/`（**排除包对象族 `objects/pkg/`**）、`blobs/`、`units/`。
+-- | 内部：缓存族里的全部文件：`objects/`（**排除包对象族 `objects/pkg/`**）、`blobs/`。
 gcFilesOf : Member nFs FsOp r => String -> Eff r (List String)
 gcFilesOf root =
   do
     objs <- walkFiles 1048576 "${root}/objects"
     blobs <- walkFiles 1048576 "${root}/blobs"
-    units <- walkFiles 1048576 "${root}/units"
     let
       excluded = ["${root}/objects/pkg/", "${root}/objects/module-order/", "${root}/objects/pkg-iface/"]
       cacheObjs = filter (\p => not (anyLine (\pre => startsWith pre p) excluded)) objs
-    in pure (append cacheObjs (append blobs units))
+    in pure (append cacheObjs blobs)
 
 -- | 内部：目录下的直接子目录（不存在或不是目录给空列表）。
 subDirsOf : Member nFs FsOp r => String -> Eff r (List String)

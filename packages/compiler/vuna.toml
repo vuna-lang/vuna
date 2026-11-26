@@ -25,7 +25,6 @@ modules = [
   "Vuna.Compiler.Driver.TargetBuild",
   "Vuna.Compiler.Driver.TargetCache",
   "Vuna.Compiler.Driver.Owner",
-  "Vuna.Compiler.Driver.PerfCache",
   "Vuna.Compiler.Driver.Split",
   "Vuna.Compiler.Driver.SplitGen",
   "Vuna.Compiler.Driver.ToolPayload",

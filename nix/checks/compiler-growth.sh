@@ -6,7 +6,7 @@
 # 线性路径的比值 ≈2；出现 n²/n³ 或逐档翻倍时会明显越界。这是对
 # `bench/compiler.sh --check`（同机绝对基线，软/硬阈值）的补充，进 `nix flake check`。
 #
-# 为什么显式隔离 `VUNA_STORE`：`TMPDIR` 只影响 AST/单元缓存，**接口与单元对象在
+# 为什么显式隔离 `VUNA_STORE`：`TMPDIR` 只影响 AST 缓存，**接口对象在
 # `VUNA_STORE`**；devShell 里本地跑时 `VUNA_STORE` 是已预热的 `.local/store`，于是各档
 # 共享热 store，读数被磨平（同一二进制在 N=8000 上是 400 ms 还是 2.2 s 完全取决于这一点）。
 # CI 的 mkCheck 没有 `VUNA_STORE`、`HOME=/homeless-shelter`，天然落在

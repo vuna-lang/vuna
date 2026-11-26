@@ -62,13 +62,9 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
    数据来自**归属桶**（一次 `O(def)` 分桶），不在每个单元重扫全程序；类型渲染与注解的
    数据族判定走 `LwEnv.lwDataTbl`（按名 O(1)），不再对全部运行时族线性扫（采样为
    ~52 万次判定：`renderTyGlobal` 37 万、`annotHeadTy` 5.6 万、`annotCalleeTy` 4.6 万、
-   `annotGlobalTy` 2 万、字段渲染 2.1 万；lowering 588 → 514 ms）。单元缓存的 key
-   （模块身份 + import 链 + `pr`）只在缓存启用时计算——自举 / CI 的一次性对象库里它
-   不可能命中，构建脚本直接 `VUNA_UNIT_CACHE=0`。模块身份直接用闭包扫描的接口地址
-   `cmAddr`（包环境 + 源摘要 + 直接依赖源摘要），不再逐模块编码整棵声明 AST。
-   同机 A/B（空 store、同窗口交替，取最小，基线 = 本轮改动前的主干二进制）：
+   `annotGlobalTy` 2 万、字段渲染 2.1 万；lowering 588 → 514 ms）。   同机 A/B（空 store、同窗口交替，取最小，基线 = 本轮改动前的主干二进制）：
    冷 `build --no-compile packages/compiler` user **4.49–4.54 s → 3.70–3.74 s**（含
-   `VUNA_IFACE_WRITE=0`）；缓存开启的单模块增量构建 user **4.27–4.36 s → 3.88–3.93 s**
+   `VUNA_IFACE_WRITE=0`）；接口缓存开启的单模块增量构建 user **4.27–4.36 s → 3.88–3.93 s**
    （接口 compute/write 见第 1 条）。`groupRuntimeDefs` 已表化，`dtDefLocTable` 的右嵌套
    `++` 已改 `strConcatMany`。
 5. **终止性 ~0.3 s（冷 build）**：`anyOwn` 的 O(n²) 已修；剩余是逐组 measure/SCT 与

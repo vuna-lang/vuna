@@ -49,7 +49,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
                                     # 键 = irHash + target + 后端二进制身份 + print
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
-  units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按单元身份 + 依赖单元 key 命中）
   views/bin/<视图摘要>/             # 构建视图（产物真身，含 .complete；key = splitIn + 链接工具链）
   views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
@@ -63,7 +62,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 类 | 域 | 生命周期 |
 | --- | --- | --- |
-| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` `target-out` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
+| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` `target-out` + `blobs` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
 | 身份与决策记录 | `module-order` / `pkg-iface` | 承载确定性或产物身份；GC 不淘汰，仅显式 `clean --store` 清理 |
 | 源对象 | `pkg` / `pkgs` | 取来的源；`clean --packages` 管理，删了要重新 fetch |
 
@@ -81,7 +80,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 依赖模块接口 | 按地址读 `objects/module-iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
 | 依赖身份 | `objects/pkg-iface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
 | 工具会话（LSP/REPL/`map`） | `objects/tool-context/<addr>` 存在 | 重建会话载荷 |
-| 单元级 codegen（`units`） | 文件名存在 + framing 通过 + 载荷依赖 ⊆ 本次单元集 | 重跑该单元 codegen |
 | 后端产物（`--target native\|wasm`） | `objects/target-out/<键>` 存在且可解码 | 起后端插件，读回产物与诊断 |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
@@ -101,11 +99,6 @@ startLine）+ 编译器 tag。它不看本包源字节：注释变更不换语�
 `opaque`/`abstract` 体变更换 `pkgImplHash`；依赖包源码变化换 `deps`（产物文件集包含依赖
 单元），摘要 / 全量两条路径的 runtime defloc 表不同所以产物口径必须区分。快指针
 `objects/splitptr/<splitIn>` 只是「源输入 → 语义产物」的别名，不是身份。
-
-单元级 codegen 缓存的 key = 单元名 + 模块身份（`Driver.Compile.ClosureMod.cmAddr`：
-包环境 + 源摘要 + 直接依赖源摘要；没有闭包表的路径退回 `encDecls` 规范编码）+
-import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，命中判定只做查表，
-不再逐模块重编码声明 AST。
 
 ## 编译器身份
 
@@ -163,7 +156,7 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
 
 - 视图、对象、roots 全部按输入摘要寻址 → 另一目录 / 另一 worktree 的同一份输入直接命中；
   实测同一编译器身份下换目录 `check .` ~82 ms、`build .` ~0.6 s（冷态分别 ~49 s / ~28 s）；
-- 并发安全由既有机制承担：views 用 `mkdir` 锁串行、roots 只追加、units 只在桶内清理；
+- 并发安全由既有机制承担：views 用 `mkdir` 锁串行、roots 只追加；
 - 代价：`vuna store clean --store` / `vuna store gc` 是**全局操作**，任一 worktree 执行都会影响
   所有使用者（只影响命中率，不影响正确性）。不要在别人构建时跑 `clean --store`。
 - Nix 里不共享可变 store：`packages.vuna-store` 先把依赖包 `check` 成只读快照，每个插件
@@ -205,12 +198,9 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
   不符即 `Nothing`；调用方按 miss 处理。输入寻址的 blob 用 `storeReadAsEff` 比对期望地址。
 - **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；产物身份
   另把本包 `miDefLocs` 计入布局摘要，行移动必然重建。
-- **单元缓存读侧按本次程序校验**：`units` 载荷自带依赖表，命中时还要求「文件名声明的
-  单元名一致 + 每个依赖都是本次程序的已知单元」。模块集合变化留下的旧 key 文件（或载荷
-  与当前程序不一致）按 miss 重算，不会把不存在的单元写进 build.sh 的依赖/stamp 表。
 - **模块顺序与缓存状态无关**：split 串接顺序取 import 图的拓扑序，拓扑排序的**起点**
   先按 `(名字内容键, 名字)` 全序排好 —— loader 的模块列表顺序（新加载者前插、预置模块
-  在尾）不进语义，同一模块集合在冷/热 store、不同入口下都得到同一份顺序与单元 key。
+  在尾）不进语义，同一模块集合在冷/热 store、不同入口下都得到同一份顺序与 split 分层。
 
 ## roots 与 GC
 
@@ -229,7 +219,7 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
     目录名参与 roots 保护；
   - `--max-size` 有值时按 mtime 从旧到新淘汰（文件与 view 目录都计入总量），直到降到上限以下。
 
-## 并发边界（views / units）
+## 并发边界（views）
 
 - **views/bin**：同一 `splitIn` 的构建用 `mkdir` 锁（`$VUNA_STORE/.tmp/lock-bin-<digest>`）串行化。
   持锁者**直接在最终视图路径构建**（codegen 里的绝对路径保持稳定）；成功后用原子写提交
@@ -239,11 +229,8 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
   视图共用 scratch claim/publish（`storeView*Eff`），命中直接运行。REPL 的动作表达式用同一套
   机制，摘要口径是 `effectbin 1|指纹|rootsHash|源码|printResult|工具链`。
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
-- **units**：只做**当前 entry 桶内**的过期 key 清理；不跨 entry 删目录。并发构建不同入口
-  不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或
-  `vuna store clean --store` 管理；删除 unit 只是重算，不影响正确性。split 生成顺序按实际
-  依赖图规范化（`canonicalTopo`：层 = 1 + max(依赖层)，同层按名字内容键），并校验该图
-  无环 —— 命中集合不同不会让产物或 build.sh 分层漂移。
+split 生成顺序按实际依赖图规范化（`canonicalTopo`：层 = 1 + max(依赖层)，同层按名字
+内容键），并校验该图无环 —— 命中集合不同不会让产物或 build.sh 分层漂移。
 
 ## 观测
 
@@ -320,4 +307,4 @@ import 链的传递单元 key + `pr0|pr1`。闭包扫描已经算好 `cmAddr`，
   身份（`views/bin` key 的一段；devShell 与测试 runner 会自动注入，手工构建时一般不用设）。
 - `VUNA_IFACE_WRITE=0` 跳过接口影子写（计算 + 落盘）：只在「这个 store 写完就丢」的一次性
   构建里用（自举 / CI 的每级全新对象库，脚本已默认设置）；常驻 store 上关掉会让下一次
-  构建失去接口复用，只能回退全量。`VUNA_UNIT_CACHE=0` 同理跳过单元缓存 key 与写回。
+  构建失去接口复用，只能回退全量。

@@ -1,6 +1,6 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 59) `vuna store clean`：一个 store 根、两类生命周期。
-#     --store     清缓存族（objects/<kind>、blobs、units、views/bin、.tmp），保留包对象族与 roots
+#     --store     清缓存族（objects/<kind>、blobs、views/bin、.tmp），保留包对象族与 roots
 #     --packages  清包对象族（objects/pkg、pkgs、tmp），保留缓存族与 roots
 #     --gc        与 --packages 连用：只删未被工作区/项目 roots 引用的包对象
 #     不带 flag 时只清缓存族；--dry-run 只报数量。

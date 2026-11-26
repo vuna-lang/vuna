@@ -42,7 +42,7 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
-- **同一个根、两类生命周期**（D15）：缓存族（`objects/<kind>/`、`blobs/`、`units/`、
+- **同一个根、两类生命周期**（D15）：缓存族（`objects/<kind>/`、`blobs/`、
   `views/`、`.tmp/`、`roots/`）由 `vuna store gc` / `clean --store` 管理；包对象族
   （`objects/pkg/`、`pkgs/`、`tmp/`）由 `clean --packages` 管理。包对象放在 `objects/pkg/`
   这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
@@ -88,7 +88,7 @@ DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete
 ## 5. 清理
 
 ```console
-vuna store clean --store                  # 清缓存族（objects/<kind>、blobs、units、views/bin、.tmp）
+vuna store clean --store                  # 清缓存族（objects/<kind>、blobs、views/bin、.tmp）
 vuna store clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
 vuna store clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
 vuna store clean --all                    # 两族都清

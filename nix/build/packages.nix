@@ -252,8 +252,6 @@ let
       mkdir -p "$out/bin"
       cp -r ${srcFor "compiler" pkgDeps.compiler}/packages packages
       chmod -R u+w .
-      # 构建在一次性对象库里跑：单元缓存不会命中，key 的逐模块声明编码是纯开销。
-      export VUNA_UNIT_CACHE=0
       # 接口影子写完后这个 store 不会再被读，接口计算与落盘是纯开销。
       export VUNA_IFACE_WRITE=0
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 packages/compiler
@@ -280,7 +278,6 @@ let
         cp -r ${srcFor "store" storeDeps}/packages packages
         chmod -R u+w packages
         export VUNA_STORE="$out/store"
-        export VUNA_UNIT_CACHE=0
         # 依赖在前：后面的 check 读得到前面的接口与模块顺序。
         for pkg in ${lib.concatStringsSep " " storeDeps}; do
           ${vuna-compiler}/bin/vuna-compiler check "packages/$pkg"
@@ -316,7 +313,6 @@ let
         ) extraStores}
         chmod -R u+w "$TMPDIR/vuna-store"
         export VUNA_STORE="$TMPDIR/vuna-store"
-        export VUNA_UNIT_CACHE=0
         ${vuna-compiler}/bin/vuna-compiler build "packages/${dir}" --out "$TMPDIR/vuna-out"
         cp "$TMPDIR/vuna-out/bin/${pkg}" "$out/bin/${installAs}"
         # 插件进程里的工具链读可执行文件旁的编译器身份：与 stage 1 对齐，否则它写出的

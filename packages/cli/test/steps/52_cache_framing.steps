@@ -6,12 +6,10 @@
 #     单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
 #     重算后的 codegen 产物落在**内容寻址 blob**（`$VUNA_STORE/blobs/<digest>`），
 #     图节点 `split:<pkg>:<kind>` 只存地址；坏字节的后果是「该地址读不出 ⇒ 重算并写回
-#     同一路径」。单元缓存（`PerfCache`）仍是独立目录，一并断言 framing。
 #     夹具 $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #     vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: sh -c 'blob=$(find "$VUNA_STORE"/blobs -type f 2>/dev/null | head -1); [ -n "$blob" ] && printf "%s" "$blob" > "$TMPDIR/c32-blob-path"'
-run: sh -c 'unit=$(find "$VUNA_STORE" -path "*/units/*" -type f 2>/dev/null | head -1); [ -n "$unit" ] && printf "%s" "$unit" > "$TMPDIR/c32-unit-path"'
 # 52a) 产物 blob 的 framing 头：magic 是 v2，tag 带 split-node schema 2，codec 是
 #      split-files 2（载荷 = 规范拓扑序）。
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
@@ -20,13 +18,6 @@ run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f2
 out-equals: vuna-split-node 2
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -1 "$blob" | cut -d"|" -f3'
 out-equals: split-files 2
-# 52a2) 单元缓存（PerfCache）的 framing 头：tag 带 unit-cache schema 2，codec 是 split-file 1。
-run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -c 18 "$unit"'
-out-equals: vuna-cache-frame 2
-run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f2 | cut -d"/" -f1'
-out-equals: vuna-unit-cache 2
-run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f3'
-out-equals: split-file 1
 # 52b) 截断：全部 blob 只留前 4096 字节（头行完整、载荷少一截）⇒ len/内容地址校验拒绝
 #      ⇒ 重算并重写同一路径。产物必须与干净构建**逐字节一致**：首次全量构建
 #      与「重算、有接口/单元缓存可复用」两条 codegen 路径的输出相同，包括

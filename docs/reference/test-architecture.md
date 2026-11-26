@@ -24,7 +24,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 ```text
                     ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
    objects/module-iface|check-outcome|tool-context|module-order|pkg-iface|splitptr
-   blobs/<splitIdentity>   units/<pkg>   views/bin/<splitIn>   roots/<project>/<digest>
+   blobs/<splitIdentity>   views/bin/<splitIn>   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
         │ test scheduler：父进程解析 store、预热一次  │
@@ -61,7 +61,6 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 | --- | --- | --- |
 | `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不丢 root |
 | `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 |
-| `units/<pkg>` | 写原子，按 entry 桶内 GC | 并发不同 entry 不互相驱逐 |
 
 ### 2.4 进程内执行层（fixture 用例）
 
@@ -123,7 +122,7 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 ## 5. 产物：走 store 视图
 
-- `views/bin/<splitIn>` / `units/` 承担 build 产物；测试共享同一视图。
+- `views/bin/<splitIn>` 承担 build 产物；测试共享同一视图。
 - 包内 effect 测试有 `views/testbin/<testBin>` 产物缓存：key = 编译器指纹 + 各 context
   root 内容 + 测试源内容；命中直接运行缓存的 `bin/vuna-test`，跳过 compile + `build.sh`。
 - repo 包的 build 可对不需要共享视图的用例用 `--out` 私有目录或 `store-isolated`。

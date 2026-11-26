@@ -22,7 +22,7 @@
 | `check packages/compiler` | ~36 ms |
 | `check .` | ~58 ms（workspace 检查所有成员） |
 | `build --no-compile`（workspace） | ~5.2 s |
-| `build .`（含链接；单元缓存默认开） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
+| `build .`（含链接） | ~7 s（其中 ocamlopt/链接 ~28 s CPU，16 路并行） |
 | `fmt --check`（各包 + examples） | ~1.4 s |
 | `map`（热缓存命中） | ~0.13 s |
 | `map` 冷启动全量重建 | 空 store 整仓 5.1–5.3 s → 2.9–3.2 s（索引按包分块并行；12 核） |

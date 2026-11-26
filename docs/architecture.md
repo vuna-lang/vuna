@@ -40,7 +40,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 │               InstName InstCoherence Driver Termination{,.ElabInput,.Measure,.Scc}
 │               Prelude Match Records Derive Coverage Representation Usage Canonical   双向精化
 ├─ Lowering/    Program Env Ty Entry Erased Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ 擦除视图 + Core 侧检查
-└─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
+└─ Driver/      Dt Compile Cache Iface Owner ToolPayload CompilerCli
                 Split SplitGen Target TargetCache                   输出模型 / facade / 后端驱动 / CLI
 产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
   Err/Suggest/Test/Fmt/Index/Repl/Suite/Dev，命令表与分发，见 [reference/cli.md](reference/cli.md)）、

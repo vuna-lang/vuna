@@ -3,8 +3,8 @@ module Vuna.Compiler.Loader.Fingerprint where
 
 -- 编译器缓存键里的「编译器身份」段。
 --
--- `check` 缓存、`split` 缓存、codegen 单元缓存、iface 分桶与 `pkgEnv` 都要求同一段身份，
--- 消费方分布在 `Driver.Compile` / `Driver.PerfCache` / `Loader.Flatten`。这里只有一个实现，
+-- `check` 缓存、build 视图、iface 分桶与 `pkgEnv` 都要求同一段身份，
+-- 消费方分布在 `Driver.Compile` / `Loader.Flatten`。这里只有一个实现，
 -- 任何新增缓存都必须用它。
 --
 -- 口径：**身份属于编译器闭包，不属于打包它的 CLI**。

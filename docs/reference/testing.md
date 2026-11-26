@@ -348,7 +348,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
 实测（本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
-`vuna check packages/base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
+`vuna check packages/base` 7.25s → 13ms。
 `--cache-dir` 只放构建桶与测试临时根（split-unit 与视图见 store，
 [test-architecture.md](test-architecture.md)）。
 ### 包内测试（`packages/<pkg>/test/`）

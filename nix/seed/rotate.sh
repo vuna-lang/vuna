@@ -23,8 +23,6 @@ VUNA=${1:-${VUNA:-./result/bin/vuna}}
 # 本次 rotation 的临时根），第一遍由产品 CLI 生成，第二遍由新 seed 生成。共享缓存会让
 # runtime 位置表路径归一不同，触发 fixed point 假失败。
 export VUNA_ELAB_FULL=1
-# 两遍都用各自全新的对象库：单元缓存不可能命中，key 的逐模块声明编码是纯开销。
-export VUNA_UNIT_CACHE=0
 # 同一原因：接口影子写完后这个 store 不会再被读，接口计算与落盘是纯开销。
 export VUNA_IFACE_WRITE=0
 

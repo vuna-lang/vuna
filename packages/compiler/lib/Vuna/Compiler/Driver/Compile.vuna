@@ -189,16 +189,11 @@ modHashPair m = (m.cmName, m.cmAddr)
 -- 在派生/预处理定义上不等（实测差的是一行 `Member.greet`）。于是同一个输入在「冷 store
 -- → 全量」与「热 store → 增量」下会产出不同字节，而输入寻址下同一路径会被两份内容
 -- 先后覆盖。
--- 构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
--- 产物因此是输入摘要的纯函数。
-summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Maybe (List ModuleIface) -> String -> Bool -> Eff r (Check (List SplitFile, CheckedPackage))
-summarySplitParts ctx mods depIfaces entry printResult =
-  let
-    -- 单元缓存 key 的逐模块身份：闭包扫描已经算好的接口地址。
-    modIds = map modHashPair mods
-  in case depIfaces of
-    Just ifaces => dtSplitProjectWithIfaces ctx entry printResult modIds ifaces
-    Nothing => dtSplitProjectParts ctx entry printResult modIds
+-- 构建一律走全量 lowering，产物因此是输入摘要的纯函数。
+summarySplitParts : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Maybe (List ModuleIface) -> String -> Bool -> Eff r (Check (List SplitFile, CheckedPackage))
+summarySplitParts ctx (Just ifaces) entry printResult =
+  dtSplitProjectWithIfaces ctx entry printResult ifaces
+summarySplitParts ctx Nothing entry printResult = dtSplitProjectParts ctx entry printResult
 
 -- | 构建（codegen）入口：两级输入寻址。
 --
@@ -246,7 +241,7 @@ rebuildSplit inputs ctx entry printResult outDir fast =
           Just xs => xs
           Nothing => []
     in do
-      summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
+      summary <- summarySplitParts ctx inputs.siDepIfaces entry printResult
       case summary of
         ErrC e => pure (ErrC e)
         OkC p =>
@@ -301,8 +296,8 @@ rebuildSplit inputs ctx entry printResult outDir fast =
 auditCompile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => SplitInputs -> PackageContext -> String -> Bool -> String -> Eff r (Check (Int, List Diagnostic))
 auditCompile inputs ctx entry printResult outDir =
   do
-    summary <- summarySplitParts ctx inputs.siClosure inputs.siDepIfaces entry printResult
-    full <- dtSplitProjectParts ctx entry printResult (map modHashPair inputs.siClosure)
+    summary <- summarySplitParts ctx inputs.siDepIfaces entry printResult
+    full <- dtSplitProjectParts ctx entry printResult
     let
       _ = log! "info" "iface-audit subject=compile entry=${entry}"
     in do

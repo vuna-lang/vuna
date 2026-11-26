@@ -48,9 +48,7 @@
 44d_negative.steps	check	cli-text
 44f_incremental.steps	check	cli-text
 44g_tool_iface.steps	check,repl	repl-session;cli-text
-44h_unit_cache.steps	build	build-link;cli-text
 44i_visibility.steps	build,check	build-link;cli-text
-44j_unit_entry.steps	compile	cli-text
 44k_tool_closure.steps	check,repl	repl-session;cli-text
 44l1_lsp_inc.steps	check,lsp	lsp-stdio;cli-text
 44l2_lsp_big_repl.steps	check,lsp,repl	repl-session;lsp-stdio;cli-text
@@ -69,7 +67,6 @@
 50_diag.steps	check,explain	cli-render;cli-text
 51_mtime_window.steps	check	cli-text
 52_cache_framing.steps	build,check	build-link;cli-text
-53_unit_cache_default.steps	build	build-link;cli-text
 54_repl_core.steps	repl	repl-session;cli-text
 54_repl_load.steps	repl	repl-session;cli-text
 54b_repl_v2_gaps.steps	(indirect)	repl-session
