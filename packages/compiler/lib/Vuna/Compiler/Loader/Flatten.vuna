@@ -1064,7 +1064,7 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
                   \_ =>
                     let
                       sourceNames = HashMap.ofNames (filter (\n => HashMap.member n fixitySet) sourceRefs)
-                    in unusedImportWarningsGo modules nameSet sourceNames imports decls reexports imports
+                    in unusedImportWarningsGo modules nameSet sourceNames decls reexports imports
                 )
           )
     )
@@ -1079,26 +1079,22 @@ visibleFixityOps modules imports =
           Nothing => []
     ) imports
 
-unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Import -> List Decl -> List String -> List Import -> Check (List Diagnostic)
-unusedImportWarningsGo modules nameSet sourceNames imports decls reexports [] = OkC []
-unusedImportWarningsGo modules nameSet sourceNames imports decls reexports (imp :: rest) =
+unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Decl -> List String -> List Import -> Check (List Diagnostic)
+unusedImportWarningsGo modules nameSet sourceNames decls reexports [] = OkC []
+unusedImportWarningsGo modules nameSet sourceNames decls reexports (imp :: rest) =
   Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (
       \es =>
         let
           used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es) || importProvidesUsedFixity sourceNames modules imp || importProvidesDeclaredFixity decls modules imp || moduleDeclaresInstance modules imp
-        in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet sourceNames imports decls reexports rest) (\more => OkC (if used then more else (::) (unusedImportDiag imports decls imp) more))
+        in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet sourceNames decls reexports rest) (\more => OkC (if used then more else (::) (unusedImportDiag imp) more))
     )
 
--- unused import 诊断：能安全整行删除时才附 machine-applicable 编辑（空编辑列表的
--- suggestion 会被下游误当成「已可应用」）。
-unusedImportDiag : List Import -> List Decl -> Import -> Diagnostic
-unusedImportDiag imports decls imp =
-  let
-    d = warnDiagAt (importSpan imp) (UnusedImport imp.importName) [imp.importName]
-  in case importRemovalEdits imports decls imp of
-    [] => d
-    edits =>
-      withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable edits) d
+-- | unused import 诊断：附 machine-applicable 编辑，删掉的区间就是 import 构造自身。
+unusedImportDiag : Import -> Diagnostic
+unusedImportDiag imp =
+  withSuggestion
+    (Suggestion "remove unused import ${imp.importName}" MachineApplicable [importRemovalEdit imp])
+    (warnDiagAt (importSpan imp) (UnusedImport imp.importName) [imp.importName])
 
 -- | 该 import 的模块声明的 fixity 里，是否有运算符真的写进了源码。
 --
@@ -1168,51 +1164,11 @@ anyInstanceDecl [] = False
 anyInstanceDecl ((DInstance _ _ _ _) :: _) = True
 anyInstanceDecl (_ :: rest) = anyInstanceDecl rest
 
--- | unused import 的 machine-applicable 编辑：整行删除只在 import **独占该行**时成立。
--- 同行的另一条 import、同行起头的声明都会被一起删掉，此时不给编辑（诊断照报）。
-importRemovalEdits : List Import -> List Decl -> Import -> List DiagEdit
-importRemovalEdits imports decls imp =
-  if importOwnsLine imports decls imp then
-    [DiagEdit (importRemovalSpan (importSpan imp)) ""]
-  else
-    []
-
--- | `import` 关键字在行首（span 起点列 = 1），且该行没有其它 import / 声明。
-importOwnsLine : List Import -> List Decl -> Import -> Bool
-importOwnsLine imports decls imp =
-  importStartsLine imp
-    && not (anyImportOnLine imports imp)
-    && not (anyDeclOnLine decls (spanStartLine (importSpan imp)))
-
-importStartsLine : Import -> Bool
-importStartsLine imp = spanStartCol (importSpan imp) == 1
-
-anyImportOnLine : List Import -> Import -> Bool
-anyImportOnLine [] imp = False
-anyImportOnLine (other :: rest) imp =
-  if spanStartOffset (importSpan other) == spanStartOffset (importSpan imp) then
-    anyImportOnLine rest imp
-  else if spanStartLine (importSpan other) == spanStartLine (importSpan imp) then
-    True
-  else
-    anyImportOnLine rest imp
-
-anyDeclOnLine : List Decl -> Int -> Bool
-anyDeclOnLine [] line = False
-anyDeclOnLine (d :: rest) line =
-  if spanStartLine (declSpan d) == line then True else anyDeclOnLine rest line
-
--- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
-importRemovalSpan : Span -> Span
-importRemovalSpan sp =
-  Span
-    (spanFile sp)
-    (spanStartLine sp)
-    1
-    (spanStartLine sp + 1)
-    1
-    (spanStartOffset sp - (spanStartCol sp - 1))
-    (spanStartOffset sp - (spanStartCol sp - 1))
+-- | unused import 的 machine-applicable 编辑：删 `import` 构造自身的 span。
+-- 不合成「整行」区间——行尾长度不在 `Span` 里，合成的跨行区间偏移会自相矛盾；
+-- 同一行的其它 import / 声明与行尾注释也不该被连带删除。
+importRemovalEdit : Import -> DiagEdit
+importRemovalEdit imp = DiagEdit (importSpan imp) ""
 
 -- 已解析声明里出现的全部引用目标（值 / 类型 / 构造子位置）。解析期已把可解析的名字
 -- 换成 canonical target；`@vuna@ctor@短名@t1@t2` 形态（重载构造子）展开成它的候选目标。
