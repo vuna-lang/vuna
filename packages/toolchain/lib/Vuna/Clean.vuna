@@ -3,7 +3,7 @@
 --
 -- 一个 store 根、两类生命周期：
 --
--- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface / tool-context，
+-- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface，
 --   以及身份记录 module-order / pkg-iface）、`views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
@@ -72,7 +72,7 @@ cleanTargets wantStore wantPackages wantGc dry dir =
 
 -- | 内部：缓存族按 kind 分目录的对象子目录名（`objects/<kind>`）。
 cacheKindNames : List String
-cacheKindNames = ["module-iface", "tool-context"]
+cacheKindNames = ["module-iface"]
 
 -- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让模块顺序
 -- 或依赖身份漂移），只有显式 `clean --store` 才清理。

@@ -1,7 +1,7 @@
 -- | 源码符号索引的数据模型与字段访问子。
 --
 -- 只含可序列化的纯数据：构建在 [Vuna.Index.Scan]，查找与影响面在 [Vuna.Index.Query]，
--- 文本渲染在 [Vuna.Index.Render]，载荷编解码在 [Vuna.Index.Codec]。
+-- 文本渲染在 [Vuna.Index.Render]。
 module Vuna.Index.Types where
 
 import Vuna.Compiler.Base.Common

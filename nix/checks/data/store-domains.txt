@@ -1,7 +1,6 @@
 # 对象库域（域名 = 阶段模型类型名；见 docs/reference/cache.md「准入判据」）。
 # 新增域必须同时满足：生产耗时 > 读取耗时、高频路径净省 ≥ 1 s、域名有对应类型。
 module-iface
-tool-context
 module-order
 pkg-iface
 pkg

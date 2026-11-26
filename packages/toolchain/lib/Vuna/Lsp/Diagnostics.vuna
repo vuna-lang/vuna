@@ -38,7 +38,6 @@ import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Flatten as Flatten
 import Vuna.Json
-import Vuna.Tool.Session
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
@@ -280,8 +279,6 @@ export record DiagCache where
   dcKey : Int
   -- | 建立缓存时的包上下文（增量精化与接口写回都用它）。
   dcCtx : PackageContext
-  -- | 工具会话（共用对象地址；LSP 内纯内存 + 落盘对象）。
-  dcDb : ToolSession
   -- | 工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）；`Nothing` 表示没有可校验的接口。
   dcTool : Maybe ToolContext
   -- | 本包干净模块的接口（增量精化时预置给当前 buffer）。
@@ -360,21 +357,6 @@ neededInClosure : List String -> List String -> Bool
 neededInClosure closure [] = True
 neededInClosure closure (n :: rest) = memName n closure && neededInClosure closure rest
 
--- 会话节点的依赖 key：**校验面 stat**（依赖源码 + manifest；`dcStats` 就是这张表）。
--- 与 REPL 同一套约定：key 保持稳定（`lspiface:<pkg>:<dirHash>`），依赖表里放
--- `st:<path>:<mtime>:<size>`，stat 任何一项变化 ⇒ miss ⇒ 重建。
--- | 内部：把 stat 表转成工具会话依赖表的条目列表。
-sessionStatDeps : List SourceInfo -> List String
-sessionStatDeps stats = map statDepKey stats
-
--- | 内部：一个源文件的 stat 依赖条目（`st:<path>:<mtime>:<size>`）。
-statDepKey : SourceInfo -> String
-statDepKey si = "st:${si.siPath}:${strFromInt si.siMtime}:${strFromInt si.siSize}"
-
--- | 内部：工具会话节点 key（`lspiface:<包名>:<目录哈希>`），与 stat 依赖表一起决定是否命中。
-lspNodeKey : PackageContext -> String
-lspNodeKey ctx = "lspiface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
-
 -- | 内部：缓存是否可复用——label 与编译器指纹 / 包 key 一致，且工具会话在当前 stat
 -- 依赖表下命中（`Nothing` 一律不复用）。
 cacheFresh : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> String -> PackageContext -> Eff r Bool
@@ -383,16 +365,7 @@ cacheFresh (Just c) label ctx =
   if c.dcLabel == label then
     do
       key <- ctxKeyOf ctx
-      if c.dcKey == key then
-        do
-          hit <- toolHitValue c.dcDb (lspNodeKey ctx) (sessionStatDeps c.dcStats)
-          pure (
-              case hit of
-                Just _ => True
-                Nothing => False
-            )
-      else
-        pure False
+      if c.dcKey == key then allFresh c.dcBuiltSec c.dcStats else pure False
   else
     pure False
 
@@ -416,9 +389,7 @@ buildSession ctx label text modName =
           in do
             manifestInfo <- sourceInfoForPath "${contextDir ctx}/vuna.toml"
             key <- ctxKeyOf ctx
-            base <- pure (toolSessionNewMemory "tool")
-            db <- toolCommitValue base (lspNodeKey ctx) (sessionStatDeps (append tool.tcStats [manifestInfo]))
-            pure (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv emptyLintConfigEnv))
+            pure (Just (DiagCache label key ctx (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv emptyLintConfigEnv))
 
 -- | 内部：会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
 usableSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache)
@@ -541,7 +512,7 @@ checkIncremental session label text modName imports =
           OkC (applied, warns, maybePkg, maybeAux) =>
             if applied then
               let
-                session2 = DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool session.dcClean session.dcBuiltSec session.dcStats maybeAux session.dcFix session.dcLintCfg
+                session2 = DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool session.dcClean session.dcBuiltSec session.dcStats maybeAux session.dcFix session.dcLintCfg
               in case maybePkg of
                 Nothing => pure (Just session2, [], warns)
                 Just checkedPkg =>
@@ -558,9 +529,7 @@ sessionForFull Nothing ctx label =
   do
     builtSec <- toolNowSec
     key <- ctxKeyOf ctx
-    base <- pure (toolSessionNewMemory "tool")
-    pure
-      (DiagCache label key ctx base Nothing [] builtSec [] Nothing emptyFixityEnv emptyLintConfigEnv)
+    pure (DiagCache label key ctx Nothing [] builtSec [] Nothing emptyFixityEnv emptyLintConfigEnv)
 
 -- | 内部：全量精化的精简入口（`dtCheckSourceChecked` 需要包上下文），成功后写回当前模块接口。
 -- 返回（会话,（错误, 警告））；原来没有缓存时仍返回 `Nothing`，避免把无接口会话带进后续请求。
@@ -775,7 +744,6 @@ setAuxCache c aux =
     c.dcLabel
     c.dcKey
     c.dcCtx
-    c.dcDb
     c.dcTool
     c.dcClean
     c.dcBuiltSec
@@ -888,7 +856,7 @@ writeBackModule session label text checked (Just name) =
         case attempt of
           Nothing => pure session
           Just (ErrC _) => pure session
-          Just (OkC mi) => pure (DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool (mi :: session.dcClean) session.dcBuiltSec session.dcStats session.dcAux session.dcFix session.dcLintCfg)
+          Just (OkC mi) => pure (DiagCache session.dcLabel session.dcKey session.dcCtx session.dcTool (mi :: session.dcClean) session.dcBuiltSec session.dcStats session.dcAux session.dcFix session.dcLintCfg)
     else
       pure session
 

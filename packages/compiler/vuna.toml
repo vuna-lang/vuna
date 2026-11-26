@@ -26,7 +26,6 @@ modules = [
   "Vuna.Compiler.Driver.Owner",
   "Vuna.Compiler.Driver.Split",
   "Vuna.Compiler.Driver.SplitGen",
-  "Vuna.Compiler.Driver.ToolPayload",
   "Vuna.Compiler.Elab.Canonical",
   "Vuna.Compiler.Elab.Case",
   "Vuna.Compiler.Elab.Coverage",

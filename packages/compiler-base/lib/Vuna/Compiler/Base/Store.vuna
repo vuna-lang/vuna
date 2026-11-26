@@ -375,13 +375,6 @@ storeObjectPathEff kind digest =
     root <- storeRootReadyEff
     pure (objectPathIn root kind digest)
 
--- | 命中判定：路径存在性（不做内容校验，内容校验在真正读取时做）。
-export storeObjectExistsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Bool
-storeObjectExistsEff kind digest =
-  do
-    path <- storeObjectPathEff kind digest
-    fsFileExists path
-
 -- | 读对象 + 全量校验（magic/tag/codec/长度/重算内容地址）。
 export storeObjectReadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Maybe String)
 storeObjectReadEff kind codec digest =
