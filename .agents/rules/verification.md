@@ -71,9 +71,12 @@ nix run .#vuna-run-tests -- --only <owner/family>   # 按 owner/family 跑原生
 ## CI 口径（合并前/Lead）
 
 ```console
-nix flake check                      # 3 packages + 19 checks
-nix run .#vuna-run-tests             # 全量 suite
+nix run .#ci -- deep                 # 与 CI 的 deep 同一条命令（静态 / 诊断 / 增长 / seed-selfhost）
+nix run .#ci -- suite                # ocaml suite（fast + integration + e2e）
+nix run .#vuna-run-tests             # 全量 suite（本地 runner）
+nix run .#ci -- --list               # 查看每组包含的 check
 ```
 
-清单与各 check 的职责见 [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
+push / PR 的 CI 只跑 `pr` 档（fmt + lint + 自检）。清单、分组与各组触发条件见
+[`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
 性能问题不要用 CI 全量做定位——按技能 `perf-debug` 的增长率规程走。

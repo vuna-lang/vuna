@@ -1,223 +1,77 @@
 name: ci
 
+# push / PR 只跑最小档 `pr`（fmt + lint + 自检）。完整便宜门禁 `deep` 与长尾
+# `suite` / `backends` / `native` / `browser` 走定时、手动 dispatch 或带对应标签的
+# PR；每组一个独立 job + 独立 Nix store 缓存，互不拖累。
 on:
   push:
     branches: [main]
   pull_request:
-  # 定时跑全量（含非阻塞的 native 自举 conformance）：它不在 push 路径上，
-  # 需要一个不被后续 push 打断的时隙才能拿到读数。
   schedule:
     - cron: "0 19 * * *"
   workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # PR 上只保留最新一次 push；main 上不互相取消——否则后一次 push 会把前一次
-  # 还没跑完的门禁直接砍掉，长任务永远等不到结论，回归就漏过去了。
+  # PR 上只保留最新一次 push；main 上不互相取消——否则后一次 push 会把前一次还没
+  # 跑完的门禁直接砍掉，长任务永远等不到结论。
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# cache-nix-action 的 purge（清理本分支旧版本 cache）需要 actions: write。
+# cache action 的 purge 需要 actions: write；_check.yml 的权限上限由这里决定。
 permissions:
   contents: read
   actions: write
 
 jobs:
-  # 拆成三个 job 是为了 wall clock：单 job 只有 4 核（--max-jobs 2 --cores 2），
-  # 而 suite 的 gate / e2e 各自就能吃满 4 核；把它们各自放进一个 runner 后，
-  # 长尾从「共享 4 核」变成「独占 4 核」，其余 check 也不再排在它们后面。
-  #
-  # 本 job 跑除 suite 长尾之外的全部 check + flake 求值（静态门禁、包构建、
-  # growth / obs / 上下文预算等，都是秒级到一分钟）。
-  flake-check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # 门禁结论经 ci-status 汇总：本 job 的 checks 步失败时仍要让 job 收尾成功，
-    # 否则 cache 的 post 步骤（post-if: success()）不会保存 store。
-    outputs:
-      checks: ${{ steps.checks.outcome }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      # Nix store 复用：命中时整条构建图（nixpkgs 工具链 + 未变输入已构建的
-      # derivations）直接从 GitHub Actions cache 恢复，只重跑输入变化的 derivation；
-      # 两次 main push 之间没变的 check（如 vuna-typecheck / vuna-tests）会整体跳过。
-      # 所有事件都**读** cache（PR / 定时任务因此不用冷构建）；只有 main push
-      # **写** cache，避免多分支 / 多事件挤占 10GB 配额。
-      # primary-key 含 commit sha（每次 push 一份），restore 取同前缀最新一份，
-      # post 阶段先清掉本分支旧版本再存新版本。恢复出来的 /nix/store 路径本身就是
-      # 有效构建产物，与 nix/packages.nix 的 allowSubstitutes = false（不走
-      # substituter）不冲突。
-      - name: Restore and save Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          # 每个 job 一个后缀：同一 sha 上多个 job 写同一个 key 会互相覆盖 / 报
-          # 「cache already exists」，实际只有一个 job 的 store 被存下来。
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}-flake
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: ${{ github.event_name == 'push' }}
-          purge: ${{ github.event_name == 'push' }}
-          purge-prefixes: nix-${{ runner.os }}-
-          # 只清一天之前的 cache：purge 在保存失败时也会执行，窗口为 0 会把所有
-          # 旧 cache 删光（实测发生过一次，配额直接归零、下一次 run 全冷构建）。
-          # 一天内的几份加起来仍在 10 GB 配额内。
-          purge-created: P1D
-          purge-primary-key: never
-      - name: flake 求值
-        run: env NIX_CONFIG='eval-cache = false' nix flake check --no-build
-      - name: checks
-        id: checks
-        # 失败也要让 job 成功收尾：cache-nix-action 的 post 步骤是
-        # `post-if: success()`——job 一红就不存 store，下次 run 只能从更旧的
-        # cache 冷构建（实测 3 min → 17 min）。门禁结论由 ci-status 汇总。
-        continue-on-error: true
-        env:
-          CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e vuna-tests-wasm vuna-tests-native vuna-typecheck"
-        run: sh nix/ci.sh
-      # Nix 每次构建都会在 store 里留下 `<out>.lock`（root 0600）。cache 保存用
-      # 非 root 的 tar 打包 /nix，读到这些锁就整体失败（Failed to save），随后
-      # 的 purge 还会删掉旧 cache。收尾前清掉；此时没有正在跑的构建。
-      - name: Drop builder lock files
-        if: always()
-        run: sudo rm -f /nix/store/*.lock
+  pr:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: pr
+      timeout: 30
+      jobs: 2
+      eval: true
+      cache-size: 1.5G
+      save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
-  # 后端 suite + 自检：wasm / native 两个矩阵 check 与 `vuna-typecheck`
-  # 放一个 job，`CI_JOBS=1` 让它们**串行**独占 4 核。串行是为了读时长：
-  # 构建日志里相邻两条 `building '...'` 的时间差就是上一个 check 的墙钟，
-  # 并行时无法归属。它们都不依赖彼此，串行只多花这些 check 各自的运行时间。
-  tests-matrix:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - name: Restore Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}-matrix
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
-      - name: vuna-tests-{wasm,native} + typecheck
-        env:
-          CI_JOBS: 1
-          CI_CHECKS: "vuna-tests-wasm vuna-tests-native vuna-typecheck"
-        run: sh nix/ci.sh
+  deep:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'deep')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: deep
+      timeout: 60
+      jobs: 2
+      cache-size: 2G
+      save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
-  # suite 长尾 1：ocaml 全量门禁（fast + integration）。CI_JOBS=1 让这个 job 的
-  # 4 个核全部给 suite 的 --jobs。
-  tests-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - name: Restore Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}-gate
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
-      - name: vuna-tests-gate
-        env:
-          CI_JOBS: 1
-          CI_CHECKS: "vuna-tests-gate"
-        run: sh nix/ci.sh
+  suite:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'suite')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: suite
+      timeout: 60
+      jobs: 1
 
-  # suite 长尾 2：e2e（steps / LSP / REPL / 包管理器；2256 + 32 case）。
-  tests-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - name: Restore Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}-e2e
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
-      - name: vuna-tests-e2e
-        env:
-          CI_JOBS: 1
-          CI_CHECKS: "vuna-tests-e2e"
-        run: sh nix/ci.sh
-
-  # 门禁结论汇总：三个 job 的实际结果在这里变成唯一失败点。flake-check 用
-  # continue-on-error 保住 store cache，所以它的失败不会体现在 job 状态上，
-  # 必须由本 job 读 step outcome 才能表达「红」。
-  ci-status:
-    needs: [flake-check, tests-matrix, tests-gate, tests-e2e]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: 汇总门禁结论
-        env:
-          FLAKE_JOB: ${{ needs.flake-check.result }}
-          FLAKE_CHECKS: ${{ needs.flake-check.outputs.checks }}
-          MATRIX_JOB: ${{ needs.tests-matrix.result }}
-          GATE_JOB: ${{ needs.tests-gate.result }}
-          E2E_JOB: ${{ needs.tests-e2e.result }}
-        run: |
-          rc=0
-          if [ "$FLAKE_JOB" != success ] || [ "$FLAKE_CHECKS" != success ]; then
-            echo "flake-check: job=$FLAKE_JOB checks=$FLAKE_CHECKS"
-            rc=1
-          fi
-          [ "$MATRIX_JOB" = success ] || { echo "tests-matrix: $MATRIX_JOB"; rc=1; }
-          [ "$GATE_JOB" = success ] || { echo "tests-gate: $GATE_JOB"; rc=1; }
-          [ "$E2E_JOB" = success ] || { echo "tests-e2e: $E2E_JOB"; rc=1; }
-          exit "$rc"
-
-  # 自举后端 conformance：用「由自身编出来的」native 编译器跑 check 与夹具
-  # （口径见 docs/reference/testing-checks.md「后端自举 conformance」）。
-  # 不进 nix flake check：整轮成本远高于日常门禁。
-  #
-  # 后端矩阵（vuna-tests-wasm / vuna-tests-native）不单独开 job：它们本身就是
-  # flake check 的成员 check，单开只会在同一个 sha 上重复存一份同样内容的 Nix
-  # store cache，挤占 cache 配额、把 flake-check 挤成冷构建。
-
-  # native 自举的 selfhost 已按成员逐包检查（进程隔离）；整仓单进程仍跑不完，本地用
-  # `--scope selfhost-stress` 取成本读数。先落地并持续报告，稳定后再删掉 continue-on-error。
-  #
-  # 只在定时 / 手动 / 带 backend 标签的 PR 上跑：native 后端在部分夹具上会挂住
-  # （延迟 answer 的 handler，debt D101），整轮成本高。放在 push 路径上只会占住 runner
-  # 又被下一次 push 取消，既拿不到读数也拖慢反馈；`backend-check.sh` 另有单命令
-  # 超时（VUNA_BACKEND_TIMEOUT），挂住的夹具按失败收口。
-  backend-native:
+  backends:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'backend')
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      # 只读缓存：本 job 的产物不入 cache（配额留给 push 上的 flake-check）。
-      - name: Restore Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}-native
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: false
-      - name: backend-check (native)
-        # 失败熔断：编译器整体坏掉时（D89）跑完几百条夹具没有额外信息，
-        # 20 条失败足以给出清单；不设上限会把 job 拖到 90 min 超时。
-        env:
-          VUNA_BACKEND_MAX_FAILS: 20
-          # 逐成员 selfhost 的并行度：每成员一个编译器进程（峰值 5–6 GiB），runner 16 GiB 跑 2 路。
-          VUNA_BACKEND_SELFHOST_JOBS: 2
-        run: nix run .#backend-check -- --compiler native --scope all --jobs 8
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: backends
+      timeout: 60
+      jobs: 1
+
+  native:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'backend')
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: native
+      timeout: 120
+      jobs: 1
+
+  browser:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: browser
+      timeout: 60
+      jobs: 1

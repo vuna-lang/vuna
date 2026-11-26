@@ -16,6 +16,9 @@
 let
   inherit (pkgs) lib;
 
+  # CI 门禁分组（唯一事实来源）。
+  groups = import ../checks/groups.nix;
+
   # 安装时剥符号表：vuna 的运行时报错/回栈标签来自 `dt_def_locs`（`.data` 里的
   # 数据表）+ frametable（`-g` 编进去的 `.data`），不依赖 ELF 的 `.symtab` / `.debug_*`
   # ——剥离后的二进制作过回栈验证，仍打印 `名字 (文件:行)`。单个二进制小 ~25%。
@@ -552,6 +555,76 @@ let
         touch "$out"
       '';
 
+  # CI 门禁分组 runner：本地与 CI 共用 `nix run .#ci -- <group>`。
+  # 组成员在构建期从 nix/checks/groups.nix 展开成 installable，运行时不再枚举 flake；
+  # `--list` 打印每组包含的 installable。CI_TOKENS（默认 nproc）/ CI_JOBS（默认 2）
+  # / CI_CORES 决定 nix build 的并行度。
+  ci =
+    let
+      groupNames = builtins.attrNames groups;
+      attrOf =
+        ref:
+        let
+          m = builtins.match "(check|package):(.*)" ref;
+          system = pkgs.stdenv.hostPlatform.system;
+        in
+        if builtins.head m == "check" then
+          ".#checks.${system}.${builtins.elemAt m 1}"
+        else
+          ".#packages.${system}.${builtins.elemAt m 1}";
+      attrsOf = g: lib.concatStringsSep " " (map attrOf groups.${g});
+      groupCase = g: "    ${g}) attrs='${attrsOf g}' ;;";
+      listCase = g: ''
+        echo "${g}:"
+        for a in ${attrsOf g}; do echo "  $a"; done'';
+    in
+    (pkgs.writeShellScriptBin "ci" ''
+      set -eu
+      export PATH="${lib.makeBinPath [ pkgs.coreutils ]}:$PATH"
+      groups="${lib.concatStringsSep " " groupNames}"
+      usage() {
+        echo "usage: ci <group> [nix build args...]" >&2
+        echo "groups: $groups" >&2
+        echo "       ci --list" >&2
+      }
+      case "''${1:-}" in
+        --list|-l)
+          ${lib.concatMapStringsSep "\n" listCase groupNames}
+          exit 0
+          ;;
+        "")
+          usage
+          exit 2
+          ;;
+      esac
+      group=$1
+      shift
+      case " $groups " in
+        *" $group "*) ;;
+        *) echo "ci: 未知分组 $group" >&2; usage; exit 2 ;;
+      esac
+      case "$group" in
+      ${lib.concatStringsSep "\n" (map groupCase groupNames)}
+      esac
+      TOKENS=''${CI_TOKENS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 8)}
+      case "$TOKENS" in ""|*[!0-9]*) TOKENS=8 ;; esac
+      JOBS=''${CI_JOBS:-2}
+      case "$JOBS" in ""|*[!0-9]*) JOBS=2 ;; esac
+      [ "$JOBS" -ge 1 ] || JOBS=1
+      [ "$JOBS" -le "$TOKENS" ] || JOBS=$TOKENS
+      CORES=''${CI_CORES:-$((TOKENS / JOBS))}
+      [ "$CORES" -ge 1 ] || CORES=1
+      echo "ci: group=$group jobs=$JOBS cores=$CORES"
+      # out-link 让本次产物成为 GC root：save 前 GC 只回收上一代遗留，不会把本次
+      # 刚构建的路径当垃圾删掉（`--no-link` 的产物不是 root）。
+      mkdir -p .ci
+      exec env NIX_CONFIG='eval-cache = false
+      log-lines = 5000' nix build --keep-going --max-jobs "$JOBS" --cores "$CORES" --out-link .ci/result $attrs "$@"
+    '')
+    // {
+      meta.description = "CI 门禁分组 runner（nix run .#ci -- pr|deep|suite|backends|native|browser）";
+    };
+
   # 跨编译器 conformance runner：在 native 自举编译器上跑 selfhost / parity / corpus。
   backend-check =
     (pkgs.writeShellScriptBin "backend-check" ''
@@ -595,5 +668,6 @@ in
     vuna-native
     vuna-wasm-browser-smoke
     backend-check
+    ci
     ;
 }

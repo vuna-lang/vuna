@@ -1,0 +1,87 @@
+name: check
+
+# 单个门禁分组的可复用 job：checkout → restore → `nix run .#ci -- <group>` → save。
+# 分组本身来自 nix/checks/groups.nix；本文件只负责运行环境与 cache 生命周期。
+on:
+  workflow_call:
+    inputs:
+      group:
+        required: true
+        type: string
+      timeout:
+        required: true
+        type: number
+      # 每组一份 Nix store cache：前缀带组名，互不干扰；没用到的组不写。
+      save:
+        required: false
+        type: boolean
+        default: false
+      cache-size:
+        required: false
+        type: string
+        default: "2G"
+      # nix build 的并行度。suite 类长尾用 1（全部核给一个 derivation）。
+      jobs:
+        required: false
+        type: number
+        default: 2
+      # 是否需要先求值整个 flake（挡住组外 check 的 eval 错误）。
+      eval:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # 每组一个前缀：本组自己的缓存优先，冷启动时回退到 deep / pr（内容寻址的
+      # store 路径可以直接复用）。PR 只读 main 上的缓存，不写。
+      - name: Restore Nix store
+        id: restore
+        uses: nix-community/cache-nix-action/restore@v7
+        with:
+          primary-key: nix-${{ inputs.group }}-${{ runner.os }}-${{ github.sha }}
+          restore-prefixes-first-match: |
+            nix-${{ inputs.group }}-${{ runner.os }}-
+            nix-deep-${{ runner.os }}-
+            nix-pr-${{ runner.os }}-
+
+      - name: flake 求值
+        if: inputs.eval
+        run: env NIX_CONFIG='eval-cache = false' nix flake check --no-build
+
+      - name: ${{ inputs.group }}
+        env:
+          CI_JOBS: ${{ inputs.jobs }}
+        run: nix run .#ci -- ${{ inputs.group }}
+
+      # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
+      - name: Drop builder lock files
+        if: always()
+        run: sudo rm -f /nix/store/*.lock
+
+      # 独立 save action：check 失败也照常保存（if: always），所以不再需要
+      # continue-on-error + ci-status 的间接层。
+      - name: Save Nix store
+        if: always() && inputs.save && steps.restore.outputs.hit-primary-key != 'true'
+        uses: nix-community/cache-nix-action/save@v7
+        with:
+          primary-key: ${{ steps.restore.outputs.primary-key }}
+          gc-max-store-size-linux: ${{ inputs.cache-size }}
+          purge: true
+          purge-prefixes: nix-${{ inputs.group }}-${{ runner.os }}-
+          # 只留一代：purge 在 save 之后执行，save 失败时不会清掉旧缓存。
+          purge-created: 0
+          purge-primary-key: never

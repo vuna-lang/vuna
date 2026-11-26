@@ -38,6 +38,7 @@ _opam/
 # Nix build results and direnv
 result
 result-*
+.ci/
 .direnv/
 
 

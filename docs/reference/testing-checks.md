@@ -20,26 +20,30 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。
 
-CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除 suite 长尾之外的
-全部 check（外加 `nix flake check --no-build` 求值），`tests-gate` 与 `tests-e2e` 各占
-一个 runner、`CI_JOBS=1` 把自己的 4 核全给 suite；`tests-matrix` 装三个后端矩阵 check
-与 `vuna-typecheck`，同样用一个 runner。单 job 只有 4 核（`--max-jobs 2 --cores 2`），
-而 gate / e2e 各自就能吃满 4 核，拆开后长尾不再共享核、其余 check 也不再排在它们后面。
-只有 `flake-check` 写 Nix store cache，另外三个 job 只读（`save: false`），避免同一 sha
-上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` / `CI_EXCLUDE`（按 flake
-求值枚举，新增 check 不用手工同步列表）。
+门禁分组在 `nix/checks/groups.nix`（唯一事实来源），本地与 CI 共用
+`nix run .#ci -- <group>`；`.github/workflows/ci.yml` 每组一个 job，
+`_check.yml` 是共用的 restore → 运行 → save 流程：
 
-`tests-matrix` 里用 `CI_JOBS=1` 串行是**为了读时长**：构建日志里相邻两条
-`building '<drv>'` 的时间差就是上一个 check 的墙钟；并行时无法归属到具体 check。
+| group | 内容 | 何时跑 |
+| --- | --- | --- |
+| `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | push / PR |
+| `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、带 `deep` 标签的 PR |
+| `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、带 `suite` 标签的 PR |
+| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | 定时、手动、带 `backend` 标签的 PR |
+| `native` | `backend-check`（package） | 同上 |
+| `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动 |
 
-`flake-check` 的 checks 步是 `continue-on-error`，失败也按成功收尾：cache action 的
-保存是 `post-if: success()`，job 一红就不存 store，下一次 push 只能从更旧的 cache 冷
-构建。代价是 job 状态不再表示门禁结论，因此单独有 `ci-status` job 汇总三个 job 的
-结果（`needs.<job>.result` + `flake-check` 的 step outcome），它才是唯一失败点。
+每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
+`deep` → `pr`），只在 main push / 定时任务上写；`purge-created: 0` 让每组只留一代。
+`nix run .#ci` 用 `--out-link .ci/result` 构建，产物是 save 前 GC 的 root，所以保存时只会
+回收上一代遗留的 store 路径。restore / save 是独立 action，门禁失败也照常保存，因此不需要
+`continue-on-error` + 汇总 job：每个组的 job 状态就是结论。
+
+`CI_JOBS` 控制 `nix build` 的并行度：`pr` / `deep` 用默认 2（`--cores` 为核数/2），
+`suite` / `backends` / `native` / `browser` 用 1，把 runner 的 4 核全给单个 derivation。
 
 保存前还有一个 `Drop builder lock files` 步：Nix 在 store 里留下 `<out>.lock`
-（root 0600），非 root 的 tar 读不动会让整次保存失败。purge 窗口是 `P1D`——purge
-在保存失败时也会执行，窗口为 0 会把旧 cache 全删光（配额归零、下一次全冷构建）。
+（root 0600），非 root 的 tar 读不动会让整次保存失败。
 
 语义项：
 
@@ -174,17 +178,17 @@ CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](n
 
 ```console
 nix build                  # 默认 = vuna；.#vuna-compiler / .#vuna-seed 同理
-nix flake check            # 全部 checks
-sh nix/ci.sh               # CI 统一入口；CI_TOKENS（默认 nproc）/ CI_JOBS（默认 2）决定
-                           # 每个 derivation 的 cores（默认 2×8）；gate/e2e 共享该预算
-CI_CHECKS="vuna-tests-gate" sh nix/ci.sh    # 只构建列出的 check
-CI_EXCLUDE="vuna-tests-gate vuna-tests-e2e" sh nix/ci.sh  # 构建其余全部 check
+nix run .#ci -- pr          # 门禁分组：pr / deep / suite / backends / native / browser
+nix run .#ci -- --list      # 打印每组包含的 installable
+nix run .#ci -- deep        # 本地完整便宜门禁（与 CI 的 deep 同一条命令）
+CI_TOKENS=8 CI_JOBS=4 nix run .#ci -- deep   # 覆写并行度（默认 CI_JOBS=2，cores=核数/2）
+nix flake check            # 本地全量兜底（包括 suite / 后端矩阵；CI 不用）
 nix develop                # 全量开发环境（工具链 + vuna-seed）；.#ocaml 只有 OCaml 工具链
 nix build .#vuna --out-link result-vuna      # 产品 CLI（stage 1）
 nix build .#vuna-compiler --out-link result-compiler  # 编译器 CLI（stage 1）
 nix build .#vuna-seed --out-link result-seed          # stage 0 种子编译器
 VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
-  vuna dev suite test/suite.toml --jobs auto
+  vuna dev suite --all --jobs auto
 ```
 
 **`result*` 可能过期**：out-link 只是手工指到某次构建，源码 / seed 变了不会自动更新。需要
@@ -202,7 +206,7 @@ VUNA=$PWD/result-vuna/bin/vuna VUNA_SEED=$PWD/result-seed/bin/vuna-seed \
 `--baseline F` 与历史对比（JSON 用 `jq` 解析），`--with-tests` 额外跑全部 checks，`--json`
 输出机器可读报告。入库基线 `bench/baselines/bootstrap.json`、`--check`（默认读基线，超
 `--threshold N`（默认 20%）只打印 `WARN`、退出 0）、`--strict`（同机 + 同 compiler 的
-WARN 变失败）；`nix/ci.sh --bench` 在 flake check 之后跑软告警（默认不跑，避免 CI 抖动）。
+WARN 变失败）。基准不进 CI（结果依赖机器）；需要时本地手动跑。
 跨机器 / 不同口径只做软告警。
 
 报告包含三级构建（seed → vuna-compiler → vuna 的 ocamlopt 时间）、编译性能（自编译
