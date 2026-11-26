@@ -169,7 +169,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 `VUNA_LOG=debug` 打开。
 
-结构化观测里递归构建发 `vuna.iface.dep-build` 标记。
+结构化观测里递归构建发 `vuna.iface.dep-build` 标记。`vuna check --explain` /
+`vuna build --explain` 逐模块打印 `explain <包> <模块> hit|stale:<原因>`
+（`no-iface` / `reexport-dirty`）。
 
 **结构化观测**（`VUNA_OBS>=1`）走另一条通道：`Driver/Compile` 与 `Driver/Dt` 的阶段跨度
 （`vuna.load` / `vuna.elab` / `vuna.iface.compute` / `vuna.codegen.split` …）。对象库读/写本身是

@@ -1808,6 +1808,33 @@ collectClean dirty0 cands =
     dirty = dirtyFix (length cands + 1) dirty0 cands
   in filter (\mi => not (memName (miNameOf mi) dirty)) cands
 
+-- ---------------------------------------------------------------
+-- `--explain`：逐模块给出 hit / stale:<原因>
+--
+-- 判据与检查路径共用（读不到接口 / 重导出脏），不另造一套失效规则。
+-- 只描述本包模块；依赖递归构建由 `dep-build=<pkg>` 行单独报告。
+-- ---------------------------------------------------------------
+explainContextEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List String)
+explainContextEff ctx =
+  do
+    mods <- ifaceModsEff ctx
+    reads <- mapEff (readOneModIface ctx) (selfModsOf ctx mods)
+    let
+      own = selfModsOf ctx mods
+      ownNames = map modNameOf own
+      cands = readIfaces reads
+      candNames = map miNameOf cands
+      missing = filter (\n => not (memName n candNames)) ownNames
+      dirty = dirtyFix (length cands + 1) [] cands
+      hits = filter (\n => not (memName n missing) && not (memName n dirty)) ownNames
+      reexported = filter (\n => memName n dirty) ownNames
+      pkg = contextPackageName ctx
+      lines = append (map (\n => "explain ${pkg} ${n} hit") hits) (append (map (\n => "explain ${pkg} ${n} stale:no-iface") missing) (map (\n => "explain ${pkg} ${n} stale:reexport-dirty") reexported))
+    in pure (Sort.sortBy (\a, b => a <= b) lines)
+
+export explainPackageEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Package -> Eff r (List String)
+explainPackageEff pkg = explainContextEff (packageContext pkg)
+
 ownCleanModules : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
 ownCleanModules ctx =
   do

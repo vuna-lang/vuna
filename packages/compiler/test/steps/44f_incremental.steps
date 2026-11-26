@@ -38,3 +38,14 @@ exit: 0
 run: sh -c 'rm -rf "$TMPDIR/stale-trans" "$TMPDIR/stale-store2"; mkdir -p "$TMPDIR/stale-trans/lib" "$TMPDIR/stale-trans/app"; printf "[package]\nname = \"staletrans\"\n" > "$TMPDIR/stale-trans/vuna.toml"; printf "module A where\n\nexport module B\n" > "$TMPDIR/stale-trans/lib/A.vuna"; printf "module B where\n\nexport module Z\n" > "$TMPDIR/stale-trans/lib/B.vuna"; printf "module Z where\n\nexport zx : Int\nzx = 1\n" > "$TMPDIR/stale-trans/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zx\n" > "$TMPDIR/stale-trans/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store2" "$VUNA" check "$TMPDIR/stale-trans" >/dev/null 2>&1'
 run: sh -c 'printf "module Z where\n\nexport zx : Int\nzx = 1\n\nexport zy : Int\nzy = 2\n" > "$TMPDIR/stale-trans/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zy\n" > "$TMPDIR/stale-trans/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store2" "$VUNA" check "$TMPDIR/stale-trans" 2>&1'
 exit: 0
+
+# --explain：冷 / 热 / 改一个模块三种场景的逐模块原因。
+run: sh -c 'S="$TMPDIR/ex"; rm -rf "$S"; mkdir -p "$S/pkg/lib" "$S/pkg/app"; printf "[package]\nname = \"explain-pkg\"\n" > "$S/pkg/vuna.toml"; printf "module A where\n\nexport f : Int -> Int\nf x = x\n" > "$S/pkg/lib/A.vuna"; printf "module B where\n\nexport b : Int\nb = 2\n" > "$S/pkg/lib/B.vuna"; printf "import A\nimport B\n\nmain : Int\nmain = f b\n" > "$S/pkg/app/Main.vuna"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check --explain "$S/pkg" 2>&1'
+out-contains: explain explain-pkg A stale:no-iface
+out-contains: explain explain-pkg B stale:no-iface
+run: sh -c 'S="$TMPDIR/ex"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check --explain "$S/pkg" 2>&1'
+out-contains: explain explain-pkg A hit
+out-contains: explain explain-pkg B hit
+run: sh -c 'S="$TMPDIR/ex"; printf "module B where\n\nexport b : Int\nb = 9\n" > "$S/pkg/lib/B.vuna"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check --explain "$S/pkg" 2>&1'
+out-contains: explain explain-pkg A hit
+out-contains: explain explain-pkg B stale:no-iface
