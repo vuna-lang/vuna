@@ -16,3 +16,9 @@ out-contains: unbound variable B
 run: sh -c 'rm -rf "$TMPDIR/export-reexp"; mkdir -p "$TMPDIR/export-reexp/lib"; printf "%s\n" "[package]" "name = \"export-reexp\"" "" "[export]" "modules = [\"P\", \"Q\", \"R\"]" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-reexp/vuna.toml"; printf "%s\n" "module P where" "" "export data T(A, B) : Type where" "  A : T" "  B : T" "" "export f : T" "f = A" > "$TMPDIR/export-reexp/lib/P.vuna"; printf "%s\n" "module Q where" "export import P (T(..), f)" > "$TMPDIR/export-reexp/lib/Q.vuna"; printf "%s\n" "module R where" "import Q" "" "export ok : T" "ok = f" > "$TMPDIR/export-reexp/lib/R.vuna"'
 run: "$VUNA" check "$TMPDIR/export-reexp"
 exit: 0
+# 类型级 axiom 的 kind 以 `Type` 结尾（`Eff : Row -> Type -> Type`）：重导出后它仍按
+# **类型构造子**解析。它原来只以 `"val"` 条目导出，import 方在类型位置会报
+# RN_UnknownConstructor。`rowRem : Type -> Row -> Row` 这类返回 Row 的仍是值。
+run: sh -c 'rm -rf "$TMPDIR/export-axiom"; mkdir -p "$TMPDIR/export-axiom/lib" "$TMPDIR/export-axiom/app"; printf "%s\n" "[package]" "name = \"export-axiom\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/export-axiom/vuna.toml"; printf "%s\n" "module P where" "" "export data R(..) : Type 1 where" "  RNil : R" "" "export axiom F : R -> Type -> Type" > "$TMPDIR/export-axiom/lib/P.vuna"; printf "%s\n" "module Q where" "import P" "" "export import P (F, R(..))" > "$TMPDIR/export-axiom/lib/Q.vuna"; printf "%s\n" "import Q" "" "export idF : {a : Type} -> F RNil a -> F RNil a" "idF x = x" "" "main : Int" "main = 1" > "$TMPDIR/export-axiom/app/Main.vuna"'
+run: "$VUNA" check "$TMPDIR/export-axiom"
+exit: 0
