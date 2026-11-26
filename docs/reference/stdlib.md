@@ -41,7 +41,7 @@
 | `Base.Trait.Monoid` | `Semigroup`（`mappend`）与 `Monoid`（`mempty`）trait（无父类，泛型代码同时约束两者）；`List` / `String` / `Maybe` / `Nat` / `Unit` 实例 |
 | `Base.Trait.Foldable` | `Foldable` trait（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；`List` / `Maybe` / `Result` 实例 |
 | `Base.Trait.Traversable` | `Traversable t f`（双参数：容器 + Applicative）与方法 `mapM : (a -> f b) -> t a -> f (t b)`；`List` / `Maybe` / `Result` 实例 |
-| `Base.Trait.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`DebugShow` trait（`debugShow : a -> String`，blanket `instance Show a => DebugShow a`，所有 `Show` 实例自动获得）与 `dbgShow : DebugShow a => a -> a`（经 `log! "debug"` 打印后返回原值）；`Show Int` / `Show Bool` 随类型模块（`Base.Data.Int` / `Base.Data.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
+| `Base.Trait.Show` | `Show` trait（`show : a -> String`）+ `String` 实例；`DebugShow` trait（`debugShow : a -> String`，blanket `instance Show a => DebugShow a`，所有 `Show` 实例自动获得）；`Show Int` / `Show Bool` 随类型模块（`Base.Data.Int` / `Base.Data.Bool`），`Show String` 因 String 经 Interp 依赖 Show 留在本模块 |
 | `Base.Trait.Interp` | 模板插值的转换 trait：`Interp a` + blanket `Show a => Interp a`（默认 = `show`）+ 具体 `Interp String`（原样输出）；插值降级与规则见 [templates.md](templates.md) |
 | `Base.Trait.Eq` | `Eq` trait（方法 `(==)` / `(/=) : a -> a -> Bool`）+ `Bool` 实例（Bool 是 `Eq` 返回类型，实例随 trait） |
 | `Base.Trait.Ord` | `Ord` trait（方法 `(<)` / `(<=)` / `(>)` / `(>=) : a -> a -> Bool`）+ `Bool` 实例；另含 `Ordering(..)`（`LT`/`EQ`/`GT`，带 `Eq`/`Ord`/`Show`/`Hashable` 实例）与 `compare` / `min` / `max` / `clamp`（三参夹取 `lo hi x`） |
@@ -50,7 +50,7 @@
 | `Base.Trait.FromString` / `Base.Trait.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Trait.Convert` | 显式转换 trait：`Convert a b`（`convert : a -> b`，全函数无损）与 `ConvertMaybe a b`（`convertMaybe : a -> Maybe b`，可失败）；只有显式调用，无 `deriving` / 隐式插入 / 恒等实例，不随 `Prelude` 导出。base 实例见 [conversions.md](conversions.md) |
 | `Base.Data.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Trait.Eq` / `Base.Trait.Ord` |
-| `Base.Data.Log` | 文本日志库层：`logOn : Int -> String -> Bool`、`logAt : Int -> String -> String -> Int`、`logError` / `logWarn` / `logInfo` / `logDebug` / `logTrace : String -> String -> Int`（`scope, text`）；热路径用内置宏 `log!`（关闭时实参不求值），规范见 [logging.md](logging.md) |
+| `Base.Data.Log` | 文本日志库层：`logOn : Int -> String -> Bool`、`logAt : Int -> String -> String -> Int`、`logError` / `logWarn` / `logInfo` / `logDebug` / `logTrace : String -> String -> Int`（`scope, text`）；`dbgShow : DebugShow a => a -> a`（经 `log! "debug"` 打印后返回原值）；热路径用内置宏 `log!`（关闭时实参不求值），规范见 [logging.md](logging.md) |
 | `Base.Effect.Core` | 通用运行时效应核心（Layer 1）：开放行 `Row`（`Nil` / `(::)`）、`Named` 命名标签、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
 | `Base.Effect.Reader` | 标签 `ReaderOp s` + `Ask`（实例名并进标签，如 `Named "counter" (ReaderOp Int)`）：`ask`/`handleReader`/`handleReaderLin`/`local`（作用域问答） |
 | `Base.Effect.State` | 标签 `StateOp s` + `Get`/`Put`（实例名并进标签，如 `Named "counter" (StateOp Nat)`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |

@@ -90,10 +90,13 @@ vuna: runtime error: division by zero
 输出只发生在 compile+run 的 runtime。
 
 `DebugShow` 在 `Base.Trait.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
-所以**所有 `Show` 实例自动获得 `dbgShow`**；需要不同调试格式的类型可另写实例。
+所以**所有 `Show` 实例自动获得 `debugShow`**；需要不同调试格式的类型可另写实例。
+`dbgShow` 本身在 `Base.Data.Log`（它引用文本日志 runtime，不随 Prelude 自动导入），
+用之前 `import Base.Data.Log`。
 
 ```console
 $ cat app/Main.vuna
+import Base.Data.Log
 main : Int
 main = let _ = log! "debug" "starting" in dbgShow 42
 $ VUNA_LOG=debug ./.output/bin/demo
