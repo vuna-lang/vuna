@@ -20,7 +20,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | B30 · B | 无有序持久容器（TreeMap/TreeSet）；哈希容器固定 1024 桶、无 remove | `packages/base/lib/Base/Container/{HashMap,HashSet}.vuna`；[stdlib.md](stdlib.md) 的容器边界 | 后续 |
 | D21 · B | 完整 FFI 未做：无回调 / GC root / pin、无 C 头文件解析、无字符串双向可变共享 | [primitives.md](primitives.md) §10「受限 FFI」 | 后续 |
 | D22 · B | 无依赖 multiplicity / 线性箭头 / 借用 / 一次性续延；线性值传给 ω 形参的通用函数被 `TC_LinearOverused` 拒绝（保守近似只误拒不误放） | `Elab/Usage.vuna`；[qtt.md](qtt.md) | 后续 |
-| D24 · C | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；codegen 侧无固定步数预算（`Lowering` 按项规模派生预算，`Target.Ocaml.Term` 无预算），剩余问题只有字面量本身的展开成本 | `Elab/Term/Impl.natLitTerm`；[primitives.md](primitives.md) §3.1 | 后续 |
+| D24 · C | Nat 字面量编译期展开为 `Zero`/`Succ` 链（Core / iface 载荷随字面量大小线性增长）；codegen 侧无固定步数预算（`Lowering` 按项规模派生预算，`Target.Ocaml.Term` 无预算）。终止性输入已用 `natChainValue` 折回 `EInt`（[performance.md](performance.md) §5.5），剩余成本只有链本身的线性展开 | `Elab/Term/Impl.natLitTerm`；`Elab/Termination/ElabInput.convExpr`；[primitives.md](primitives.md) §3.1 | 后续 |
 | D27 · C | 精化期未解 meta 按「可表示」处理会漏插 cast（终解后才知道类型不可表示）；handler 续延域的 `resIdx i o` 走不透明值 + 恒等 cast | `Elab/Meta.vuna` 的未解 meta 判据；[effects.md](effects.md) §5 | 后续 |
 | D32 · C | 顶层签名的自由隐式变量 kind：按应用次数 + 类型构造子实参位置的参数 kind 推断（`Box f` 已可用）；**头可合一的重叠实例仍被拒**（设计如此，见 [records-traits.md](records-traits.md)） | `Elab/Sig.quantifyTopKinds`/`quantifyTopSigCtxCachedKinds`、`Elab/Trait.{instanceTeleMetas,classParamKindOf}` | 细节 |
 | D37 · B | `runEff` 内部信任入口仍接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | `packages/base/lib/Base/Effect/Core.vuna`（`runEff`）；`Elab/Term/Impl.vuna`（`unhandledEffectLabel`）；[effects.md](effects.md) §8.4/§8.6 | 后续 |

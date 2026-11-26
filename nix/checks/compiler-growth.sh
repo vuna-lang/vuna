@@ -51,6 +51,11 @@ gen_deep_probe() { # depth file —— `x : Maybe (Maybe … Int)`，层数 = de
   printf 'x : %s\nx = Nothing\n' "$ty" >"$file"
 }
 
+gen_nat_probe() { # n file —— `main : Nat` 字面量，精化期是 n 层 Succ 链
+  n=$1 file=$2
+  printf 'import Base\n\nmain : Nat\nmain = %s\n' "$n" >"$file"
+}
+
 time_check() { # file -> ms (min of 2 independent cold runs)
   f=$1
   best=999999
@@ -114,6 +119,27 @@ for depth in 32 64; do
     printf '  depth=%-3s %6s ms  (base)\n' "$depth" "$ms"
   fi
   deep_prev=$ms
+done
+
+# Nat 字面量：精化期展开成 `Zero` / `Succ` 链，终止性分析必须先把链折回整数。
+# 逐层翻成分析表达式时，前向器重写与调用图收集按链长平方增长（N=10k/20k/40k
+# 修复前约 0.57 s / 1.6 s / 5.7 s，逐档 ×2.8 / ×3.5）；折回后约 150/154/170 ms。
+nat_prev=""
+for n in 10000 20000 40000; do
+  f="$probe/nat$n.vuna"
+  gen_nat_probe "$n" "$f"
+  ms=$(time_check "$f")
+  if [ -n "$nat_prev" ]; then
+    ratio_milli=$((ms * 1000 / nat_prev))
+    printf '  nat N=%-6s %6s ms  (x%s.%s)\n' "$n" "$ms" "$((ratio_milli / 1000))" "$((ratio_milli % 1000))"
+    if [ "$ratio_milli" -gt "$MAX_RATIO_MILLI" ]; then
+      echo "FAIL: Nat 字面量 growth ratio $((ratio_milli / 1000)).$((ratio_milli % 1000)) > $((MAX_RATIO_MILLI / 1000)).$((MAX_RATIO_MILLI % 1000)) at N=$n (prev=${nat_prev}ms, cur=${ms}ms)" >&2
+      exit 1
+    fi
+  else
+    printf '  nat N=%-6s %6s ms  (base)\n' "$n" "$ms"
+  fi
+  nat_prev=$ms
 done
 
 touch "$out/ok"
