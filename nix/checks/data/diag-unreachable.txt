@@ -60,3 +60,13 @@ RN_DuplicateImport	只在 Catalog 里定义，当前无构造点（重复 import
 RN_DuplicateModuleAlias	只在 Catalog 里定义，当前无构造点（别名重复先由 RN_AmbiguousModule 收口）
 RN_ModuleAliasConflict	只在 Catalog 里定义，当前无构造点（别名冲突先由 RN_AmbiguousModule 收口）
 TC_EffResFamilyMissing	op 族的形状检查已先由 TC_HandleFamilyUnsupported 收口，无合法语法触发
+
+# 记录字段选择器（a530de1）：构造需要同名字段 / 选择器名冲突的专门夹具，尚未补。
+RN_SelectorConflict	记录字段选择器冲突：同一字段被多个 record claim；尚无结构化夹具
+RN_SelectorNameTaken	记录字段选择器名与已有全局名冲突；尚无结构化夹具
+RN_SelectorNotRecord	对非 record / 线性 record 使用 `R.f` 选择器；尚无结构化夹具
+RN_SelectorShared	多个 record 共享字段名且都未 claim；尚无结构化夹具
+
+# 分析预算耗尽（本批新增）：夹具要构造超限输入。
+TC_InstanceSearchExhausted	实例搜索深度 16 耗尽；夹具需 17 层 ctx 链（尚未补）
+TC_TerminationBudgetExhausted	SCT 图数 / 轮数上限耗尽；夹具需 >512 张图（尚未补）
