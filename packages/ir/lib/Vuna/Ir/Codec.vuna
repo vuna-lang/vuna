@@ -881,7 +881,7 @@ encShared s acc =
   B.encList
     (B.encPair B.encStr (B.encList (B.encPair B.encInt B.encStr)))
     s.irSharedRecordFields
-    (B.encMaybe encListFam s.irSharedListFam (B.encBool s.irSharedUsesFloat (B.encBool s.irSharedUsesTrace (B.encBool s.irSharedUsesObs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedDefLocs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedUnboxed (B.encList (B.encPair B.encStr (B.encPair B.encStr encBools)) s.irSharedCtorShapes (B.encBool s.irSharedUsesHost acc))))))))
+    (B.encMaybe encListFam s.irSharedListFam (B.encBool s.irSharedUsesFloat (B.encBool s.irSharedUsesTrace (B.encBool s.irSharedUsesObs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedDefLocs (B.encList (B.encPair B.encStr (B.encPair B.encStr B.encInt)) s.irSharedUnboxed (B.encList (B.encPair B.encStr (B.encPair B.encStr encBools)) s.irSharedCtorShapes (B.encBool s.irSharedUsesHost (B.encBool s.irSharedUsesSched acc)))))))))
 
 decShared : Int -> B.Cur -> Maybe (IrShared, B.Cur)
 decShared fuel c =
@@ -931,7 +931,13 @@ decShared8 : Int -> B.Cur -> List (String, List (Int, String)) -> Maybe IrListFa
 decShared8 fuel c recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes =
   B.thenPair
     (B.decBool fuel c)
-    (\usesHost, c1 => Just (IrShared recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes usesHost, c1))
+    (\usesHost, c1 => decShared9 fuel c1 recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes usesHost)
+
+decShared9 : Int -> B.Cur -> List (String, List (Int, String)) -> Maybe IrListFam -> Bool -> Bool -> Bool -> List (String, String, Int) -> List (String, String, Int) -> List (String, String, List Bool) -> Bool -> Maybe (IrShared, B.Cur)
+decShared9 fuel c recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes usesHost =
+  B.thenPair
+    (B.decBool fuel c)
+    (\usesSched, c1 => Just (IrShared recFields listFam usesFloat usesTrace usesObs defLocs unboxed ctorShapes usesHost usesSched, c1))
 
 -- ---------------------------------------------------------------
 -- IrUnit / IrProgram

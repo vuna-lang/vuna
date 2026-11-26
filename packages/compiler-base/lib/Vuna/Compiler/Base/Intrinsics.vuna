@@ -1303,6 +1303,26 @@ floatIntrinsicNames =
     "bi_ge_float"
   ]
 
+-- | 单线程 fiber 调度器原语（`Base.EffSched`）。它们不占效应行，所以「纯程序」也可能
+-- 用到；OCaml 后端据此决定是否追加调度器 runtime。
+export schedIntrinsicNames : List String
+schedIntrinsicNames =
+  [
+    "prim_schedNewScope",
+    "prim_schedFork",
+    "prim_schedYield",
+    "prim_schedIsCancelled",
+    "prim_schedAwait",
+    "prim_schedTaskResult",
+    "prim_schedTaskError",
+    "prim_schedCancelTask",
+    "prim_schedCancelScope",
+    "prim_schedScopeWait",
+    "prim_schedScopeWaitTimeout",
+    "prim_schedScopeError",
+    "prim_schedScopeCount"
+  ]
+
 -- | 需要 OCaml `unix.cmxa` 的隐藏原语：宿主文件 / 进程 / 网络 / 时钟 / 线程。
 -- 只用于 OCaml 后端决定是否追加 `dtHostRuntime`（以及产物是否链接 `unix.cmxa`）；
 -- 多列无害（多链接一个库），少列会让生成程序编译失败。调度器原语不在内：调度器
