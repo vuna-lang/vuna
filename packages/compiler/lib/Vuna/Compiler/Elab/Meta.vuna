@@ -1284,24 +1284,21 @@ isSortVal ec v =
 -- 保证 `TCon` 实参与 telescope 逐位对齐（求值器的 VCon 依赖这个对齐）。
 -- **非零参**构造子的**未饱和引用**做 η 展开（`etaCtorTerm`），不再留
 -- `TGlobal`——见 `etaCtorTerm` 注释。
+-- | 两个 `ctorRefTerm*` 入口共用的判定：`Bool` 用规范构造子，零参直接 `TCon`，
+-- 非零参未饱和引用做 η 展开，查不到才退回 `TGlobal`。
+ctorRefTermOf : Maybe DtCtor -> String -> Term
+ctorRefTermOf Nothing name = TGlobal name
+ctorRefTermOf (Just ctor) name =
+  if isBoolCanonical (dtCtorFamily ctor) then
+    boolCtorTerm (dtCtorName ctor)
+  else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
+
 -- | `ctorRefTerm` 的 Ec 版本：构造子查 `ecCtorTbl`（O(1)），不走族表线性扫。
 export ctorRefTermEc : Ec -> String -> Term
-ctorRefTermEc ec name =
-  case dtCtorLookupEc ec name of
-    Just ctor =>
-      if isBoolCanonical (dtCtorFamily ctor) then
-        boolCtorTerm (dtCtorName ctor)
-      else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
-    Nothing => TGlobal name
+ctorRefTermEc ec name = ctorRefTermOf (dtCtorLookupEc ec name) name
 
 export ctorRefTerm : List DtData -> String -> Term
-ctorRefTerm datas name =
-  case dtCtorLookup name datas of
-    Just ctor =>
-      if isBoolCanonical (dtCtorFamily ctor) then
-        boolCtorTerm (dtCtorName ctor)
-      else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
-    Nothing => TGlobal name
+ctorRefTerm datas name = ctorRefTermOf (dtCtorLookup name datas) name
 
 -- 构造子应用必须饱和成 TCon，求值器才能给 case 造出 VCon（中性 NGlobal 命不中分支）。
 -- 未饱和应用做 η 展开（与 `ctorRefTerm` 共用 `etaCtorTerm`），

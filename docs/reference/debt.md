@@ -99,7 +99,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-13 · D | `Impl.vuna` 的 `bindShapeOf`：do 块语义靠对 `bind` 签名项做硬编码 de Bruijn 索引匹配（`imD/imE/imM/imR` 与两套 `iaE/iaL/ibL/ibR`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-14 · A | `Impl.vuna` 的 `perform`/`handle`：三候选试错（`handleWithAt` → `…Hole` → `handleWith`），顺序由「是不是裸变量」决定，最后一个失败时抛第一个错误 | `Elab/Term/Impl.vuna` | 后续 |
 | EC-15 · A | `Impl.vuna` 的 `specializeInterpPrimApp`：`Interp` 实例语义硬编码进编译器（与 base 实例双真源） | `Elab/Term/Impl.vuna` | 后续 |
-| EC-20 · D | `Meta.vuna` 的 `ctorRefTerm*`：Ec 版与全局版两份实现 | `Elab/Meta.vuna` | 后续 |
 | EC-28 · C | `Elab/Driver.vuna` 的 `resolveDictGoalsFix`：字典收敛固定 8 轮（三处调用点） | `Elab/Driver.vuna` | 后续 |
 | EC-29 · D | `Elab/Driver.vuna` 的实例索引自检：只在 `VUNA_LOG=debug` 下跑 | `Elab/Driver.vuna` | 后续 |
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
