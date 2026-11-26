@@ -18,7 +18,7 @@ Closes # / 风巢 #
 - [ ] 相关 suite：`nix run .#vuna-run-tests -- --only <owner/family>`
 - [ ] `deep` 标签已加并绿（改 compiler / base / ir / target / nix / seed）
 - [ ] `suite` 标签已加并绿（改 test / 语言行为）
-- [ ] `backend` 标签已加并绿（改 native / wasm / runtime）
+- [ ] `backend` 改动已在本地跑 `nix run .#ci -- backends` / `native`（GitHub CI 暂不跑）
 - [ ] `browser` 标签已加并绿（改 wasm-host / 浏览器面）
 - 未跑：
 
