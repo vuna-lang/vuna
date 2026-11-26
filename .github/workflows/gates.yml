@@ -1,8 +1,9 @@
 name: gates
 
-# PR 的细粒度门禁：detect 按 type + pkg/area 计算检查子集，gates 只跑这些检查。
-# `gates / run` 是 required check；detect 失败时 precondition 让这个检查保持失败，
-# 不会因为 job 被跳过而卡在 Expected。
+# PR 的细粒度门禁：detect 按 type + pkg/area 计算检查子集。
+# `gates / run` 是 required check，只跑计划里**非 suite** 的部分；计划含 gate / e2e 时
+# 由 `suite` 矩阵按 shard 并行（与 ci.yml 的 main 基线同一批 check）。
+# detect 失败时 precondition 让 `gates / run` 保持失败，不会因为 job 被跳过而卡在 Expected。
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
@@ -23,10 +24,17 @@ jobs:
     timeout-minutes: 10
     outputs:
       labels: ${{ steps.labels.outputs.labels }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      suite: ${{ steps.plan.outputs.suite }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: compute labels
         id: labels
@@ -98,8 +106,60 @@ jobs:
             echo "- labels: \`$labels\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  gates:
+      # 计划由 pr-gates.nix 唯一计算：让 HCL 只消费 JSON，不复制选择规则。
+      # 计划含完整 gate / e2e 时，它们换成对应 shard 组（gate-shard-* / e2e-shard-*），
+      # 每个 shard 是独立 matrix job（独立 runner），尾部长杆按耗时摊开。
+      - name: plan
+        id: plan
+        env:
+          LABELS: ${{ steps.labels.outputs.labels }}
+        run: |
+          set -euo pipefail
+          read -r -a labels <<< "$LABELS"
+          matrix=$(nix run .#ci -- plan-json "${labels[@]}" | jq -c '
+            def shard($g): [range(0; 4) | "\($g)-shard-\(.)"];
+            .refs as $r
+            | {group: (
+                (if ($r | index("check:vuna-tests-gate")) then shard("gate") else [] end)
+                + (if ($r | index("check:vuna-tests-e2e")) then shard("e2e") else [] end)
+              )}')
+          suite=$(printf '%s' "$matrix" | jq '(.group | length) > 0')
+          {
+            echo ""
+            echo "## suite shards"
+            echo
+            if [ "$suite" = "true" ]; then
+              printf '%s' "$matrix" | jq -r '.group[]' | sed 's/^/- /'
+            else
+              echo "（计划里没有完整 gate / e2e）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 空 matrix 不进 `strategy`：计划里没有 suite 时矩阵给一个 `none` 占位，
+          # `suite` job 由下面的 `if` 跳过。
+          if [ "$suite" != "true" ]; then
+            matrix='{"group":["none"]}'
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
+
+  # 计划里的 gate / e2e 换成 shard 组并行；没有 suite 时整个 job 跳过（不占 runner）。
+  suite:
     needs: detect
+    if: needs.detect.outputs.suite == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: ${{ matrix.group }}
+      cache-key: suite
+      timeout: 45
+      jobs: 1
+      cache-size: 2G
+
+  # 必需的汇总检查：跑计划里剩下的部分，并把 suite shard 的结论一并收进来。
+  gates:
+    needs: [detect, suite]
     if: always()
     uses: ./.github/workflows/_check.yml
     with:
@@ -108,4 +168,5 @@ jobs:
       jobs: 2
       cache-size: 2G
       gate-labels: ${{ needs.detect.outputs.labels }}
-      precondition: ${{ needs.detect.result }}
+      plan-exclude-suite: true
+      precondition: ${{ (needs.detect.result == 'success' && (needs.suite.result == 'success' || needs.suite.result == 'skipped')) && 'success' || format('detect={0} suite={1}', needs.detect.result, needs.suite.result) }}

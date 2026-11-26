@@ -70,7 +70,8 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
   「跑过 / 没跑」、seed 与后端影响。有关联 issue 时描述含 `Closes #N` 或 `Refs #N`；
   PR-only 改动加 `no-issue` 标签。
 - PR 的必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` /
-  `area` 自动选择的检查）。`pr-triage` 自动维护 type / pkg / area 标签，不再手工加
+  `area` 自动选择的检查；完整 gate / e2e 由 `suite` matrix 按 shard 并行，`gates / run`
+  收齐结论）。`pr-triage` 自动维护 type / pkg / area 标签，不再手工加
   `deep` / `suite`；需要强制整组时再加 `deep` / `suite` / `browser`。
 - PR 已经有提交后再改动：重新 `git rebase -i origin/main` 整理，然后
   `git push --force-with-lease`；**不要**对 `main` 使用 force push。

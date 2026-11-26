@@ -1,7 +1,8 @@
 name: ci
 
 # PR 的固定必需检查是 `pr`（fmt + lint + 自检）；增量检查由 gates.yml 按 type + area
-# 选择（area → `vuna-tests-*` 切片，见 nix/checks/slices.nix）。main push 额外跑完整
+# 选择（area → `vuna-tests-*` 切片；计划里的完整 gate / e2e 换成 gate-shard-* /
+# e2e-shard-* 由 `suite` matrix 并行，见 nix/checks/slices.nix）。main push 额外跑完整
 # `gate`（fast+integration）；定时 / 手动再跑 `e2e` 与 `deep` / `browser`。完整 suite
 # 在 CI 里按 case 耗时拆成 4 个 shard matrix job 并行；包内单测是独立 job。
 #

@@ -79,7 +79,8 @@ nix run .#ci -- --list               # 查看每组包含的 check
 ```
 
 - GitHub 上 PR 的**必需检查是 `pr / run` 与 `gates / run`**；`gates` 按 `type` + `pkg` /
-  `area` 自动选择检查，标签由 `pr-triage` 维护（技能 `vuna-pr`）。
+  `area` 自动选择检查（计划里的完整 gate / e2e 由 `suite` matrix 按 shard 并行，
+  `gates / run` 收齐结论），标签由 `pr-triage` 维护（技能 `vuna-pr`）。
 - `deep` / `suite` / `browser` 标签仍可手动强制整组；`backends` / `native` 由本地手动跑。
 - 清单、分组与选择规则见
   [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md) 与
