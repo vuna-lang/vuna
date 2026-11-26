@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Termination.Scc where
 -- Vuna.Compiler.Elab.Termination.Scc：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Obs
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
@@ -826,6 +827,18 @@ sctBlindNote sites =
     ns =>
       " [SCT 未识别调用：${joinComma ns}（callee 以值传递或遍历预算耗尽，只按弱边计入）]"
 
+-- | SCT 放弃（图数 / 轮数上限）用独立错误码：这不是「证明不终止」。
+-- 保留上游诊断的位置 / call 字段，只换 code 与模板。
+budgetDiagnostic : List String -> Diagnostic -> Diagnostic
+budgetDiagnostic comp msg =
+  let
+    subject = join "," comp
+    detail =
+      "size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）"
+    base = tcMsg (TerminationBudgetExhausted subject) [subject]
+    kept = { base | diagLabels = msg.diagLabels, diagFields = msg.diagFields }
+  in appendMessage " [${detail}]" kept
+
 export sctCheck : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
   obsCheck "vuna.term.sct" (\_ => sctCheckGo comp defTbl ctors projs facts msg)
@@ -852,9 +865,9 @@ sctCheckGo comp defTbl ctors projs facts msg =
             let
               _ = obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
               _ = obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
-            in if closed then if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)) else ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
+            in if closed then if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)) else ErrC (appendMessage note (budgetDiagnostic comp msg))
       else
-        ErrC (appendMessage note (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg))
+        ErrC (appendMessage note (budgetDiagnostic comp msg))
 
 -- ===============================================================
 -- 12. fuel 线程判据：组内函数的某个形参是 Int fuel（通常第 0 个，也可能在别的

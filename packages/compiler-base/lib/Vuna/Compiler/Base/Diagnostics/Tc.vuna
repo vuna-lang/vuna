@@ -62,6 +62,8 @@ export data TcErr(..) : Nat -> Type where
   AxiomWithDefinition : String -> TcErr 1
   BranchTooManyArgs : String -> TcErr 1
   CannotProveTermination : String -> TcErr 1
+  -- 终止性分析的容量 / 收敛上限耗尽（不是真的证明不终止）。
+  TerminationBudgetExhausted : String -> TcErr 1
   CannotRedefineBuiltin : String -> TcErr 1
   CannotSolveMetavar : String -> TcErr 1
   CannotSolveHigherOrder : String -> TcErr 1
@@ -81,6 +83,8 @@ export data TcErr(..) : Nat -> Type where
   InstanceDuplicateMethod : String -> TcErr 1
   NeedsTwoArgs : String -> TcErr 1
   NoInstanceFound : String -> TcErr 1
+  -- 实例搜索的递归深度 / via 链预算耗尽（不是真的缺实例）。
+  InstanceSearchExhausted : String -> TcErr 1
   -- 模板字符串插值（`${e}` → `Base.Trait.Interp.interp e`）找不到 `Interp`/`Show` 实例。
   InterpNoInstance : String -> TcErr 1
   NotExhaustive : String -> TcErr 1
@@ -191,6 +195,7 @@ tcCode (AxiomWithDefinition _) = "TC_AxiomWithDefinition"
 tcCode (BranchTooManyArgs _) = "TC_BranchTooManyArgs"
 tcCode ClauseUnreachable = "TC_ClauseUnreachable"
 tcCode (CannotProveTermination _) = "TC_CannotProveTermination"
+tcCode (TerminationBudgetExhausted _) = "TC_TerminationBudgetExhausted"
 tcCode (CannotRedefineBuiltin _) = "TC_CannotRedefineBuiltin"
 tcCode (CannotSolveMetavar _) = "TC_CannotSolveMetavar"
 tcCode (CannotSolveHigherOrder _) = "TC_CannotSolveHigherOrder"
@@ -222,6 +227,7 @@ tcCode (InstanceUnknownMethod _) = "TC_InstanceUnknownMethod"
 tcCode (InstanceDuplicateMethod _) = "TC_InstanceDuplicateMethod"
 tcCode (NeedsTwoArgs _) = "TC_NeedsTwoArgs"
 tcCode (NoInstanceFound _) = "TC_NoInstanceFound"
+tcCode (InstanceSearchExhausted _) = "TC_InstanceSearchExhausted"
 tcCode (InterpNoInstance _) = "TC_InterpNoInstance"
 tcCode (NotExhaustive _) = "TC_NotExhaustive"
 tcCode (SignatureNoDef _) = "TC_SignatureNoDef"
@@ -312,6 +318,8 @@ tcTemplate (BranchTooManyArgs _) = "branch for constructor <0> has too many argu
 tcTemplate ClauseUnreachable =
   "clause is unreachable: the earlier clauses already match every value it matches"
 tcTemplate (CannotProveTermination _) = "cannot prove termination of <0>"
+tcTemplate (TerminationBudgetExhausted _) =
+  "termination analysis gave up on <0>: budget exhausted (not a proof of non-termination)"
 tcTemplate (CannotRedefineBuiltin _) = "cannot redefine builtin <0>"
 tcTemplate (CannotSolveMetavar _) =
   "cannot solve metavariable ?<0> (solution would escape its scope)"
@@ -334,6 +342,8 @@ tcTemplate (InstanceDuplicateMethod _) =
   "instance declares method <0> more than once (same method, two spellings)"
 tcTemplate (NeedsTwoArgs _) = "<0> needs exactly two arguments"
 tcTemplate (NoInstanceFound _) = "no instance found for <0>"
+tcTemplate (InstanceSearchExhausted _) =
+  "instance search gave up on <0>: recursion budget exhausted (not a missing instance)"
 tcTemplate (InterpNoInstance _) =
   "template interpolation needs an Interp or Show instance for <0> (derive Show, define instance Interp <0>, or convert with show / strFromInt)"
 tcTemplate (NotExhaustive _) = "case is not exhaustive: missing <0>"
@@ -567,6 +577,10 @@ tcChunk5 =
       (tcTemplate (CannotProveTermination ""))
       "无法证明终止性",
     TcEntry
+      (tcCode (TerminationBudgetExhausted ""))
+      (tcTemplate (TerminationBudgetExhausted ""))
+      "终止性分析预算耗尽（大小变化图闭包未收敛），不是证明不终止",
+    TcEntry
       (tcCode (CannotRedefineBuiltin ""))
       (tcTemplate (CannotRedefineBuiltin ""))
       "不能重定义内建名",
@@ -633,6 +647,10 @@ tcChunk7 =
       "instance 重复声明同一接口方法（两种写法）",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到实例",
+    TcEntry
+      (tcCode (InstanceSearchExhausted ""))
+      (tcTemplate (InstanceSearchExhausted ""))
+      "实例搜索递归预算耗尽，不是缺实例",
     TcEntry
       (tcCode (InterpNoInstance ""))
       (tcTemplate (InterpNoInstance ""))

@@ -83,7 +83,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | ID · 类 | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | EL-22 · D | 终止性有三份几乎同构的手写遍历（`posWalk` / `strWalk` / `siteWalkC`），工作在「分析表达式」层（由 `Termination.ElabInput` 从精化产物翻译；实例身份已按字典分组，类型信息仍在翻译时丢弃），HOF 识别是 `Base.Data.List.{map,filter,concatMap,mapMaybe,foldl,foldr}` / `Result.traverse` / `Common.traverse` 的 canonical 模块名白名单；三处对 `EInterp` 的覆盖各不相同 | `Elab/Termination.vuna`、`Elab/Termination/{Measure,Scc}.vuna` | 后续 |
-| EL-23 · C | 终止性判据的容量兜底把「放弃」渲染成「证明失败」：`tableGraphCap = 512`、`sctClosureFuel = 240`、正性不动点 1024、弱可达 100000 耗尽一律判失败；`blindSitesOf` 把「没分析到」落成全弱边，错误码与真正的非终止相同 | `Elab/Termination/Scc.vuna`、`Elab/Termination.vuna`、`Elab/Termination/Measure.vuna` | 后续 |
+| EL-23 · C | 终止性判据的容量兜底把「放弃」渲染成「证明失败」：`tableGraphCap = 512` / `sctClosureFuel = 240` 已改用 `TC_TerminationBudgetExhausted`；剩余三处：正性不动点 1024（耗尽返回部分 facts）、`weakReachFuel 100000`（耗尽返回 True）、`blindSitesOf` 把未识别调用落成全弱边——仍按普通终止性失败输出 | `Elab/Termination/Scc.vuna`（`sctBlindNote` / `blindSitesOf`）、`Elab/Termination.vuna`（`computePosFactsWork`）、`Elab/Termination/Measure.vuna`（`weakReachFuel`） | 后续（剩余三处容量） |
 | EL-24 · ⚠️C | 覆盖率 / 可达性有五处口径：`Case.BranchVerdict`、`Coverage.clauseCover`、`Match.familyCovered`、`Coverage.familyCtors`、`Impl` 的 Bool/Nat/Int/String 专用路径；索引族与未知族一律按「已覆盖」静默放行 | `Elab/{Case,Coverage,Match}.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EL-26 · B | **没有严格正性检查**：`Elab.Data.elabCtor` 只校验构造子结果头是本族、索引个数与字段宇宙层级，构造子字段可以出现「本族在 Pi 定义域」这类非严格正的出现 ⇒ 能构造空类型的居民（`data Void` + `data D` / `MkD : (D -> Void) -> D` 被接受）。Idris 2 / Yaffle 都有 `Core.Termination.Positivity` 且在所有模式下检查 | `Elab/Data.vuna`（`elabCtor` / `checkCtorFieldSorts`）；探针与先例对照见 [prior-art-elaboration.md](prior-art-elaboration.md) §9 | 后续 |
 | EL-25 · D | `Sig.vuna` 里四份手写 AST 遍历（`exprMaxAppArity` / `exprLowerVars` / `memberDomainOverridesOne` / `Trait.exprFreeLower`）覆盖的构造子集合各不相同且都不完整；`methodArgRigsOf` 的 `rigOf` 参数从未被调用，却对每个域白做一次 `eval` | `Elab/Sig.vuna`、`Elab/Trait.vuna` | 后续 |
@@ -103,7 +103,7 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | EC-30 · A | `Impl.vuna` 的 check 位 `if`：分支检查失败后整体重推断（位置 / 期望类型信息丢失，回退用原 `ec`） | `Elab/Term/Impl.vuna` | 后续 |
 | EC-31 · ⚠️D | `Ec` 是 22 字段巨型状态：每个 setter 按位置重列全部字段（15 处），漏一处即静默串字段；解表有三份真源（`ecSols` 列表 / `ecSolTbl` 哈希 / `csSolsCount`），靠「新解必须前插」这条隐式不变量同步 | `Elab/Types.vuna`（`Ec`、`ecPut*`、`solsDelta`） | 后续 |
 | EC-32 · D | `ConstraintStore` 一个记录兼任 5 种无关状态：待处理队列、id 分配、重试表、解表计数、**构造子索引是否完整**；`ecPutCtorTbl` 也会改它 | `Elab/Types.vuna`、`Elab/Meta.vuna` | 后续 |
-| EC-34 · ⚠️C | 实例搜索把「递归深度」和「候选 / via 预算」压进同一个固定 `16`（`searchInstanceIn`），耗尽报 `TC_NoInstanceFound`：合法的深 ctx / via 链被报成「缺实例」 | `Elab/Dict.vuna`（`searchInstFuel` / `tryViaDict`） | 后续 |
+| EC-34 · ⚠️C | 实例搜索曾把「递归深度」和「候选 / via 预算」压进同一个固定 `16`：合法的深 ctx / via 链被报成「缺实例」。现在深度独立为 `instDepthBound`，耗尽报 `TC_InstanceSearchExhausted`；via 实参扫描不再消耗深度。剩余：`tryMatchInst` / `solveDictCtxs` 耗尽仍返回 `Nothing`（候选被静默跳过，最终可能落到 `TC_NoInstanceFound`） | `Elab/Dict.vuna`（`instDepthBound` / `searchInstFuel` / `tryMatchInst` / `solveDictCtxs`） | 后续（候选跳过改三态） |
 | EC-35 · C | 行标签的**诊断展示**用 `showValueAt 6`（深度 6 截断）：匹配本身走 `conv`，但歧义 / 缺实例的候选列表可能显示相同文本，难以区分 | `Elab/Dict.vuna`（`labelCandText` / `labelScan`） | 后续（展示层） |
 | EC-39 · ⚠️D | 「类型层 / 擦除」有五份判据且会互相矛盾：`Usage.isTypeForming`（只沿 cod）认为 `Int -> Type` 是类型层，`Meta.isTypeLayerValue`（每个域都须是类型层）认为不是；另有 `isTypeDomain` / `isKindWithCtx` / `isFamilyKindValue` / `rigIsErased` 重复实现 | `Elab/Usage.vuna`、`Elab/Meta.vuna`、`Elab/Term/Impl.vuna` | 后续 |
 | EC-40 · C | `Elab/Types.vuna` 的 `refineValue` 不下钻 `VCase` 分支体、不处理 `VProj`（`_ => v`）⇒ 索引精化在卡住的 case / 投影里静默丢失 | `Elab/Types.vuna` | 后续 |
