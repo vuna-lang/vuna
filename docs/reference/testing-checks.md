@@ -29,7 +29,7 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
 | `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（`pr / run`） |
-| `gate` | `vuna-tests-gate`（完整 fast+integration） | main push |
+| `gate` | `vuna-tests-gate`（完整 fast+integration） | main push（人工 / break-glass；自动合并不触发，见下） |
 | `slices` | 7 个 `vuna-tests-*` area 切片 | PR 计划器按 area 选；本地 `nix run .#ci -- slices` |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
 | `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、`suite` 标签 |
@@ -62,6 +62,11 @@ PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` �
 让前端改动命中所有夹具）。完整覆盖由 nightly 的 `suite` 组（gate + e2e）兜底；切片保留
 `minCases` 下限，过滤后 case 数骤降直接失败。`codegen-wasm` / `codegen-native` 暂不进
 GitHub CI（维持只在本地 `backends` 组跑），它们的 area 标签只服务 `--area` 局部筛选。
+
+**自动合并与 main 基线**：GitHub 不为 `GITHUB_TOKEN` 执行的推送创建工作流运行，
+auto-merge 的合并归 `github-actions[bot]`，所以 `gate` 不会在自动合并后触发。main 的完整
+基线（gate + e2e）由定时 `suite` 组承担；要让自动合并也触发 push `gate`，给仓库配置
+`AUTOMERGE_TOKEN`（`automerge.yml` 已优先使用它）。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。

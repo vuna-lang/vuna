@@ -176,6 +176,10 @@ GitHub 只在 required checks 全绿、分支满足 strict up-to-date 时执行 
 检查失败、取消或 PR 落后于 main 都不会合并。落后时仍需 agent 在分支上
 `git rebase origin/main && git push --force-with-lease`。
 
+合并身份是 `github-actions[bot]`（`GITHUB_TOKEN`），GitHub 不为该身份的推送创建工作流，
+所以 main push 的 `gate` 只覆盖人工 / break-glass 推送。配 `AUTOMERGE_TOKEN` 后合并会触发
+push 门禁；否则 main 的完整基线由定时 `suite` 组（gate + e2e）承担。
+
 `main` 的 ruleset 由 [nix/tools/github-branch-protection.sh](../../nix/tools/github-branch-protection.sh)
 管理，required checks 是 `pr / run` 与 `gates / run`。没有 bypass；break-glass 流程见
 CONTRIBUTING.md。
