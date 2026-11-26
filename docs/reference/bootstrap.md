@@ -139,7 +139,7 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 3. 自举链的平台锁定被显式接受：`.s` 是 x86-64 Linux SysV 汇编，其它平台要么用发布的
    二进制锚点，要么不参与从零构建；
 4. 若同时退役 OCaml 后端，跨后端语义差分只剩 suite + wasm 交叉 + Core 语义，oracle 缺口
-   必须作为开放债务登记（[debt.md](debt.md)）。
+   必须作为开放债务登记（[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）。
 
 **规模边界。** 编译器自身的 `.s` 文件集实测约 143 个文件 / 45 MB / 189 万行（其中 lambda
 体约 89 万行）；同口径 OCaml 种子是 158 个文件 / 9.5 MB / 5.4 万行。因此 `.s` 种子适合作为
@@ -184,7 +184,7 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
   `Base.Effect.Core*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
   [primitives.md](primitives.md) §7。
 - **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
-  根包可用（[debt.md](debt.md) D62）。
+  根包可用（gh#104）。
 - `Driver.CompilerCli.runIn`（`@vuna@prim_eff_runIn`）是唯一的进程执行入口（代码内部约定，
   不是能力检查）。
 
@@ -227,4 +227,4 @@ flag 统一为 `-g -w -a+39 -warn-error +39`（warning 39 = unused rec，设 war
 - 内建声明面、原语语义与宿主层：[primitives.md](primitives.md)
 - 子系统数据流与改动定位：[architecture.md](../architecture.md)
 - 测试体系与 corpus：[testing.md](testing.md)；CI 门槛与 checks 清单：[testing-checks.md](testing-checks.md)
-- 开放债务：[debt.md](debt.md)
+- 开放债务：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)

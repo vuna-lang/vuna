@@ -285,7 +285,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **错误**：未知宏 `[RN_UnknownMacro]`、参数个数不符 `[RN_MacroArity]`、`log!` 级别非法
   `[RN_LogLevelUnknown]` / 非字面量 `[RN_LogLevelNotLiteral]`，都带调用点 span。
 - **边界**：暂不支持用户自定义宏 / 模式宏 / 宏生成宏；宏名是全局内置名，不参与模块作用域
-  （见 [debt.md](debt.md)）。
+  （见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）。
 
 ## `case` 分支与模式
 

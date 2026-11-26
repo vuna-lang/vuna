@@ -102,12 +102,23 @@ Agent 在开发、评审或门禁失败时发现问题：
   `nix run .#ci -- backends|native`。
 - `seed`：seed 轮换，优先合并。
 
+### 债务
+
+- `debt`：从旧债务清单迁移的未关闭债务；
+- `debt:A` / `debt:B` / `debt:C` / `debt:D`：原分类（补丁 / 能力缺口 / 近似 / 结构妥协）；
+- `debt:silent`：后果是静默错误；
+- `debt:trigger`：触发条件型；
+- `priority:P0` … `priority:P3`：优先级，不替代 `status:*`。
+
+文档和注释引用 issue 统一写 `gh#N`；issue 正文的 `Legacy-Debt: Dxx` 只用于迁移追溯。
+
 标签定义在 [`.github/labels.yml`](../../.github/labels.yml)，由
 `nix/tools/github-labels.sh` 同步；旧标签用 `--migrate` 迁移。
 
 ## PR 与 issue 联动
 
 PR 描述必须包含 `Closes #N` 或 `Refs #N`（`gates / run` 检查）；例外加 `no-issue`。
+文档里的 issue 引用写 `gh#N`，不写裸 `#N`。
 
 `pr-triage` 在 PR 打开/更新时自动：
 

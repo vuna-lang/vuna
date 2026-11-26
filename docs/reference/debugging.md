@@ -54,7 +54,7 @@ vuna: runtime error: division by zero
   `genGroup`/`genDef`），所以 `ocamlopt -g` 的 DWARF `.debug_line`、`gdb`、`perf` 以及
   `Printexc` 回栈**原生**指向 `.vuna`，不必只靠 `dt_def_locs` 表（两者互补：裁剪掉 DWARF
   的产物仍靠表）。位置是**文件 + 行**粒度（同一指令后连续生成的代码都归到该起始行，
-  没有表达式级定位，见 debt D80）；`ocamlopt` 单元内联仍可能把帧归到调用者（D33）。
+  没有表达式级定位，见 gh#84）；`ocamlopt` 单元内联仍可能把帧归到调用者（gh#82）。
   规范见 [observability.md](observability.md) §5。
 - 纯 `main`（零参值绑定）在**模块初始化期**求值，早于 main 钩子：`Main.ml` 第一行
   开启回栈、并给入口 main 的绑定套同一个报告器；`main : Eff r a` 的 thunk 在钩子的
@@ -62,7 +62,7 @@ vuna: runtime error: division by zero
 - 回栈记录由生成代码 `Printexc.record_backtrace true` 打开；`build.sh` 本就带 `-g`
   （见 [compiler.md](compiler.md) 的输出模型）。
 
-**边界**（登记在 [debt.md](debt.md) D33）：`ocamlopt` 会内联小函数，被内联的抛错点
+**边界**（登记在 gh#82）：`ocamlopt` 会内联小函数，被内联的抛错点
 会归到调用者帧；非入口单元顶层初始化的异常不在覆盖范围；没有表达式级 span / 局部
 变量值 / 断点（无 DAP，没有真调试器）。
 

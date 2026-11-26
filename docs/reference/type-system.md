@@ -6,7 +6,7 @@ LSP / 测试夹具）都走它。本文是类型规则的语义页；表面语�
 [frontend-syntax.md](frontend-syntax.md)，模块系统见 [language.md](language.md)，
 记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
 quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页为准）；Core 表示与
-合一实现见 [core.md](core.md)，未关闭的债务见 [debt.md](debt.md)。
+合一实现见 [core.md](core.md)，未关闭的债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 宇宙与 kind
 
@@ -59,7 +59,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   分支与 `Core/Conv` 的字符串比较）。
 - **元变量求解**：局部变量 spine 优先走 Miller pattern（提取成 λ 抽象）；Miller pattern
   之外保留「头一致就提取」近似（`Core/Conv.solveMetaHoLegacyFuel`），能提取就
-  提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一未实现（debt B07）。
+  提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一未实现（gh#95）。
 - 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
 - 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Trait.Eq` 是 trait。`Nat` / `Vec` /
@@ -143,7 +143,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **Tarski 式存在式**：依赖索引取值用运行时类型码 `Ty` + 指标族 `Tm : Ty -> Type` +
   存在式 `Some` 表达，让 `Ctx n -> Fin n -> Some` 这类 lookup 写成普通函数（构造存在式
   的值时给出类型码与指标）。泛型 Σ 的值级构造（字段类型依赖运行时值）未实现
-  （[debt.md](debt.md)）。
+  （[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）。
 - **空族判定**：索引含中性项时无法证明族为空，判据保守判「可能非空」（细节见
   「依赖模式匹配与 case」）；隐式模式 `{p}` 与 `auto` / 隐式等式搜索未实现。
 
@@ -273,4 +273,4 @@ Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。�
 - 记录、trait / 实例 / `deriving`、`do` / Monad：[records-traits.md](records-traits.md)
 - Core 表示、NbE、合一、精化器、擦除 codegen 不变量：[core.md](core.md)
 - 原语身份、Int / String 语义、宿主层：[primitives.md](primitives.md)
-- 未关闭的债务：[debt.md](debt.md)
+- 未关闭的债务：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)

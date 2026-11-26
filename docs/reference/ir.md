@@ -295,7 +295,7 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 - 后端没有固定步数预算：IR 上每个节点一次结构递归。
 - Lowering 的预算按项规模派生（`lowerBudgetFor size = 8 * size + 512`，只防项本身有病），
   因此深层嵌套的单定义体（如 150 层嵌套应用）不会误报 `IC_FuelExhausted (codegen)`；
-  字面量展开成本见 [debt.md](debt.md) D24。
+  字面量展开成本见 gh#53。
 - 回归夹具：`packages/compiler/test/corpus/dt_deep`（150 层嵌套应用），由
   `packages/compiler/test/steps/103_ir_lowering.steps`（深层项）与
   `packages/compiler/test/steps/104_ir_runtime_contract.steps`（符号 → 文本映射）以及

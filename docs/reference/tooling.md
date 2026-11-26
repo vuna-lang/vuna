@@ -458,7 +458,7 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 | 命令 | 行为 |
 |---|---|
-| `vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml|repr|repr-cps] [--out FILE] DIR` | 对包做检查 + lowering，输出确定性文本（默认 stdout）。`raw` = lowering 后；`cps` = 选择性 CPS；`machine` = handler/符号/trampoline 的机器化 lowering；`anf` / `anf2` = 对定义做 1 / 2 次 ANF（用于观察 D111 的非幂等）；`ocaml` = OCaml 后端模型渲染后的类型声明与定义；`repr` / `repr-cps` = binder 槽与值位置的运行时 kind 分布（ptr / static / scalar / unknown，未知按来源细分；缺类型的 binder 按绑定点推断），`repr-cps` 走 native 实际输入的 CPS 之后形态。 |
+| `vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml|repr|repr-cps] [--out FILE] DIR` | 对包做检查 + lowering，输出确定性文本（默认 stdout）。`raw` = lowering 后；`cps` = 选择性 CPS；`machine` = handler/符号/trampoline 的机器化 lowering；`anf` / `anf2` = 对定义做 1 / 2 次 ANF（用于观察 ANF 的非幂等）；`ocaml` = OCaml 后端模型渲染后的类型声明与定义；`repr` / `repr-cps` = binder 槽与值位置的运行时 kind 分布（ptr / static / scalar / unknown，未知按来源细分；缺类型的 binder 按绑定点推断），`repr-cps` 走 native 实际输入的 CPS 之后形态。 |
 | `vuna dev ir decode FILE` | 把后端插件收到的 IR 载荷（`vuna-target-*` 的 `--ir` 文件）解回同一套渲染文本：用于核对「dump 看到的 IR」与「插件实际拿到的 def 集」是否一致（插件拿的是可达子集，且 CPS 之后还在插件里跑一次）。 |
 
 只用于 diff / 观测，不是稳定 ABI，也不写构建产物。
@@ -493,11 +493,11 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 - LSP codeAction 的剩余缺口：case split 枚举非索引 `data` 与 record（单构造器 record 模式），
   不覆盖索引族（parse 级拿不到索引约束）与不透明 `axiom`；构造子是 parse 级解析（依赖模块
   读盘）；`fix all` 的 command 形式依赖客户端支持 `workspace/applyEdit`；rename 由
-  `textDocument/rename` 提供（解析级，见 lsp.md）（见 [debt.md](debt.md) C38）。
+  `textDocument/rename` 提供（解析级，见 lsp.md）（见 gh#77）。
 - **REPL server（非目标，不是待修债务）**：无请求取消/超时、无并发连接、无断线重连；server
   模式不执行 `:!` 与效果表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket）。单会话
   状态机本质串行，超时/取消需要可中断求值原语；安全模型只允许 loopback，故不做并发连接与
   外部网络协议。
 
-开放债务见 [debt.md](debt.md)；测试入口见
+开放债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)；测试入口见
 [testing.md](testing.md)。

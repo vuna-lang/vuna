@@ -52,7 +52,7 @@ data Term where
   真正按需发生的只有 `force` 对全局定义的 delta 展开（下一条），这里没有 call-by-name
   意义上的惰性。
 - `TIf` 的两支在 `eval` 里也各做一次**弱头**求值（`VIf` 槽里存 `Value`），只有 `normalize`
-  对选中支下钻；codegen 只执行选中支（差异见 [debt.md](debt.md) D120）。
+  对选中支下钻；codegen 只执行选中支（差异见 gh#59）。
 - `force`：展开已解元变量，并按需 **delta 展开**有定义的全局；步数上限
   `defaultFuel = 512`，到限返回 stuck（不 panic）。`primReduce` 在 force 内做内建归约
   （`IntrinsicOp` 分派）。delta 每次重新求值定义体，没有求值缓存（按定义记忆化的前置
@@ -62,7 +62,7 @@ data Term where
   用于显示与终止性检查。
 - 浮点值 `VFloat` 的载荷是 `string_of_float` 的规范文本：定义性相等比文本，算术 / 比较
   先按 `[-]digits[.digits][e±NN]`、`nan`、`inf` 解析回宿主 `Float`。规范文本只有 12 位
-  有效数字，精度边界见 [debt.md](debt.md) CO-08。
+  有效数字，精度边界见 gh#48。
 - `Nat` 值按 `Zero` / `Succ` 链物化。interp 建链有规模上限（`natValueMaybe`：超过
   `natChainLimit = 65536` 不归约），避免为一个大整数分配上亿个构造子；超限时 `main`
   报 `CG_MainNotValue`。

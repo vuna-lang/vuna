@@ -118,7 +118,7 @@
 - **用户面唯一入口**：标准库与用户代码经 `Base.Effect.Core.*` 标签 + handler 表达效果
   （`consolePrint` / `fsReadFile` / `exitWith` …；入口执行点 `runPure : Eff [] a -> a`）。
   宿主原语是 `@vuna@` 内部名，源码里没有写法——这条边界由名字可见性保证，不是能力位检查。
-- **显式接受的损失**（[debt.md](debt.md) D62）：宿主层 import 门控、
+- **显式接受的损失**（gh#104）：宿主层 import 门控、
   每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
   是 `Eff r a`，入口 `main : Eff r a`（内建宿主标签由 entry 预装 handler），核心求值路径不执行运行时效应。
 - **base 的宿主层直接使用点**：13 个真实使用点见 [effects.md](effects.md) §8.6。

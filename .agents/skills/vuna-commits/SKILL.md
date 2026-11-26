@@ -37,7 +37,7 @@ git rebase -i origin/main
 ```
 feat(store): 对象库按输入摘要复用视图
 fix(elab): 实例头实参取尽时不再伪造 Int 类型
-docs(debt): 对齐 D135 收口后的现状
+docs(debt): 同步 gh#100 的现状
 test(store): 锁定精简后的对象库布局
 chore(seed): 轮换 seed
 ```

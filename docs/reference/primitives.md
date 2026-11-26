@@ -6,7 +6,7 @@
 `Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Target.Ocaml.Term`（runtime
 映射）、`Core.Eval`（核心求值归约）。语法见 [language.md](language.md)，类型规则见
 [type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
-[debt.md](debt.md)。
+[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 1. 术语
 
@@ -28,7 +28,7 @@
   类型身份仍由本文件的内建表提供，`Base.Data.Int` 不声明类型。**这是设计选择而非欠账**：把
   `Int`/`String`/`Float` 上移成源码 `primitive type` 声明需要两阶段 bootstrap、改大量身份
   比较与 `Base` 叶模块拆分，功能零增益；用户自定义 primitive 类型的需求归受限 FFI
-  （[debt.md](debt.md) D21）。
+  （gh#96）。
   实例落点规则见 [operators.md](operators.md)。
 - **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Trait.Eq` /
   `Base.Trait.Ord` 的方法名本身（`(==)` / `(/=)` / `(<)` / `(<=)` / `(>)` / `(>=)`）；Int/String 上的
@@ -228,7 +228,7 @@
 - 可变数据的安全边界：可变容器操作返回 `Eff []`，但要求 `MutOp` 标记；句柄是普通值，
   可以逃逸（GC 所有权，见 [effects.md](effects.md) §8.8）。没有 region/ST 令牌；
   也没有依赖 multiplicity / 线性箭头（多用未禁止，见 [effects.md](effects.md)、
-  [debt.md](debt.md) D22）。
+  gh#97）。
 
 ## 6.2 多线程原语
 
@@ -301,7 +301,7 @@ native `96` 与 ocaml `95` 分别覆盖 Process / Net 的 `Result` runner。
   （state/futex | result | stack base | size | closure | tcb | slot | scratch），`join`
   用 futex 等 state，完成后 `munmap` 栈与 scratch；重复 join 返回同一结果。登记失败时先
   `munmap` 刚分配的栈与 scratch 再 trap `too many threads (limit 4096)`；**没有 detach**：
-  spawn 出来的句柄必须 join，否则槽、栈与 scratch 都不回收（见 [debt.md](debt.md) D140）。
+  spawn 出来的句柄必须 join，否则槽、栈与 scratch 都不回收（见 gh#54）。
 - 子线程在 `runPure` 里执行任务体；`threadId` 是线程表槽号（主线程 0，与 OCaml 的 domain
   id 同口径），`threadParallelism` 数 `sched_getaffinity` 的位。
 - 分配：有子线程（`rt_thread_count > 0`）时 `alloc` 拿一把 futex 堆锁；单线程路径不加锁。
@@ -420,7 +420,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
   已处理干净的动作）。
 - **`prim_*`（纯原语）仍可直接调用**：没有 manifest `[capabilities]` / `[trust]`、每包原语
   白名单或 `unsafe` 审计；显式接受的损失见 [effects.md](effects.md) §8.6 与
-  [debt.md](debt.md) D62。
+  gh#104。
 - `vuna repl` 能求值顶层类型为 `Eff r a` 的表达式：Nil 行直接跑；带行时先定义带显式签名的值
   （`prog : Eff [ConsoleOp] Int`）再求值 `prog`（见 [tooling.md](tooling.md)）。
 
@@ -533,4 +533,4 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - `net` 只有 TCP（数字 IPv4）与 Unix domain socket：无 DNS、TLS、异步/超时、并发；
   `accept`/`recv` 是阻塞语义。原语本身不限制绑定地址，`vuna repl serve --listen` 在 CLI 层只接受
   loopback 与 Unix socket（见 [tooling.md](tooling.md)）。
-- 以上是原语与 runtime 侧的现状边界；开放债务见 [debt.md](debt.md)。
+- 以上是原语与 runtime 侧的现状边界；开放债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。

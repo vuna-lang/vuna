@@ -16,7 +16,7 @@
 两者当前不同步：产物自举通过，`selfhost` scope（整仓 `check .`）未通过（§4）。
 
 信任锚点仍是 OCaml `seed/`：native 产物（`.s` 文件集）还没有参与 `stage1 == stage2`，
-也没有独立的 native 种子轮换路径（[debt.md](debt.md) D106，前提见
+也没有独立的 native 种子轮换路径（gh#144，前提见
 [bootstrap.md](bootstrap.md)「锚点演进」）。
 
 ## 2. 产物与平台前提
@@ -140,69 +140,17 @@ OCaml 的峰值按**进程树**计（`vuna` 把命令派给 `vuna-toolchain` 子
 
 `92_eff_thread_mutex_cond` 的失败（corpus scope）在编译器侧复现：native 编译该夹具 572 s（无诊断
 585 s）/ 912 MB，OCaml 42 s。它不靠大 live（只有 118 MB），而是 **5,735 次回收 × 平均 39 MB 栈跨度**
-——累计保守扫栈 225 GB。深层递归的编译器阶段每次回收都按 `[rsp, stack_top)` 付一遍扫根成本。
-
-### 4.4 单文件定义数增长
-
-口径：单文件 N 个 `f<i> = i` 定义，冷 store（含 base 接口加载），`check` 该文件。
-
-| N | native ms | native 峰值 MiB | live | mapped | live 对象 | OCaml ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| 500 | 620 | 85 | 35.6 MB | 108 MB | 0.54 M | 208 |
-| 1000 | 824 | 129 | 61.8 MB | 147 MB | 0.97 M | 209 |
-| 2000 | 1237 | 195 | 67.1 MB | 207 MB | 1.12 M | 209 |
-| 4000 | 1856 | 296 | 107.1 MB | 306 MB | 2.05 M | 413 |
-
-墙钟随定义数近似线性（500 → 4000 是 3.0×，OCaml 2.0×），live 与 mapped 也近似线性。单文件本身
-没有超线性；整仓的放大来自单堆累积（§4.1）与回收次数（§4.3）。
-
-## 5. 成本落在哪里
-
-三条并列事实，都来自 §4.3 的诊断行：
-
-1. **回收在 live 上重扫，是主项**：占墙钟 base 55% / `compiler` 60% / `toolchain` 80% /
-   92 夹具 73% / 整仓 83%。native 的 live 集远大于同工作量的 OCaml：整仓 11.4 GB（OCaml 峰值
-   640 MB）、`compiler` 3.36 GB（OCaml 406 MB）、`toolchain` 2.67 GB（OCaml 669 MB）。平均对象
-   45–57 B；整仓 mapped/live 只有 1.3×，所以放大不在碎片，而在**存活对象本身多，且每次整堆回收
-   全扫**。
-2. **保守扫栈按回收次数收费**：92 夹具只有 118 MB live，却做了 5,735 次回收（5,088 minor），
-   累计扫栈 225 GB（平均跨度 39 MB、峰值 147 MB）；`toolchain` 2.6 GB、整仓 2.0 GB。深递归的
-   编译器阶段把 `[rsp, stack_top)` 撑大，每一次回收都为这个跨度付费。
-3. **单进程整仓是结构性的**：文本格式按成员分进程 402 s 通过，单进程 902 s 未完成。逐包里
-   `toolchain` / `dev` 约 7.9 / 8.5 min（OCaml 22–24 s），本身已超过 `backend-check` 的 240 s 默认
-   预算。
-
-本轮数据排除的解释：单文件检查没有超线性（§4.4）；碎片不是主因（整仓 mapped/live 1.3×，
-回收时间跟着 live 走）；也不是「只在整仓才慢」——`compiler` / `toolchain` 单包的 live 与回收
-占比同向放大。
-
-## 6. 门禁地位
-
-- `vuna-native` 与 `backend-check` **不在 `nix flake check` 里**：整轮成本远高于日常门禁。
-- `selfhost` scope 是**逐成员进程**：成员清单取根 `vuna.toml`，默认串行、单成员
-  1200 s 上限；整仓单进程只作为 `selfhost-stress` 的成本读数（超时记 skip，不进 `--scope all`）。
-- CI 只在每夜定时、手动 dispatch、带 `backend` 标签的 PR 上跑 `--scope all`，且 job 是
-  `continue-on-error`（`.github/workflows/ci.yml` 的 `backend-native`）。
-- push 路径上的 native 覆盖由 `vuna-tests-native` 承担：suite 的 native 矩阵，181 个 case
-  （对照：ocaml 1073、wasm 170）。
-- `checks.seed-selfhost` 只读 OCaml `seed/`，与 native 产物无关。
-
-所以 `selfhost` 失败不会挡住日常提交，也不会出现在 push 的 CI 结论里。§4 的读数要按 §3 的命令复测。
-
-## 7. 已知边界
-
-- **效应**：续延是一次性（multi-shot 不做）；延迟 answer 的 handler 在机器路径不工作
-  （native `impossible branch`，[debt.md](debt.md) D101）；`handleState` 这类 answer 类型是
-  函数的库 handler 三端不一致（D114）。
+——累计保守扫栈 225 GB。深层递归的编译器阶段每次回收都按 `gh#37）；`handleState` 这类 answer 类型是
+  函数的库 handler 三端不一致（gh#38）。
 - **多线程**：`clone` + futex 与 STW GC 可用；宿主持有态按线程隔离（状态槽 / cleanup 链在 TCB，
   路径等固定缓冲在每线程 scratch），阻塞的宿主 syscall 也发布停车标记；线程体仍是
   `Eff []`，宿主效应族要在 worker 体内显式装 handler（`runFsHost`，见
   [primitives.md](primitives.md) §6.2）。
 - **能力面**：FFI / extern、stdin 的 `readLine` / `readBytes`、net 不在支持面；native 目标
-  没有 entry 能力检查（DR-05）。
-- **优化边界**：带捕获的高阶参数、部分应用 shim、逐点 `alloc` 调用仍按慢路径走（D129）；
-  死槽清零给 `self` 产物带来约 1.5 MB 的文本体积成本（D133）。
-- **oracle**：OCaml 后端退役后没有独立的语义 oracle，跨后端差分要靠 suite + wasm 交叉（D107）。
+  没有 entry 能力检查（gh#132）。
+- **优化边界**：带捕获的高阶参数、部分应用 shim、逐点 `alloc` 调用仍按慢路径走（gh#92）；
+  死槽清零给 `self` 产物带来约 1.5 MB 的文本体积成本（gh#90）。
+- **oracle**：OCaml 后端退役后没有独立的语义 oracle，跨后端差分要靠 suite + wasm 交叉（gh#145）。
 
 ## 8. 相关页
 
@@ -210,4 +158,4 @@ OCaml 的峰值按**进程树**计（`vuna` 把命令派给 `vuna-toolchain` 子
 - 种子策略、rotation、fixed point 与锚点前提：[bootstrap.md](bootstrap.md)
 - 后端实现（IR 支持面、ABI、栈帧、优化 pass）：[native.md](native.md)
 - 运行时（符号表、资源限制、两代 GC、已知边界）：[native-runtime.md](native-runtime.md)
-- 未关闭的缺陷与缺口：[debt.md](debt.md)
+- 未关闭的缺陷与缺口：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)

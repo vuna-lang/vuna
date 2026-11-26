@@ -215,7 +215,7 @@ native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，
 - GC 沿帧保守扫根（[native-runtime.md](native-runtime.md) §1.2）；handler 帧与续延都在堆上，随栈槽与 cleanup 链可达。
 
 延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
-[debt.md](debt.md) D101。
+gh#37。
 
 ### 3.5 高阶参数特化
 
@@ -500,7 +500,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
-| 多线程原语 | 支持 | `thread_spawn` / `thread_join` / `mutex*` / `condvar*` / `atomic*`（`clone` + futex；并行区 STW 回收，宿主态按线程隔离，线程表 4096 槽 + 高水位扫描，见 [primitives.md](primitives.md) §6.2 与 [debt.md](debt.md) D140） |
+| 多线程原语 | 支持 | `thread_spawn` / `thread_join` / `mutex*` / `condvar*` / `atomic*`（`clone` + futex；并行区 STW 回收，宿主态按线程隔离，线程表 4096 槽 + 高水位扫描，见 [primitives.md](primitives.md) §6.2 与 gh#54） |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /

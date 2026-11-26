@@ -446,7 +446,7 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写
   输出（重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写 `(..)`；
-  `90_orphan_default` 实际覆盖重复实例，孤儿规则不存在，见 debt D30）；
+  `90_orphan_default` 实际覆盖重复实例，孤儿规则不存在，见 gh#138）；
   `99_explicit_*`（约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
   位置不支持）。
   `96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的解析负例；
