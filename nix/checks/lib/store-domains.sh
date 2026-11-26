@@ -19,7 +19,7 @@ allow="nix/checks/data/store-domains.txt"
 kinds=$(
   {
     grep -rhoE 'storeObject[A-Za-z]*Eff "[a-z-]+"' packages/ | sed -E 's/.*"([a-z-]+)".*/\1/'
-    grep -rhoE '^(orderKind|pkgIfaceSummaryKind) = "[a-z-]+"' packages/ | sed -E 's/.*"([a-z-]+)".*/\1/'
+    grep -rhoE '^pkgSummaryKind = "[a-z-]+"' packages/ | sed -E 's/.*"([a-z-]+)".*/\1/'
   } | sort -u
 )
 

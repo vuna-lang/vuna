@@ -491,41 +491,71 @@ buildIdForEff ctx =
 --     依赖重跑后同一个接口身份回到 `iface:`，注释不敏感的增量性质恢复。
 -- 没有读依赖接口对象，因此不会回到 `ifaceModsEff`（env）形成环。
 -- ---------------------------------------------------------------
-pkgIfaceSummaryKind : String
-pkgIfaceSummaryKind = "pkg-iface"
+pkgSummaryKind : String
+pkgSummaryKind = "pkg-summary"
 
-pkgIfaceSummaryCodec : String
-pkgIfaceSummaryCodec = "pkg-iface-summary 1"
+pkgSummaryCodec : String
+pkgSummaryCodec = "pkg-summary 1"
 
-pkgIfaceSummaryKeyOf : String -> String -> String -> String
-pkgIfaceSummaryKeyOf pkg srcClosure tag = addrOf ["pkg-iface", pkg, srcClosure, tag]
+-- | 包摘要：模块顺序 + 依赖方消费的接口身份。
+export record PkgSummary(..) where
+  psOrder : List String
+  psIfaceHash : String
+
+encPkgSummary : PkgSummary -> String
+encPkgSummary s = encTop (encList encStr) (s.psIfaceHash :: s.psOrder)
+
+decPkgSummary : String -> Maybe PkgSummary
+decPkgSummary payload =
+  case decList decStr (strLength payload) (curOf payload) of
+    Nothing => Nothing
+    Just (h :: names, rest) => if curAtEnd rest then Just (PkgSummary names h) else Nothing
+    Just ([], _) => Nothing
+
+pkgSummaryKeyOf : String -> String -> String -> String
+pkgSummaryKeyOf pkg srcClosure tag = addrOf ["pkg-summary", pkg, srcClosure, tag]
+
+readPkgSummaryAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (Maybe PkgSummary)
+readPkgSummaryAt root =
+  do
+    h <- rootHash root
+    tag <- cacheTagEff
+    payload <-
+      storeObjectReadEff
+        pkgSummaryKind
+        pkgSummaryCodec
+        (pkgSummaryKeyOf (rootName root) (strFromInt h) tag)
+    pure (
+        case payload of
+          Nothing => Nothing
+          Just bytes => decPkgSummary bytes
+      )
+
+manifestIdentityOf : Member nFs FsOp r => Root -> Int -> Eff r (String, String)
+manifestIdentityOf root h =
+  do
+    let
+      tomlPath = "${rootDir root}/vuna.toml"
+    in do
+      exists <- fsFileExists tomlPath
+      toml <- if exists then fsReadFile tomlPath else pure ""
+      pure (rootName root, "manifest:${textHash toml}:${strFromInt h}")
 
 -- | 依赖根的接口身份（或 manifest 回退）。
 depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (String, String)
 depRootIdentityEff root =
   do
     h <- rootHash root
-    tag <- cacheTagEff
+    saved <- readPkgSummaryAt root
     let
-      key = pkgIfaceSummaryKeyOf (rootName root) (strFromInt h) tag
-    in do
-      saved <- storeObjectReadEff pkgIfaceSummaryKind pkgIfaceSummaryCodec key
-      let
-        verdict =
-          case saved of
-            Just _ => "iface"
-            Nothing => "manifest"
-        _ = log! "debug" "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
-      in case saved of
-        Just s => pure (rootName root, "iface:${s}")
-        Nothing =>
-          do
-            let
-              tomlPath = "${rootDir root}/vuna.toml"
-            in do
-              exists <- fsFileExists tomlPath
-              toml <- if exists then fsReadFile tomlPath else pure ""
-              pure (rootName root, "manifest:${textHash toml}:${strFromInt h}")
+      verdict =
+        case saved of
+          Just _ => "iface"
+          Nothing => "manifest"
+      _ = log! "debug" "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
+    in case saved of
+      Just summary => pure (rootName root, "iface:${summary.psIfaceHash}")
+      Nothing => manifestIdentityOf root h
 
 depIdentitiesEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (String, String))
 depIdentitiesEff ctx =
@@ -539,9 +569,9 @@ depIdentitiesHash pairs = addrOf ("dep-identities" :: map pairText pairs)
 pairText : (String, String) -> String
 pairText p = "${firstOf p}=${secondOf p}"
 
--- | 写本包的接口身份摘要（供依赖方读；失败/缺根不影响正确性，只是依赖方回退 manifest）。
-writePkgIfaceSummaryEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ModuleIface -> Eff r Int
-writePkgIfaceSummaryEff ctx modules =
+-- | 写本包的模块顺序 + 接口身份（供依赖方读；失败/缺根不影响正确性）。
+writePkgSummaryEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ModuleIface -> Eff r Int
+writePkgSummaryEff ctx modules =
   case filter (\r => rootName r == contextPackageName ctx) (contextRoots ctx) of
     [] => pure 0
     r :: _ =>
@@ -549,9 +579,9 @@ writePkgIfaceSummaryEff ctx modules =
         h <- rootHash r
         tag <- cacheTagEff
         let
-          key = pkgIfaceSummaryKeyOf (contextPackageName ctx) (strFromInt h) tag
-          payload = pkgIfaceHashOfModules (contextPackageName ctx) modules
-        in storeObjectWriteEff pkgIfaceSummaryKind pkgIfaceSummaryCodec key payload
+          summary = PkgSummary (map miNameOf modules) (pkgIfaceHashOfModules (contextPackageName ctx) modules)
+          key = pkgSummaryKeyOf (contextPackageName ctx) (strFromInt h) tag
+        in storeObjectWriteEff pkgSummaryKind pkgSummaryCodec key (encPkgSummary summary)
 
 metaPairText : (String, Int) -> String
 metaPairText (name, hash) = "{\"name\":\"${name}\",\"hash\":${hash}}"
@@ -1047,43 +1077,9 @@ depIfacesOfWith ctx mods =
 -- 用依赖图重新拓扑排序也不行——base/compiler 的 import 图**有环**，环内顺序任意。
 -- 所以写侧把「这次写全的模块名顺序」单独存一个极小对象，读侧照它排列；缺失 ⇒ 回退全量。
 -- ---------------------------------------------------------------
-orderKind : String
-orderKind = "module-order"
-
-orderCodec : String
-orderCodec = "module-order 1"
-
-encOrderNames : List String -> String
-encOrderNames names = encTop (encList encStr) names
-
-decOrderNamesComplete : String -> Maybe (List String)
-decOrderNamesComplete s =
-  case decList decStr (strLength s) (curOf s) of
-    Nothing => Nothing
-    Just (names, rest) => if curAtEnd rest then Just names else Nothing
-
 rootOfName : String -> List Root -> Maybe Root
 rootOfName _ [] = Nothing
 rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
-
--- 顺序对象的身份 = 包名 + 包源闭包 + 编译器 tag。只用包名会让编译器换代或源码变化后
--- 仍读到旧顺序（`Split.canonicalTopo` 随后报依赖不在拓扑序）。
-orderKeyOfEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r String
-orderKeyOfEff root =
-  do
-    h <- rootHash root
-    tag <- cacheTagEff
-    pure (addrOf ["module-order", rootName root, strFromInt h, tag])
-
--- | 写某包的模块顺序（完整模块面写全后调用）。
-writeOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Int
-writeOrderEff ctx names =
-  case rootOfName (contextPackageName ctx) (contextRoots ctx) of
-    Nothing => pure 0
-    Just root =>
-      do
-        key <- orderKeyOfEff root
-        storeObjectWriteEff orderKind orderCodec key (encOrderNames names)
 
 -- | 读某包的模块顺序；缺失/损坏 ⇒ Nothing（调用方回退全量，宁可慢，不产错序）。
 readOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Maybe (List String))
@@ -1092,12 +1088,11 @@ readOrderEff ctx pkg =
     Nothing => pure Nothing
     Just root =>
       do
-        key <- orderKeyOfEff root
-        payload <- storeObjectReadEff orderKind orderCodec key
+        summary <- readPkgSummaryAt root
         pure (
-            case payload of
+            case summary of
               Nothing => Nothing
-              Just bytes => decOrderNamesComplete bytes
+              Just s => Just s.psOrder
           )
 
 -- | 已写的模块顺序是否覆盖这些导出模块（覆盖 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
@@ -1989,16 +1984,14 @@ writeIfaceShadowGo ctx checked pre clean =
                             pure (OkC modules)
                       else
                         do
-                          -- 先写「模块顺序」再写接口对象：读侧只有两份都在时才用接口路径。
-                          _ <- writeOrderEff ctx (map miNameOf modules)
                           -- 接口写边界：`Eff` 动作，标记而非跨度；`vuna.counter.cache.write` 不是
                           -- 词汇表里的名字（只有 `vuna.cache.write`，且它是保留的 span 名而不是计数名的
                           -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
                           -- 阶段拆分靠文本行，结构化只报「写发生了」。
                           _ <- obsMarkEff "vuna.iface.write"
                           n <- writeIfaceObjects own toWrite
-                          -- 依赖身份摘要：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
-                          _ <- writePkgIfaceSummaryEff ctx modules
+                          -- 模块顺序 + 依赖身份摘要：依赖方按源闭包摘要 + 编译器 tag 读。
+                          _ <- writePkgSummaryEff ctx modules
                           t4 <- clockNow
                           let
                             _ = log! "info" "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
