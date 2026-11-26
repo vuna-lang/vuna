@@ -71,6 +71,7 @@ if [ "$checks_json" = "[]" ]; then
   exit 2
 fi
 
+# 显式固定 unattributed commits 的额外审批：GitHub 当前默认 true，这里写出来避免默认值漂移。
 payload=$(jq -n \
   --arg name "$ruleset_name" \
   --arg branch "$branch" \
@@ -91,6 +92,7 @@ payload=$(jq -n \
         dismiss_stale_reviews_on_push: false,
         require_code_owner_review: false,
         require_last_push_approval: false,
+        require_extra_approval_for_unattributed_changes: true,
         required_review_thread_resolution: true,
         allowed_merge_methods: ["rebase"]
       }},
