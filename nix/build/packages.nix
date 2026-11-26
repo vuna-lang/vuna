@@ -500,13 +500,7 @@ let
     build = ''
       mkdir -p "$out/bin"
       cp -r ${
-        srcFor "native" (
-          pkgDeps.compiler
-          ++ [
-            "target-native"
-            "target-wasm"
-          ]
-        )
+        srcFor "native" (pkgDeps.compiler ++ pkgDeps.target-native ++ pkgDeps.target-wasm)
       }/packages packages
       chmod -R u+w packages
       export VUNA_STORE="$TMPDIR/vuna-store"
