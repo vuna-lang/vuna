@@ -1,0 +1,25 @@
+name: 想法 / 方向
+description: 先写一句话，之后由 agent 查重、讨论并补全元信息
+title: "[idea] "
+labels: ["status:backlog", "needs-refinement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这里只要求一句话。Agent 会先搜索已有 issue，再和你确认背景、目标、验收标准、
+        影响面与关系；确认前不会排期。
+  - type: textarea
+    id: idea
+    attributes:
+      label: 一句话
+      description: 想做什么、为什么，或你观察到的现象。
+      placeholder: 例如：把 trait 改名为 typeclass，看看影响面有多大。
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充上下文（可选）
+      description: 相关链接、代码位置、之前的讨论都可以放这里。
+    validations:
+      required: false

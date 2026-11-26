@@ -1,0 +1,44 @@
+name: Task
+description: 维护、重构、测试或 agent 发现的后继任务
+title: "[task] "
+labels: ["type:chore", "status:backlog"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: 背景
+      description: 来源 PR / issue / commit，以及为什么现在要做。
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: 要做的事
+      description: 具体改动点，尽量落到文件或模块。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 跑哪些检查、看什么结果。
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: 影响面
+      description: 涉及的 pkg / area。
+    validations:
+      required: false
+  - type: textarea
+    id: relations
+    attributes:
+      label: 关系
+      description: Parent epic、blocked by、related。
+      placeholder: |
+        - Parent: #
+        - Blocked by: #
+        - Related: #
+    validations:
+      required: false

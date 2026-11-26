@@ -1,0 +1,27 @@
+name: labels
+
+# labels.yml 落地到 main 后同步仓库标签。脚本是幂等的，只创建/更新，不删除；
+# 需要清理未登记标签时手动运行 `nix/tools/github-labels.sh --prune`。
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - nix/tools/github-labels.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: sync labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          nix/tools/github-labels.sh --sync
