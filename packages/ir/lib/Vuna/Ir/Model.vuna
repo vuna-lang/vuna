@@ -424,6 +424,10 @@ export record IrShared(..) where
   -- | 程序是否用到调度器原语（`Base.EffSched`）。动作入口总会用到（`dtp_sched_main`），
   -- 由装配侧再并上；决定是否追加 `dtSchedRuntime`。
   irSharedUsesSched : Bool
+  -- | 程序是否用到效应机器（perform / handle / self / bracket cleanup 的隐藏原语）。
+  -- 动作入口总会用到，由装配侧再并上；决定是否追加 `dtEffRuntime`（`Perform`
+  -- 效应、cleanup 登记表、`Effect.Deep` 的 handler 壳）。
+  irSharedUsesEff : Bool
 
 export irSharedUnboxedOf : String -> List (String, String, Int) -> Maybe (String, Int)
 irSharedUnboxedOf family [] = Nothing

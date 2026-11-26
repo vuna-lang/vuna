@@ -327,8 +327,8 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
         ErrC e => pure (ErrC e)
         OkC entryM =>
           let
-            -- 动作入口的钩子引用 `dtp_sched_main`，所以即使程序没用 `Base.EffSched`
-            -- 也要追加调度器 runtime；纯值入口不需要。
+            -- 动作入口的钩子引用 `dtp_sched_main` 与效应机器，所以即使程序没用
+            -- `Base.EffSched` 也要追加调度器 / 效应 runtime；纯值入口不需要。
             entryIsAction = entryIsActionM entryM
             -- 把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
             _ = log! "info" "cg-splitstart"
@@ -357,6 +357,7 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
                 shared.irSharedUsesObs
                 shared.irSharedUsesHost
                 (shared.irSharedUsesSched || entryIsAction)
+                (shared.irSharedUsesEff || entryIsAction)
             _ = log! "info" "cg-runtimeText-done"
           in splitProgramFiles
             env

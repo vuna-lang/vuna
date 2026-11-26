@@ -126,14 +126,12 @@ let dt_show_string s =
   Bytes.sub_string b 0 (!o + 1)
 ${dtPrimRuntime}"""
 
--- effectful 内建（`prim_*`）的 DT 运行时实现。
--- 签名在 `Vuna.Compiler.Base.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `Target.Ocaml.Runtime` 的符号表）；`argsGetArgs` / `stdinReadLine` 是零参**值**，
--- 所以在引用点展开成 `dtp_*(()`，与 OCaml 运行时的既有处理一致（每次求值都重新读）。
--- `stdinReadBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
--- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
-dtPrimRuntime : String
-dtPrimRuntime = ("""type _ Effect.t += Perform : int * int * string * string * Obj.t -> Obj.t Effect.t
+-- 效应机器运行时（`dtEffRuntime`）：`Perform` 效应、派发 id、bracket 的 cleanup
+-- 登记表、以及 `Effect.Deep` 的 handler 壳。只有程序真的 perform / handle 或走动作
+-- 入口时追加（`irSharedUsesEff`）；纯值程序不带这套 runtime，也就不会把
+-- Domain / Effect / Printexc 一串 stdlib 模块拖进产物的启动路径。
+dtEffRuntime : String
+dtEffRuntime = ("""type _ Effect.t += Perform : int * int * string * string * Obj.t -> Obj.t Effect.t
 
 (* 派发 id：与编译器 dispatchIdOf 及 native / wasm runtime 同一公式
    （FNV-1a 32 位，最后取低 30 位），三端对同一路由串必须得到同一个数。 *)
@@ -326,7 +324,41 @@ let dtp_removeFile path =
 let dtp_fileExists path = Sys.file_exists path
 let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
 let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
-let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
+(* POSIX shell 单引号转义（与 Filename.quote 同形）：只给 Sys.command 用。
+   不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
+let dtp_shell_quote s =
+  let q = String.make 1 (Char.chr 39) in
+  let esc = q ^ String.make 1 (Char.chr 92) ^ q in
+  q ^ String.concat esc (String.split_on_char (Char.chr 39) s) ^ q
+let dtp_runIn dir args =
+  dtp_hostReset ();
+  let quote s = dtp_shell_quote s in
+  let cmd = String.concat \" \" (List.map quote args) in
+  (* `cd` 在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。
+     125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
+  let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
+  if code = 125 then (dtp_hostSetStatus 1; -1) else code
+let dtp_net_next = ref 1
+let dtp_net_parse (addr : string) =
+  let n = String.length addr in
+  if n > 5 && String.sub addr 0 5 = \"unix:\" then `Unix (String.sub addr 5 (n - 5))
+  else if n > 4 && String.sub addr 0 4 = \"tcp:\" then
+    let rest = String.sub addr 4 (n - 4) in
+    (match (try Some (String.rindex rest ':') with Not_found -> None) with
+     | None -> failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
+     | Some i ->
+       let host = String.sub rest 0 i in
+       let portstr = String.sub rest (i + 1) (String.length rest - i - 1) in
+       let port = try int_of_string portstr with _ -> failwith (\"net: invalid port: \" ^ portstr) in
+       `Tcp (host, port))
+  else failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
+""")
+
+-- 纯数据原语（`dtPrimRuntime`）：数组原地写、动态数组、字节缓冲、字符串切片。
+-- 不碰效应机器也不碰宿主原语，任何程序都带；其余 effectful / 宿主原语在
+-- `dtEffRuntime` 里按需追加。
+dtPrimRuntime : String
+dtPrimRuntime = ("""let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
   let b = Array.copy a in
   Array.set b i v; b
 let dtp_dynNew cap =
@@ -396,34 +428,6 @@ let dtp_substring start len s =
   let ln = if len < 0 then 0 else if st + len > n then n - st else len in
   String.sub s st ln
 let dtp_exit n = exit n
-(* POSIX shell 单引号转义（与 Filename.quote 同形）：只给 Sys.command 用。
-   不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
-let dtp_shell_quote s =
-  let q = String.make 1 (Char.chr 39) in
-  let esc = q ^ String.make 1 (Char.chr 92) ^ q in
-  q ^ String.concat esc (String.split_on_char (Char.chr 39) s) ^ q
-let dtp_runIn dir args =
-  dtp_hostReset ();
-  let quote s = dtp_shell_quote s in
-  let cmd = String.concat \" \" (List.map quote args) in
-  (* `cd` 在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。
-     125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
-  let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
-  if code = 125 then (dtp_hostSetStatus 1; -1) else code
-let dtp_net_next = ref 1
-let dtp_net_parse (addr : string) =
-  let n = String.length addr in
-  if n > 5 && String.sub addr 0 5 = \"unix:\" then `Unix (String.sub addr 5 (n - 5))
-  else if n > 4 && String.sub addr 0 4 = \"tcp:\" then
-    let rest = String.sub addr 4 (n - 4) in
-    (match (try Some (String.rindex rest ':') with Not_found -> None) with
-     | None -> failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
-     | Some i ->
-       let host = String.sub rest 0 i in
-       let portstr = String.sub rest (i + 1) (String.length rest - i - 1) in
-       let port = try int_of_string portstr with _ -> failwith (\"net: invalid port: \" ^ portstr) in
-       `Tcp (host, port))
-  else failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
 """)
 
 -- 单线程协作式 fiber 调度器运行时。
@@ -1280,8 +1284,10 @@ let dtp_try_net_send_within h s micros =
 -- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器跳过 `(fun)`
 -- 分量后取**最后两段**（单元 + 值）查表，渲染成 `main (app/Main.vuna:12)`。
 -- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
-dtReporterRuntime : String
-dtReporterRuntime = """let rec dt_frame_parts parts =
+-- | 报告器文本。`usesEff` 决定是否带 `Effect.Unhandled` 分支：它引用
+-- `Perform` 效应构造子，而 `Perform` 只在 `dtEffRuntime` 里声明。
+export dtReporterRuntimeWith : Bool -> String
+dtReporterRuntimeWith usesEff = """let rec dt_frame_parts parts =
   match parts with
   | [] -> []
   | \"(fun)\" :: rest -> dt_frame_parts rest
@@ -1339,8 +1345,7 @@ let dt_bt_labels (bt : dt_raw_backtrace) : string list =
 let dt_exn_quote m = String.make 1 (Char.chr 34) ^ m ^ String.make 1 (Char.chr 34)
 let dt_exn_msg e =
   match e with
-  | Effect.Unhandled (Perform (_, _, key, name, _)) -> \"unhandled effect \" ^ key ^ \" (instance \" ^ name ^ \")\"
-  | Failure m -> m
+${if usesEff then "  | Effect.Unhandled (Perform (_, _, key, name, _)) -> \"unhandled effect \" ^ key ^ \" (instance \" ^ name ^ \")\"\n" else ""}  | Failure m -> m
   | Invalid_argument m -> \"Invalid_argument(\" ^ dt_exn_quote m ^ \")\"
   | Sys_error m -> \"Sys_error(\" ^ dt_exn_quote m ^ \")\"
   | Not_found -> \"Not_found\"
@@ -2094,12 +2099,17 @@ inlineText _ _ = Nothing
 -- `usesFloat` / `usesTrace` / `usesObs` / `usesHost` 为 False 时对应 helper 不出现：
 -- 不用 Float / tracing / 观测 / 宿主原语的程序 runtime 逐字节稳定（产物身份与缓存
 -- 都依赖这一点）；`usesHost` 为 False 时产物也不链接 `unix.cmxa`。
-export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> Bool -> String
-dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched =
-  dtRuntime
+export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> Bool -> Bool -> String
+dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched usesEff =
+  let
+    -- 效应机器是调度器（`Perform` + cleanup 表）与宿主 handler 的共同底座：
+    -- 三条旗标任一命中都要带上它。纯值程序三者皆空，产物因此只有纯数据原语。
+    usesEffRt = usesEff || usesSched || usesHost
+  in dtRuntime
+    ++ (if usesEffRt then dtEffRuntime else "")
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
-    ++ dtReporterRuntime
+    ++ dtReporterRuntimeWith usesEffRt
     ++ (if usesSched then dtSchedRuntime else "")
     ++ (if usesHost then dtHostRuntime else "")
     ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")

@@ -93,6 +93,7 @@ sampleShared =
     [Pair "Some" (Pair "Opt" [True, False])]
     True
     True
+    True
 
 sampleProgram : IrProgram
 sampleProgram = IrProgram sampleShared sampleUnit
