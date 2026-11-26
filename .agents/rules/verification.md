@@ -69,17 +69,20 @@ nix run .#vuna-run-tests -- --only <owner/family>   # 按 owner/family 跑原生
 ## CI 口径（PR）
 
 ```console
-nix run .#ci -- pr                   # PR 必需检查：fmt + lint + 自检
-nix run .#ci -- deep                 # 与 CI 的 deep 同一条命令（静态 / 诊断 / 增长 / seed-selfhost）
+nix run .#ci -- pr                   # 快速检查：fmt + lint + 自检
+nix run .#ci -- plan type:bug pkg:compiler  # 预览 PR 会选的增量检查
+nix run .#ci -- run-plan type:bug pkg:compiler
+nix run .#ci -- deep                 # 完整便宜门禁（静态 / 诊断 / 增长 / seed-selfhost）
 nix run .#ci -- suite                # ocaml suite（fast + integration + e2e）
 nix run .#vuna-run-tests             # 全量 suite（本地 runner）
 nix run .#ci -- --list               # 查看每组包含的 check
 ```
 
-- GitHub 上 PR 的**必需检查只有 `pr / run`**；`deep` / `suite` / `backends` / `native`
-  由 PR 标签触发，不是 required，但改了对应面就必须加标签并等绿再合并（技能 `vuna-pr`）。
-- `deep` / `suite` / `backends` / `native` / `browser` 另由 nightly 与手动 dispatch 兜底；
-  清单、分组与触发条件见
-  [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md)。
-- push 到 `main` 只跑 `pr`；完整门禁在 PR（标签）与 nightly。
+- GitHub 上 PR 的**必需检查是 `pr / run` 与 `gates / run`**；`gates` 按 `type` + `pkg` /
+  `area` 自动选择检查，标签由 `pr-triage` 维护（技能 `vuna-pr`）。
+- `deep` / `suite` / `browser` 标签仍可手动强制整组；`backends` / `native` 由本地手动跑。
+- 清单、分组与选择规则见
+  [`docs/reference/testing-checks.md`](../../docs/reference/testing-checks.md) 与
+  [`docs/reference/github-workflow.md`](../../docs/reference/github-workflow.md)。
+- push 到 `main` 跑 `pr`；完整门禁在 PR 与 nightly。
 - 性能问题不要用 CI 全量做定位——按技能 `perf-debug` 的增长率规程走。

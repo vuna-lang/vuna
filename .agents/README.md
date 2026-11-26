@@ -21,7 +21,8 @@
 | [repo-navigation](skills/repo-navigation/SKILL.md) | 动手前摸仓库：要改的模块整篇读，只引用的查 `vuna map` / `vuna api` |
 | [lint-rule](skills/lint-rule/SKILL.md) | 新增/修改 `vuna lint` 规则（含自动修复），或把规则提升进 recommended 并迁移仓库 |
 | [perf-debug](skills/perf-debug/SKILL.md) | 命令/阶段变慢、超时、怀疑复杂度回退 |
-| [vuna-pr](skills/vuna-pr/SKILL.md) | 开 PR：提交整理、标签门禁、rebase merge、worktree 收尾、break-glass |
+| [vuna-issue](skills/vuna-issue/SKILL.md) | 创建 / 精炼 / 领取 / 收尾 issue：backlog 两类来源、查重、元信息、关系与状态 |
+| [vuna-pr](skills/vuna-pr/SKILL.md) | 开 PR：提交整理、门禁计划、rebase merge、worktree 收尾、break-glass |
 | [vuna-commits](skills/vuna-commits/SKILL.md) | 写或校验提交信息（Conventional Commits 的 vuna 口径） |
 | `worktree`（全局） | 副 worktree 隔离与 teardown；口径在 `~/.config/opencode/skills/worktree/SKILL.md` |
 
