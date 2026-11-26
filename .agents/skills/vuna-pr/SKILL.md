@@ -16,8 +16,8 @@ git branch --show-current              # 不能是 main
 git status --short                     # 应为干净；脏就先提交或放 _scratch/
 ```
 
-主工作区路径用 `git worktree list` 找 `[main]` 那一行。开工前应有对应 issue；
-没有就按技能 `vuna-issue` 查重后创建/精炼，并把 issue 标成 `status:in-progress`。
+主工作区路径用 `git worktree list` 找 `[main]` 那一行。issue 可选：PR-only 改动加
+`no-issue` 标签；需要追踪的复杂工作再按技能 `vuna-issue` 建/领并标 `status:in-progress`。
 
 ## 1. 开 PR 前：rebase + 整理提交
 
@@ -43,15 +43,16 @@ gh pr create --base main --title "<type(scope): 中文描述>" \
 
 - 能自动生成标题与描述时优先用全局技能 `github-pr-create`；标题用主提交的
   Conventional Commits 标题。
-- 描述必须包含 `Closes #N` 或 `Refs #N`，以及 `.github/pull_request_template.md` 的
-  「跑过 / 没跑」、seed 与后端影响；没有 issue 的例外加 `no-issue` 标签。
+- 描述必须包含 `.github/pull_request_template.md` 的「跑过 / 没跑」、seed 与后端影响；
+  有关联 issue 时写 `Closes #N` 或 `Refs #N`，PR-only 改动加 `no-issue` 标签。
 - 需要草稿时加 `--draft`；草稿会跑 `pr` 与 `gates`，但 auto-merge 关闭。
 
 ## 3. 门禁：自动计划，不手工选组
 
 PR 的必需检查是 `pr / run` 与 `gates / run`。`pr-triage` 会根据标题、路径与关联 issue
-自动维护 `type:*`、`pkg:*`、`area:*`；`gates.yml` 用这些标签选出检查子集，不需要手工加
-`deep` / `suite`。
+自动维护 `type:*`、`pkg:*`、`area:*`；`gates.yml` 用这些标签选出检查子集（suite 侧是
+`nix/checks/slices.nix` 的 area 切片），不需要手工加 `deep` / `suite`。main push 会额外跑
+完整 `gate`（fast+integration），完整 suite 仍由 nightly 的 `suite` 组兜底。
 
 ```console
 nix run .#ci -- plan type:bug pkg:compiler   # 本地预览将跑哪些检查

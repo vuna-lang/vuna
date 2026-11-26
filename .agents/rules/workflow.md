@@ -4,15 +4,16 @@
 `main` 只读：所有改动（源码、文档、seed 轮换）都经 GitHub PR 合入；本地 `main`
 只用于读取与 `git pull --ff-only`。
 
-## 1. 开工：从 issue 开始，从 `origin/main` 切分支
+## 1. 开工：从 `origin/main` 切分支（issue 可选）
 
-先确认已有 issue；没有就按技能 `vuna-issue` 查重后创建/精炼。领取时把 issue 标成
-`status:in-progress` 并 assign 给自己。
+**issue 不是开工前置**：PR-only 的改动直接切分支，PR 加 `no-issue` 标签即可。
+需要追踪的复杂工作（epic 子任务、多轮验收）再按技能 `vuna-issue` 查重后创建/精炼，
+领取时标 `status:in-progress` 并 assign 给自己。
 
 ```console
-gh issue edit <n> --add-assignee @me --add-label status:in-progress
+gh issue edit <n> --add-assignee @me --add-label status:in-progress  # 有关联 issue 时
 git fetch origin
-git switch -c <type>/<n>-<slug> origin/main   # 在副 worktree 内
+git switch -c <type>/<slug> origin/main   # 在副 worktree 内
 ```
 
 - 分支名用 `<type>/<slug>`：`feat/`、`fix/`、`docs/`、`chore/`、`refactor/`、`test/`；
@@ -66,8 +67,8 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 
 - PR 标题与主提交一致（Conventional Commits）；描述按
   [`.github/pull_request_template.md`](../../.github/pull_request_template.md) 写清
-  「跑过 / 没跑」、seed 与后端影响。描述必须含 `Closes #N` 或 `Refs #N`（例外加
-  `no-issue`）。
+  「跑过 / 没跑」、seed 与后端影响。有关联 issue 时描述含 `Closes #N` 或 `Refs #N`；
+  PR-only 改动加 `no-issue` 标签。
 - PR 的必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` /
   `area` 自动选择的检查）。`pr-triage` 自动维护 type / pkg / area 标签，不再手工加
   `deep` / `suite`；需要强制整组时再加 `deep` / `suite` / `browser`。
