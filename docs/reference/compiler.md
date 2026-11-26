@@ -16,8 +16,8 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 [packages.md](packages.md)「层约束」）。全包 **75 个模块，全部在 `[export]` 里**——
 没有内部模块，纯门面模块已删除（`Core` / `Elab` / `Loader` 的 `*.vuna` 门面，以及随 OCaml 后端
 迁到 `packages/target-ocaml` 的 `Codegen` 门面；`Ir` 的校验入口拆到 `Ir.Validate`），
-消费方直接 import 具体子模块；`Elab` 的选择性重导出也一并消失，子模块即公开面
-（见 [debt.md](debt.md) 的封装债务）。目标每模块 ≤~800 行，实际已有明显超标的模块：
+消费方直接 import 具体子模块；`Elab` 没有选择性重导出门面，子模块即公开面。
+目标每模块 ≤~800 行，实际已有明显超标的模块：
 `Driver/Compile.vuna` / `Frontend/Parser.vuna` / `Driver/Dt.vuna` 约 2.1–2.9k 行，
 `Elab/Trait.vuna` / `Elab/Term/Impl.vuna` 约 1.7k / 3.8k 行。
 
