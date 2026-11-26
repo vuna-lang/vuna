@@ -5,8 +5,8 @@ module Vuna.Target.Ocaml.Assembly where
 -- 本模块只消费 IR：`genUnitParts` 把 `IrUnit`（类型声明 + 分组 +
 -- List 族标志）装成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与生成状态。
 -- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）在 `Lowering`；main 钩子
--- 统一由 `Target.Ocaml.Term.genEntryHook` 渲染。check 路径在 `Driver.Dt` 里走
--- `Lower.lowerProgramOf` + `genUnitParts` 并丢弃文本（`buildText=False`）。
+-- 统一由 `Target.Ocaml.Term.genEntryHook` 渲染。check 路径在 `Driver.Dt` 里只调
+-- `checkUnitParts`（遍历分组 / 定义查 extern / axiom），不装配文本。
 --
 -- 单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Target.Ocaml.Decl` /
 -- `Target.Ocaml.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
