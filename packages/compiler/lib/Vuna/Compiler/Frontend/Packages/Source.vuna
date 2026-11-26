@@ -30,6 +30,8 @@ skipSourceDir name =
     || name
     == ".output"
     || name
+    == ".vuna"
+    || name
     == ".direnv"
     || name
     == "node_modules"

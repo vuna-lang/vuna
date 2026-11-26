@@ -92,6 +92,8 @@ skipDir name =
     || name
     == ".output"
     || name
+    == ".vuna"
+    || name
     == ".direnv"
     || name
     == "seed"

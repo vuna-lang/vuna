@@ -1,0 +1,22 @@
+# store-isolated: 断言包状态目录，使用 case 私有 store。
+# areas: compiler-core, compiler-frontend
+# 119) 包状态目录：默认 `<包目录>/.vuna`；`VUNA_PKG_STATE` 重定向；只读源码树没有重定向时
+#      必须显式失败（不回退共享 store）。
+run: sh -c 'P="$TMPDIR/state-default"; mkdir -p "$P/app"; printf "[package]\nname = \"state-default\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 1\n" > "$P/app/Main.vuna"; "$VUNA" check "$P"'
+exit: 0
+file-exists: $TMPDIR/state-default/.vuna
+
+run: sh -c 'P="$TMPDIR/state-override"; mkdir -p "$P/app"; printf "[package]\nname = \"state-override\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 1\n" > "$P/app/Main.vuna"; VUNA_PKG_STATE="$TMPDIR/state-alt" "$VUNA" check "$P"'
+exit: 0
+file-exists: $TMPDIR/state-alt
+file-absent: $TMPDIR/state-override/.vuna
+
+# 只读包目录 + 显式重定向：check 正常完成。
+run: sh -c 'P="$TMPDIR/state-ro"; mkdir -p "$P/app"; printf "[package]\nname = \"state-ro\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 2\n" > "$P/app/Main.vuna"; chmod 500 "$P"; VUNA_PKG_STATE="$TMPDIR/state-ro-alt" "$VUNA" check "$P"; code=$?; chmod 700 "$P"; exit $code'
+exit: 0
+file-exists: $TMPDIR/state-ro-alt
+
+# 只读包目录且没有重定向：必须报错（root 下无法造出不可写目录，跳过这一条）。
+run: sh -c 'if [ "$(id -u)" -eq 0 ]; then echo "skip .vuna read-only probe (root)"; exit 0; fi; P="$TMPDIR/state-ro-bare"; mkdir -p "$P/app"; printf "[package]\nname = \"state-ro-bare\"\n" > "$P/vuna.toml"; printf "main : Int\nmain = 3\n" > "$P/app/Main.vuna"; chmod 500 "$P"; out=$("$VUNA" check "$P" 2>&1); code=$?; chmod 700 "$P"; echo "$out"; if [ "$code" -eq 0 ]; then echo "FAIL: read-only package accepted without VUNA_PKG_STATE"; exit 1; fi'
+exit: 0
+out-contains: .vuna

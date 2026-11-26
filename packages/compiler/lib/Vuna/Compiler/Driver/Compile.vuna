@@ -27,6 +27,7 @@ import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Base.Walk
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
+import Vuna.Compiler.Frontend.Packages.State
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
@@ -36,7 +37,6 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Manifest
-import Vuna.Compiler.Base.Version
 import Vuna.Compiler.Base.Obs
 import Base.Data.List as List
 import Base.Data.Sort as Sort
@@ -361,7 +361,7 @@ buildSplit dir outDir =
 -- 快照只认 .ml/build.sh）。
 -- ---------------------------------------------------------------
 metaSchema : Int
-metaSchema = 1
+metaSchema = 2
 
 metaFileName : String
 metaFileName = "build-meta.json"
@@ -406,16 +406,19 @@ moduleNameOfPath rootPath path =
     rel = if endsWith ".vuna" rel0 then substring 0 (byteLength rel0 - 5) rel0 else rel0
   in slashesToDots rel
 
+-- 模块名升序：`collectFilesEff` 的顺序来自宿主目录枚举，不能进内容摘要。
 rootSources : Member nFs FsOp r => Root -> Eff r (List (String, Int))
 rootSources root =
   do
     paths <- collectVunaMeta (rootDir root)
-    mapEff (
-        \p =>
-          do
-            content <- fsReadFile p
-            pure (moduleNameOfPath (rootDir root) p, textHash content)
-      ) paths
+    pairs <-
+      mapEff (
+          \p =>
+            do
+              content <- fsReadFile p
+              pure (moduleNameOfPath (rootDir root) p, textHash content)
+        ) paths
+    pure (Sort.sortBy (\a, b => firstOf a <= firstOf b) pairs)
 
 rootHash : Member nFs FsOp r => Root -> Eff r Int
 rootHash root =
@@ -451,12 +454,15 @@ dependencyHashes ctx =
   case contextRoots ctx of
     [] => pure []
     _ :: deps =>
-      mapEff (
-          \r =>
-            do
-              h <- rootHash r
-              pure (rootName r, h)
-        ) deps
+      do
+        pairs <-
+          mapEff (
+              \r =>
+                do
+                  h <- rootHash r
+                  pure (rootName r, h)
+            ) deps
+        pure (Sort.sortBy (\a, b => firstOf a <= firstOf b) pairs)
 
 -- ---------------------------------------------------------------
 -- 编译器身份的归属与产物里的 `build-id`
@@ -607,22 +613,26 @@ lastSegmentRev (c :: rest) acc = if c == 47 then strPack acc else lastSegmentRev
 lastSegment : String -> String
 lastSegment path = lastSegmentRev (reverse (strUnpack path)) []
 
-export buildMetaText : Member nFs FsOp r => PackageContext -> String -> Bool -> Eff r String
+-- `compiler` 段是**二进制身份**（`cache-tag`）：同版本不同二进制必须换 meta，
+-- 否则长期保留的 `.output` 会被误判「新鲜」。`sources` / `dependencies` 已按名排序，
+-- 摘要与 JSON 都不依赖宿主目录枚举顺序。
+export buildMetaText : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> String -> Bool -> Eff r String
 buildMetaText ctx entry linked =
   do
     sources <- contextSources ctx entry
     deps <- dependencyHashes ctx
+    compiler <- cacheTagEff
     let
       manifestHash = textHash (manifestSemanticText ctx.contextPackage)
       entryName = lastSegment entry
       linkedText = if linked then "true" else "false"
     in do
-      pure "{\"schema\":${metaSchema},\"compiler\":\"${vunaVersion}\",\"package\":\"${contextPackageName ctx}\",\"entry\":\"${entryName}\",\"linked\":${linkedText},\"closure\":${closureHashOf sources 0},\"manifest\":${manifestHash},\"sources\":[${joinJsonList (map metaPairText sources)}],\"dependencies\":[${joinJsonList (map metaPairText deps)}]}\n"
+      pure "{\"schema\":${metaSchema},\"compiler\":\"${compiler}\",\"package\":\"${contextPackageName ctx}\",\"entry\":\"${entryName}\",\"linked\":${linkedText},\"closure\":${closureHashOf sources 0},\"manifest\":${manifestHash},\"sources\":[${joinJsonList (map metaPairText sources)}],\"dependencies\":[${joinJsonList (map metaPairText deps)}]}\n"
 
 metaPathOf : String -> String
 metaPathOf outDir = "${outDir}/${metaFileName}"
 
-export writeBuildMeta : Member nFs FsOp r => String -> PackageContext -> String -> Bool -> Eff r Int
+export writeBuildMeta : Member nFs FsOp r, Member nEnv EnvOp r => String -> PackageContext -> String -> Bool -> Eff r Int
 writeBuildMeta outDir ctx entry linked =
   do
     text <- buildMetaText ctx entry linked
@@ -630,7 +640,7 @@ writeBuildMeta outDir ctx entry linked =
     pure (natToInt n)
 
 -- 同哈希跳过：meta 内容与期望（linked=true）完全一致，且产物二进制存在。
-export metaUpToDate : Member nFs FsOp r => String -> PackageContext -> String -> String -> Eff r Bool
+export metaUpToDate : Member nFs FsOp r, Member nEnv EnvOp r => String -> PackageContext -> String -> String -> Eff r Bool
 metaUpToDate outDir ctx entry binPath =
   do
     let
@@ -1943,6 +1953,8 @@ writeIfaceShadowGo ctx checked pre clean =
     pure (OkC [])
   else
     do
+      -- 包状态目录必须先可写：只读源码树没有 `VUNA_PKG_STATE` 时在这里显式失败。
+      _ <- ensurePkgStateDirEff (contextDir ctx)
       let
         _ = log! "info" "iface-shadow-start"
       in do

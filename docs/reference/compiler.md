@@ -59,6 +59,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name` 与可选 `implicit-prelude`；`[layers]` 的键/值形状；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Frontend.Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
 | `Frontend.Packages.Source` | 包内容收集与摘要：`vuna.toml` + `lib/`/`app/`/`test/` 源文件 → `PackageSource` → 内容摘要 / 语义身份 | `packageSourceEff`、`contentHashOf`、`identityHashOf`、`skipSourceDir` |
+| `Frontend.Packages.State` | 包状态目录：默认 `<包目录>/.vuna`，`VUNA_PKG_STATE` 整体重定向；建不出来时显式失败（不回退共享 store） | `pkgStateDirOf`、`pkgStateDirEff`、`ensurePkgStateDirEff`、`ifaceDirOf` |
 | `Frontend.Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
 | `Frontend.Canonical.Pkg` | 包内容编码（codec `pkg-source 1`）：文件集合 → 规范字节，服务内容摘要与语义身份 | `encPackageContent`、`decPackageContent`、`identityOfSource`、`encPackageIdentity` |
 

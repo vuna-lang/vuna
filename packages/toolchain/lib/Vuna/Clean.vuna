@@ -259,6 +259,8 @@ skipCleanDir name =
     || name
     == ".direnv"
     || name
+    == ".vuna"
+    || name
     == "node_modules"
     || name
     == "_scratch"

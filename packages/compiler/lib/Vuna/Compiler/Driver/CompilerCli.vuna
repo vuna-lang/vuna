@@ -1453,7 +1453,7 @@ compileCodegen ctx entry outDir o =
 
 -- 链接：先建 bin/（build.sh 的 -o bin/<pkg> 需要父目录存在），再跑 build.sh；
 -- 链接成功后写 build-meta.json（同哈希跳过在 buildOne 入口判定）。
-buildLinked : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
+buildLinked : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> CliOpts -> Eff r (Int, CliOpts)
 buildLinked ctx entry outDir name o =
   do
     _ <- ensureDirPath "${outDir}/bin"

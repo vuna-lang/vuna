@@ -62,6 +62,7 @@ modules = [
   "Vuna.Compiler.Frontend.Manifest",
   "Vuna.Compiler.Frontend.Packages.Pkg",
   "Vuna.Compiler.Frontend.Packages.Source",
+  "Vuna.Compiler.Frontend.Packages.State",
   "Vuna.Compiler.Frontend.Parser",
   "Vuna.Compiler.Frontend.Parser.Support",
   "Vuna.Compiler.Frontend.AstQuery",
