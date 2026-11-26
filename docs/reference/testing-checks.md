@@ -94,9 +94,10 @@ PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.
   先落依赖接口、再以独立进程计时**第二次 check**（包路径增量收尾），1000/2000/4000/8000
   相邻档 ≤2.6；单文件探针走全量精化，覆盖不到 `dedup*`/`anyOwn`/写接口这类收尾热点
   （见 [performance.md](performance.md) §5.2）；
-- `vuna-frontend-growth`：合成 2000/4000/8000 个同形定义，从 trace 取 `vuna.parse.lex` /
-  `vuna.parse.syntax` 的 `totalUs`（按同一进程窗口的 CPU / 墙钟比折算成 CPU 时间），再加
-  `fmt --check` 的 CPU 时间，相邻档 ≤2.5×；与 `vuna-compiler-growth` 互补（整条 check 里
+- `vuna-frontend-growth`：合成 2000/4000/8000 个同形定义，`fmt --check` 的 CPU 时间相邻档
+  ≤2.5×；trace 的 `vuna.parse.lex` / `vuna.parse.syntax` 的 `totalUs`（按同一进程窗口的
+  CPU / 墙钟比折算）聚合了整个 base 闭包的解析、且会跨过 minor heap 回收台阶，因此只断言
+  2000→8000 的 4x 窗口 ≤8×，相邻档仅作诊断。与 `vuna-compiler-growth` 互补（整条 check 里
   前端只占几个百分点，n² 会被精化成本掩盖）。读数见 [performance.md](performance.md) §6.1；
 - `vuna-resolve-chain-growth`：合成 `g = 1 + 1 + …`（2000/4000/8000 项）的单文件中缀链，
   从 trace 取 `vuna.resolve.warn` 的 `totalUs`，相邻档 ≤2.5×；重排后的左结合链是左嵌套，
