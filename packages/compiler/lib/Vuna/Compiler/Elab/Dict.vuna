@@ -41,7 +41,13 @@ isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClass
 --   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；命名实例不参与
 --      自动搜索（只能用 `@name` 显式选中）。
 export searchInstanceIn : List (String, Term) -> Ctx -> Ec -> Value -> Span -> Check (Term, Ec)
-searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
+searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx instDepthBound ec dom sp
+
+-- 实例搜索的递归深度上限（ctx 链 / via 委托）。耗尽报 `TC_InstanceSearchExhausted`，
+-- 不再伪装成「缺实例」。候选匹配与 via 实参扫描不消耗深度：前者是有限列表扫描，
+-- 后者按实参个数逐个尝试，本身有结构测度。
+instDepthBound : Int
+instDepthBound = 16
 
 -- 兼容入口：无局部上下文（顶层回填路径）。
 searchInstance : Ec -> Value -> Span -> Check (Term, Ec)
@@ -62,7 +68,9 @@ searchInstFuel globals ctx fuel ec0 dom sp =
   let
     ec = ecBump ec0 "elab.inst.search"
   in if fuel <= 0 then
-    missingInstance ec dom sp
+    let
+      sd = showResolvedValue ec dom
+    in tcErr1 sp (InstanceSearchExhausted sd) sd
   else
     let
       _ = log! "debug" "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInstList ec)}"
@@ -183,26 +191,25 @@ replaceAt i x (a :: rest) = if i <= 0 then (::) x rest else (::) a (replaceAt (i
 
 -- | 尝试用 `deriving via field` 委托求字典目标：找到包装候选后逐实参定位字段。
 tryViaDict : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Maybe (Term, Ec))
-tryViaDict globals ctx fuel ec dom sp =
-  if fuel <= 0 then
-    OkC Nothing
-  else
-    case forceVal ec dom of
-      VNeutral (NGlobal fam args) => if viaCandidateExists ec dom then tryViaArgs globals ctx (fuel - 1) ec sp fam args 0 else OkC Nothing
-      _ => OkC Nothing
+tryViaDict globals ctx depth ec dom sp =
+  case forceVal ec dom of
+    VNeutral (NGlobal fam args) =>
+      if viaCandidateExists ec dom then
+        tryViaArgs globals ctx depth ec sp fam args 0
+      else
+        OkC Nothing
+    _ => OkC Nothing
 
 -- | 在目标实参里找可用的 via 包装；用替换后的字段类型重新搜索字典实例。
 tryViaArgs : List (String, Term) -> Ctx -> Int -> Ec -> Span -> String -> List Value -> Int -> Check (Maybe (Term, Ec))
-tryViaArgs globals ctx fuel ec sp fam args idx =
-  if fuel <= 0 then
-    OkC Nothing
-  else
-    case args of
-      [] => OkC Nothing
-      arg :: rest =>
-        case viaWrapperOf ec fam arg of
-          Nothing => tryViaArgs globals ctx (fuel - 1) ec sp fam rest (idx + 1)
-          Just fieldTy => Vuna.Compiler.Base.Common.bind (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp) (\p => OkC (Just p))
+tryViaArgs globals ctx depth ec sp fam [] idx = OkC Nothing
+tryViaArgs globals ctx depth ec sp fam (arg :: rest) idx =
+  case viaWrapperOf ec fam arg of
+    Nothing => tryViaArgs globals ctx depth ec sp fam rest (idx + 1)
+    Just fieldTy =>
+      Vuna.Compiler.Base.Common.bind
+        (searchInstFuel globals ctx (depth - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy (arg :: rest)))) sp)
+        (\p => OkC (Just p))
 
 -- 实例搜索的候选集合——按 `dom` 的字典族**精确取桶**，不扫全实例表。
 -- 族名取 force 后的头部（`Dict_<类>`）；族名不确定时（未解元变量、非字典头）回落全表：
