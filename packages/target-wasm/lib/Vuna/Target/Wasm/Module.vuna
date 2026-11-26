@@ -21,6 +21,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Ir.Model
 import Vuna.Ir.Analysis
+import Vuna.Ir.Passes
 import Vuna.Ir.Cps
 import Vuna.Ir.Anf
 import Vuna.Ir.Runtime
@@ -2215,10 +2216,10 @@ build program printResult =
     st0 = mkSt defsAll
     buildAnf : List IrDef -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
     buildAnf ds entry0 lf =
-      case anfProgramDefs ds of
+      case Passes.passSpan Passes.wasmAnf (\_ => anfProgramDefs ds) of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
         Ok ds1 =>
-          case annotateDefs ds1 of
+          case Passes.passSpan Passes.wasmTailAnnotate (\_ => annotateDefs ds1) of
             -- 第二次 ANF（CPS 输出再规范化）会丢掉输入里的尾标记；ANF 之后重新标记。
             Err msg => WasmRejected (WasmInternal ("tail: " ++ msg))
             Ok ds2 =>
@@ -2253,9 +2254,12 @@ build program printResult =
             Just rm => rm
             Nothing => ""
         roots = append ["Base.Effect.Core.machineRun", irEntryMainOf e] runSeeds
-        rewrittenAll = map (rwDef runName) defs
+        rewrittenAll = Passes.passSpan Passes.wasmHostRewrite (\_ => map (rwDef runName) defs)
         tblAll = HashMap.fromList (map (\d => (irDefName d, d)) rewrittenAll)
-        rewritten = Analysis.reachableDefsByRefs (depKeeps tblAll) 100000 roots rewrittenAll
+        rewritten =
+          Passes.passSpan
+            Passes.wasmPrune
+            (\_ => Analysis.reachableDefsByRefs (depKeeps tblAll) 100000 roots rewrittenAll)
         live = rewritten
         directable =
           if listNull handlerSeeds then
@@ -2276,7 +2280,7 @@ build program printResult =
       in if directable then
         buildAnf (append rewritten [pureKDef]) (Just entryClean) listFamM
       else
-        case cpsDefsMachine ordered of
+        case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
           Ok cpsOrdered => buildAnf cpsOrdered (Just e) listFamM
           Err msg => WasmRejected (WasmUnsupported msg)
 
