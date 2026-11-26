@@ -1,8 +1,9 @@
 name: ci
 
 # PR 的固定必需检查是 `pr`（fmt + lint + 自检）；增量检查由 gates.yml 按 type + area
-# 选择。`deep` / `suite` / `browser` 在定时与手动 dispatch 上跑整组，PR 需要强制整组时
-# 加对应标签由 gates 计划器带上。
+# 选择（area → `vuna-tests-*` 切片，见 nix/checks/slices.nix）。main push 额外跑完整
+# `gate`（fast+integration）；`deep` / `suite` / `browser` 在定时与手动 dispatch 上跑整组，
+# PR 需要强制整组时加对应标签由 gates 计划器带上。
 #
 # `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
 # 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。
@@ -37,6 +38,18 @@ jobs:
       eval: true
       cache-size: 1.5G
       save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  # main push 的完整 suite 层（fast+integration）：PR 只跑命中的 area 切片
+  # （gates.yml），合并后在这里把完整夹具基线跑一遍；e2e / backends 仍只在定时与手动 dispatch。
+  gate:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: gate
+      timeout: 60
+      jobs: 1
+      cache-size: 2G
+      save: true
 
   deep:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
