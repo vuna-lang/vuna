@@ -78,7 +78,7 @@
 | `Base.Effect` | 效应门面（只提供路径）：`Core`（运行时核心）/ `Types`（类型面）/ `State` / `Reader` / `Error` / `Exn` / `Ref` / `Fs` / `Console` / `Clock` / `Env` / `Args` / `Stdin` / `Exit` / `Net` / `Process`，以及 `Pure` 子树 |
 | `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Data.Nat` / `Base.Trait.Num` / `Base.Data.Unit` / `Base.Trait.Applicative`(经 Monad) / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`；不含 `Vec` / `Fin` 与哈希容器；`import Base` 即可用） |
-| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」；`[package]` 的 `implicit-prelude = false` 可关闭本包模块的注入）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Effect.Core`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Data.Nat` |
+| `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Data.Pair` / `Base.Data.Function` / `Base.Data.Bool` / `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Num` / `Base.Trait.Show` / `Base.Trait.Interp` / `Base.Data.List` / `Base.Data.Maybe` / `Base.Data.Result` / `Base.Data.String` / `Base.Trait.Monad`（含 `Applicative`）/ `Base.Data.Unit` / `Base.Trait.Monoid` / `Base.Trait.Foldable` / `Base.Trait.Traversable` / `Base.Trait.Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」；`[package]` 的 `implicit-prelude = false` 可关闭本包模块的注入）；显式 `import` 时不再重复注入；**不导出也不 import** `Base.Effect.Core`（效果 API 全需显式 import）与 `Base.Data.Nat` |
 
 推荐入口层：应用默认依赖自动 `Prelude`（或显式 `import Base`）；数据用 `Base.Data.X`、
 trait 用 `Base.Trait.X`、容器用 `Base.Container.X`、效应用 `Base.Effect.X`，统一写
@@ -166,8 +166,10 @@ packages/base/lib/
 - `packages/base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
 - 自动注入只看包上下文（有 base 依赖才注入 `Prelude`，且该包未关闭 `implicit-prelude`），
   矩阵见上节；没有第二套加载模式；
-- `Base.Effect.Core` 刻意不重导出到 `Prelude`：动作类型与 handler 需要显式 `import Base.Effect.Core as Eff`（`Prelude` 只
-  `import Base.Effect.Core` 以加载类型/原语闭包，不进自动导出面），效果面不随自动注入进入每个源文件；
+- `Base.Effect.Core` 不在 `Prelude` 的导入闭包里：动作类型与 handler 需要显式
+  `import Base.Effect.Core as Eff`（不 import 时源码里写不出 `Eff` / `Row`）。效果面完全
+  不进每个源文件的依赖闭包——OCaml 后端因此不给纯值程序生成效应 runtime（见
+  [effects.md](effects.md)、[performance-hotspots.md](performance-hotspots.md)）；
 - `packages/base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
   [bootstrap.md](bootstrap.md)。
 
