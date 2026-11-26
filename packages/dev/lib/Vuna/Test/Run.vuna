@@ -472,7 +472,9 @@ withEnvIfaceAt : Env -> String -> List String -> List String
 withEnvIfaceAt env storeOverride argv =
   let
     store = if storeOverride == "" then env.envStore else storeOverride
-  in withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${store}"] argv)
+  in withEnv
+    env
+    (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${store}", "VUNA_PKG_STATE=${store}/state"] argv)
 
 -- | 内部：steps case 的进程环境：TMPDIR / REPL 历史 / XDG 缓存按 case 隔离（同一 worker
 -- 内多个 steps case 顺序执行，共享 `envTmp` 会让 `$TMPDIR/ws1` 之类互相污染）；对象库
@@ -483,7 +485,7 @@ withStepsEnv env caseTmp isolated argv =
     store = if isolated then "${caseTmp}/store" else env.envStore
   in withEnv
     env
-    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_REPL_HISTORY=${caseTmp}/repl-history", "XDG_CACHE_HOME=${caseTmp}/cache"] argv)
+    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_PKG_STATE=${store}/state", "VUNA_REPL_HISTORY=${caseTmp}/repl-history", "XDG_CACHE_HOME=${caseTmp}/cache"] argv)
 
 -- | 内部：stdout 与 stderr 拼接（分离模式下 stdout 在前）。
 combinedOut : CmdResult -> String

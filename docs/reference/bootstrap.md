@@ -75,7 +75,7 @@ rebase。`seed/` 冲突不手选两侧：abort 后先 rebase 非 seed 提交，�
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
   在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
   `nix/seed/rotation.txt`（`nix/seed/rotate.sh`，失败不破坏工作树）；
-- 接口缓存放在对象库（`$VUNA_STORE/objects/module-iface`），源码旁没有接口文件；两遍编译共用
+- 接口缓存放在包状态目录（`<pkg>/.vuna/iface` 或 `VUNA_PKG_STATE`），两遍编译共用
   对象库，位置表路径由包上下文归一，fixed point 比较的是生成文件集；
 - CI 用 `checks.seed-selfhost` 守不变量 1/2：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，

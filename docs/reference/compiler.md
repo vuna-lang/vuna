@@ -158,9 +158,9 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Driver.SplitGen` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/module-iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `<pkg>/.vuna/iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 按地址读依赖与同包模块的 `objects/module-iface/<addr>`（缺任一模块 ⇒ 回退全量），同树 build 由 `<pkg>/.output` 的 `build-meta.json` 判新鲜、显式 `--no-compile --out` 每次重跑 codegen；依赖接口按地址逐模块探测（导出面必须齐全，否则回退全量；模块顺序按内容键 / 模块名排序，不落盘），依赖身份由依赖根的源码闭包 + manifest 现场算；接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；判据见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自目录；依赖导出面缺件 ⇒ 回退全量），同树 build 由 `<pkg>/.output` 的 `build-meta.json` 判新鲜、显式 `--no-compile --out` 每次重跑 codegen；依赖接口按地址逐模块探测（导出面必须齐全，否则回退全量；模块顺序按内容键 / 模块名排序，不落盘），依赖身份由依赖根的源码闭包 + manifest 现场算；接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；判据见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Target` | 非 OCaml 目标的后端驱动：检查 + lowering，把 `IrProgram` 编码后经临时文件交独立进程 `vuna-target-<t>`（`--ir` / `--out` / `--print` / `--diag`）；产物不缓存，每次启动插件；不 import 任何后端实现 | `compileBackend`、`dispatch` |
 
@@ -227,7 +227,7 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 粒度分两层：
 
 - **模块级接口**：`Driver.Iface.ModuleIface`，每模块一个对象
-  `objects/module-iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
+  `<pkg>/.vuna/iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
   装载、逐项校验；
 - **依赖身份**：`manifest:<toml 摘要>:<根源闭包摘要>`，不落独立对象；依赖接口的
   覆盖性按地址探测导出面。依赖模块接口的顺序不在载荷里：由编译器按
@@ -241,7 +241,7 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 check / build pkg
   ├─ 没有 check 结果重放：每次都精化（失败的检查同样重跑，干净模块按接口复用）
   ├─ VUNA_ELAB_FULL=1 → 全量：loadProject + elabProgramFull（整闭包）
-  └─ 否则 depIfacesOf：逐依赖包按地址读 `objects/module-iface/`（缺任一模块 ⇒ 回退全量）
+  └─ 否则 depIfacesOf：逐依赖包按地址读 `<包状态>/iface/`（导出面缺件 ⇒ 回退全量）
         ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
         │     → 全量回退（并重写本包接口）
         └─ 全部可用 → 接口路径（无干净模块 = 包内全量；有干净模块 = 只精化脏模块）：
