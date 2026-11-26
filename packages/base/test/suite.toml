@@ -8,6 +8,7 @@ timeout = 300
 min_cases = 30
 
 [family.stdlib]
+areas = ["base", "runtime", "ir", "codegen-ocaml", "codegen-wasm", "codegen-native"]
 dir = "corpus/stdlib"
 matrix = "pure-cross"
 check = false
