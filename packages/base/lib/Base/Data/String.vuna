@@ -153,9 +153,24 @@ sameBytes off pat text i n fuel =
   else
     False
 
--- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
+-- | 把 `s` 重复 `n` 次：按二进制倍增拼接，只做 O(log n) 次拼接（不建长度 n 的列表）。
 export repeat : Nat -> String -> String
-repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
+repeat n s =
+  let
+    k = natToInt n
+  in if k <= 0 then "" else repeatGo k s "" (k + 1)
+
+-- | 内部：`block` 是 `s` 的 2^i 次重复；`k` 的每个二进制位决定是否并入 `acc`。
+repeatGo : Int -> String -> String -> Int -> String
+repeatGo k block acc fuel =
+  if fuel <= 0 then
+    acc
+  else if k <= 0 then
+    acc
+  else if k - k / 2 * 2 == 1 then
+    repeatGo (k / 2) (block ++ block) (block ++ acc) (fuel - 1)
+  else
+    repeatGo (k / 2) (block ++ block) acc (fuel - 1)
 
 -- | 取子串 `(start, len)`；越界由 `strSubstring` 原语 clamp，不走 List 桥接。
 export substring : Nat -> Nat -> String -> String
