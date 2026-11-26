@@ -20,7 +20,9 @@ jobs:
     steps:
       - name: enable or disable auto-merge
         env:
-          GH_TOKEN: ${{ github.token }}
+          # 用 PAT 执行合并时，main 的 push 事件会触发 ci.yml 的 gate；GITHUB_TOKEN
+          # 合并归 github-actions[bot]，GitHub 不为其推送创建工作流运行。
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
