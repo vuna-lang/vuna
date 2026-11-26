@@ -109,16 +109,4 @@ grep -q '"ph":"C"' "$compiler_trace" || fail "compiler trace has no counter (ph:
 grep -q '"name":"vuna.counter.term.sites"' "$compiler_trace" \
   || fail "compiler trace misses vuna.counter.term.sites"
 
-# ---------------------------------------------------------------- 5) 缓存计数
-# `VUNA_ELAB_FULL=1` 故意绕过 check-outcome 缓存（每条路径都全量），所以缓存的
-# hit/miss/write 计数要另一个**不开全量**的冷 check 才看得到：空 store 下必然 miss
-# 并写回一次。
-cache_dir=$(run_with_obs 2 packages/base cache cache 0)
-cache_trace=$(find "$cache_dir" -name '*.jsonl' -type f | head -1)
-[ -n "$cache_trace" ] || fail "no trace file produced for the cold cache-check run"
-grep -q '"name":"vuna.counter.cache.miss"' "$cache_trace" \
-  || fail "cold cache-check trace misses vuna.counter.cache.miss"
-grep -q '"name":"vuna.counter.cache.write"' "$cache_trace" \
-  || fail "cold cache-check trace misses vuna.counter.cache.write"
-
 echo "vuna-obs-schema: ok (traces in $OUT/traces)"

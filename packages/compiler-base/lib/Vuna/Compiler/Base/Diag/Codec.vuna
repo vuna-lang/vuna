@@ -446,7 +446,7 @@ absentEnc : NoSourceReason -> List String -> List String
 absentEnc r acc = encTag (absentTag r) acc
 
 -- ---------------------------------------------------------------
--- 对外：诊断列表 / 包级 check 结果
+-- 对外：诊断列表
 -- ---------------------------------------------------------------
 -- | 诊断列表的规范载荷（`Store` framing 之前）。
 export encDiagnostics : List Diagnostic -> String
@@ -459,43 +459,3 @@ decDiagnostics payload =
   in case decDiagList fuel (curOf payload) of
     Nothing => Nothing
     Just (ds, rest) => if curAtEnd rest then Just ds else Nothing
-
--- | 包级 check 的结果：通过（诊断通常是 warning）或失败（首错 + 后续）。
-export data CheckOutcome(..) : Type where
-  CheckPassed : List Diagnostic -> CheckOutcome
-  CheckFailed : List Diagnostic -> CheckOutcome
-
-checkOutcomeCodec : String
-checkOutcomeCodec = "check-result 1"
-
-encOutcome : CheckOutcome -> List String -> List String
-encOutcome (CheckPassed ds) acc = encTag 0 (encDiagList ds acc)
-encOutcome (CheckFailed ds) acc = encTag 1 (encDiagList ds acc)
-
-decOutcome : Int -> Cur -> Maybe (CheckOutcome, Cur)
-decOutcome fuel c =
-  thenPair (decTag (fuel - 1) c) (
-      \tg, b1 =>
-        thenPair (decDiagList (fuel - 1) b1) (
-            \ds, b2 =>
-              case tg of
-                0 => Just (CheckPassed ds, b2)
-                1 => Just (CheckFailed ds, b2)
-                _ => Nothing
-          )
-    )
-
--- | `CheckOutcome` 的落盘 codec 名。
-export checkResultCodec : String
-checkResultCodec = checkOutcomeCodec
-
-export encCheckOutcome : CheckOutcome -> String
-encCheckOutcome o = encConcat (encOutcome o [])
-
-export decCheckOutcome : String -> Maybe CheckOutcome
-decCheckOutcome payload =
-  let
-    fuel = strLength payload + 1
-  in case decOutcome fuel (curOf payload) of
-    Nothing => Nothing
-    Just (o, rest) => if curAtEnd rest then Just o else Nothing

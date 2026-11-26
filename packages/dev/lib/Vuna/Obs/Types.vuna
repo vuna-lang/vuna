@@ -319,7 +319,6 @@ vunaEventVocabulary =
     "vuna.counter.meta.zonk",
     "vuna.counter.cache.hit",
     "vuna.counter.cache.miss",
-    "vuna.counter.cache.write",
     "vuna.term",
     "vuna.term.sct",
     "vuna.counter.term.scc_size",
