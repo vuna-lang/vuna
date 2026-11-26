@@ -2,8 +2,7 @@
 
 本文覆盖 `vuna doc`（docstring → 单文件交互 HTML）与 `vuna search`（名称 / docstring /
 类型检索），以及它们共用的索引与边界。LSP hover、错误码体系见
-[tooling.md](tooling.md)；索引缓存实现见 [cache.md](cache.md) 与
-[cache.md](cache.md)。
+[tooling.md](tooling.md)；对象库形态见 [cache.md](cache.md)。
 
 ## 1. docstring
 
@@ -145,21 +144,20 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 ## 4. 索引 v3
 
-`vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引（会话载荷在
-`$VUNA_STORE/objects/tool-context/`，按输入摘要判定）。
+`vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引。索引在进程内
+构建：`vuna map` / `vuna api` 每次调用重建（不落对象库），LSP 在会话内复用。
 
-索引载荷（schema `vuna-index 3`）：
+索引记录（schema `vuna-index 3`）每个符号一条，8 个字段：
+`module` / `name` / `kind` / `line` / `col` / `sig` / `doc` / `type`。
 
-- `symbols.txt` 每行 8 字段：`module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；
-- `doc` 用 `\\`、`\t`、`\n`、`\r` 转义保存换行（多行 docstring 经缓存命中后仍完整）；
+- `doc` 保留转义后的换行（多行 docstring 完整）；
 - `type` 是 `symType`（函数/构造子/字段/方法/axiom/extern 的显示类型；data/record/trait 为空）；
-- manifest 首行 `vuna-index 3`；不是这个 schema 的缓存一律全量重建。
+- 版本标记是 `vuna-index 3`；不是这个 schema 的索引数据一律全量重建。
 
 `vuna api` / LSP hover 只显示 `symDoc`（docstring），普通注释不出现；多行 doc 逐行缩进。
 
-`vuna api <Module>` 在标题下先输出**模块 docstring**（`ModuleInfo.modDoc`，随索引载荷一起
-缓存；`index-payload 2` 起），再列符号行。模块是否存在以索引的模块表为准：没有导出符号的
-模块也输出标题与文档（旧版直接报 `no such module`）。
+`vuna api <Module>` 在标题下先输出**模块 docstring**（`ModuleInfo.modDoc`），再列符号行。
+模块是否存在以索引的模块表为准：没有导出符号的模块也输出标题与文档。
 
 ## 5. 设计参照
 

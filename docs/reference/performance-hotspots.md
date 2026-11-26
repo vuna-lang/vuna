@@ -105,21 +105,17 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 8. 已修热点（不要重复排查，读数见 [performance.md](performance.md) §1）：**`Dt.dedup*` 的 O(n²)、`Termination.anyOwn` 的
    O(n²)、写接口的包接口双读、build 的重复闭包扫描**；`Elab.Usage` 全程序扫描（实测
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
-   ctor/解表索引、`unsolvedFrom` 全解表扫描、iface/impl 双摘要共享子哈希
+   ctor/解表索引、`unsolvedFrom` 全解表扫描、iface 子哈希共享
    （`defs` / `decls` 不再各编码一遍：冷 `check packages/compiler` 分配
    **1.187e9 → 1.131e9 words（−4.7%）**、CPU **4.76 s → 4.52 s（−5.2%）**）。
 
-   build 的重复闭包扫描：view 地址、快 key 与重建三处各自跑一遍 `ifaceModsEff`（整包源扫描 +
-   逐模块头解析 + 地址分配）与依赖接口读，冷 `build --no-compile compiler` 因此扫两遍。
-   `Driver.Compile.SplitInputs`（`splitInputsOf`）把闭包 / 依赖接口 / 输入摘要一次算好，
-   由 `compileToDirGiven` / `buildViewAddrOf` 复用。同机同窗口 A/B 对 main：热
-   `build --no-compile compiler` **0.424–0.429 → 0.290–0.310 s**、冷
-   `build --no-compile compiler` 5.7–6.0 s → 5.6–5.8 s（噪声内）、产物树 `diff -r`
-   逐字节一致；`check` 路径不变（本来就只扫一遍）。
+   build 的重复闭包扫描已合并：`Driver.Compile.SplitInputs`（`splitInputsOf`）把闭包 /
+   依赖接口 / 输入摘要一次算好，由 `compileToDirGiven` 复用；`check` 路径本来就只扫一遍。
+   冷读数见 [performance.md](performance.md) §1。
 
    闭包扫描对每个模块 `lex + parse` 一遍拿 import 边算接口地址（整包 183 个模块约
-   125 ms）。头是源字节的纯函数，但单独建对象只省下这 ~90 ms，收益低于 store 的准入
-   判据，所以不设 `module-header` 域。
+   125 ms）。头是源字节的纯函数，但单独建对象只省下这 ~90 ms，低于 store 的准入
+   判据，所以不为模块头设对象域。
 
    **`sort_lib` 的 3.9× 不是排序算法**：`Base.Data.Sort.sortBy` 的 20k 排序在同进程
    循环里约 3.9 ms（与手写 OCaml 同量级），bench 的 wall 里主要是分配与 minor heap
@@ -385,19 +381,15 @@ import 调 `exportIndexOfModule` → `resolvedName` → `resolveModuleName` → 
       后实测 **9.1 s → 0.09 s**，产物逐字节一致。
     - `doc` / `Index` 的逐文件解析串行：改成按包分块（128 文件/单元）LPT 装箱、父线程解析包
       上下文、worker 只读文件（`runFsResult`），`FixityEnv` 在单元内串接。整仓 `doc --check`
-      **3.5–3.9 s → 1.6–1.8 s**；空 store 的 `search parMap`（= 冷建整仓索引）
+      **3.5–3.9 s → 1.6–1.8 s**；`search parMap`（整仓建索引）
       **5.1–5.3 s → 2.9–3.2 s**。用户时间 +40–60%，是并行 GC 的代价（每 Domain 独立 2 MB
-      minor heap，见 [primitives.md](primitives.md) §6.2）。索引对象字节不变：同一批源码的
-      tool-context 地址在旧 / 新实现下一致。
+      minor heap，见 [primitives.md](primitives.md) §6.2）。同一批源码的索引记录逐字节一致。
     - `Doc.Html` 的 `htmlEscape` / `renderInline` / `scriptSafe` 曾按字符 `acc ++ piece` 累加
       （输出长度平方级；`scriptSafe` 作用在整段内嵌 JSON 上），`linkMap` 还按模块重算一次。
       改单遍拼接后 `doc packages/toolchain`（74 模块 / 2.2 MB）**60.6 s → 0.9 s**（user），
       整仓 `doc .`（349 模块 / 10 MB）从 15 分钟级降到 **~4 s**；book 不变时产物逐字节一致。
-    - 残留：`store gc` 的根集查找是 `Clean.gcCandidates` 对每个对象在全部 roots 里线性
-      `memName`（46 GB store ≈ 31,682 条 roots × 28 万对象），`sizesOf` 还对同一批文件再
-      stat 一次；`store gc --dry-run` 实测 **116 s user**（`sortByAge` 的插入排序另在处置）。
-    - 试过又撤掉：**Index 依赖表 / Obs 逐行解析的并行**。两处都被 IO 或串行聚合段主导，墙钟
-      不变而 user 上升：热 `map`（1676 个源文件读 + 双哈希）0.32–0.36 s → 0.35–0.36 s
-      （user 0.25–0.29 → 0.32–0.34）；17 MB / 12 万行 trace 的 `dev obs summarize --json`
-      1.08–1.15 s → 1.08–1.15 s（user 0.82–0.91 → 2.64–2.93，每 Domain 2 MB minor heap 的
-      并行 GC 代价）。要降这两处得先降单线程成本（避免逐文件双哈希 / 换 JSON 解析），不是并行。
+    - 残留：`store gc` 对 `objects/module-iface` 的每个候选各 `stat` 一次（age 判定与
+      `sizesOf` 各走一遍），`sortByAge` 仍是插入排序。
+    - 试过又撤掉：**Obs 逐行解析的并行**。17 MB / 12 万行 trace 的 `dev obs summarize --json`
+      墙钟不变而 user 上升（1.08–1.15 s → 1.08–1.15 s；user 0.82–0.91 → 2.64–2.93，每 Domain
+      2 MB minor heap 的并行 GC 代价）。要降得先降单线程成本（换 JSON 解析），不是并行。

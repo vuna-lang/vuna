@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
 | **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna deps pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
-| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
+| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`objects/pkg-summary` 载荷里的接口身份） | 下游可见接口/透明体变化 |
 
 规范编码在 `Vuna.Compiler.Frontend.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
 `Base.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
@@ -41,10 +41,11 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
-- **同一个根、两类生命周期**（D15）：缓存族（`objects/<kind>/`、
-  `views/`、`.tmp/`、`roots/`）由 `vuna store gc` / `clean --store` 管理；包对象族
-  （`objects/pkg/`、`pkgs/`、`tmp/`）由 `clean --packages` 管理。包对象放在 `objects/pkg/`
-  这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
+- **同一个根、两类生命周期**（D15）：缓存族（`objects/module-iface/`、`objects/pkg-summary/`）
+  由 `vuna store clean --store` / `vuna store gc` 管理；包对象族（`objects/pkg/`、`pkgs/`、
+  `tmp/`）由 `clean --packages` 管理。`roots/` 不属于任何一族：只由 `vuna deps fetch` 追加，
+  供 `clean --packages --gc` 判引用（项目目录已消失的项目根由 `store gc` 裁掉）。包对象放在
+  `objects/pkg/` 这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
 - **fetch 登记 roots**：`vuna deps fetch` 把取到的包摘要写进发起项目的 roots，`clean --packages
   --gc` 取所有项目 roots 的并集 ⇒ 共享 store 上不会误删别的项目取过的对象。
 
@@ -87,11 +88,11 @@ DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete
 ## 5. 清理
 
 ```console
-vuna store clean --store                  # 清缓存族（objects/<kind>、views/bin、.tmp）
+vuna store clean --store                  # 清缓存族（objects/module-iface、objects/pkg-summary、遗留 views/）
 vuna store clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
 vuna store clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
 vuna store clean --all                    # 两族都清
-vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按 roots + grace 淘汰
+vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按时间 / 容量上限淘汰
 ```
 
 不带 flag 时只清缓存族（默认**不碰**包对象族：对象跨项目复用，误删代价是重新取包）。

@@ -202,11 +202,11 @@ end:
 - 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
 - 父进程只预热一次 `vuna check packages/base`（需要时 `check .`），worker 不各自 warmIfaces。
-- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface` / `objects/pkg-summary`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
-- 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
+- 对象库的写入（原子写）与 `roots/` 只追加见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
-- 对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
+- 对象库的 GC 用 `vuna store gc`（宽限窗口 + 容量上限，只淘汰 `objects/module-iface`）。
 - **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例走进程内全量精化
   （`InProc.checkFile`），warning 必然重算，不需要 `-W` / 私有 store；`warning`
   的「让退出码变 1」语义由 steps 的 `--deny-warnings` 覆盖。
@@ -270,7 +270,7 @@ vuna dev suite --all --cache-dir DIR   # 覆盖测试对象库与构建桶根
   `*.diagcodes`；缺口与不可达审计在 `nix/checks/data/diag-coverage-allow.txt`，覆盖数不低于
   `nix/checks/data/diag-coverage.min`）；`nix/checks/lib/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/checks/data/diag-style-allow.txt`）；LSP quick fix 集成在 `corpus/lsp/quickfix.sh`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
-- `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶/last-failed；verdict 在对象库）。
+- `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶 / last-failed）。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
 - `--audit`：扫描 suite 的 test 根下 `corpus/`（当前 `packages/*/test/corpus`）的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
   并 exit 1；`corpus/codegen` 是 metrics 固定输入，显式排除。
@@ -347,9 +347,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
-实测（本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
+实测（本机 16 核）：空 `--cache-dir` 下同一夹具 compile 2.9–5.5s，复用已有桶 7ms；
 `vuna check packages/base` 7.25s → 13ms。
-`--cache-dir` 只放构建桶与测试临时根（split-unit 与视图见 store，
+`--cache-dir` 只放构建桶与测试临时根（对象库另在 `VUNA_STORE`，
 [test-architecture.md](test-architecture.md)）。
 ### 包内测试（`packages/<pkg>/test/`）
 

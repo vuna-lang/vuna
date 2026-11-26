@@ -22,11 +22,9 @@ nix run .#vuna-run-tests -- --only <owner/family>   # 按 owner/family 跑原生
 - **新文件先 `git add`**：`nix run .#vuna` 的源码树只含 git 已跟踪文件；新增 `.vuna` /
   夹具没进 index 时，loader 报 `LD_ModuleNotFound`（模块确实不存在于构建输入），看到的
   也仍是旧文件集。新增文件后先 `git add` 再跑验证。
-- **后端产物缓存**：native / wasm 产物按 `(IR 摘要, target, 后端二进制 size+mtime, print)`
-  命中。nix store 里文件 mtime 恒为 1，所以**重建后二进制大小不变**时会复用旧产物。
-  改 `packages/target-native/` / `packages/target-wasm/` 后：先确认 `runtime.s` / `.wat`
-  这类产物真的变了；要可靠复现就给独立空 store
-  （`VUNA_STORE=$(mktemp -d) nix run .#vuna -- …`）。`vuna dev suite` 每个 case 自带
+- **后端产物不缓存**：每次 `compile` / `build --target <t>` 都启动 `vuna-target-<t>` 插件，
+  产物由本次插件进程写出。改 `packages/target-native/` / `packages/target-wasm/` 后直接
+  重跑即可确认 `runtime.s` / `.wat` 这类文本真的变了；`vuna dev suite` 每个 case 自带
   独立 store，是可靠口径。
 - 测试别为验证一处改动跑全量：先 `--only <owner/family>`，必要时再 `--filter PAT`。
 - 只有纯 `Int`/`String`/`Bool` 的夹具能走核心求值（进程内 interp 阶段）；`main : Eff [] a` 走

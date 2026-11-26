@@ -6,7 +6,7 @@
 
 ## 1. 原则：测试是对象库的普通客户端
 
-对象库是仓库唯一的缓存形态（输入寻址、存在即命中、删除只影响命中率、roots + GC）。
+对象库是仓库唯一的缓存形态（输入寻址、存在即命中、删除只影响命中率；`roots/` 只服务包对象 GC）。
 测试 runner 因此不维护第二套缓存：**一次 run 只有一个 store root**，父进程预热一次，
 worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显式隔离。
 
@@ -23,8 +23,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 ```text
                     ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
-   objects/module-iface|check-outcome|tool-context|module-order|pkg-iface
-   views/bin/<buildViewKey>   roots/<project>/<digest>
+   objects/module-iface   objects/pkg-summary   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
         │ test scheduler：父进程解析 store、预热一次  │
@@ -33,7 +32,7 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
                 │                       │
    golden/error/check 语义 case      steps 工具/仓库 case
    每次都真正执行，不落 verdict     共享 store；长 case 拆分/并行
-   共享 store（接口 / 产物命中）     只有 store 语义用例用私有 store
+   共享 store（模块接口命中）       只有 store 语义用例用私有 store
 ```
 
 ### 2.1 共享规则
@@ -45,11 +44,11 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 3. **默认共享，隔离显式**：steps 文件头写 `# store-isolated` 的 case 用 `${caseTmp}/store`；
    其余共享。断言缓存布局、GC、冷命中、只读语义的用例必须隔离。
 4. **没有结果判定缓存**：golden / error / steps 每次都真正执行；真正的冷跑仍用显式空
-   `VUNA_STORE`（对象库本身有接口与产物缓存，不能靠它"假装冷"）。
+   `VUNA_STORE`（对象库本身有模块接口缓存，不能靠它"假装冷"）。
 
 ### 2.2 为什么可以共用
 
-- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface` / `objects/pkg-summary`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节；日常 `check`/`build` 与测试并发写不会互相覆盖。
 - 编译器身份在 `ver` 输入里：身份取自产物 `build-id` 的内容，同源同身份——日常 CLI 与测试
   用**不同源码**构建的二进制地址不同，不会读错；同源的不同副本则共享对象。
@@ -60,7 +59,6 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 | 位置 | 现状 | 影响 |
 | --- | --- | --- |
 | `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不丢 root |
-| `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 |
 
 ### 2.4 进程内执行层（fixture 用例）
 
@@ -71,7 +69,7 @@ runner 直接调用编译器/工具链的导出函数并断言返回值（细节
 - **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，`packages/dev/lib/Vuna/Test/Session.vuna`，依赖接口 + `AuxCache`）优先，
   不可用时同进程退回全量精化。没有「回退子进程」这一步——那会把断言退回字符串匹配。
   增量会话不覆盖的只有 `warnUnusedDefsIn`，所以负例一律走全量。
-- **verdict key 只有输入摘要**（不含 env 分量），所以同一输入在不同环境共用同一裁决。
+- **复用键只有输入摘要**（不含 env 分量），所以同一输入在不同环境共用同一份精化结果。
 - **隔离只保留在 steps 岛**：`# store-isolated` 的私有 store 只用于断言缓存布局/GC/
   冷命中的 steps 用例；fixture 负例不需要私有 store 绕缓存。
 
@@ -117,15 +115,15 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 ## 4. 结果判定：没有 verdict 对象
 
 - golden / error / steps 每次都真正执行；不写 `objects/test`，也不登记 roots。
-- 判定的可复用性靠输入寻址的**接口与产物**对象（`module-iface` / `check-outcome` / `views`），
-  不是"上次这个 case 过了"。
+- 判定的可复用性靠输入寻址的**模块接口**对象（`objects/module-iface`）与包身份
+  （`objects/pkg-summary`），不是"上次这个 case 过了"。
 
-## 5. 产物：走 store 视图
+## 5. 产物：写包目录
 
-- `views/bin/<splitIn>` 承担 build 产物；测试共享同一视图。
-- 包内 effect 测试有 `views/testbin/<testBin>` 产物缓存：key = 编译器指纹 + 各 context
-  root 内容 + 测试源内容；命中直接运行缓存的 `bin/vuna-test`，跳过 compile + `build.sh`。
-- repo 包的 build 可对不需要共享视图的用例用 `--out` 私有目录或 `store-isolated`。
+- 日常 build 直接写 `<pkg>/.output`；同输入重复 build 由 `build-meta.json` 判新鲜，否则重跑
+  codegen + 链接。没有 store 视图、构建锁或 `.complete` 提交点。
+- 包内 effect 测试与 REPL 动作在私有临时目录编译运行，不发布可执行产物。
+- 需要固定的输出位置时用显式 `--out`；断言缓存布局/GC 的用例用 `store-isolated`。
 
 ## 6. CI
 
@@ -136,7 +134,7 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 
 ## 7. 验收与测量
 
-- 同一 store 连续 `check packages/compiler`：第二次 `cache-path=hit`、`iface-write=0/N`、< 100 ms。
+- 同一 store 连续 `check packages/compiler`：第二次 `cache-path=summary`、`iface-write=0/N`、< 100 ms。
 - 单 dt golden case：< 2 s；单 suite 的 steps 层：< 60 s；全量：< 2 min。
 - 测量必须在静默树上重录，记录 HEAD、CPU、`VUNA_STORE` 是否为空、`--cache-dir`。
 

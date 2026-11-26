@@ -22,9 +22,7 @@
 | check-warm | 53 |
 | build-all | 8717 |
 | build-compiler | 3469 |
-| build-warm | 45 |
-| map-cold | 2111 |
-| map-hot | 130 |
+| map（整仓索引重建） | 2111 |
 | fmt-check | 1139 |
 
 **编译器自身编到 native**（`sh bench/native.sh`，基线 `bench/baselines/native.json`，只做同机
@@ -47,39 +45,16 @@
 现在跑得完（live 1.1 GB，同机 40–100 s），但重复读数散布大，基线仍只含 base 一档
 （`"full": false`）。
 
-**冷路径的成本来源（显式编码与 `Base.Store` framing 的代价，不是查询图引入的）**：check-compiler /
+**冷路径的成本来源（显式编码与 `Base.Store` framing 的代价）**：check-compiler /
 build-compiler / build-all 要为每个模块把缓存载荷**显式规范编码 + `Base.Store` framing（含 SHA-256
 内容地址）**并算摘要——逐项写字节，而不是 `Obj.magic` 级拷贝。
 
-**build-warm 的归因：`canonicalTopo` + `splitGraph`**。同机 `VUNA_LOG=debug` 分段实测
-（`compiler` 包、119 单元、4.4 MB blob），拓扑序未进载荷时各段构成：
-
-| 阶段 | 用时 |
-| --- | --- |
-| 进程启动 + 源闭包哈希（check-warm 也付） | ≈ 32 ms |
-| `sessionLoad` + blob 读/framing 校验/**解码** | 6.6 ms |
-| 写产物文件（内容未变不重写） | 3.3 ms |
-| **`canonicalTopo` + `splitGraph`** | **≈ 254 ms** |
-| `copyFfiFiles` + `build.sh` 生成 | 2 ms |
-
-`canonicalTopo` 有三处 O(n²) 叠加：迭代松弛每轮线性扫 memo 表、插入排序每次比较重算
-SHA-256 的 tie key、排序结果按名线性找文件。两条路径都已不付这笔：
-
-1. **载荷写侧规范化**：split 载荷 codec 是 `split-files 2`，内容直接是规范拓扑序；
-   命中路径按载荷顺序写产物，不再重算 `canonicalTopo`（codec 不符的旧载荷 miss 一次并重写）。
-2. **`canonicalTopo` 去 O(n²)**：HashMap memo 的迭代松弛（缺失键按 0）、graph 单元 +
-   全部依赖去重后每个名字只算一次 tie key、文件名 `HashMap` 索引。未命中（冷）路径的
-   这一步同样只做一次且近线性（冷路径总时长由 codegen 主导）；命中（热）路径为 0。
-
-同机 A/B（同一源码、同一份 blob，冷/热产物 `diff -r` 逐字节一致）：低负载窗口 build-warm
-**308 → 45 ms**；高负载窗口（宿主 load ≈50）同窗口交替 **546–567 → 79–83 ms**（均
-`--runs 5` 中位数）。两个窗口的比值都约 6.8×，收益与负载无关。
-载荷解码只需 ~6.6 ms（4.4 MB blob）⇒「per-file 内容寻址 blob + 小 manifest」不是当前瓶颈。
+**`canonicalTopo` 是近线性的**：HashMap memo 的迭代松弛（缺失键按 0）、graph 单元 + 全部
+依赖去重后每个名字只算一次 tie key、文件名 `HashMap` 索引。每次 codegen 都要按拓扑序排单元；
+冷路径总时长由 codegen 主导。
 
 `fmt-check`（1139）高于基线 546，来自源码规模增长与仓内路径差异（同一棵树、两个二进制的
-A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基线里的 1502 只删索引缓存
-目录，迁到查询图后已是空操作，测到的是热路径；冷路径的成本是 `Index.Codec` 编码 + SHA-256
-内容地址。
+A/B 读数一致）。`map`（2111）是整仓索引的重建时间：索引不落盘，每次 `vuna map` 都重算。
 
 **CI 门槛**：`bench/compiler.sh --check` 硬失败阈值；`vuna-compiler-growth`
 （合成 500/1000/2000/4000 单文件，每翻倍 ≤2.5×；**脚本上限只到 4000，8000 档实测 3.03×

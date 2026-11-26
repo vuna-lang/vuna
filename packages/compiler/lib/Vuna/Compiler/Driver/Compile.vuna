@@ -1064,7 +1064,7 @@ depIfacesOfWith ctx mods =
           Nothing =>
             do
               let
-                _ = log! "debug" "iface-reject=module-order"
+                _ = log! "debug" "iface-reject=pkg-summary"
               in do
                 pure Nothing
           Just depMods => readIfaceListEff depMods
@@ -1825,7 +1825,7 @@ cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
 
 -- 接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
--- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/` + `objects/module-order/`（依赖侧的
+-- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/` + `objects/pkg-summary/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
 ifaceCompilerTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String

@@ -4,8 +4,8 @@
 职责见 [compiler.md](reference/compiler.md)，Core / 精化器见 [core.md](reference/core.md)，
 语义见 [language.md](reference/language.md) / [type-system.md](reference/type-system.md) / [qtt.md](reference/qtt.md)，
 自举 / 内建原语与宿主层见 [bootstrap.md](reference/bootstrap.md) / [primitives.md](reference/primitives.md)，
-模块级接口缓存与输入寻址对象库存取见 [cache.md](reference/cache.md)（对象族 / 命中判据 /
-roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对拍）。
+模块级接口缓存与输入寻址对象库存取见 [cache.md](reference/cache.md)（域表 / 命中判据 /
+roots 与 GC / 编译器身份；排障用 `VUNA_IFACE_AUDIT=1` 双路径对拍）。
 
 > 本页是**现状**地图；终态方向、不变量与非目标见
 > [architecture-target.md](architecture-target.md)。
@@ -40,8 +40,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 │               InstName InstCoherence Driver Termination{,.ElabInput,.Measure,.Scc}
 │               Prelude Match Records Derive Coverage Representation Usage Canonical   双向精化
 ├─ Lowering/    Program Env Ty Entry Erased Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ 擦除视图 + Core 侧检查
-└─ Driver/      Dt Compile Cache Iface Owner ToolPayload CompilerCli
-                Split SplitGen Target TargetCache                   输出模型 / facade / 后端驱动 / CLI
+└─ Driver/      Dt Compile Cache Iface Owner CompilerCli
+                Split SplitGen Target                   输出模型 / facade / 后端驱动 / CLI
 产品 CLI 包 vuna（模块根 packages/cli/lib/，入口 packages/cli/app/Main.vuna）：Cli（+子模块 Spec/Help/Args/
   Err/Suggest/Test/Fmt/Index/Repl/Suite/Dev，命令表与分发，见 [reference/cli.md](reference/cli.md)）、
   Interp/Fmt/Lint/Index（门面+子模块）、
@@ -279,8 +279,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   codeAction（lint quick fix）/ lint 诊断；`Vuna.Lsp.Semantic` 提供 semanticTokens/full
   （CST 词法流 + 声明表），`Vuna.Lsp.Highlight` / `Vuna.Lsp.Folding` 提供 documentHighlight
   与按缩进的 foldingRange。
-- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，会话载荷
-  落在 `objects/tool-context/`，按输入摘要判定）；`Vuna.Search` 消费它做名称/doc/类型检索。
+- `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`）；每次调用在
+  进程内重建（不落对象库）；`Vuna.Search` 消费它做名称/doc/类型检索。
 
 ## 5. 自举链：seed → vuna-seed → vuna-compiler → vuna
 
@@ -292,7 +292,7 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
  → vuna-compiler build . → .output/bin/vuna（同为逐模块输出）
 ```
 
-产品侧不是一次整包构建：`vuna-store` 先对依赖包逐个 `check`（写接口 / 模块顺序 / 包身份），
+产品侧不是一次整包构建：`vuna-store` 先对依赖包逐个 `check`（写模块接口与 `pkg-summary`），
 每个插件派生拷这份 store 后只构建自己的包（`vuna-cli` / `vuna-toolchain` / `vuna-target-*` /
 `vuna-plugin-web` / `vuna-dev`），`vuna` 只把二进制拷进同一个 `bin/`——入口用可执行文件自身
 位置做插件发现，所以是拷贝而不是链接。改一个插件只重建它的派生；编译器身份 `cache-tag`

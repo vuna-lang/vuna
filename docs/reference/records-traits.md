@@ -509,7 +509,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - 可执行包 / `vuna build` 要求 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler，
   自定义效应必须先 handle 成 `Nil`）；核心求值路径（`vuna test` 纯测试 / REPL 的纯表达式）是
   纯核心求值，任何 `main : Eff ...` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
-  `main : Eff ...` 走 compile + 运行；REPL 的 `Eff r a` 表达式编译成可执行文件运行（按内容
-  寻址缓存在 `views/effectbin`）。
+  `main : Eff ...` 走 compile + 运行；REPL 的 `Eff r a` 表达式在私有临时目录编译成可执行文件
+  运行（不发布产物）。
 - 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。
