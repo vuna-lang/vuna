@@ -8,12 +8,14 @@ timeout = 300
 min_cases = 760
 
 [family.dt]
+areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml"]
 dir = "corpus/dt"
 matrix = "pure"
 check = true
 tags = ["dt"]
 
 [family.dt_err]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/dt_err"
 matrix = "pure"
 interp = false
@@ -21,6 +23,7 @@ check = true
 tags = ["dt", "error"]
 
 [family.dt_base]
+areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml", "base"]
 dir = "corpus/dt_base"
 matrix = "pure"
 check = true
@@ -29,6 +32,7 @@ tags = ["dt", "base"]
 # --- 后端能力矩阵：按副作用分层（见 docs/reference/testing.md）---
 # 纯语义三端差分：ocaml 是语义 oracle，wasm / native 必须逐字一致。
 [family.pure_cross]
+areas = ["compiler-core", "ir", "codegen-ocaml", "codegen-wasm", "codegen-native"]
 dir = "corpus/pure_cross"
 interp = false
 check = true
@@ -38,6 +42,7 @@ tags = ["parity"]
 
 # 三端共有的宿主副作用：Console / MutRef / getenv / getArgs / exit / 经标签的 FS。
 [family.effect_common]
+areas = ["compiler-core", "ir", "runtime", "codegen-ocaml", "codegen-wasm", "codegen-native"]
 dir = "corpus/effect/common"
 interp = false
 check = true
@@ -49,6 +54,7 @@ tags = ["effect"]
 # 用显式 timeout 把暴露时间收紧，别的 case 也就不必替它守着默认预算。
 # 算法层面的增长率由 `checks.vuna-effect-machine-growth` 单独卡。
 [family.effect_perf]
+areas = ["compiler-core", "runtime", "codegen-ocaml", "codegen-wasm", "codegen-native"]
 dir = "corpus/effect/perf"
 interp = false
 check = true
@@ -59,6 +65,7 @@ tags = ["effect", "perf"]
 
 # 系统级副作用：process / sleep / mtime / 真实 cwd（ocaml + native）。
 [family.effect_native]
+areas = ["compiler-core", "ir", "runtime", "codegen-ocaml", "codegen-native"]
 dir = "corpus/effect/native"
 interp = false
 check = true
@@ -68,6 +75,7 @@ tags = ["effect"]
 
 # 只有 ocaml 宿主实现的系统副作用：stdin / raw net。
 [family.effect_ocaml]
+areas = ["compiler-core", "ir", "runtime", "codegen-ocaml"]
 dir = "corpus/effect/ocaml"
 interp = false
 check = true
@@ -77,6 +85,7 @@ tags = ["effect"]
 
 # WASI / 浏览器能力面：preopen 根、cwd=/、execPath=""、mtime=Nothing。
 [family.effect_wasm]
+areas = ["compiler-core", "ir", "runtime", "codegen-ocaml", "codegen-wasm"]
 dir = "corpus/effect/wasm"
 interp = false
 check = true
@@ -86,6 +95,7 @@ tags = ["effect"]
 
 # 编译器包 API 的函数级夹具（mock handler + runPure 断言；只跑 run）。
 [family.dt_compiler]
+areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml"]
 dir = "corpus/compiler"
 matrix = "pure"
 check = true
@@ -94,6 +104,7 @@ tags = ["dt", "compiler"]
 # 精化器性能回归：只跑 `vuna check`，不编译不运行；
 # 单 case 超时 15s：长 do / 长 >>= 链必须保持线性耗时，超时即失败。
 [family.elab_perf]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/elab_perf"
 matrix = "pure"
 kind = "check-ok"
@@ -102,12 +113,14 @@ tags = ["dt", "perf"]
 
 # 声明式步进用例（run/expect 指令，见 docs/reference/testing.md）
 [family.run]
+areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml"]
 dir = "corpus/run"
 matrix = "pure"
 check = false
 tags = ["run"]
 
 [family.modules]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/modules"
 matrix = "pure"
 entry = "app/Main.vuna"
@@ -115,12 +128,14 @@ check = false
 tags = ["modules"]
 
 [family.records_files]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/records"
 matrix = "pure"
 check = false
 tags = ["records"]
 
 [family.records_dirs]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/records"
 matrix = "pure"
 entry = "app/Main.vuna"
@@ -128,12 +143,14 @@ check = false
 tags = ["records"]
 
 [family.traits_files]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/traits"
 matrix = "pure"
 check = false
 tags = ["traits"]
 
 [family.traits_dirs]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/traits"
 matrix = "pure"
 entry = "app/Main.vuna"
@@ -141,12 +158,14 @@ check = false
 tags = ["traits"]
 
 [family.monad]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/monad"
 matrix = "pure"
 check = true
 tags = ["monad"]
 
 [family.float]
+areas = ["compiler-frontend", "compiler-core", "codegen-ocaml"]
 dir = "corpus/float"
 matrix = "pure"
 check = true
@@ -154,6 +173,7 @@ tags = ["float"]
 
 # --- check 为主（interp 不支持 / 无 golden）---
 [family.type_ok]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/type_ok"
 interp = false
 check = true
@@ -161,6 +181,7 @@ compare_interp = false
 tags = ["types"]
 
 [family.type_err]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/type_err"
 interp = false
 check = true
@@ -169,6 +190,7 @@ compare_interp = false
 tags = ["types", "error"]
 
 [family.typed_ok]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/typed_ok"
 interp = false
 check = true
@@ -176,6 +198,7 @@ compare_interp = false
 tags = ["types"]
 
 [family.type_modules]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/type_modules"
 entry = "app/Main.vuna"
 interp = false
@@ -185,22 +208,26 @@ tags = ["types", "modules"]
 
 # 只跑 check 的夹具（终止性）。
 [family.term]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/term"
 kind = "check-ok"
 tags = ["term"]
 
 [family.term_err]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/term_err"
 kind = "check-error"
 tags = ["term", "error"]
 
 # --- error（解析 / 求值负例）---
 [family.err]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/err"
 compile = false
 tags = ["parse", "error"]
 
 [family.warn_err]
+areas = ["compiler-frontend", "compiler-core"]
 dir = "corpus/warn_err"
 interp = false
 compile = false
@@ -208,6 +235,7 @@ check = true
 tags = ["warning", "error"]
 
 [family.run_err]
+areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml"]
 dir = "corpus/run_err"
 check = false
 tags = ["run", "error"]
@@ -215,6 +243,7 @@ tags = ["run", "error"]
 # --- 工具链（lint / fix）---
 
 [family.steps_native]
+areas = ["tests"]
 dir = "steps"
 kind = "steps"
 tags = ["declarative"]

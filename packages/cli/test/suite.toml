@@ -8,6 +8,7 @@ timeout = 300
 min_cases = 142
 
 [family.pkg_err]
+areas = ["toolchain", "compiler-core"]
 dir = "corpus/pkg_err"
 entry = "lib/Main.vuna"
 check = true
@@ -18,16 +19,19 @@ compare_interp = false
 tags = ["pkg", "error"]
 
 [family.lint]
+areas = ["toolchain"]
 dir = "corpus/lint"
 kind = "lint"
 tags = ["lint"]
 
 [family.fix]
+areas = ["toolchain"]
 dir = "corpus/fix"
 kind = "fix"
 tags = ["lint", "fix"]
 
 [family.steps_native]
+areas = ["toolchain", "tests"]
 dir = "steps"
 kind = "steps"
 tags = ["declarative"]

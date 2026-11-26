@@ -8,6 +8,7 @@ timeout = 300
 min_cases = 1
 
 [family.steps_native]
+areas = ["tests"]
 dir = "steps"
 kind = "steps"
 tags = ["declarative"]
