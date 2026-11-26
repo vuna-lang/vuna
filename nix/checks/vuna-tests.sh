@@ -47,25 +47,51 @@ MATRIX_ARGS=""
 for matrix in ${VUNA_TEST_MATRICES:-}; do
   MATRIX_ARGS="$MATRIX_ARGS --matrix $matrix"
 done
+# 影响面切片：VUNA_TEST_AREAS 是空格分隔的 area 名（见 nix/checks/slices.nix），
+# 由 suite.toml 的 [family.areas] / steps 的 `# areas:` 认领。
+AREA_ARGS=""
+for area in ${VUNA_TEST_AREAS:-}; do
+  AREA_ARGS="$AREA_ARGS --area $area"
+done
+# 切片过滤后 case 数下限：先 `--list` 数一遍，低于下限直接失败——挡住「area 名打错 /
+# family 掉出切片」变成 0 个 case 的全绿。`--list` 不编译、不执行 case。
+if [ -n "${VUNA_TEST_MIN_CASES:-}" ]; then
+  # shellcheck disable=SC2086
+  selected=$("$VUNA" dev suite --all --list $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS | grep -cE '^[A-Za-z][A-Za-z-]*/[A-Za-z0-9_]+/' || true)
+  if [ "$selected" -lt "$VUNA_TEST_MIN_CASES" ]; then
+    echo "vuna-tests: only $selected case(s) selected, VUNA_TEST_MIN_CASES requires >= $VUNA_TEST_MIN_CASES" >&2
+    exit 1
+  fi
+fi
 # `--all` 读 test/suite.toml 的 driver 清单；清单只维护这一份。
 rc=0
 # shellcheck disable=SC2086
-"$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS || rc=1
+"$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS || rc=1
 
 # 包内单测（`vuna test <pkg>`：顶层 test/*.vuna）；http/web 的行为面不在 suite corpus 里。
-for pkg in packages/*; do
-  [ -d "$pkg/test" ] || continue
-  set -- "$pkg"/test/*.vuna
-  [ -e "$1" ] || continue
-  "$VUNA" test "$pkg" --jobs "$JOBS" || rc=1
-done
+# 切片按 VUNA_TEST_UNIT_PKGS 只跑相关包；未设置时跑全部。
+run_unit_tests() {
+  for pkg in "$@"; do
+    [ -d "$pkg/test" ] || continue
+    set -- "$pkg"/test/*.vuna
+    [ -e "$1" ] || continue
+    "$VUNA" test "$pkg" --jobs "$JOBS" || rc=1
+  done
+}
+if [ "${VUNA_TEST_UNIT_PKGS+set}" = set ]; then
+  # 切片显式声明单测包；空值表示该切片不跑包内单测。
+  # shellcheck disable=SC2086
+  run_unit_tests $VUNA_TEST_UNIT_PKGS
+else
+  run_unit_tests packages/*
+fi
 
 # e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
     # shellcheck disable=SC2086
-    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS || rc=1
+    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS || rc=1
     ;;
 esac
 

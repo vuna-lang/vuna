@@ -637,7 +637,11 @@ let
                  else $gates.areas[$a].default end)] | add // []) as $area_refs
           | ([$labels[] | select(. == "deep" or . == "suite" or . == "browser")] ) as $forced
           | ([$forced[] | $group_defs[.]] | add // []) as $forced_refs
-          | ($area_refs + $type_refs + $forced_refs) | unique | .[]
+          | ($area_refs + $type_refs + $forced_refs) | unique as $refs0
+          # 完整 gate 在计划里时，area 切片被它覆盖，去掉重复构建。
+          | (if ($refs0 | index("check:vuna-tests-gate")) != null
+             then [$refs0[] as $r | select(($group_defs.slices | index($r)) == null) | $r]
+             else $refs0 end) | .[]
         ' "$@"
       }
 

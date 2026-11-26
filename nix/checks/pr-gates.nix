@@ -7,7 +7,10 @@
 # 选择规则：
 #   1. area 标签优先；没有 area 时用 pkg 标签映射到 area；都没有则 fallback。
 #   2. type:perf 使用 area 的 perf 子集；其他 type 使用 area.default + type 的附加检查。
-#   3. 多个 area / type 取并集并去重。
+#   3. 多个 area / type 取并集并去重；完整 gate 在计划里时去掉被它覆盖的 area 切片。
+#
+# suite 侧一个 area 对应 `nix/checks/slices.nix` 的一个切片（`check:vuna-tests-<切片>`）；
+# 切片只跑该影响面的用例，完整覆盖由 nightly 的 `suite` 组承担。
 let
   repoDefault = [
     "check:vuna-static"
@@ -47,7 +50,7 @@ in
         "check:vuna-single-pass"
         "check:vuna-frontend-growth"
         "check:vuna-resolve-chain-growth"
-        "check:vuna-tests-gate"
+        "check:vuna-tests-frontend"
       ];
       perf = [
         "check:vuna-frontend-growth"
@@ -63,7 +66,7 @@ in
         "check:vuna-compiler-growth"
         "check:vuna-compiler-growth-ctor"
         "check:vuna-compiler-growth-incremental"
-        "check:vuna-tests-gate"
+        "check:vuna-tests-core"
       ];
       perf = [
         "check:vuna-compiler-growth"
@@ -77,6 +80,7 @@ in
         "check:vuna-static"
         "check:vuna-single-pass"
         "check:vuna-iface-selftest"
+        "check:vuna-tests-ir"
       ];
       perf = [
         "check:vuna-single-pass"
@@ -87,7 +91,7 @@ in
     codegen-ocaml = {
       default = [
         "check:vuna-metrics"
-        "check:vuna-tests-gate"
+        "check:vuna-tests-ocaml"
       ];
       perf = [
         "check:vuna-metrics"
@@ -119,7 +123,7 @@ in
       default = [
         "check:vuna-container-growth"
         "check:vuna-effect-machine-growth"
-        "check:vuna-tests-gate"
+        "check:vuna-tests-base"
       ];
       perf = [
         "check:vuna-container-growth"
@@ -130,7 +134,7 @@ in
     runtime = {
       default = [
         "check:vuna-effect-machine-growth"
-        "check:vuna-tests-gate"
+        "check:vuna-tests-runtime"
       ];
       perf = [
         "check:vuna-effect-machine-growth"
@@ -139,10 +143,10 @@ in
 
     toolchain = {
       default = [
-        "check:vuna-tests-gate"
+        "check:vuna-tests-toolchain"
       ];
       perf = [
-        "check:vuna-tests-gate"
+        "check:vuna-tests-toolchain"
       ];
     };
 
@@ -206,6 +210,7 @@ in
 
     tests = {
       default = [
+        "check:vuna-static"
         "check:vuna-tests-gate"
       ];
       perf = [
