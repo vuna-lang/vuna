@@ -292,7 +292,7 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
  → vuna-compiler build . → .output/bin/vuna（同为逐模块输出）
 ```
 
-产品侧不是一次整包构建：`vuna-store` 先对依赖包逐个 `check`（写模块接口与 `pkg-summary`），
+产品侧不是一次整包构建：`vuna-store` 先对依赖包逐个 `check`（写模块接口），
 每个插件派生拷这份 store 后只构建自己的包（`vuna-cli` / `vuna-toolchain` / `vuna-target-*` /
 `vuna-plugin-web` / `vuna-dev`），`vuna` 只把二进制拷进同一个 `bin/`——入口用可执行文件自身
 位置做插件发现，所以是拷贝而不是链接。改一个插件只重建它的派生；编译器身份 `cache-tag`

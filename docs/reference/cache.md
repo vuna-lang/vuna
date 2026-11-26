@@ -3,12 +3,11 @@
 本文记录 vuna **唯一对象库的形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
 命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。
 
-对象库只保留三个域：
+对象库只保留两个域：
 
 | 域 | 内容 | 生命周期 |
 | --- | --- | --- |
 | `module-iface` | 模块级精化结果（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`） | 缓存；可删可重建，`clean --store` / `gc` 管理 |
-| `pkg-summary` | 包摘要：依赖方消费的 `pkgIfaceHash` + 已写接口的模块名集合（完整性标记） | 身份/决策记录；GC 不淘汰，仅显式 `clean --store` 清理 |
 | `pkg` | 取来的包源码（`pkg-source 1`，见 [package-store.md](package-store.md)） | 显式 fetch；`clean --packages` 管理 |
 
 `views/`、`check-outcome`、`tool-context`、`target-out`、`module-header`、`units`、`blobs`、
@@ -22,8 +21,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 6；带实例/方法 span）。
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
-  objects/pkg-summary/<键>          # 包摘要：pkgIfaceHash + 已写接口的模块面
-                                    # （codec `pkg-summary 2`；键含包的 implicit-prelude 开关）
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
   roots/<项目摘要>/.project         # 项目绝对目录（包 GC 据此清理已消失的项目根）
@@ -47,7 +44,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 包级 `check` | 按地址读依赖与同包模块的 `objects/module-iface/<addr>` | 精化脏模块；缺任一依赖模块 ⇒ 回退全量 |
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
 | 同树重复 `build` | `<pkg>/.output/build-meta.json` 与当前输入一致（含二进制身份 `cache-tag`） | 重跑 codegen + `ocamlopt` |
-| 依赖身份 | `objects/pkg-summary/<键>` 命中 ⇒ `iface:<pkgIfaceHash>` | 回退 `manifest:<toml 摘要>:<根源闭包摘要>` |
+| 依赖身份 | 不读缓存：`manifest:<toml 摘要>:<根源闭包摘要>`（源码 + manifest 现场算） | —（依赖源码变化即换地址） |
 | 依赖模块顺序 | 不读缓存：按（内容键, 模块名）确定性排序 | —（同一输入恒得同一顺序） |
 
 `buildViewKey` / `checkIn` 已随 `views` / `check-outcome` 删除；包的构建输入由
@@ -58,7 +55,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 缓存 key 里的「编译器」段不是二进制指纹，而是**内容身份**：
 
 - 编译器包（本包模块含 `Vuna.Compiler.Loader.Fingerprint`）的身份 = 本包源闭包（模块名 → 内容哈希，
-  按名排序）+ 依赖身份摘要 + `vuna-compiler-id 1`（`Fingerprint.compilerIdOf`）；
+  按名排序）+ 依赖身份摘要（源码闭包 + manifest）+ `vuna-compiler-id 1`（`Fingerprint.compilerIdOf`）；
 - 其他包的身份 = 构建它的编译器的身份（继承）。
 
 `vuna build` / `vuna compile` 把身份写进产物目录的 `build-id`（与 `build.sh` 同级）；
@@ -113,7 +110,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | --- | --- | --- |
 | `contentHash` | 文件 `(相对路径, 字节)` | 完整性、包对象地址、manifest `hash` |
 | `ifaceHash` / `miIfaceHash` / `hashOfIface` | 下游可见语义面（span/path、`opaque`/`abstract` 体排除） | 逻辑指纹：依赖失效 |
-| `pkgIfaceHash` | 模块摘要按名排序聚合 | 包接口身份（依赖身份） |
 | `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（manifest `identity` / registry / `vuna deps pin`；不参与缓存失效） |
 
 `implHash` / `pkgImplHash` 已随产物缓存删除。
@@ -136,11 +132,11 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   build 的 `.output` 由 `build-meta.json` 判新鲜。
 - **模块顺序不落盘**：依赖模块接口的串接顺序由编译器按（内容键, 模块名）确定性排序，
   与缓存状态无关；同一输入恒得同一顺序。
-- **pkg-summary 的完整性标记是「已写接口的模块名集合」**：摘要缺失，或集合未覆盖该包
-  对外承诺的 `[export]` 模块面时无法确认依赖接口齐全 ⇒ 回退全量（`iface-reject=pkg-summary`）。
-  键含包的 `implicit-prelude` 开关，切换开关即换键，不会复用旧摘要。
-- **pkg-summary 缺失的回退**：`manifest:<toml 摘要>:<根源闭包摘要>`；依赖源闭包在回退里，
-  所以依赖源码变了而依赖方先跑，也必然换地址，不会复用旧判定。
+- **依赖接口按地址探测**：读依赖接口时逐模块探测 `objects/module-iface/<addr>`，缺失的
+  内部模块跳过；该包对外承诺的 `[export]` 模块面必须全部读得到，否则整包回退全量
+  （`iface-reject=dep-iface-missing`）。没有单独的覆盖集对象。
+- **依赖身份由源码 + manifest 现场算**：`manifest:<toml 摘要>:<根源闭包摘要>`，不读身份快照。
+  依赖源码（含注释）变化 ⇒ 依赖方地址变化 ⇒ 一次未命中；换根目录 / 换缓存状态不影响结果。
 
 ## roots 与 GC
 
@@ -154,8 +150,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
     布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉；
   - 候选 = `objects/module-iface` 里 mtime 早于宽限窗口（默认 3600s）的文件；
   - `--max-size` 有值时按 mtime 从旧到新淘汰，直到降到上限以下；
-  - `objects/pkg/` 永不进入候选（源对象族归 `clean --packages`），`objects/pkg-summary`
-    是身份记录，也不进入候选。
+  - `objects/pkg/` 永不进入候选（源对象族归 `clean --packages`）。
 
 ## 观测
 
@@ -166,8 +161,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 没覆盖 `[export].modules` 的全部模块（日志带 `closure=`/`required=`/`covered=`/`missing=`） |
 | `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（写覆盖）⇒ 不再补跑第二遍 lib check |
-| `iface-reject=pkg-summary` | 依赖包缺 `pkg-summary`，或已写集合未覆盖导出面 ⇒ 回退全量 |
-| `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `pkg-summary` 还是 manifest 回退 |
+| `iface-reject=dep-iface-missing` | 依赖包的导出面接口没读全 ⇒ 回退全量 |
+| `dep-identity=<pkg> verdict=manifest` | 依赖身份由源码 + manifest 现场算 |
 | `store-gc candidates=… delete=… total=…` | GC 决策 |
 
 `VUNA_LOG=debug` 打开。
@@ -181,10 +176,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 - **warning 可能不完整**：`-W` / `--deny-warnings` 强制本包模块重新精化（依赖包仍复用接口），
   普通 `vuna check` 不显示 warning。
-- **依赖未重跑时回退身份含源闭包**：`objects/pkg-summary` 缺失或未写全（依赖还没 check、
-  只检查了部分模块，或依赖源码变了还没重跑）时，回退值是
-  `manifest:<toml 摘要>:<根源闭包摘要>`；依赖方先跑也不会复用旧判定，代价是依赖**未重跑**时
-  注释变更也会多一次 miss。
+- **依赖源码变化（含注释）会让依赖方多一次未命中**：依赖身份是
+  `manifest:<toml 摘要>:<根源闭包摘要>`，没有 `ifaceHash` 快照来吸收注释 / opaque 体变化。
+  这是删除身份对象后的取舍；依赖方先跑也不会复用旧判定。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **没有 check 结果重放**：失败的 `check` 每次都重新精化（干净模块仍复用），不再落盘 Pass/Fail。

@@ -94,7 +94,7 @@
     按版本解析出 `(源, hash)`，写回 `[dependencies]` 的内联表行并自动 fetch；
     `--dry-run` 只打印，`--no-fetch` 只改 manifest。索引是便利层，不是身份真源；
   - `vuna store clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：一个 store 根、
-    两类生命周期——`--store` 清缓存族（`objects/module-iface`、`objects/pkg-summary`，
+    两类生命周期——`--store` 清缓存族（`objects/module-iface`，
     并清掉遗留的 `views/`），`--packages` 清包对象族（`objects/pkg` + `pkgs` + `tmp`），`--gc` 只删未被
     工作区/项目 roots 引用的包对象，`--all` 两者都清；不带 flag 时只清缓存族。没有树内
     `*.iface`，也没有 `--iface`。见 [cache.md](cache.md) / [package-store.md](package-store.md)；

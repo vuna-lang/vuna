@@ -3,8 +3,8 @@
 --
 -- 一个 store 根、两类生命周期：
 --
--- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface，
---   以及身份记录 pkg-summary）、`views/{bin,testbin}/`、`.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
+-- - `--store`：**缓存族** —— `objects/module-iface/`、`views/{bin,testbin}/`、`.tmp/`。
+--   保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
 -- - `--gc`：与 `--packages` 连用，只删包对象族里**未被引用**的对象；引用集是当前包与
@@ -74,18 +74,11 @@ cleanTargets wantStore wantPackages wantGc dry dir =
 cacheKindNames : List String
 cacheKindNames = ["module-iface"]
 
--- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让依赖身份
--- 漂移），只有显式 `clean --store` 才清理。
-identityKindNames : List String
-identityKindNames = ["pkg-summary"]
-
 -- | 内部：缓存族的清理作用域：各 kind 目录 + 两类视图产物 / `.tmp`。
 -- 不碰包对象族（`objects/pkg`）、`pkgs` 与 `roots`。
 cacheScopesOf : String -> List String
 cacheScopesOf root =
-  append
-    (map (\k => "${root}/objects/${k}") (append cacheKindNames identityKindNames))
-    ["${root}/views", "${root}/.tmp"]
+  append (map (\k => "${root}/objects/${k}") cacheKindNames) ["${root}/views", "${root}/.tmp"]
 
 -- | 内部：清缓存族（`--store`）：作用域见 [Vuna.Clean.cacheScopesOf]，`dry` 时只统计不删。
 cleanStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
@@ -400,7 +393,7 @@ gcFilesOf root =
   do
     objs <- walkFiles 1048576 "${root}/objects"
     let
-      excluded = ["${root}/objects/pkg/", "${root}/objects/pkg-summary/"]
+      excluded = ["${root}/objects/pkg/"]
     in pure (filter (\p => not (anyLine (\pre => startsWith pre p) excluded)) objs)
 
 -- | 内部：文件候选：名字（对象摘要）不在 roots 里，且 mtime 早于宽限窗口；带 size 便于容量判定。

@@ -13,7 +13,6 @@
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
 | **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna deps pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
-| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`objects/pkg-summary` 载荷里的接口身份；摘要键另含包 manifest 的 `implicit-prelude` 开关） | 下游可见接口/透明体变化 |
 
 规范编码在 `Vuna.Compiler.Frontend.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
 `Base.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
@@ -22,9 +21,9 @@ roundtrip 自检：`examples/infra` 的 `pkg-canon-rt` / `pkg-identity-rt`。
 **为什么 `path` 依赖不写摘要**（D12）：`path` 是工作树共变的可变输入，正确性由
 「源内容哈希 → 模块接口哈希 → 依赖接口哈希链」保证；把摘要写进 manifest 会让每次改
 依赖源码都要改上游 manifest，把「完整性」错配到「日常开发」。`git` / `url` 是不可变源，
-必须带 `hash`。依赖**已 check** 时依赖方只消费 `pkgIfaceHash`（注释不脏）；依赖源码变了
-但依赖还没重跑时，回退身份带上该根源闭包摘要，依赖方多一次 miss 但不会假命中
-（见 [cache.md](cache.md) 的「依赖未重跑时回退身份含源闭包」）。
+必须带 `hash`。依赖身份由依赖根的**源码闭包 + manifest** 现场算
+（`manifest:<toml 摘要>:<根源闭包摘要>`，见 [cache.md](cache.md)），不读独立身份对象；
+依赖源码变化（含注释）会让依赖方多一次 miss，但不会假命中。
 
 ## 2. store 布局
 
@@ -41,7 +40,7 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
-- **同一个根、两类生命周期**（D15）：缓存族（`objects/module-iface/`、`objects/pkg-summary/`）
+- **同一个根、两类生命周期**（D15）：缓存族（`objects/module-iface/`）
   由 `vuna store clean --store` / `vuna store gc` 管理；包对象族（`objects/pkg/`、`pkgs/`、
   `tmp/`）由 `clean --packages` 管理。`roots/` 不属于任何一族：只由 `vuna deps fetch` 追加，
   供 `clean --packages --gc` 判引用（项目目录已消失的项目根由 `store gc` 裁掉）。包对象放在
@@ -88,7 +87,7 @@ DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete
 ## 5. 清理
 
 ```console
-vuna store clean --store                  # 清缓存族（objects/module-iface、objects/pkg-summary、遗留 views/）
+vuna store clean --store                  # 清缓存族（objects/module-iface、遗留 views/）
 vuna store clean --packages [--dry-run]   # 清包对象族（objects/pkg + pkgs + tmp）
 vuna store clean --packages --gc [DIR]    # 只删未被工作区/项目 roots 引用的包对象
 vuna store clean --all                    # 两族都清
