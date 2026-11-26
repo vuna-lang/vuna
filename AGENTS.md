@@ -23,6 +23,8 @@
 4. 需要时再下钻：`docs/reference/`（语言 / 类型 / Core / 编译器 / 包 / 工具 / 测试参考页）、
    [debt](docs/reference/debt.md)。
 
+人类贡献者从 [CONTRIBUTING.md](CONTRIBUTING.md) 开始：分支、提交整理、PR 标签门禁与合并方式。
+
 **定位符号**用 `vuna map find` / `vuna map impact` / `vuna api`（规程见技能 `repo-navigation`）；
 **不要做的事**：通读全仓、读 `seed/` 或 `docs/api.html`（生成物）。
 
@@ -81,15 +83,18 @@
 
 细则见 `.agents/rules/`；下面每条都在对应文件里有完整口径。
 
-- **每轮开工先 rebase 主分支**（`git fetch origin main` → `git rebase main`），历史保持线性
-  （[workflow.md](.agents/rules/workflow.md)）。
+- **`main` 只读，所有改动走 PR**：`git fetch origin` → 从 `origin/main` 切 `<type>/<slug>`
+  分支；开 PR 前用 `git rebase -i origin/main` 整理提交；`main` 只接受 **rebase merge**。
+  禁止直推 `main` / `master`，禁止对 `main` force push
+  （[workflow.md](.agents/rules/workflow.md)、技能 `vuna-pr`）。
 - **改动只在副 worktree 进行**：所有源码 / 文档改动都在独立 worktree
-  （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取、
-  rebase 与 cherry-pick；收尾按技能 `worktree` 的脚本把提交带回主仓并 teardown
+  （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取与
+  `git pull --ff-only`；收尾改为 push 分支 → 开 PR → 合并 → teardown，**不再 cherry-pick 回主仓**
   （[workflow.md](.agents/rules/workflow.md)）。
 - **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换（先用
   `nix build .#vuna --out-link result` 固定二进制），且独立成
-  `chore(seed): ...` 提交（[workflow.md](.agents/rules/workflow.md)）。
+  `chore(seed): ...` 提交；含 seed 的 PR 加 `seed` 标签并优先合并
+  （[workflow.md](.agents/rules/workflow.md)）。
 - **改完代码跑 `nix run .#vuna -- fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量
   `nix build` / `nix flake check`（[verification.md](.agents/rules/verification.md)）。
 - **改 `packages/compiler/` 后先验证「旧种子能编译新源码」**（`nix build .#vuna-seed` 或 CI 的
@@ -131,7 +136,13 @@ nix run .#ci -- pr                        # push / PR 的最小门禁（fmt + li
 nix run .#ci -- deep                      # 本地完整便宜门禁（与 CI 的 deep 同一条命令）
 nix run .#ci -- --list                    # 门禁分组：pr / deep / suite / backends / native / browser
 nix flake check                           # 本地全量兜底（CI 不再用；清单见 testing-checks.md）
-git config core.hooksPath .githooks       # 启用 pre-commit（devShell/direnv 自动设置）
+git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devShell/direnv 自动设置）
+git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）
+gh pr create --base main --title ...      # 开 PR；标题/描述按技能 vuna-pr
+gh pr checks <n> --watch                  # 等 PR 门禁
+gh pr merge <n> --rebase                  # 线性合并（仅用户明确授权后）
+git pull --ff-only                        # 主仓同步
+nix/tools/github-branch-protection.sh     # 应用 main 的 ruleset（幂等；见技能 vuna-pr）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
 ```
 
