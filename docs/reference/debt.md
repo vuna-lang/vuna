@@ -82,7 +82,6 @@ ID 是稳定引用（`层前缀-序号`）：条目关闭即删除该行，ID �
 | LD-24 · D | 导出表索引只迁移了一半：`modulesExporting*In` 用索引，其余限定名 / 命名空间路径仍 `exportsOf` 后线性扫；`namespacesOfWith` 每个模块重建整张 module 表（O(n²)），列表版与索引版两套实现需同步修 | `Loader/Modules.vuna`、`Loader/Resolve.vuna` | 后续 |
 | LD-25 · C | unused-import 的删除编辑：`importStartsLine` 用 `spanStartCol == 8 或 18` 判断，缩进 / tab 下静默不给 quickfix；`importRemovalSpan` 的 `endOffset` 指向本行行首而非下一行行首，offset 与 line/col 不自洽 | `Loader/Flatten.vuna` | 后续 |
 | LD-26 · D | 加载流程残留：`providers = []` 参与 re-export 拼接、`modules1 = modules` / `imports1` 原样透传（已删机制的脚手架）；`fixitiesForSourceIn` 的 `hdr` 两分支同构；`1048576` 在 6 个入口各写一份 | `Loader/Flatten.vuna` | 后续 |
-| LD-27 · A | `Resolve.resolveGlobal` 的构造子回退分支是死代码（`modulesExportingValueIn` 已含 `kind="ctor"`）；`pickCtorOrOver` 空表回 `overCtorName … []`，`pickValueOrOver` 空表回裸短名，同一个「没找到」两种内部形态 | `Loader/Resolve.vuna`、`Loader/Modules.vuna` | 后续 |
 
 ## Elab：声明 / 终止性 / 覆盖率
 

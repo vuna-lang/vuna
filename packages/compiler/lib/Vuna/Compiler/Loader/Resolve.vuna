@@ -690,27 +690,15 @@ resolveGlobal modules label prefix ns imports scope name =
               \pairs =>
                 case pairs of
                   [] =>
-                    Vuna.Compiler.Base.Common.bind (ctorCandidates modules prefix ns imports name) (
-                        \cands =>
-                          case cands of
-                            [] =>
-                              Vuna.Compiler.Base.Common.bind (modulesExportingCtorIn ns.nsModuleTbl ns.nsOpenNames name) (
-                                  \cpairs =>
-                                    case cpairs of
-                                      [] =>
-                                        if HashMap.member name ns.nsTypeSet then
-                                          OkC (mangle prefix name)
-                                        else
-                                          Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
-                                              \tpairs =>
-                                                case tpairs of
-                                                  [] => onErrDiag (appendMessage "${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}") (onErrDiag (appendMessage (traitImportHint name)) (rnNoLoc1 (UnknownVariable name) name))
-                                                  _ => Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "name" name tpairs) (\p => OkC (secondOf p).target)
-                                            )
-                                      _ => OkC (pickCtorOrOver name (nubNames (map pairExportTarget cpairs)))
-                                )
-                            _ => OkC (pickCtorOrOver name cands)
-                      )
+                    if HashMap.member name ns.nsTypeSet then
+                      OkC (mangle prefix name)
+                    else
+                      Vuna.Compiler.Base.Common.bind (modulesExportingTypeIn ns.nsModuleTbl ns.nsOpenNames name) (
+                          \tpairs =>
+                            case tpairs of
+                              [] => onErrDiag (appendMessage "${suggest name (append ns.nsValues (append ns.nsCtors (append ns.nsTypes scope)))}") (onErrDiag (appendMessage (traitImportHint name)) (rnNoLoc1 (UnknownVariable name) name))
+                              _ => Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "name" name tpairs) (\p => OkC (secondOf p).target)
+                        )
                   _ =>
                     case ctorPairTargets modules pairs of
                       [] => OkC (pickValueOrOver name pairs)
@@ -731,11 +719,11 @@ valuePairTargets modules ((m, e) :: rest) =
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
   in if isCtor then valuePairTargets modules rest else (::) e.target (valuePairTargets modules rest)
 
--- | 从候选 target 里选唯一名；多个不同 target 编码成重载值标记名，交给精化器按期望类型选。
+-- | 从候选 target 里选唯一名；0 个或多个都编码成重载候选名。
 pickValueOrOver : String -> List (String, ExportEntry) -> String
 pickValueOrOver name pairs =
   case nubNames (map pairExportTarget pairs) of
-    [] => name
+    [] => reservedText (RsOverValue name [])
     [t] => t
     targets => reservedText (RsOverValue name targets)
 
