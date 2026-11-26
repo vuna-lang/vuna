@@ -196,7 +196,7 @@ let v_entryIsActionM = (fun (mc0 : Vuna_dIr_dModel.t_IrEntry B_dData_dMaybe.t_Ma
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 460 "Vuna/Compiler/Driver/SplitGen.vuna"
+# 462 "Vuna/Compiler/Driver/SplitGen.vuna"
 let rec v_splitModuleFiles = (fun (mc0 : t_SplitGenCtx) (mc1 : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> (match dtb__64 with
   | { B_dData_dPair.f_Pair_first = dtb__66; B_dData_dPair.f_Pair_second = dtb__67 } -> (let unit = (v_splitUnitOfModule dtb__66) in (let unitDatas = ((v_datasOfUnit mc0) dtb__66) in (let unitDefs = ((v_defsOfUnit mc0) dtb__66) in (let qc = { Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcUnit = unit; Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDefs = (mc0).f_SplitGenCtx_sgcDefUnitT; Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDatas = (mc0).f_SplitGenCtx_sgcDataUnitT } in (let envU = ((Lowering_dEnv.v_lwEnvWithUnit unit) (mc0).f_SplitGenCtx_sgcEnv) in (match (((Lowering_dProgram.v_lowerUnitCheckedFrom envU) unitDatas) unitDefs) with
@@ -222,7 +222,7 @@ let rec v_splitModuleFiles = (fun (mc0 : t_SplitGenCtx) (mc1 : (string, Frontend
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 488 "Vuna/Compiler/Driver/SplitGen.vuna"
+# 490 "Vuna/Compiler/Driver/SplitGen.vuna"
 let v_splitMainFile = (fun (ctx : t_SplitGenCtx) (printResult : bool) -> (let entryUnit = (v_splitUnitOfModule Driver_dOwner.v_entryOwner) in (let entryDefs = ((v_defsOfUnit ctx) Driver_dOwner.v_entryOwner) in (let entryDatas = ((v_datasOfUnit ctx) Driver_dOwner.v_entryOwner) in (let qc = { Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcUnit = entryUnit; Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDefs = (ctx).f_SplitGenCtx_sgcDefUnitT; Vuna_dTarget_dOcaml_dDecl.f_QualCtx_qcDatas = (ctx).f_SplitGenCtx_sgcDataUnitT } in (let envU = ((Lowering_dEnv.v_lwEnvWithUnit entryUnit) (ctx).f_SplitGenCtx_sgcEnv) in (match (((Lowering_dProgram.v_lowerUnitCheckedFrom envU) entryDatas) entryDefs) with
   | Base_dDiag.C_Check_ErrC (dtb__76) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__76)))
   | Base_dDiag.C_Check_OkC (dtb__77) -> (match (Lowering_dEntry.v_lowerEntryOf (ctx).f_SplitGenCtx_sgcAllDefs) with
@@ -254,7 +254,7 @@ let v_splitWithOwners = (fun (env : Lowering_dEnv.t_LwEnv) (modules : (string, F
   | Base_dDiag.C_Check_ErrC (dtb__87) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__87)))
   | Base_dDiag.C_Check_OkC (dtb__88) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_splitMainFile ctx) printResult)) (fun mainFileR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match mainFileR with
   | Base_dDiag.C_Check_ErrC (dtb__89) -> (Base_dDiag.C_Check_ErrC (dtb__89))
-  | Base_dDiag.C_Check_OkC (dtb__90) -> (let files = (B_dData_dList.C_List__x58__x58_ ({ Driver_dSplit.f_SplitFile_splitName = (Vuna_dTarget_dOcaml_dAssembly.v_runtimeUnit ^ ".ml"); Driver_dSplit.f_SplitFile_splitText = runtimeText; Driver_dSplit.f_SplitFile_splitDeps = B_dData_dList.C_List_Nil }, (B_dData_dList.C_List__x58__x58_ ({ Driver_dSplit.f_SplitFile_splitName = (Vuna_dTarget_dOcaml_dAssembly.v_deflocsUnit ^ ".ml"); Driver_dSplit.f_SplitFile_splitText = deflocsText; Driver_dSplit.f_SplitFile_splitDeps = (B_dData_dList.C_List__x58__x58_ (Vuna_dTarget_dOcaml_dAssembly.v_runtimeUnit, B_dData_dList.C_List_Nil)) }, ((B_dData_dList.v_append dtb__88) (B_dData_dList.C_List__x58__x58_ (dtb__90, B_dData_dList.C_List_Nil))))))) in (match (v_checkSplitNames files) with
+  | Base_dDiag.C_Check_OkC (dtb__90) -> (let files = ((Driver_dSplit.v_pruneSplitFiles (B_dData_dList.C_List__x58__x58_ (Vuna_dTarget_dOcaml_dAssembly.v_runtimeUnit, (B_dData_dList.C_List__x58__x58_ (Vuna_dTarget_dOcaml_dAssembly.v_deflocsUnit, (B_dData_dList.C_List__x58__x58_ ((Driver_dSplit.v_splitUnitOfFile dtb__90), B_dData_dList.C_List_Nil))))))) (B_dData_dList.C_List__x58__x58_ ({ Driver_dSplit.f_SplitFile_splitName = (Vuna_dTarget_dOcaml_dAssembly.v_runtimeUnit ^ ".ml"); Driver_dSplit.f_SplitFile_splitText = runtimeText; Driver_dSplit.f_SplitFile_splitDeps = B_dData_dList.C_List_Nil }, (B_dData_dList.C_List__x58__x58_ ({ Driver_dSplit.f_SplitFile_splitName = (Vuna_dTarget_dOcaml_dAssembly.v_deflocsUnit ^ ".ml"); Driver_dSplit.f_SplitFile_splitText = deflocsText; Driver_dSplit.f_SplitFile_splitDeps = (B_dData_dList.C_List__x58__x58_ (Vuna_dTarget_dOcaml_dAssembly.v_runtimeUnit, B_dData_dList.C_List_Nil)) }, ((B_dData_dList.v_append dtb__88) (B_dData_dList.C_List__x58__x58_ (dtb__90, B_dData_dList.C_List_Nil)))))))) in (match (v_checkSplitNames files) with
   | Base_dDiag.C_Check_ErrC (dtb__91) -> (Base_dDiag.C_Check_ErrC (dtb__91))
   | Base_dDiag.C_Check_OkC (dtb__92) -> (match (v_checkSplitAcyclic files) with
   | Base_dDiag.C_Check_ErrC (dtb__93) -> (Base_dDiag.C_Check_ErrC (dtb__93))

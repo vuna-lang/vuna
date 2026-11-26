@@ -21,28 +21,24 @@ let rec v_vlen = (fun xs -> (match xs with
 ))
 
 # 40 "Base/Data/Vec.vuna"
-let rec v_get = (fun mc0 (mc1 : B_dData_dFin.t_Fin) -> (match mc0 with
-  | C_Vec__x58__x58_ (dtb__6, dtb__7) -> (match mc1 with
-  | B_dData_dFin.C_Fin_FSucc (dtb__8) -> ((v_get dtb__7) dtb__8)
-  | B_dData_dFin.C_Fin_FZero -> dtb__6
-  | _ -> failwith "DT: impossible branch"
-)
+let rec v_get = (fun mc0 (mc1 : int) -> (match mc0 with
+  | C_Vec__x58__x58_ (dtb__6, dtb__7) -> (let dtnat__8 = mc1 in (if (dtnat__8 = 0) then dtb__6 else (let dtb__9 = (dtnat__8 - 1) in ((v_get dtb__7) dtb__9))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 45 "Base/Data/Vec.vuna"
 let rec v_getMaybe = (fun mc0 (mc1 : int) -> (match mc0 with
-  | C_Vec__x58__x58_ (dtb__9, dtb__10) -> (let dtnat__11 = mc1 in (if (dtnat__11 = 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__9)) else (let dtb__12 = (dtnat__11 - 1) in ((v_getMaybe dtb__10) dtb__12))))
+  | C_Vec__x58__x58_ (dtb__10, dtb__11) -> (let dtnat__12 = mc1 in (if (dtnat__12 = 0) then (B_dData_dMaybe.C_Maybe_Just (dtb__10)) else (let dtb__13 = (dtnat__12 - 1) in ((v_getMaybe dtb__11) dtb__13))))
   | C_Vec_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 51 "Base/Data/Vec.vuna"
-let[@tail_mod_cons] rec v_tabulate = (fun (mc0 : int) mc1 -> (let dtnat__13 = mc0 in (if (dtnat__13 = 0) then C_Vec_Nil else (let dtb__14 = (dtnat__13 - 1) in (C_Vec__x58__x58_ ((mc1 B_dData_dFin.C_Fin_FZero), ((v_tabulate dtb__14) (fun (i : B_dData_dFin.t_Fin) -> (mc1 (B_dData_dFin.C_Fin_FSucc (i)))))))))))
+let[@tail_mod_cons] rec v_tabulate = (fun (mc0 : int) mc1 -> (let dtnat__14 = mc0 in (if (dtnat__14 = 0) then C_Vec_Nil else (let dtb__15 = (dtnat__14 - 1) in (C_Vec__x58__x58_ ((mc1 0), ((v_tabulate dtb__15) (fun i -> (mc1 (bi_natSucc i))))))))))
 
 # 65 "Base/Data/Vec.vuna"
 let[@tail_mod_cons] rec v_vecToList = (fun mc0 -> (match mc0 with
-  | C_Vec__x58__x58_ (dtb__15, dtb__16) -> (B_dData_dList.C_List__x58__x58_ (dtb__15, (v_vecToList dtb__16)))
+  | C_Vec__x58__x58_ (dtb__16, dtb__17) -> (B_dData_dList.C_List__x58__x58_ (dtb__16, (v_vecToList dtb__17)))
   | C_Vec_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))

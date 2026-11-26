@@ -205,10 +205,15 @@ let dtp_effectId (s : string) : int =
    任务时设置它）；非调度器上下文（-1）有一份独立栈。状态放在 `Domain.DLS` 里：
    每个 domain（线程）有自己的 cleanup 栈，domain 之间互不干扰。
    注意：cleanup 在 handler 退出点执行，只能访问**外层** handler（当前 handler
-   的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。 *)
+   的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。
+   表示是「数组 + 深度」：push / pop / mark 都是 O(1)，pop 时清槽释放闭包。 *)
+type dtp_cleanup_stack = {
+  mutable dtp_cs_items : (int -> int) array;
+  mutable dtp_cs_len : int;
+}
 type dtp_cleanup_state = {
   mutable dtp_cs_fiber : int;
-  mutable dtp_cs_stacks : (int * (unit -> unit) list ref) list;
+  mutable dtp_cs_stacks : (int * dtp_cleanup_stack) list;
 }
 let dtp_cleanup_stateK =
   Domain.DLS.new_key (fun () -> { dtp_cs_fiber = -1; dtp_cs_stacks = [] })
@@ -225,40 +230,22 @@ let dtp_cleanup_stack_of (fid : int) =
   match dtp_cs_lookup fid s.dtp_cs_stacks with
   | Some r -> r
   | None ->
-    let r = ref [] in
+    let r = { dtp_cs_items = Array.make 8 (fun _ -> 0); dtp_cs_len = 0 } in
     s.dtp_cs_stacks <- (fid, r) :: s.dtp_cs_stacks;
     r
 let dtp_cleanup_current () = dtp_cleanup_stack_of (dtp_cleanup_fiber_get ())
-let dtp_cleanup_mark () = List.length !(dtp_cleanup_current ())
-let dtp_cleanup_push (f : int -> int) : int =
-  let r = dtp_cleanup_current () in
-  r := (fun () -> ignore (f 0)) :: !r;
-  0
-let dtp_cleanup_pop (_ : int) : int =
-  let r = dtp_cleanup_current () in
-  (match !r with _ :: rest -> r := rest | [] -> ());
-  0
-let dtp_cleanup_run_to (mark : int) =
-  let r = dtp_cleanup_current () in
-  let rec go fuel =
-    if fuel <= 0 then ()
-    else if List.length !r <= mark then ()
-    else match !r with
-      | [] -> ()
-      | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
-  in
-  (* 预算 = 进入时的待跑条数：每轮 pop 一条必然递减，不需要魔法上限。 *)
-  let pending = List.length !r - mark in
-  if pending <= 0 then () else go pending
+let dtp_cleanup_mark () = (dtp_cleanup_current ()).dtp_cs_len
+let dtp_cleanup_drain_to (s : dtp_cleanup_stack) (mark : int) =
+  while s.dtp_cs_len > mark do
+    let i = s.dtp_cs_len - 1 in
+    let f = s.dtp_cs_items.(i) in
+    s.dtp_cs_items.(i) <- (fun _ -> 0);
+    s.dtp_cs_len <- i;
+    (try ignore (f 0) with _ -> ())
+  done
+let dtp_cleanup_run_to (mark : int) = dtp_cleanup_drain_to (dtp_cleanup_current ()) mark
 let dtp_cleanup_run_all_for (fid : int) =
-  let r = dtp_cleanup_stack_of fid in
-  let rec go fuel =
-    if fuel <= 0 then ()
-    else match !r with
-      | [] -> ()
-      | f :: rest -> r := rest; (try f () with _ -> ()); go (fuel - 1)
-  in
-  go (List.length !r)
+  dtp_cleanup_drain_to (dtp_cleanup_stack_of fid) 0
 let dtp_cleanup_forget (fid : int) =
   let s = dtp_cleanup_state () in
   s.dtp_cs_stacks <- List.filter (fun (k, _) -> k <> fid) s.dtp_cs_stacks
@@ -266,41 +253,66 @@ let dtp_cleanup_reset () =
   let s = dtp_cleanup_state () in
   s.dtp_cs_stacks <- [];
   s.dtp_cs_fiber <- -1
-
-(* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
-   bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
-(* 当前 handler 的 self 栈（每个 Domain 一份）：opH 执行期间把
-   (keyId,nameId,key,name,ret,h) 压栈，`prim_effectSelf` 用它把子计算重新装进同一个 handler。 *)
-let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : (int * int * string * string * Obj.t * Obj.t) list))
+(* 当前 handler 的 self 栈（每个 Domain 一份）：opH 执行期间压入
+   (keyId,nameId,key,name,ret,h)，`prim_effectSelf` 用它把子计算重新装进同一个 handler。
+   帧在一次安装内不变，只分配一次；每次 perform 只做一次 cons。 *)
+let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : Obj.t list))
 let dtp_effect_run key name kid nid ret h th =
   let mark = dtp_cleanup_mark () in
-  let run_cleanups () = dtp_cleanup_run_to mark in
-  (* 外层 Obj.magic 与旧内联实现一致：effc 的 continue 返回 Obj.t，去掉它会让
-     handler 的 answer 类型被钉成 Obj.t。 *)
-  Obj.magic
-    (match Effect.Deep.match_with th ()
-      { retc = (fun x -> (Obj.magic ret) x);
-        exnc = (fun e -> raise e);
-        effc = (fun (type a) (eff : a Effect.t) -> match eff with
-          | Perform (k, n, kk, nn, payload) when k = kid && n = nid ->
-            Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
-              let st = Domain.DLS.get dtp_selfK in
-              let saved = !st in
-              st := (kid, nid, key, name, Obj.repr ret, Obj.repr h) :: saved;
-              (try
-                 let r = (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)) in
-                 st := saved; r
-               with e -> st := saved; raise e))
-          | _ -> None) }
-    with
-    | r -> run_cleanups (); r
-    | exception e -> run_cleanups (); raise e)
+  let st = Domain.DLS.get dtp_selfK in
+  (* 帧在一次安装内不变：只分配一次，resumption 闭包捕获它（1 个字段），
+     每次 perform 只 cons 一次。 *)
+  let frame = Obj.repr (kid, nid, key, name, Obj.repr ret, Obj.repr h) in
+  (* 外层 Obj.magic 与 continuation 的 Obj.t 表示一致：effc 的 continue 返回 Obj.t，
+     去掉它会让 handler 的 answer 类型被钉成 Obj.t。 *)
+  try
+    let r =
+      Obj.magic
+        (match Effect.Deep.match_with th ()
+          { retc = (fun x -> (Obj.magic ret) x);
+            exnc = (fun e -> raise e);
+            effc = (fun (type a) (eff : a Effect.t) -> match eff with
+              | Perform (k, n, _, _, payload) when k = kid && n = nid ->
+                Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
+                  let saved = !st in
+                  st := frame :: saved;
+                  (try
+                     let r = (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)) in
+                     st := saved; r
+                   with e -> st := saved; raise e))
+              | _ -> None) }
+        with
+        | r -> r
+        | exception e -> raise e)
+    in
+    dtp_cleanup_run_to mark; r
+  with e -> dtp_cleanup_run_to mark; raise e
 let dtp_effect_handle_id key name kid nid ret h th =
   fun u -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) u)
 let dtp_effect_self th =
   match !(Domain.DLS.get dtp_selfK) with
-  | (kid, nid, key, name, ret, h) :: _ -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) 0)
+  | top :: _ ->
+    let (kid, nid, key, name, ret, h) = Obj.obj top in
+    dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) 0)
   | [] -> failwith "self outside handler"
+let dtp_cleanup_push (f : int -> int) : int =
+  let s = dtp_cleanup_current () in
+  if s.dtp_cs_len = Array.length s.dtp_cs_items then begin
+    let b = Array.make (2 * s.dtp_cs_len + 8) (fun _ -> 0) in
+    Array.blit s.dtp_cs_items 0 b 0 s.dtp_cs_len;
+    s.dtp_cs_items <- b
+  end;
+  s.dtp_cs_items.(s.dtp_cs_len) <- f;
+  s.dtp_cs_len <- s.dtp_cs_len + 1;
+  0
+let dtp_cleanup_pop (_ : int) : int =
+  let s = dtp_cleanup_current () in
+  if s.dtp_cs_len > 0 then begin
+    let i = s.dtp_cs_len - 1 in
+    s.dtp_cs_items.(i) <- (fun _ -> 0);
+    s.dtp_cs_len <- i
+  end;
+  0
 let dtp_output_mutex = Mutex.create ()
 let dtp_with_output_lock (f : unit -> int) : int =
   Mutex.lock dtp_output_mutex;
