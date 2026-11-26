@@ -99,7 +99,7 @@
     `packages/compiler/lib/Vuna/Compiler/Base/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
-  CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
+  CI 侧由 `cli/steps_native/41_workspace_build` 覆盖它的 build / run / test / fmt / doc。
 - 可执行入口：`vuna build` 要求入口 `main : Eff r a`（行里的内建宿主标签由 entry 预装 handler，
   自定义效应必须先 handle 成 `Nil`；退出码用 `exitWith` / `Base.Effect.Exit`）。
   没有 manifest 级能力/特权/信任门控：`prim_*`（纯原语）对任何包（用户包、ad-hoc 文件）
