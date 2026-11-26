@@ -41,7 +41,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
-| 包级 `check` | 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自的状态目录） | 精化脏模块；依赖导出面缺件 ⇒ 回退全量 |
+| 包级 `check` | 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自的状态目录） | 精化脏模块；依赖导出面缺件 ⇒ 递归构建依赖，仍缺才回退全量 |
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
 | 同树重复 `build` | `<pkg>/.output/build-meta.json` 与当前输入一致（含二进制身份 `cache-tag`） | 重跑 codegen + `ocamlopt` |
 | 依赖身份 | 不读缓存：`manifest:<toml 摘要>:<根源闭包摘要>`（源码 + manifest 现场算） | —（依赖源码变化即换地址） |
@@ -133,8 +133,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - **模块顺序不落盘**：依赖模块接口的串接顺序由编译器按（内容键, 模块名）确定性排序，
   与缓存状态无关；同一输入恒得同一顺序。
 - **依赖接口按地址探测**：读依赖接口时逐模块探测 `<包状态>/iface/<addr>`，缺失的
-  内部模块跳过；该包对外承诺的 `[export]` 模块面必须全部读得到，否则整包回退全量
-  （`iface-reject=dep-iface-missing`）。没有单独的覆盖集对象。
+  内部模块跳过；该包对外承诺的 `[export]` 模块面缺件时，先**递归 check 该依赖**
+  （深度预算 64，依赖图是 DAG），重探仍缺才整包回退全量（`iface-reject=dep-iface-missing`）。
+  没有单独的覆盖集对象。
 - **依赖身份由源码 + manifest 现场算**：`manifest:<toml 摘要>:<根源闭包摘要>`，不读身份快照。
   依赖源码（含注释）变化 ⇒ 依赖方地址变化 ⇒ 一次未命中；换根目录 / 换缓存状态不影响结果。
 
@@ -163,9 +164,12 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（写覆盖）⇒ 不再补跑第二遍 lib check |
 | `iface-reject=dep-iface-missing` | 依赖包的导出面接口没读全 ⇒ 回退全量 |
 | `dep-identity=<pkg> verdict=manifest` | 依赖身份由源码 + manifest 现场算 |
+| `dep-build=<pkg>` | 依赖导出面缺件 ⇒ 递归 check 该依赖 |
 | `store-gc candidates=… delete=… total=…` | GC 决策 |
 
 `VUNA_LOG=debug` 打开。
+
+结构化观测里递归构建发 `vuna.iface.dep-build` 标记。
 
 **结构化观测**（`VUNA_OBS>=1`）走另一条通道：`Driver/Compile` 与 `Driver/Dt` 的阶段跨度
 （`vuna.load` / `vuna.elab` / `vuna.iface.compute` / `vuna.codegen.split` …）。对象库读/写本身是
