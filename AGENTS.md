@@ -83,8 +83,9 @@
 
 细则见 `.agents/rules/`；下面每条都在对应文件里有完整口径。
 
-- **`main` 只读，所有改动走 PR**：开工前先有 issue（技能 `vuna-issue`）；
-  `git fetch origin` → 从 `origin/main` 切 `<type>/<slug>` 分支；开 PR 前用
+- **`main` 只读，所有改动走 PR**：issue 可选（PR-only 改动加 `no-issue` 标签；需要追踪的
+  复杂工作再按技能 `vuna-issue` 建/领）；`git fetch origin` → 从 `origin/main` 切
+  `<type>/<slug>` 分支；开 PR 前用
   `git rebase -i origin/main` 整理提交；`main` 只接受 **rebase merge**，默认全绿后 auto-merge。
   禁止直推 `main` / `master`，禁止对 `main` force push
   （[workflow.md](.agents/rules/workflow.md)、技能 `vuna-pr`）。
@@ -128,6 +129,7 @@ nix run .#vuna -- fmt <改动的文件/目录>     # 格式化；--check 只检�
 nix run .#vuna -- run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
 nix/tools/dev-loop.sh -p toolchain -- fmt --check . # 树内增量循环（改工具/插件；tooling.md §0）
 nix run .#vuna-run-tests -- --only <owner/family> # 按 owner/family 跑 suite（--list 看 id；用 ~/.vuna/test-store）
+nix run .#vuna-run-tests -- --area compiler-frontend --tier fast # 只跑一个 area 影响面（PR 切片同口径）
 nix run .#vuna-run-tests -- --backend wasm # 后端矩阵：只跑 matrix 允许 wasm 的 case
 nix build .#vuna --out-link result        # 需要固定二进制时才构建（result 可能指向别的产物）
 sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那条先跑过
@@ -135,7 +137,7 @@ nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
 nix run .#ci -- pr                        # push / PR 的最小门禁（fmt + lint + 自检）
 nix run .#ci -- deep                      # 本地完整便宜门禁（与 CI 的 deep 同一条命令）
-nix run .#ci -- --list                    # 门禁分组：pr / deep / suite / backends / native / browser
+nix run .#ci -- --list                    # 门禁分组：pr / gate / slices / deep / suite / backends / native / browser
 nix flake check                           # 本地全量兜底（CI 不再用；清单见 testing-checks.md）
 git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devShell/direnv 自动设置）
 git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）

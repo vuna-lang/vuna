@@ -9,13 +9,14 @@
 
 ## 1. 准备
 
-先确认已有 issue；没有就按 [`.agents/skills/vuna-issue/SKILL.md`](.agents/skills/vuna-issue/SKILL.md)
-查重后创建或精炼。领取时把 issue 标成 `status:in-progress` 并 assign 给自己。
+issue 可选：PR-only 的改动直接切分支，PR 加 `no-issue` 标签；需要追踪的复杂工作再按
+[`.agents/skills/vuna-issue/SKILL.md`](.agents/skills/vuna-issue/SKILL.md) 查重后创建/精炼，
+领取时标 `status:in-progress` 并 assign 给自己。
 
 ```console
-gh issue edit <n> --add-assignee @me --add-label status:in-progress
+gh issue edit <n> --add-assignee @me --add-label status:in-progress  # 有关联 issue 时
 git fetch origin
-git switch -c <type>/<n>-<slug> origin/main
+git switch -c <type>/<slug> origin/main
 git config core.hooksPath .githooks   # devShell / direnv 会自动设置
 ```
 

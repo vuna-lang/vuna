@@ -83,12 +83,13 @@ Agent 在开发、评审或门禁失败时发现问题：
 
 ### area（门禁选择）
 
-`area:*` 表示包内子系统或跨包面：`compiler-frontend`、`compiler-core`、
-`codegen-ocaml`、`codegen-native`、`codegen-wasm`、`runtime`、`ci`、`docs`、`editor`、
-`web`、`seed`、`tests`、`repo`。
+`area:*` 表示包内子系统或跨包面：`compiler-frontend`、`compiler-core`、`ir`、
+`codegen-ocaml`、`codegen-native`、`codegen-wasm`、`base`、`runtime`、`toolchain`、
+`obs`、`editor`、`web`、`seed`、`tests`、`ci`、`docs`、`repo`。
 
-`area:*` 优先决定 `gates` 要跑哪些检查；没有 area 时用 `pkg:*` 映射到默认 scope，
-两者都没有时用 `area:repo`。
+`area:*` 优先决定 `gates` 要跑哪些检查；suite 侧映射到 `nix/checks/slices.nix` 的
+area 切片（只跑该影响面的夹具，完整覆盖由 nightly 的 `suite` 组兜底）。没有 area 时用
+`pkg:*` 映射到默认 scope，两者都没有时用 `area:repo`。
 
 ### 控制
 
@@ -96,7 +97,7 @@ Agent 在开发、评审或门禁失败时发现问题：
 - `needs-info`：等待用户补充信息。
 - `blocked`：被依赖或外部条件阻塞。
 - `breaking`：破坏性改动。
-- `no-issue`：PR 无需关联 issue 的例外。
+- `no-issue`：PR 不关联 issue（PR-only 改动的默认做法）。
 - `deep` / `suite` / `browser`：手动强制跑整组门禁。
 - `backend`：后端矩阵提示；GitHub CI 不跑 wasm/native 矩阵，只在本地
   `nix run .#ci -- backends|native`。
@@ -117,8 +118,8 @@ Agent 在开发、评审或门禁失败时发现问题：
 
 ## PR 与 issue 联动
 
-PR 描述必须包含 `Closes #N` 或 `Refs #N`（`gates / run` 检查）；例外加 `no-issue`。
-文档里的 issue 引用写 `gh#N`，不写裸 `#N`。
+issue 可选：PR-only 改动加 `no-issue` 标签即可；需要关联时在描述里写 `Closes #N` 或
+`Refs #N`（`gates / run` 检查）。文档里的 issue 引用写 `gh#N`，不写裸 `#N`。
 
 `pr-triage` 在 PR 打开/更新时自动：
 

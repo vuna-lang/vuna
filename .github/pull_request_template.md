@@ -1,9 +1,8 @@
 ## 关联
 
-Closes #N / Refs #N
+Closes #N / Refs #N（PR-only 改动写 `no issue` 并加 `no-issue` 标签）
 
-> `.github/workflows/gates.yml` 会检查这里必须有 `Closes #N` 或 `Refs #N`；
-> 无需关联 issue 的例外加 `no-issue` 标签。
+> `.github/workflows/gates.yml` 要求这里有 `Closes #N` / `Refs #N`，或者 PR 带 `no-issue` 标签。
 
 ## 变更
 
