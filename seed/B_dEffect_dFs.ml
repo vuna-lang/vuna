@@ -132,6 +132,9 @@ let v_fsErrorOpHR = (fun (op : t_FsErrorOp) _u -> (match op with
 let v_runFsError = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "fs-error") n) 1044473165) (dtp_effectId n)) v_fsErrorRet) v_fsErrorOpHR) comp))
 
 # 337 "Base/Effect/Fs.vuna"
+let v_runFsResult = (fun comp -> ((v_runFsError "fs-error") (v_runFsHost comp)))
+
+# 341 "Base/Effect/Fs.vuna"
 let v_runFsErrorHost = (fun comp -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_runFsError "fs-error") comp)) (fun res -> (match res with
   | B_dData_dResult.C_Result_Ok (dtb__33) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) dtb__33)
   | B_dData_dResult.C_Result_Err (dtb__34) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dEffect_dHost.v_hostSync ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_eprint dtio_0)) (String.concat "" ["vuna: "; dtb__34; "\n"])))) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dEffect_dHost.v_hostSync ((fun dtio_0 -> B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_exit dtio_0)) 1))) (fun _u -> ((fun msg -> failwith msg) "unreachable: fs error handler")))))

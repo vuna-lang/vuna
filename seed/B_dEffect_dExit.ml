@@ -18,3 +18,6 @@ let v_handleExitHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_ha
 
 # 40 "Base/Effect/Exit.vuna"
 let v_runExitHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleExitHostHost "default") comp)))
+
+# 44 "Base/Effect/Exit.vuna"
+let v_runExitEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runExitHost comp)))

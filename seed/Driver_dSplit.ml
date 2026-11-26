@@ -168,52 +168,29 @@ let v_sortDepEntries = (fun (xs : (string, int) B_dData_dPair.t_Pair B_dData_dLi
 # 370 "Vuna/Compiler/Driver/Split.vuna"
 let v_sortDepsByTie = (fun (ties : (string, int) B_dContainer_dHashMap.t_HashMap) (deps : string B_dData_dList.t_List) -> ((B_dData_dList.v_map B_dData_dPair.v_firstOf) (v_sortDepEntries ((B_dData_dList.v_map (fun (d : string) -> { B_dData_dPair.f_Pair_first = d; B_dData_dPair.f_Pair_second = ((v_tieOf ties) d) })) deps))))
 
-# 387 "Vuna/Compiler/Driver/Split.vuna"
+# 386 "Vuna/Compiler/Driver/Split.vuna"
 let v_encSplitFile = (fun (f : t_SplitFile) (acc : string B_dData_dList.t_List) -> ((Base_dBytes.v_encStr (f).f_SplitFile_splitName) ((Base_dBytes.v_encStr (f).f_SplitFile_splitText) (((Base_dBytes.v_encList Base_dBytes.v_encStr) (f).f_SplitFile_splitDeps) acc))))
 
 # 390 "Vuna/Compiler/Driver/Split.vuna"
-let v_decSplitFile = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dData_dMaybe.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe) ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun p1 -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dData_dMaybe.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe) ((Base_dBytes.v_decStr (fuel - 1)) (B_dData_dPair.v_secondOf p1))) (fun p2 -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dData_dMaybe.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe) (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) (B_dData_dPair.v_secondOf p2))) (fun p3 -> ((B_dTrait_dApplicative.v_pure B_dData_dMaybe.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe) { B_dData_dPair.f_Pair_first = { f_SplitFile_splitName = (B_dData_dPair.v_firstOf p1); f_SplitFile_splitText = (B_dData_dPair.v_firstOf p2); f_SplitFile_splitDeps = (B_dData_dPair.v_firstOf p3) }; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p3) }))))))))
-
-# 399 "Vuna/Compiler/Driver/Split.vuna"
 let v_encSplitFiles = (fun (fs : t_SplitFile B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (((Base_dBytes.v_encList v_encSplitFile) fs) acc))
-
-# 403 "Vuna/Compiler/Driver/Split.vuna"
-let v_decSplitFilesComplete = (fun (s : string) -> (let nd_uscrut1 = (((Base_dBytes.v_decList v_decSplitFile) (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__39) -> (match dtb__39 with
-  | { B_dData_dPair.f_Pair_first = dtb__40; B_dData_dPair.f_Pair_second = dtb__41 } -> (if (Base_dBytes.v_curAtEnd dtb__41) then (B_dData_dMaybe.C_Maybe_Just (dtb__40)) else B_dData_dMaybe.C_Maybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-)))
-
-# 410 "Vuna/Compiler/Driver/Split.vuna"
-let v_decSplitFileComplete = (fun (s : string) -> (let nd_uscrut1 = ((v_decSplitFile (bi_strLength s)) (Base_dBytes.v_curOf s)) in (match nd_uscrut1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__42) -> (match dtb__42 with
-  | { B_dData_dPair.f_Pair_first = dtb__43; B_dData_dPair.f_Pair_second = dtb__44 } -> (if (Base_dBytes.v_curAtEnd dtb__44) then (B_dData_dMaybe.C_Maybe_Just (dtb__43)) else B_dData_dMaybe.C_Maybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-)
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-)))
 
 # 25 "Vuna/Compiler/Driver/Split.vuna"
 let v_splitName = (fun (p : t_SplitFile) -> (match p with
-  | { f_SplitFile_splitName = dtb__45; f_SplitFile_splitText = dtb__46; f_SplitFile_splitDeps = dtb__47 } -> dtb__45
+  | { f_SplitFile_splitName = dtb__39; f_SplitFile_splitText = dtb__40; f_SplitFile_splitDeps = dtb__41 } -> dtb__39
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 26 "Vuna/Compiler/Driver/Split.vuna"
 let v_splitText = (fun (p : t_SplitFile) -> (match p with
-  | { f_SplitFile_splitName = dtb__48; f_SplitFile_splitText = dtb__49; f_SplitFile_splitDeps = dtb__50 } -> dtb__49
+  | { f_SplitFile_splitName = dtb__42; f_SplitFile_splitText = dtb__43; f_SplitFile_splitDeps = dtb__44 } -> dtb__43
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 33 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_writeSplitFiles = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFile B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_writeSplitFiles nFs) mc0) dtb__52)) (fun restR -> (match restR with
-  | Base_dDiag.C_Check_ErrC (dtb__53) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__53)))
-  | Base_dDiag.C_Check_OkC (dtb__54) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) (String.concat "" [mc0; "/"; (v_splitName dtb__51)])) (v_splitText dtb__51))) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__54 + 1))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__45, dtb__46) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_writeSplitFiles nFs) mc0) dtb__46)) (fun restR -> (match restR with
+  | Base_dDiag.C_Check_ErrC (dtb__47) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__47)))
+  | Base_dDiag.C_Check_OkC (dtb__48) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) (String.concat "" [mc0; "/"; (v_splitName dtb__45)])) (v_splitText dtb__45))) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__48 + 1))))))
   | _ -> failwith "DT: impossible branch"
 )))
   | B_dData_dList.C_List_Nil -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (0)))
@@ -222,9 +199,9 @@ let rec v_writeSplitFiles = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFil
 
 # 46 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_writeSplitFilesIfChanged = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFile B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__55, dtb__56) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_writeSplitFilesIfChanged nFs) mc0) dtb__56)) (fun restR -> (match restR with
-  | Base_dDiag.C_Check_ErrC (dtb__57) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__57)))
-  | Base_dDiag.C_Check_OkC (dtb__58) -> (let path = (String.concat "" [mc0; "/"; (v_splitName dtb__55)]) in (let text = (v_splitText dtb__55) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun old -> (if (old = text) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__58 + 1)))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__58 + 1))))))))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__58 + 1)))))))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__49, dtb__50) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((v_writeSplitFilesIfChanged nFs) mc0) dtb__50)) (fun restR -> (match restR with
+  | Base_dDiag.C_Check_ErrC (dtb__51) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__51)))
+  | Base_dDiag.C_Check_OkC (dtb__52) -> (let path = (String.concat "" [mc0; "/"; (v_splitName dtb__49)]) in (let text = (v_splitText dtb__49) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsFileExists nFs) path)) (fun exists -> (if exists then (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun old -> (if (old = text) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__52 + 1)))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__52 + 1))))))))) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dEffect_dFs.v_fsWriteFile nFs) path) text)) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC ((dtb__52 + 1)))))))))))
   | _ -> failwith "DT: impossible branch"
 )))
   | B_dData_dList.C_List_Nil -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_OkC (0)))
@@ -233,13 +210,13 @@ let rec v_writeSplitFilesIfChanged = (fun (nFs : string) (mc0 : string) (mc1 : t
 
 # 27 "Vuna/Compiler/Driver/Split.vuna"
 let v_splitDeps = (fun (p : t_SplitFile) -> (match p with
-  | { f_SplitFile_splitName = dtb__59; f_SplitFile_splitText = dtb__60; f_SplitFile_splitDeps = dtb__61 } -> dtb__61
+  | { f_SplitFile_splitName = dtb__53; f_SplitFile_splitText = dtb__54; f_SplitFile_splitDeps = dtb__55 } -> dtb__55
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 75 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_splitGraph = (fun (mc0 : t_SplitFile B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> (let name = (v_splitName dtb__62) in (if ((B_dData_dString.v_endsWith ".ml") name) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_stripMl name); B_dData_dPair.f_Pair_second = (v_splitDeps dtb__62) }, (v_splitGraph dtb__63))) else (v_splitGraph dtb__63)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__56, dtb__57) -> (let name = (v_splitName dtb__56) in (if ((B_dData_dString.v_endsWith ".ml") name) then (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_stripMl name); B_dData_dPair.f_Pair_second = (v_splitDeps dtb__56) }, (v_splitGraph dtb__57))) else (v_splitGraph dtb__57)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))

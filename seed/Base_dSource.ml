@@ -112,10 +112,26 @@ let rec v_dropPastSlash = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 wi
 # 190 "Vuna/Compiler/Base/Source.vuna"
 let v_parentOfPath = (fun (path : string) -> (let chars = (B_dData_dList.dtp_unpack path) in (let rev = (B_dData_dList.v_reverse chars) in (let after = (v_dropPastSlash rev) in (if ((B_dData_dList.v_length after) = (B_dData_dList.v_length rev)) then "." else (let parent = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse after)) in (if (parent = "") then (if ((B_dData_dString.v_startsWith "/") path) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") path) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") parent)) else false) then ("/" ^ parent) else parent))))))))
 
-# 231 "Vuna/Compiler/Base/Source.vuna"
+# 212 "Vuna/Compiler/Base/Source.vuna"
+let v_stripPathPrefix = (fun (prefix : string) (path : string) -> (if (prefix = "") then path else (if ((B_dData_dString.v_startsWith (prefix ^ "/")) path) then (((dtp_substring (bi_strLength (prefix ^ "/"))) ((bi_strLength path) - (bi_strLength (prefix ^ "/")))) path) else path)))
+
+# 222 "Vuna/Compiler/Base/Source.vuna"
+let rec v_stripRootsPath = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (if ((B_dData_dString.v_startsWith (dtb__25 ^ "/")) mc1) then ((v_stripPathPrefix dtb__25) mc1) else ((v_stripRootsPath dtb__26) mc1))
+  | B_dData_dList.C_List_Nil -> mc1
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 228 "Vuna/Compiler/Base/Source.vuna"
+let v_stripDotSlashPath = (fun (path : string) -> (if ((B_dData_dString.v_startsWith "./") path) then (((dtp_substring 2) ((bi_strLength path) - 2)) path) else path))
+
+# 234 "Vuna/Compiler/Base/Source.vuna"
+let v_locationPathUnder = (fun (roots : string B_dData_dList.t_List) (dir : string) (path : string) -> (v_stripDotSlashPath ((v_stripPathPrefix dir) ((v_stripRootsPath roots) path))))
+
+# 262 "Vuna/Compiler/Base/Source.vuna"
 let rec v_prefixLen2 = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28) -> (if (dtb__25 = dtb__27) then (1 + ((v_prefixLen2 dtb__26) dtb__28)) else 0)
+  | B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> (if (dtb__27 = dtb__29) then (1 + ((v_prefixLen2 dtb__28) dtb__30)) else 0)
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 )
@@ -123,52 +139,52 @@ let rec v_prefixLen2 = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 237 "Vuna/Compiler/Base/Source.vuna"
+# 268 "Vuna/Compiler/Base/Source.vuna"
 let v_lengthDiffLE = (fun (la : int) (lb : int) (n : int) -> (if (la >= lb) then ((la - lb) <= n) else ((lb - la) <= n)))
 
-# 215 "Vuna/Compiler/Base/Source.vuna"
+# 246 "Vuna/Compiler/Base/Source.vuna"
 let v__usimilarName = (fun (a : string) (b : string) -> (if (a = b) then false else (if ((B_dData_dString.v_startsWith a) b) then true else (if ((B_dData_dString.v_startsWith b) a) then true else (let la = (B_dData_dList.dtp_unpack a) in (let lb = (B_dData_dList.dtp_unpack b) in (if (((v_lengthDiffLE (B_dData_dList.v_length la)) (B_dData_dList.v_length lb)) 2) then (((v_prefixLen2 la) lb) >= 2) else false)))))))
 
-# 208 "Vuna/Compiler/Base/Source.vuna"
+# 239 "Vuna/Compiler/Base/Source.vuna"
 let rec v_suggest = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__29, dtb__30) -> (if ((v__usimilarName mc0) dtb__29) then (String.concat "" [" (did you mean "; dtb__29; "?)"]) else ((v_suggest mc0) dtb__30))
+  | B_dData_dList.C_List__x58__x58_ (dtb__31, dtb__32) -> (if ((v__usimilarName mc0) dtb__31) then (String.concat "" [" (did you mean "; dtb__31; "?)"]) else ((v_suggest mc0) dtb__32))
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 15 "Vuna/Compiler/Base/Source.vuna"
 let v_posLine = (fun (p : t_Pos) -> (match p with
-  | { f_Pos_posLine = dtb__31; f_Pos_posCol = dtb__32; f_Pos_posOffset = dtb__33; f_Pos_posEndOffset = dtb__34 } -> dtb__31
+  | { f_Pos_posLine = dtb__33; f_Pos_posCol = dtb__34; f_Pos_posOffset = dtb__35; f_Pos_posEndOffset = dtb__36 } -> dtb__33
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 17 "Vuna/Compiler/Base/Source.vuna"
 let v_posCol = (fun (p : t_Pos) -> (match p with
-  | { f_Pos_posLine = dtb__35; f_Pos_posCol = dtb__36; f_Pos_posOffset = dtb__37; f_Pos_posEndOffset = dtb__38 } -> dtb__36
+  | { f_Pos_posLine = dtb__37; f_Pos_posCol = dtb__38; f_Pos_posOffset = dtb__39; f_Pos_posEndOffset = dtb__40 } -> dtb__38
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 19 "Vuna/Compiler/Base/Source.vuna"
 let v_posOffset = (fun (p : t_Pos) -> (match p with
-  | { f_Pos_posLine = dtb__39; f_Pos_posCol = dtb__40; f_Pos_posOffset = dtb__41; f_Pos_posEndOffset = dtb__42 } -> dtb__41
+  | { f_Pos_posLine = dtb__41; f_Pos_posCol = dtb__42; f_Pos_posOffset = dtb__43; f_Pos_posEndOffset = dtb__44 } -> dtb__43
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 21 "Vuna/Compiler/Base/Source.vuna"
 let v_posEndOffset = (fun (p : t_Pos) -> (match p with
-  | { f_Pos_posLine = dtb__43; f_Pos_posCol = dtb__44; f_Pos_posOffset = dtb__45; f_Pos_posEndOffset = dtb__46 } -> dtb__46
+  | { f_Pos_posLine = dtb__45; f_Pos_posCol = dtb__46; f_Pos_posOffset = dtb__47; f_Pos_posEndOffset = dtb__48 } -> dtb__48
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 30 "Vuna/Compiler/Base/Source.vuna"
 let v_spanFile = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__47; f_Span_spanStartLine = dtb__48; f_Span_spanStartCol = dtb__49; f_Span_spanEndLine = dtb__50; f_Span_spanEndCol = dtb__51; f_Span_spanStartOffset = dtb__52; f_Span_spanEndOffset = dtb__53 } -> dtb__47
+  | { f_Span_spanFile = dtb__49; f_Span_spanStartLine = dtb__50; f_Span_spanStartCol = dtb__51; f_Span_spanEndLine = dtb__52; f_Span_spanEndCol = dtb__53; f_Span_spanStartOffset = dtb__54; f_Span_spanEndOffset = dtb__55 } -> dtb__49
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 32 "Vuna/Compiler/Base/Source.vuna"
 let v_spanStartLine = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__54; f_Span_spanStartLine = dtb__55; f_Span_spanStartCol = dtb__56; f_Span_spanEndLine = dtb__57; f_Span_spanEndCol = dtb__58; f_Span_spanStartOffset = dtb__59; f_Span_spanEndOffset = dtb__60 } -> dtb__55
+  | { f_Span_spanFile = dtb__56; f_Span_spanStartLine = dtb__57; f_Span_spanStartCol = dtb__58; f_Span_spanEndLine = dtb__59; f_Span_spanEndCol = dtb__60; f_Span_spanStartOffset = dtb__61; f_Span_spanEndOffset = dtb__62 } -> dtb__57
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -177,31 +193,31 @@ let v_isSpanEmpty = (fun (sp : t_Span) -> ((v_spanStartLine sp) = 0))
 
 # 34 "Vuna/Compiler/Base/Source.vuna"
 let v_spanStartCol = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__61; f_Span_spanStartLine = dtb__62; f_Span_spanStartCol = dtb__63; f_Span_spanEndLine = dtb__64; f_Span_spanEndCol = dtb__65; f_Span_spanStartOffset = dtb__66; f_Span_spanEndOffset = dtb__67 } -> dtb__63
+  | { f_Span_spanFile = dtb__63; f_Span_spanStartLine = dtb__64; f_Span_spanStartCol = dtb__65; f_Span_spanEndLine = dtb__66; f_Span_spanEndCol = dtb__67; f_Span_spanStartOffset = dtb__68; f_Span_spanEndOffset = dtb__69 } -> dtb__65
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 36 "Vuna/Compiler/Base/Source.vuna"
 let v_spanEndLine = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__68; f_Span_spanStartLine = dtb__69; f_Span_spanStartCol = dtb__70; f_Span_spanEndLine = dtb__71; f_Span_spanEndCol = dtb__72; f_Span_spanStartOffset = dtb__73; f_Span_spanEndOffset = dtb__74 } -> dtb__71
+  | { f_Span_spanFile = dtb__70; f_Span_spanStartLine = dtb__71; f_Span_spanStartCol = dtb__72; f_Span_spanEndLine = dtb__73; f_Span_spanEndCol = dtb__74; f_Span_spanStartOffset = dtb__75; f_Span_spanEndOffset = dtb__76 } -> dtb__73
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 38 "Vuna/Compiler/Base/Source.vuna"
 let v_spanEndCol = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__75; f_Span_spanStartLine = dtb__76; f_Span_spanStartCol = dtb__77; f_Span_spanEndLine = dtb__78; f_Span_spanEndCol = dtb__79; f_Span_spanStartOffset = dtb__80; f_Span_spanEndOffset = dtb__81 } -> dtb__79
+  | { f_Span_spanFile = dtb__77; f_Span_spanStartLine = dtb__78; f_Span_spanStartCol = dtb__79; f_Span_spanEndLine = dtb__80; f_Span_spanEndCol = dtb__81; f_Span_spanStartOffset = dtb__82; f_Span_spanEndOffset = dtb__83 } -> dtb__81
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 40 "Vuna/Compiler/Base/Source.vuna"
 let v_spanStartOffset = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__82; f_Span_spanStartLine = dtb__83; f_Span_spanStartCol = dtb__84; f_Span_spanEndLine = dtb__85; f_Span_spanEndCol = dtb__86; f_Span_spanStartOffset = dtb__87; f_Span_spanEndOffset = dtb__88 } -> dtb__87
+  | { f_Span_spanFile = dtb__84; f_Span_spanStartLine = dtb__85; f_Span_spanStartCol = dtb__86; f_Span_spanEndLine = dtb__87; f_Span_spanEndCol = dtb__88; f_Span_spanStartOffset = dtb__89; f_Span_spanEndOffset = dtb__90 } -> dtb__89
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 42 "Vuna/Compiler/Base/Source.vuna"
 let v_spanEndOffset = (fun (p : t_Span) -> (match p with
-  | { f_Span_spanFile = dtb__89; f_Span_spanStartLine = dtb__90; f_Span_spanStartCol = dtb__91; f_Span_spanEndLine = dtb__92; f_Span_spanEndCol = dtb__93; f_Span_spanStartOffset = dtb__94; f_Span_spanEndOffset = dtb__95 } -> dtb__95
+  | { f_Span_spanFile = dtb__91; f_Span_spanStartLine = dtb__92; f_Span_spanStartCol = dtb__93; f_Span_spanEndLine = dtb__94; f_Span_spanEndCol = dtb__95; f_Span_spanStartOffset = dtb__96; f_Span_spanEndOffset = dtb__97 } -> dtb__97
   | _ -> failwith "DT: impossible branch"
 ))
 

@@ -30,7 +30,7 @@ let v_builtinTyName = (fun (v : Core_dTerm.t_Value) -> (match v with
 let v_isEqShort = (fun (m : string) -> (if (m = "==") then true else (m = "eq")))
 
 # 65 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_eqRuntimeName = (fun (mc0 : string) (mc1 : string) -> (if (mc1 = "Int") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_int")) else (Base_dDiag.C_Check_OkC ("bi_neq_int"))) else (if (mc1 = "String") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_str")) else (Base_dDiag.C_Check_OkC ("bi_neq_str"))) else (if (mc1 = "Float") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_float")) else (Base_dDiag.C_Check_OkC ("bi_neq_float"))) else (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg (Base_dDiagnostics_dTc.C_TcErr_OpOnlyIntString (mc0, mc1))) (B_dData_dVec.C_Vec_VCons (mc0, (B_dData_dVec.C_Vec_VCons (mc1, B_dData_dVec.C_Vec_Nil)))))))))))
+let v_eqRuntimeName = (fun (mc0 : string) (mc1 : string) -> (if (mc1 = "Int") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_int")) else (Base_dDiag.C_Check_OkC ("bi_neq_int"))) else (if (mc1 = "String") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_str")) else (Base_dDiag.C_Check_OkC ("bi_neq_str"))) else (if (mc1 = "Float") then (if (v_isEqShort mc0) then (Base_dDiag.C_Check_OkC ("bi_eq_float")) else (Base_dDiag.C_Check_OkC ("bi_neq_float"))) else (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dTc.v_tcMsg (Base_dDiagnostics_dTc.C_TcErr_OpOnlyIntString (mc0, mc1))) (B_dData_dVec.C_Vec__x58__x58_ (mc0, (B_dData_dVec.C_Vec__x58__x58_ (mc1, B_dData_dVec.C_Vec_Nil)))))))))))
 
 # 76 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_indexOfNameGo = (fun (mc0 : string) (mc1 : string B_dData_dList.t_List) (mc2 : int) -> (match mc1 with

@@ -1,23 +1,23 @@
 open Vuna_runtime
-# 31 "Vuna/Compiler/Loader/Expand.vuna"
+# 32 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandFuelBound = 1073741824
 
-# 230 "Vuna/Compiler/Loader/Expand.vuna"
-let v_internalRef = (fun (name : string) (sp : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_EVar (("!" ^ name), sp)))
+# 231 "Vuna/Compiler/Loader/Expand.vuna"
+let v_internalRef = (fun (name : string) (sp : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_EVar (("!" ^ name), (Frontend_dAst.v_synthNodeRef sp))))
 
-# 234 "Vuna/Compiler/Loader/Expand.vuna"
+# 235 "Vuna/Compiler/Loader/Expand.vuna"
 let v_logLevelOf = (fun (s : string) -> ((B_dData_dList.v_lookupPair s) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "error"; B_dData_dPair.f_Pair_second = 0 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "warn"; B_dData_dPair.f_Pair_second = 1 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "info"; B_dData_dPair.f_Pair_second = 2 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "debug"; B_dData_dPair.f_Pair_second = 3 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "trace"; B_dData_dPair.f_Pair_second = 4 }, B_dData_dList.C_List_Nil))))))))))))
 
-# 238 "Vuna/Compiler/Loader/Expand.vuna"
-let v_logOnRef = (fun (level : int) (scope : string) (sp : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_logOnIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EInt (level, sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (scope, sp)), B_dData_dList.C_List_Nil)))), sp)))
+# 239 "Vuna/Compiler/Loader/Expand.vuna"
+let v_logOnRef = (fun (level : int) (scope : string) (sp : Frontend_dAst.t_NodeRef) -> (let sref = (Frontend_dAst.v_synthNodeRef sp) in (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_logOnIntrinsicName) sref), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EInt (level, sref)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (scope, sref)), B_dData_dList.C_List_Nil)))), sref))))
 
-# 243 "Vuna/Compiler/Loader/Expand.vuna"
-let v_logExpand = (fun (scope : string) (level : int) (msg : Frontend_dAst.t_Expr) (sp : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_EIf ((((v_logOnRef level) scope) sp), (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_logEmitIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EInt (level, sp)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (scope, sp)), (B_dData_dList.C_List__x58__x58_ (msg, B_dData_dList.C_List_Nil)))))), sp)), (Frontend_dAst.C_Expr_EInt (0, sp)), sp)))
+# 247 "Vuna/Compiler/Loader/Expand.vuna"
+let v_logExpand = (fun (scope : string) (level : int) (msg : Frontend_dAst.t_Expr) (sp : Frontend_dAst.t_NodeRef) -> (let sref = (Frontend_dAst.v_synthNodeRef sp) in (Frontend_dAst.C_Expr_EIf ((((v_logOnRef level) scope) sref), (Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_logEmitIntrinsicName) sref), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EInt (level, sref)), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EStr (scope, sref)), (B_dData_dList.C_List__x58__x58_ (msg, B_dData_dList.C_List_Nil)))))), sref)), (Frontend_dAst.C_Expr_EInt (0, sref)), sref))))
 
-# 251 "Vuna/Compiler/Loader/Expand.vuna"
+# 257 "Vuna/Compiler/Loader/Expand.vuna"
 let v_macroArityMismatch = (fun (name : string) (expected : int) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Frontend_dAst.t_NodeRef) -> (let expectedText = (bi_strFromInt expected) in (let actualText = (bi_strFromInt (B_dData_dList.v_length args)) in (((((Base_dDiagnostics_dRn.v_rnAt3 (Frontend_dAst.v_nodeRefSpan sp)) (Base_dDiagnostics_dRn.C_RnErr_MacroArity (name, expectedText, actualText))) name) expectedText) actualText))))
 
-# 264 "Vuna/Compiler/Loader/Expand.vuna"
+# 270 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandMacro = (fun (scope : string) (name : string) (args : Frontend_dAst.t_Expr B_dData_dList.t_List) (sp : Frontend_dAst.t_NodeRef) -> (if (name = "log") then (let nd_uscrut4 = args in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> (match dtb__1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> (match dtb__3 with
@@ -36,19 +36,19 @@ let v_expandMacro = (fun (scope : string) (name : string) (args : Frontend_dAst.
   | _ -> ((((v_macroArityMismatch name) 2) args) sp)
 )) else (if (name = "mark") then (let nd_uscrut4 = args in (match nd_uscrut4 with
   | B_dData_dList.C_List__x58__x58_ (dtb__7, dtb__8) -> (match dtb__8 with
-  | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_obsMarkIntrinsicName) sp), (B_dData_dList.C_List__x58__x58_ (dtb__7, B_dData_dList.C_List_Nil)), sp))))
+  | B_dData_dList.C_List_Nil -> (let sref = (Frontend_dAst.v_synthNodeRef sp) in (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EApp (((v_internalRef Base_dIntrinsics.v_obsMarkIntrinsicName) sref), (B_dData_dList.C_List__x58__x58_ (dtb__7, B_dData_dList.C_List_Nil)), sref)))))
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
 )
   | _ -> ((((v_macroArityMismatch name) 1) args) sp)
 )) else (((Base_dDiagnostics_dRn.v_rnAt1 (Frontend_dAst.v_nodeRefSpan sp)) (Base_dDiagnostics_dRn.C_RnErr_UnknownMacro (name))) name))))
 
-# 106 "Vuna/Compiler/Loader/Expand.vuna"
+# 107 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandExprs = (fun (fuel : int) (scope : string) (exprs : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match exprs with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__9, dtb__10) -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) dtb__9)) (fun (e2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind (((v_expandExprs (fuel - 1)) scope) dtb__10)) (fun (rest2 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (e2, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 115 "Vuna/Compiler/Loader/Expand.vuna"
+# 116 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandExpr = (fun (fuel : int) (scope : string) (e : Frontend_dAst.t_Expr) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match e with
   | Frontend_dAst.C_Expr_EVar (dtb__11, dtb__12) -> (match (Frontend_dReserved.v_macroNameOf dtb__11) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__13) -> ((((v_expandMacro scope) dtb__13) B_dData_dList.C_List_Nil) dtb__12)
@@ -78,37 +78,37 @@ and v_expandExpr = (fun (fuel : int) (scope : string) (e : Frontend_dAst.t_Expr)
   | Frontend_dAst.C_Expr_EInterp (dtb__57, dtb__58) -> ((Base_dCommon.v_bind (((v_expandInterpParts (fuel - 1)) scope) dtb__57)) (fun (parts2 : Frontend_dAst.t_InterpPart B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Expr_EInterp (parts2, dtb__58))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 147 "Vuna/Compiler/Loader/Expand.vuna"
+# 148 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandPatExprs = (fun (fuel : int) (scope : string) (binds : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match binds with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__59, dtb__60) -> ((Base_dCommon.v_bind (((v_expandBindingSig (fuel - 1)) scope) (dtb__59).Frontend_dAst.f_Binding_bindSig)) (fun (sig2 : Frontend_dAst.t_BindingSig B_dData_dMaybe.t_Maybe) -> ((Base_dCommon.v_bind (((v_expandBindingValue (fuel - 1)) scope) (dtb__59).Frontend_dAst.f_Binding_bindValue)) (fun (value2 : Frontend_dAst.t_BindingValue) -> ((Base_dCommon.v_bind (((v_expandPatExprs (fuel - 1)) scope) dtb__60)) (fun (rest2 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_Binding_bindPat = (dtb__59).Frontend_dAst.f_Binding_bindPat; Frontend_dAst.f_Binding_bindValue = value2; Frontend_dAst.f_Binding_bindSig = sig2; Frontend_dAst.f_Binding_bindRef = (dtb__59).Frontend_dAst.f_Binding_bindRef }, rest2))))))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 157 "Vuna/Compiler/Loader/Expand.vuna"
+# 158 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandBindingSig = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst.t_BindingSig B_dData_dMaybe.t_Maybe) -> (match mc2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__61) -> ((Base_dCommon.v_bind (((v_expandExpr (mc0 - 1)) mc1) (dtb__61).Frontend_dAst.f_BindingSig_sigType)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((B_dData_dMaybe.C_Maybe_Just ({ Frontend_dAst.f_BindingSig_sigType = ty2; Frontend_dAst.f_BindingSig_sigRef = (dtb__61).Frontend_dAst.f_BindingSig_sigRef }))))))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC (B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
-# 165 "Vuna/Compiler/Loader/Expand.vuna"
+# 166 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandAlts = (fun (fuel : int) (scope : string) (alts : Frontend_dAst.t_Alt B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match alts with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__62, dtb__63) -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) (dtb__62).Frontend_dAst.f_Alt_altBody)) (fun (body2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind (((v_expandAlts (fuel - 1)) scope) dtb__63)) (fun (rest2 : Frontend_dAst.t_Alt B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_Alt_altPat = (dtb__62).Frontend_dAst.f_Alt_altPat; Frontend_dAst.f_Alt_altBody = body2; Frontend_dAst.f_Alt_altRef = (dtb__62).Frontend_dAst.f_Alt_altRef }, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 174 "Vuna/Compiler/Loader/Expand.vuna"
+# 175 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandClauses = (fun (fuel : int) (scope : string) (clauses : Frontend_dAst.t_LocalClause B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match clauses with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) (dtb__64).Frontend_dAst.f_LocalClause_lcBody)) (fun (body2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind (((v_expandClauses (fuel - 1)) scope) dtb__65)) (fun (rest2 : Frontend_dAst.t_LocalClause B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Frontend_dAst.f_LocalClause_lcPats = (dtb__64).Frontend_dAst.f_LocalClause_lcPats; Frontend_dAst.f_LocalClause_lcBody = body2; Frontend_dAst.f_LocalClause_lcRef = (dtb__64).Frontend_dAst.f_LocalClause_lcRef; Frontend_dAst.f_LocalClause_lcHead = (dtb__64).Frontend_dAst.f_LocalClause_lcHead }, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 184 "Vuna/Compiler/Loader/Expand.vuna"
+# 185 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandBindingValue = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst.t_BindingValue) -> (match mc2 with
   | Frontend_dAst.C_BindingValue_BClauses (dtb__66) -> ((Base_dCommon.v_bind (((v_expandClauses (mc0 - 1)) mc1) dtb__66)) (fun (cs : Frontend_dAst.t_LocalClause B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_BindingValue_BClauses (cs))))))
   | Frontend_dAst.C_BindingValue_BVal (dtb__67) -> ((Base_dCommon.v_bind (((v_expandExpr (mc0 - 1)) mc1) dtb__67)) (fun (e2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_BindingValue_BVal (e2))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 190 "Vuna/Compiler/Loader/Expand.vuna"
+# 191 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandFieldExprs = (fun (fuel : int) (scope : string) (fields : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (let nd_uscrut3 = fields in (match nd_uscrut3 with
   | B_dData_dList.C_List__x58__x58_ (dtb__68, dtb__69) -> (match dtb__68 with
   | { B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = dtb__71 } -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) dtb__71)) (fun (value2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind (((v_expandFieldExprs (fuel - 1)) scope) dtb__69)) (fun (rest2 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__70; B_dData_dPair.f_Pair_second = value2 }, rest2))))))))
@@ -117,7 +117,7 @@ and v_expandFieldExprs = (fun (fuel : int) (scope : string) (fields : (string, F
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 199 "Vuna/Compiler/Loader/Expand.vuna"
+# 200 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandDoStmts = (fun (fuel : int) (scope : string) (stmts : Frontend_dAst.t_DoStmt B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match stmts with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__72, dtb__73) -> (match dtb__72 with
@@ -128,7 +128,7 @@ and v_expandDoStmts = (fun (fuel : int) (scope : string) (stmts : Frontend_dAst.
 )
   | _ -> failwith "DT: impossible branch"
 )))
-# 212 "Vuna/Compiler/Loader/Expand.vuna"
+# 213 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandInterpParts = (fun (fuel : int) (scope : string) (parts : Frontend_dAst.t_InterpPart B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match parts with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__81, dtb__82) -> (match dtb__81 with
@@ -139,52 +139,52 @@ and v_expandInterpParts = (fun (fuel : int) (scope : string) (parts : Frontend_d
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 72 "Vuna/Compiler/Loader/Expand.vuna"
+# 73 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandCtor = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst.t_Ctor) -> (match mc2 with
   | { Frontend_dAst.f_Ctor_ctorName = dtb__85; Frontend_dAst.f_Ctor_ctorType = dtb__86; Frontend_dAst.f_Ctor_ctorArity = dtb__87; Frontend_dAst.f_Ctor_ctorRef = dtb__88 } -> ((Base_dCommon.v_bind (((v_expandExpr (mc0 - 1)) mc1) dtb__86)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Ctor_ctorName = dtb__85; Frontend_dAst.f_Ctor_ctorType = ty2; Frontend_dAst.f_Ctor_ctorArity = dtb__87; Frontend_dAst.f_Ctor_ctorRef = dtb__88 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 63 "Vuna/Compiler/Loader/Expand.vuna"
+# 64 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandCtors = (fun (fuel : int) (scope : string) (ctors : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match ctors with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__89, dtb__90) -> ((Base_dCommon.v_bind (((v_expandCtor (fuel - 1)) scope) dtb__89)) (fun (c2 : Frontend_dAst.t_Ctor) -> ((Base_dCommon.v_bind (((v_expandCtors (fuel - 1)) scope) dtb__90)) (fun (rest2 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (c2, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 87 "Vuna/Compiler/Loader/Expand.vuna"
+# 88 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandField = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst.t_Field) -> (match mc2 with
   | { Frontend_dAst.f_Field_fieldName = dtb__91; Frontend_dAst.f_Field_fieldType = dtb__92; Frontend_dAst.f_Field_fieldRef = dtb__93 } -> ((Base_dCommon.v_bind (((v_expandExpr (mc0 - 1)) mc1) dtb__92)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_Field_fieldName = dtb__91; Frontend_dAst.f_Field_fieldType = ty2; Frontend_dAst.f_Field_fieldRef = dtb__93 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 78 "Vuna/Compiler/Loader/Expand.vuna"
+# 79 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandFields = (fun (fuel : int) (scope : string) (fields : Frontend_dAst.t_Field B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match fields with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__94, dtb__95) -> ((Base_dCommon.v_bind (((v_expandField (fuel - 1)) scope) dtb__94)) (fun (f2 : Frontend_dAst.t_Field) -> ((Base_dCommon.v_bind (((v_expandFields (fuel - 1)) scope) dtb__95)) (fun (rest2 : Frontend_dAst.t_Field B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (f2, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 100 "Vuna/Compiler/Loader/Expand.vuna"
+# 101 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandTraitMethod = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst.t_TraitMethod) -> (match mc2 with
   | { Frontend_dAst.f_TraitMethod_traitMethodName = dtb__96; Frontend_dAst.f_TraitMethod_traitMethodType = dtb__97; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__98 } -> ((Base_dCommon.v_bind (((v_expandExpr (mc0 - 1)) mc1) dtb__97)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ({ Frontend_dAst.f_TraitMethod_traitMethodName = dtb__96; Frontend_dAst.f_TraitMethod_traitMethodType = ty2; Frontend_dAst.f_TraitMethod_traitMethodRef = dtb__98 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 91 "Vuna/Compiler/Loader/Expand.vuna"
+# 92 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandTraitMethods = (fun (fuel : int) (scope : string) (methods : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match methods with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__99, dtb__100) -> ((Base_dCommon.v_bind (((v_expandTraitMethod (fuel - 1)) scope) dtb__99)) (fun (m2 : Frontend_dAst.t_TraitMethod) -> ((Base_dCommon.v_bind (((v_expandTraitMethods (fuel - 1)) scope) dtb__100)) (fun (rest2 : Frontend_dAst.t_TraitMethod B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (m2, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 39 "Vuna/Compiler/Loader/Expand.vuna"
+# 40 "Vuna/Compiler/Loader/Expand.vuna"
 let rec v_expandDeclsGo = (fun (fuel : int) (scope : string) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match decls with
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | B_dData_dList.C_List__x58__x58_ (dtb__101, dtb__102) -> ((Base_dCommon.v_bind (((v_expandDecl fuel) scope) dtb__101)) (fun (d2 : Frontend_dAst.t_Decl) -> ((Base_dCommon.v_bind (((v_expandDeclsGo (fuel - 1)) scope) dtb__102)) (fun (rest2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (d2, rest2))))))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 48 "Vuna/Compiler/Loader/Expand.vuna"
+# 49 "Vuna/Compiler/Loader/Expand.vuna"
 and v_expandDecl = (fun (fuel : int) (scope : string) (d : Frontend_dAst.t_Decl) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "macro expansion") else (match d with
   | Frontend_dAst.C_Decl_DData (dtb__103, dtb__104, dtb__105, dtb__106, dtb__107, dtb__108, dtb__109, dtb__110, dtb__111) -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) dtb__105)) (fun (kind2 : Frontend_dAst.t_Expr) -> ((Base_dCommon.v_bind (((v_expandCtors (fuel - 1)) scope) dtb__106)) (fun (ctors2 : Frontend_dAst.t_Ctor B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DData (dtb__103, dtb__104, kind2, ctors2, dtb__107, dtb__108, dtb__109, dtb__110, dtb__111))))))))
   | Frontend_dAst.C_Decl_DAxiom (dtb__112, dtb__113, dtb__114) -> ((Base_dCommon.v_bind (((v_expandExpr (fuel - 1)) scope) dtb__113)) (fun (ty2 : Frontend_dAst.t_Expr) -> (Base_dDiag.C_Check_OkC ((Frontend_dAst.C_Decl_DAxiom (dtb__112, ty2, dtb__114))))))
@@ -197,5 +197,5 @@ and v_expandDecl = (fun (fuel : int) (scope : string) (d : Frontend_dAst.t_Decl)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 36 "Vuna/Compiler/Loader/Expand.vuna"
+# 37 "Vuna/Compiler/Loader/Expand.vuna"
 let v_expandDecls = (fun (scope : string) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (((v_expandDeclsGo v_expandFuelBound) scope) decls))

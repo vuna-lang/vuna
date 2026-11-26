@@ -255,7 +255,7 @@ let rec v_groupDefsOf = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List
 let rec v_assembleGroups = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List B_dData_dList.t_List) -> (match mc2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__64, dtb__65) -> (let members = ((v_groupDefsOf mc1) dtb__64) in (let isRec = ((v_groupNeedsRec mc0) dtb__64) in (let checked = (if isRec then (match (v_firstBadRecursiveValue members) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__66) -> (match ((v_findDefByName dtb__66) members) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__67) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (Vuna_dIr_dModel.v_irDefSpan dtb__67)) dtb__66) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__66))) (B_dData_dVec.C_Vec_VCons (dtb__66, B_dData_dVec.C_Vec_Nil)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__67) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (Vuna_dIr_dModel.v_irDefSpan dtb__67)) dtb__66) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__66))) (B_dData_dVec.C_Vec__x58__x58_ (dtb__66, B_dData_dVec.C_Vec_Nil)))
   | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dDiagnostics_dCg.v_cgErr1 (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__66))) dtb__66)
   | _ -> failwith "DT: impossible branch"
 )
@@ -416,18 +416,18 @@ let v_refsOfDef = (fun (keepDep : (string) -> bool) (d : Vuna_dIr_dModel.t_IrDef
 ))
 
 # 525 "Vuna/Ir/Analysis.vuna"
-let rec v_closeRefsByRefs = (fun (fuel : int) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (keepDep : (string) -> bool) (work : string B_dData_dList.t_List) (acc : string B_dData_dList.t_List) -> (if (fuel <= 0) then acc else (match work with
-  | B_dData_dList.C_List_Nil -> acc
-  | B_dData_dList.C_List__x58__x58_ (dtb__230, dtb__231) -> (if ((B_dData_dList.v_memName dtb__230) acc) then (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) acc) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) tbl) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) (B_dData_dList.C_List__x58__x58_ (dtb__230, acc)))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__232) -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) ((B_dData_dList.v_append ((v_refsOfDef keepDep) dtb__232)) dtb__231)) (B_dData_dList.C_List__x58__x58_ (dtb__230, acc)))
+let rec v_closeRefsByRefs = (fun (fuel : int) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (keepDep : (string) -> bool) (work : string B_dData_dList.t_List) (seen : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then seen else (match work with
+  | B_dData_dList.C_List_Nil -> seen
+  | B_dData_dList.C_List__x58__x58_ (dtb__230, dtb__231) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) seen) then (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) seen) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) tbl) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) true) seen))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__232) -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) ((B_dData_dList.v_append ((v_refsOfDef keepDep) dtb__232)) dtb__231)) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) true) seen))
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 503 "Vuna/Ir/Analysis.vuna"
-let v_reachableDefsByRefs = (fun (keepDep : (string) -> bool) (fuel : int) (roots : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (let tbl = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs)) in (let budget = ((8 + fuel) + (v_refEdgeCount defs)) in (let names = (((((v_closeRefsByRefs budget) tbl) keepDep) roots) B_dData_dList.C_List_Nil) in ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((B_dData_dList.v_memName (Vuna_dIr_dModel.v_irDefName d)) names))) defs)))))
+let v_reachableDefsByRefs = (fun (keepDep : (string) -> bool) (fuel : int) (roots : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (let tbl = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs)) in (let budget = ((8 + fuel) + (v_refEdgeCount defs)) in (let seen = (((((v_closeRefsByRefs budget) tbl) keepDep) roots) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)) in ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) (Vuna_dIr_dModel.v_irDefName d)) seen))) defs)))))
 
 # 541 "Vuna/Ir/Analysis.vuna"
 let v_irStringsOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
@@ -463,7 +463,7 @@ let rec v_firstBadRecName = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (str
 # 580 "Vuna/Ir/Analysis.vuna"
 let rec v_assembleGo = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List B_dData_dList.t_List) (mc2 : (string) -> bool) (mc3 : (string) -> Base_dSource.t_Span B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__239, dtb__240) -> (let isRec = ((v_groupNeedsRec mc0) dtb__239) in (let checked = (if isRec then (match ((v_firstBadRecName dtb__239) mc2) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__241) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (mc3 dtb__241)) dtb__241) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__241))) (B_dData_dVec.C_Vec_VCons (dtb__241, B_dData_dVec.C_Vec_Nil)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__241) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (mc3 dtb__241)) dtb__241) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__241))) (B_dData_dVec.C_Vec__x58__x58_ (dtb__241, B_dData_dVec.C_Vec_Nil)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__239 }))
   | _ -> failwith "DT: impossible branch"
 ) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = dtb__239 }))) in ((Base_dCommon.v_bind checked) (fun (grp : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_assembleGo mc0) dtb__240) mc2) mc3)) (fun (tail : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (grp, tail))))))))))

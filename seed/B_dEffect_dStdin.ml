@@ -22,3 +22,6 @@ let v_handleStdinHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_h
 
 # 58 "Base/Effect/Stdin.vuna"
 let v_runStdinHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleStdinHostHost "default") comp)))
+
+# 62 "Base/Effect/Stdin.vuna"
+let v_runStdinEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runStdinHost comp)))

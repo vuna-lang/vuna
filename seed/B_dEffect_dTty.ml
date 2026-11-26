@@ -18,3 +18,6 @@ let v_handleTtyHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_han
 
 # 45 "Base/Effect/Tty.vuna"
 let v_runTtyHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleTtyHostHost "default") comp)))
+
+# 49 "Base/Effect/Tty.vuna"
+let v_runTtyEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runTtyHost comp)))

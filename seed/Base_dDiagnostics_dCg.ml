@@ -53,7 +53,7 @@ let v_cgErr = (fun (e : t_CgErr) (args : string B_dData_dVec.t_Vec) -> (Base_dDi
 let v_cgErr0 = (fun (e : t_CgErr) -> ((v_cgErr e) B_dData_dVec.C_Vec_Nil))
 
 # 125 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_cgErr1 = (fun (e : t_CgErr) (a0 : string) -> ((v_cgErr e) (B_dData_dVec.C_Vec_VCons (a0, B_dData_dVec.C_Vec_Nil))))
+let v_cgErr1 = (fun (e : t_CgErr) (a0 : string) -> ((v_cgErr e) (B_dData_dVec.C_Vec__x58__x58_ (a0, B_dData_dVec.C_Vec_Nil))))
 
 # 129 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
 let v_cgErr0At = (fun (sp : Base_dSource.t_Span) (e : t_CgErr) -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withLabel { Base_dDiag.f_Label_labelSpan = (B_dData_dMaybe.C_Maybe_Just (sp)); Base_dDiag.f_Label_labelText = ""; Base_dDiag.f_Label_labelStyle = Base_dDiag.C_LabelStyle_LabelPrimary; Base_dDiag.f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) ((v_cgMsg e) B_dData_dVec.C_Vec_Nil)))))

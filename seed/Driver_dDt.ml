@@ -5,11 +5,11 @@ and t_MainInfo = { f_MainInfo_miKind : string; f_MainInfo_miHostTags : string B_
 and t_AuxCache = { f_AuxCache_auxCacheKey : string; f_AuxCache_auxCacheDecls : Frontend_dAst.t_Decl B_dData_dList.t_List; f_AuxCache_auxCacheStart : (Elab_dTypes.t_Ec, (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair; f_AuxCache_auxCacheDepCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List; f_AuxCache_auxCacheCleanCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List }
 and t_DtIncrSetup = { f_DtIncrSetup_dsStartEc : Elab_dTypes.t_Ec; f_DtIncrSetup_dsStartGlobals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List; f_DtIncrSetup_dsTermAux : Frontend_dAst.t_Decl B_dData_dList.t_List; f_DtIncrSetup_dsPrepared : Frontend_dAst.t_Decl B_dData_dList.t_List; f_DtIncrSetup_dsDecls : Frontend_dAst.t_Decl B_dData_dList.t_List; f_DtIncrSetup_dsWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List; f_DtIncrSetup_dsDepCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List; f_DtIncrSetup_dsCleanCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List; f_DtIncrSetup_dsNext : t_AuxCache B_dData_dMaybe.t_Maybe }
 
-# 78 "Vuna/Compiler/Driver/Dt.vuna"
+# 76 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtProjectDecls = (fun (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) (B_dData_dList.v_reverse (B_dData_dPair.v_secondOf parts)))) (B_dData_dPair.v_firstOf parts)))
 
-# 82 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoad = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "load-start") else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadProject nFs) nEnv) nProcess) ctx) entry)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+# 80 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoad = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "load-start") else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_loadProject nFs) ctx) entry)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__0) -> (Base_dDiag.C_Check_ErrC (dtb__0))
   | Base_dDiag.C_Check_OkC (dtb__1) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "load-modules-done") else 0) in (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__1) with
   | Base_dDiag.C_Check_ErrC (dtb__2) -> (Base_dDiag.C_Check_ErrC (dtb__2))
@@ -19,15 +19,15 @@ let v_dtLoad = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Fr
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 107 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadPartsForCheck = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadProject nFs) nEnv) nProcess) ctx) entry)) (fun projectR -> (match projectR with
+# 105 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoadPartsForCheck = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_loadProject nFs) ctx) entry)) (fun projectR -> (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__4) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__4)))
   | Base_dDiag.C_Check_OkC (dtb__5) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__5))))
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 119 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadModulesParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadProjectModules nFs) nEnv) nProcess) ctx) names)) (fun projectR -> (match projectR with
+# 117 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoadModulesParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_loadProjectModules nFs) ctx) names)) (fun projectR -> (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__6) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__6)))
   | Base_dDiag.C_Check_OkC (dtb__7) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__7))))
   | _ -> failwith "DT: impossible branch"
@@ -70,7 +70,7 @@ let v_sealModule = (fun (m : Loader_dModules.t_Module) -> (let decls = (Loader_d
 let v_sealOpaqueDecls = (fun (modules : Loader_dModules.t_Module B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_sealModule) (B_dData_dList.v_reverse modules))) entryDecls))
 
 # 270 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtFileHasModuleHeader = (fun (nFs : string) (nEnv : string) (nProcess : string) (path : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_parseFileWithPath nFs) nEnv) nProcess) path) text)) (fun parsed -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match parsed with
+let v_dtFileHasModuleHeader = (fun (nFs : string) (nEnv : string) (nProcess : string) (path : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_parseFileWithPath nFs) path) text)) (fun parsed -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match parsed with
   | Base_dDiag.C_Check_OkC (dtb__21) -> (let nd_uscrut12 = (B_dData_dPair.v_firstOf dtb__21) in (match nd_uscrut12 with
   | { Frontend_dAst.f_SourceFile_sourceFileModDecl = dtb__22; Frontend_dAst.f_SourceFile_sourceFileImports = dtb__23; Frontend_dAst.f_SourceFile_sourceFileFixities = dtb__24; Frontend_dAst.f_SourceFile_sourceFileDecls = dtb__25; Frontend_dAst.f_SourceFile_sourceFileExports = dtb__26; Frontend_dAst.f_SourceFile_sourceFileReexports = dtb__27; Frontend_dAst.f_SourceFile_sourceFileOpacity = dtb__28 } -> (match dtb__22 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__29) -> true
@@ -82,11 +82,11 @@ let v_dtFileHasModuleHeader = (fun (nFs : string) (nEnv : string) (nProcess : st
 )))))))
 
 # 365 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckSource = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadModuleSource nFs) nEnv) nProcess) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+let v_dtCheckSource = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadModuleSource nFs) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__30) -> (Base_dDiag.C_Check_ErrC (dtb__30))
   | Base_dDiag.C_Check_OkC (dtb__31) -> (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__31) with
   | Base_dDiag.C_Check_ErrC (dtb__32) -> (Base_dDiag.C_Check_ErrC (dtb__32))
-  | Base_dDiag.C_Check_OkC (dtb__33) -> (match (Elab_dDriver.v_elabProgramFull (Frontend_dRast_dBridge.v_toRastDecls ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__33))) (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__33))))) with
+  | Base_dDiag.C_Check_OkC (dtb__33) -> (match (Elab_dDriver.v_elabProgramFull ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__33))) (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__33)))) with
   | Base_dDiag.C_Check_ErrC (dtb__34) -> (Base_dDiag.C_Check_ErrC (dtb__34))
   | Base_dDiag.C_Check_OkC (dtb__35) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append (B_dData_dPair.v_firstOf dtb__33)) (Elab_dTypes.v_dtProgWarnings dtb__35))))
   | _ -> failwith "DT: impossible branch"
@@ -156,7 +156,7 @@ let rec v_findDtDef = (fun (mc0 : string) (mc1 : Elab_dTypes.t_DtDef B_dData_dLi
 ))
 
 # 672 "Vuna/Compiler/Driver/Dt.vuna"
-let v_loadReplDecls = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectSource nFs) nEnv) nProcess) ctx) "<repl>") source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+let v_loadReplDecls = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectSource nFs) ctx) "<repl>") source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__60) -> (Base_dDiag.C_Check_ErrC (dtb__60))
   | Base_dDiag.C_Check_OkC (dtb__61) -> (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__61) with
   | Base_dDiag.C_Check_ErrC (dtb__62) -> (Base_dDiag.C_Check_ErrC (dtb__62))
@@ -169,7 +169,7 @@ let v_loadReplDecls = (fun (nFs : string) (nEnv : string) (nProcess : string) (c
 # 686 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtBindingTypes = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_loadReplDecls nFs) nEnv) nProcess) ctx) program)) (fun declsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match declsR with
   | Base_dDiag.C_Check_ErrC (dtb__64) -> (Base_dDiag.C_Check_ErrC (dtb__64))
-  | Base_dDiag.C_Check_OkC (dtb__65) -> (match (Elab_dDriver.v_elabProgramFull (Frontend_dRast_dBridge.v_toRastDecls dtb__65)) with
+  | Base_dDiag.C_Check_OkC (dtb__65) -> (match (Elab_dDriver.v_elabProgramFull dtb__65) with
   | Base_dDiag.C_Check_ErrC (dtb__66) -> (Base_dDiag.C_Check_ErrC (dtb__66))
   | Base_dDiag.C_Check_OkC (dtb__67) -> (match (Elab_dDriver.v_ecOfProgram dtb__67) with
   | { B_dData_dPair.f_Pair_first = dtb__68; B_dData_dPair.f_Pair_second = dtb__69 } -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_map (fun (d : Elab_dTypes.t_DtDef) -> { B_dData_dPair.f_Pair_first = (Elab_dTypes.v_dtDefName d); B_dData_dPair.f_Pair_second = (Core_dTerm.v_showTypeSig (((Elab_dMeta.v_zonkTerm dtb__68) 0) (Elab_dTypes.v_dtDefType d))) })) (Elab_dTypes.v_dtProgDefs dtb__67))))
@@ -383,7 +383,7 @@ let v_dtInferDefTypes = (fun (nFs : string) (nEnv : string) (nProcess : string) 
   | Base_dDiag.C_Check_OkC (dtb__179) -> (match (((v_allocTelescopes Elab_dTypes.v_emptyCtx) Elab_dTypes.v_ecEmpty) dtb__179) with
   | { B_dData_dPair.f_Pair_first = dtb__180; B_dData_dPair.f_Pair_second = dtb__181 } -> (let startGlobals = ((B_dData_dList.v_append dtb__180) Elab_dPrelude.v_preludeGlobals) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_loadReplDecls nFs) nEnv) nProcess) ctx) (String.concat "" [program; "\n"; defSource; "\n"]))) (fun allDeclsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match allDeclsR with
   | Base_dDiag.C_Check_ErrC (dtb__182) -> (Base_dDiag.C_Check_ErrC (dtb__182))
-  | Base_dDiag.C_Check_OkC (dtb__183) -> (match (((Elab_dDriver.v_elabProgramFullWith dtb__181) startGlobals) (Frontend_dRast_dBridge.v_toRastDecls dtb__183)) with
+  | Base_dDiag.C_Check_OkC (dtb__183) -> (match (((Elab_dDriver.v_elabProgramFullWith dtb__181) startGlobals) dtb__183) with
   | Base_dDiag.C_Check_ErrC (dtb__184) -> (Base_dDiag.C_Check_ErrC (dtb__184))
   | Base_dDiag.C_Check_OkC (dtb__185) -> (let taken = (Frontend_dAst.v_topNames dtb__183) in (match (Elab_dDriver.v_ecOfProgram dtb__185) with
   | { B_dData_dPair.f_Pair_first = dtb__186; B_dData_dPair.f_Pair_second = dtb__187 } -> ((((v_inferEachType targets) dtb__185) dtb__186) taken)
@@ -406,22 +406,22 @@ let v_dtInferDefTypes = (fun (nFs : string) (nEnv : string) (nProcess : string) 
 ))))
 
 # 837 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtGoalsSource = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadModuleSource nFs) nEnv) nProcess) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+let v_dtGoalsSource = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadModuleSource nFs) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__189) -> (Base_dDiag.C_Check_ErrC (dtb__189))
   | Base_dDiag.C_Check_OkC (dtb__190) -> (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__190) with
   | Base_dDiag.C_Check_ErrC (dtb__191) -> (Base_dDiag.C_Check_ErrC (dtb__191))
-  | Base_dDiag.C_Check_OkC (dtb__192) -> (Elab_dDriver.v_goalsOfProgram (Frontend_dRast_dBridge.v_toRastDecls (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__192))))
+  | Base_dDiag.C_Check_OkC (dtb__192) -> (Elab_dDriver.v_goalsOfProgram (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__192)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 851 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtGoalsSourceTolerant = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadModuleSource nFs) nEnv) nProcess) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+let v_dtGoalsSourceTolerant = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadModuleSource nFs) ctx) label) source)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__193) -> (Base_dDiag.C_Check_ErrC (dtb__193))
   | Base_dDiag.C_Check_OkC (dtb__194) -> (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__194) with
   | Base_dDiag.C_Check_ErrC (dtb__195) -> (Base_dDiag.C_Check_ErrC (dtb__195))
-  | Base_dDiag.C_Check_OkC (dtb__196) -> (Elab_dDriver.v_goalsOfProgramTolerant (Frontend_dRast_dBridge.v_toRastDecls (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__196))))
+  | Base_dDiag.C_Check_OkC (dtb__196) -> (Elab_dDriver.v_goalsOfProgramTolerant (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__196)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -464,13 +464,13 @@ let v_splitReplExpr = (fun (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -
 )))
 
 # 321 "Vuna/Compiler/Driver/Dt.vuna"
-let v_replProgramFull = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectSource nFs) nEnv) nProcess) ctx) "<repl>") (String.concat "" [program; "\n"; v_replExprName; " = "; exprSource; "\n"]))) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+let v_replProgramFull = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectSource nFs) ctx) "<repl>") (String.concat "" [program; "\n"; v_replExprName; " = "; exprSource; "\n"]))) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
   | Base_dDiag.C_Check_ErrC (dtb__208) -> (Base_dDiag.C_Check_ErrC (dtb__208))
   | Base_dDiag.C_Check_OkC (dtb__209) -> (match ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__209) with
   | Base_dDiag.C_Check_ErrC (dtb__210) -> (Base_dDiag.C_Check_ErrC (dtb__210))
   | Base_dDiag.C_Check_OkC (dtb__211) -> (match (v_splitReplExpr ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__211))) (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__211)))) with
   | Base_dDiag.C_Check_ErrC (dtb__212) -> (Base_dDiag.C_Check_ErrC (dtb__212))
-  | Base_dDiag.C_Check_OkC (dtb__213) -> (match (Elab_dDriver.v_elabProgramFull (Frontend_dRast_dBridge.v_toRastDecls (B_dData_dPair.v_firstOf dtb__213))) with
+  | Base_dDiag.C_Check_OkC (dtb__213) -> (match (Elab_dDriver.v_elabProgramFull (B_dData_dPair.v_firstOf dtb__213)) with
   | Base_dDiag.C_Check_ErrC (dtb__214) -> (Base_dDiag.C_Check_ErrC (dtb__214))
   | Base_dDiag.C_Check_OkC (dtb__215) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__215; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__213) }))
   | _ -> failwith "DT: impossible branch"
@@ -485,14 +485,14 @@ let v_replProgramFull = (fun (nFs : string) (nEnv : string) (nProcess : string) 
 # 340 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExpr = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_replProgramFull nFs) nEnv) nProcess) ctx) program) exprSource)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
   | Base_dDiag.C_Check_ErrC (dtb__216) -> (Base_dDiag.C_Check_ErrC (dtb__216))
-  | Base_dDiag.C_Check_OkC (dtb__217) -> ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf dtb__217)) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf dtb__217)))
+  | Base_dDiag.C_Check_OkC (dtb__217) -> ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf dtb__217)) (B_dData_dPair.v_secondOf dtb__217))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 353 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExprInfo = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_replProgramFull nFs) nEnv) nProcess) ctx) program) exprSource)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
   | Base_dDiag.C_Check_ErrC (dtb__218) -> (Base_dDiag.C_Check_ErrC (dtb__218))
-  | Base_dDiag.C_Check_OkC (dtb__219) -> ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf dtb__219)) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf dtb__219)))
+  | Base_dDiag.C_Check_OkC (dtb__219) -> ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf dtb__219)) (B_dData_dPair.v_secondOf dtb__219))
   | _ -> failwith "DT: impossible branch"
 )))))
 
@@ -548,7 +548,7 @@ let rec v_defTableOf = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> 
 # 909 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtMainInfo = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoad nFs) nEnv) nProcess) ctx) entry)) (fun declsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match declsR with
   | Base_dDiag.C_Check_ErrC (dtb__236) -> (Base_dDiag.C_Check_ErrC (dtb__236))
-  | Base_dDiag.C_Check_OkC (dtb__237) -> (match (Elab_dDriver.v_elabProgram (Frontend_dRast_dBridge.v_toRastDecls (B_dData_dPair.v_firstOf dtb__237))) with
+  | Base_dDiag.C_Check_OkC (dtb__237) -> (match (Elab_dDriver.v_elabProgram (B_dData_dPair.v_firstOf dtb__237)) with
   | Base_dDiag.C_Check_ErrC (dtb__238) -> (Base_dDiag.C_Check_ErrC (dtb__238))
   | Base_dDiag.C_Check_OkC (dtb__239) -> (match (v_findMainDef (B_dData_dPair.v_secondOf dtb__239)) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((Base_dDiagnostics_dCg.v_cgErr0At { Base_dSource.f_Span_spanFile = entry; Base_dSource.f_Span_spanStartLine = 1; Base_dSource.f_Span_spanStartCol = 1; Base_dSource.f_Span_spanEndLine = 1; Base_dSource.f_Span_spanEndCol = 1; Base_dSource.f_Span_spanStartOffset = 0; Base_dSource.f_Span_spanEndOffset = 0 }) Base_dDiagnostics_dCg.C_CgErr_NoMain)
@@ -600,7 +600,7 @@ let v_evalDtMain = (fun (program : Elab_dTypes.t_DtProgram) -> (v_evalDtMainCore
 # 297 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalFile = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoadPartsForCheck nFs) nEnv) nProcess) ctx) entry)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
   | Base_dDiag.C_Check_ErrC (dtb__254) -> (Base_dDiag.C_Check_ErrC (dtb__254))
-  | Base_dDiag.C_Check_OkC (dtb__255) -> (let parts = (B_dData_dPair.v_secondOf dtb__255) in (let decls = ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf parts)) (B_dData_dPair.v_firstOf parts)) in ((Base_dCommon.v_bind (Elab_dDriver.v_elabProgramFull (Frontend_dRast_dBridge.v_toRastDecls decls))) v_evalDtMain)))
+  | Base_dDiag.C_Check_OkC (dtb__255) -> (let parts = (B_dData_dPair.v_secondOf dtb__255) in (let decls = ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf parts)) (B_dData_dPair.v_firstOf parts)) in ((Base_dCommon.v_bind (Elab_dDriver.v_elabProgramFull decls)) v_evalDtMain)))
   | _ -> failwith "DT: impossible branch"
 )))))
 
@@ -720,12 +720,12 @@ let rec v_shiftedDepProgramsGo = (fun (mc0 : (string, int) B_dData_dPair.t_Pair 
 let v_shiftedDepPrograms = (fun (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let names = (v_dedupSortedNames (v_sortNames ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ifaces))) in (if ((B_dData_dList.v_length names) <> (B_dData_dList.v_length ifaces)) then (Base_dDiag.v_icInternal "iface: duplicate dependency module name") else ((v_shiftedDepProgramsGo ((v_nameSlotTbl names) 0)) ifaces))))
 
 # 1272 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtPrepareTermAux = (fun (aux : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (Elab_dRecords.v_prepareDecls (Frontend_dRast_dBridge.v_toRastDecls aux))) (fun (p : (Elab_dRecords.t_RecordMeta B_dData_dList.t_List, Frontend_dRast.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind (Elab_dDerive.v_expandDerivings (B_dData_dPair.v_secondOf p))) (fun (ds : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((Frontend_dRast_dBridge.v_toAstDecls ds))))))))
+let v_dtPrepareTermAux = (fun (aux : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind (Elab_dRecords.v_prepareDecls aux)) (fun (p : (Elab_dRecords.t_RecordMeta B_dData_dList.t_List, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind (Elab_dDerive.v_expandDerivings (B_dData_dPair.v_secondOf p))) (fun (ds : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (ds)))))))
 
 # 1283 "Vuna/Compiler/Driver/Dt.vuna"
 let rec v_dtAuxForTermination = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__273, dtb__274) -> (match dtb__273 with
-  | Frontend_dAst.C_Decl_DFun (dtb__275, dtb__276, dtb__277, dtb__278) -> (match (Elab_dTermination_dMeasure.v_projectionOfDef { B_dData_dPair.f_Pair_first = dtb__275; B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_map Frontend_dRast_dBridge.v_toRastPat) dtb__276); B_dData_dPair.f_Pair_second = (Frontend_dRast_dBridge.v_toRastExpr dtb__277) }, B_dData_dList.C_List_Nil)) }) with
+  | Frontend_dAst.C_Decl_DFun (dtb__275, dtb__276, dtb__277, dtb__278) -> (match (Elab_dTermination_dMeasure.v_projectionOfDef { B_dData_dPair.f_Pair_first = dtb__275; B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_map (fun (x : Frontend_dAst.t_Pat) -> x)) dtb__276); B_dData_dPair.f_Pair_second = dtb__277 }, B_dData_dList.C_List_Nil)) }) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__279) -> (B_dData_dList.C_List__x58__x58_ (dtb__273, (v_dtAuxForTermination dtb__274)))
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_dtAuxForTermination dtb__274)
   | _ -> failwith "DT: impossible branch"
@@ -737,8 +737,8 @@ let rec v_dtAuxForTermination = (fun (mc0 : Frontend_dAst.t_Decl B_dData_dList.t
 ))
 
 # 1296 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtElabFullWithPrepared = (fun (startEc : Elab_dTypes.t_Ec) (startGlobals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (termAux : Frontend_dAst.t_Decl B_dData_dList.t_List) (preparedAux : Frontend_dAst.t_Decl B_dData_dList.t_List) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Elab_dRecords.v_prepareDeclsWith (Frontend_dRast_dBridge.v_toRastDecls termAux)) ((Elab_dDriver.v_maybeAddHasFieldInstances startGlobals) (Frontend_dRast_dBridge.v_toRastDecls decls)))) (fun (p : (Elab_dRecords.t_RecordMeta B_dData_dList.t_List, Frontend_dRast.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match p with
-  | { B_dData_dPair.f_Pair_first = dtb__280; B_dData_dPair.f_Pair_second = dtb__281 } -> ((Base_dCommon.v_bind (Elab_dDerive.v_expandDerivings dtb__281)) (fun (ds2 : Frontend_dRast.t_Decl B_dData_dList.t_List) -> (((((Elab_dDriver.v_elabProgramGoWithAux startEc) startGlobals) dtb__280) (Frontend_dRast_dBridge.v_toRastDecls (v_dtAuxForTermination preparedAux))) ds2)))
+let v_dtElabFullWithPrepared = (fun (startEc : Elab_dTypes.t_Ec) (startGlobals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) (termAux : Frontend_dAst.t_Decl B_dData_dList.t_List) (preparedAux : Frontend_dAst.t_Decl B_dData_dList.t_List) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Elab_dRecords.v_prepareDeclsWith termAux) ((Elab_dDriver.v_maybeAddHasFieldInstances startGlobals) decls))) (fun (p : (Elab_dRecords.t_RecordMeta B_dData_dList.t_List, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match p with
+  | { B_dData_dPair.f_Pair_first = dtb__280; B_dData_dPair.f_Pair_second = dtb__281 } -> ((Base_dCommon.v_bind (Elab_dDerive.v_expandDerivings dtb__281)) (fun (ds2 : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (((((Elab_dDriver.v_elabProgramGoWithAux startEc) startGlobals) dtb__280) (v_dtAuxForTermination preparedAux)) ds2)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
@@ -785,7 +785,7 @@ let v_dtIncrementalSetup = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext)
 ) in ((Base_dCommon.v_bind prepared) (fun (preparedAux : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (let next = (if cacheable then (B_dData_dMaybe.C_Maybe_Just ({ f_AuxCache_auxCacheKey = key; f_AuxCache_auxCacheDecls = preparedAux; f_AuxCache_auxCacheStart = start; f_AuxCache_auxCacheDepCps = depCps; f_AuxCache_auxCacheCleanCps = cleanCps })) else B_dData_dMaybe.C_Maybe_Nothing) in (Base_dDiag.C_Check_OkC ({ f_DtIncrSetup_dsStartEc = (B_dData_dPair.v_firstOf start); f_DtIncrSetup_dsStartGlobals = (B_dData_dPair.v_secondOf start); f_DtIncrSetup_dsTermAux = termAux; f_DtIncrSetup_dsPrepared = preparedAux; f_DtIncrSetup_dsDecls = decls; f_DtIncrSetup_dsWarns = loaderWarns; f_DtIncrSetup_dsDepCps = depCps; f_DtIncrSetup_dsCleanCps = cleanCps; f_DtIncrSetup_dsNext = next }))))))))))))))))))))))))))))))
 
 # 1427 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtGoalsIncrementalCore = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (resolved : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.lsp.goals.setup") (fun (_u : int) -> (((((v_dtIncrementalSetup ctx) resolved) depIfaces) cleanIfaces) cache)))) (fun (s : t_DtIncrSetup) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.lsp.goals.elab") (fun (_u : int) -> ((((Elab_dDriver.v_elabGoalsWithPrepared (s).f_DtIncrSetup_dsStartEc) (s).f_DtIncrSetup_dsStartGlobals) (Frontend_dRast_dBridge.v_toRastDecls (s).f_DtIncrSetup_dsTermAux)) (Frontend_dRast_dBridge.v_toRastDecls (s).f_DtIncrSetup_dsDecls))))) (fun (gs : Elab_dDriver.t_DtGoalInfo B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = gs; B_dData_dPair.f_Pair_second = (s).f_DtIncrSetup_dsNext })))))))
+let v_dtGoalsIncrementalCore = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (resolved : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.lsp.goals.setup") (fun (_u : int) -> (((((v_dtIncrementalSetup ctx) resolved) depIfaces) cleanIfaces) cache)))) (fun (s : t_DtIncrSetup) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.lsp.goals.elab") (fun (_u : int) -> ((((Elab_dDriver.v_elabGoalsWithPrepared (s).f_DtIncrSetup_dsStartEc) (s).f_DtIncrSetup_dsStartGlobals) (s).f_DtIncrSetup_dsTermAux) (s).f_DtIncrSetup_dsDecls)))) (fun (gs : Elab_dDriver.t_DtGoalInfo B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = gs; B_dData_dPair.f_Pair_second = (s).f_DtIncrSetup_dsNext })))))))
 
 # 1507 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckScoped = (fun (allDatas : Elab_dTypes.t_DtData B_dData_dList.t_List) (unitDatas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((((Lowering_dEnv.v_mkLwEnv allDatas) defs) globals) "")) (fun (env : Lowering_dEnv.t_LwEnv) -> ((Base_dObs.v_obsCheck "vuna.codegen.check") (fun (_u : int) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.lower") (fun (_u : int) -> (((Lowering_dProgram.v_lowerUnitOf env) ((B_dData_dList.v_map Elab_dTypes.v_dtDefName) defs)) ((B_dData_dList.v_map Elab_dTypes.v_dtDataName) unitDatas))))) (fun (unitIr : Vuna_dIr_dModel.t_IrUnit) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.gen") (fun (_u : int) -> ((Vuna_dTarget_dOcaml_dAssembly.v_checkUnitParts (Lowering_dEnv.v_lwEnvShared env)) unitIr)))) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (0)))))))))))
@@ -842,147 +842,83 @@ let v_moduleOrderLess = (fun (a : Loader_dModules.t_Module) (b : Loader_dModules
 # 1680 "Vuna/Compiler/Driver/Dt.vuna"
 let v_topoModules = (fun (mods : Loader_dModules.t_Module B_dData_dList.t_List) -> (let sorted = ((B_dData_dSort.v_sortBy v_moduleOrderLess) mods) in (B_dData_dPair.v_secondOf (((((v_topoVisitAll ((B_dData_dList.v_length sorted) + 1)) sorted) ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) sorted)) B_dData_dList.C_List_Nil) B_dData_dList.C_List_Nil))))
 
-# 1692 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitDeclsHash = (fun (m : Loader_dModules.t_Module) -> ((Base_dBytes.v_encTop Frontend_dCanonical_dAst.v_encDecls) (Loader_dModules.v_moduleDeclsOf m)))
+# 1688 "Vuna/Compiler/Driver/Dt.vuna"
+let v_splitGenerate = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (moduleParts : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (prog : Elab_dTypes.t_DtProgram) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let roots = ((B_dData_dList.v_map Frontend_dPackages_dPkg.v_rootDir) (Frontend_dPackages_dPkg.v_contextRoots ctx)) in (let cdir = (Frontend_dPackages_dPkg.v_contextDir ctx) in (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "cg-generate-start") else 0) in (((((((Driver_dSplitGen.v_generateDtSplitProgram moduleParts) entryDecls) prog) printResult) roots) cdir) extraDefLocs)))))
 
-# 1698 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitModuleId = (fun (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (m : Loader_dModules.t_Module) -> (match ((B_dData_dList.v_lookupPair (Loader_dModules.v_moduleNameOf m)) modIds) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__295) -> ("a:" ^ dtb__295)
-  | B_dData_dMaybe.C_Maybe_Nothing -> ("d:" ^ (v_unitDeclsHash m))
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1704 "Vuna/Compiler/Driver/Dt.vuna"
-let v_pairKeyValue = (fun (p : (string, string) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_secondOf p))
-
-# 1707 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitImportsOf = (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_map v_findModuleNameField) ((B_dData_dList.v_append (m).Loader_dModules.f_Module_moduleImportsOf) (m).Loader_dModules.f_Module_moduleImplicitImportsOf)))
-
-# 1710 "Vuna/Compiler/Driver/Dt.vuna"
-let rec v_concatKeys = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__296, dtb__297) -> (String.concat "" [dtb__296; ";"; (v_concatKeys dtb__297)])
-  | B_dData_dList.C_List_Nil -> ""
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1714 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitImportKey = (fun (acc : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (n : string) -> (match ((B_dData_dList.v_lookupPair n) acc) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__298) -> dtb__298
-  | B_dData_dMaybe.C_Maybe_Nothing -> "?"
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1720 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitKeyOne = (fun (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (acc : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (m : Loader_dModules.t_Module) -> (let deps = ((B_dData_dList.v_map (v_unitImportKey acc)) (v_unitImportsOf m)) in (Driver_dIface.v_shaText (String.concat "" ["u|"; (Loader_dModules.v_moduleNameOf m); "|"; ((v_unitModuleId modIds) m); "|"; (v_concatKeys deps)]))))
-
-# 1726 "Vuna/Compiler/Driver/Dt.vuna"
-let rec v_unitKeysGo = (fun (mc0 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : Loader_dModules.t_Module B_dData_dList.t_List) (mc2 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__299, dtb__300) -> (((v_unitKeysGo mc0) dtb__300) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf dtb__299); B_dData_dPair.f_Pair_second = (((v_unitKeyOne mc0) mc2) dtb__299) }, mc2)))
-  | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1731 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitKeysOf = (fun (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (printResult : bool) -> (let modKeys = (((v_unitKeysGo modIds) modules) B_dData_dList.C_List_Nil) in (let entryHash = ((Base_dBytes.v_encTop Frontend_dCanonical_dAst.v_encDecls) entryDecls) in (let entryKey = (Driver_dIface.v_shaText (String.concat "" ["e|"; entryHash; "|"; (if printResult then "consolePrint" else "noprint"); "|"; (v_concatKeys ((B_dData_dList.v_map v_pairKeyValue) modKeys))])) in (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = "__entry__"; B_dData_dPair.f_Pair_second = entryKey }, modKeys))))))
-
-# 1743 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitCacheLookup = (fun (nFs : string) (nEnv : string) (dir : string) (keys : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (name : string) -> (match ((B_dData_dList.v_lookupPair name) keys) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__301) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Driver_dPerfCache.v_unitCacheRead nFs) nEnv) dir) name) dtb__301)) (fun cached -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match cached with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__302) -> (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("unit-cache-hit " ^ name)) else 0) in (B_dData_dMaybe.C_Maybe_Just (dtb__302)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | _ -> failwith "DT: impossible branch"
-))))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) B_dData_dMaybe.C_Maybe_Nothing)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1759 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitCacheStore = (fun (nFs : string) (nEnv : string) (nProcess : string) (dir : string) (keys : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (name : string) (sf : Driver_dSplit.t_SplitFile) -> (match ((B_dData_dList.v_lookupPair name) keys) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__303) -> (((((((Driver_dPerfCache.v_unitCacheWrite nFs) nEnv) nProcess) dir) name) dtb__303) sf)
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) 0)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 1768 "Vuna/Compiler/Driver/Dt.vuna"
-let v_unitCacheEnabled = (fun (nEnv : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dEnv.v_envGetEnv nEnv) "VUNA_UNIT_CACHE")) (fun v -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (v <> "0")))))
-
-# 1774 "Vuna/Compiler/Driver/Dt.vuna"
-let v_splitGenerateCached = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (modules : Loader_dModules.t_Module B_dData_dList.t_List) (moduleParts : (string, Frontend_dAst.t_Decl B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (entryDecls : Frontend_dAst.t_Decl B_dData_dList.t_List) (prog : Elab_dTypes.t_DtProgram) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let pkg = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let bucketKey = (String.concat "" [pkg; "|"; entry]) in (let roots = ((B_dData_dList.v_map Frontend_dPackages_dPkg.v_rootDir) (Frontend_dPackages_dPkg.v_contextRoots ctx)) in (let cdir = (Frontend_dPackages_dPkg.v_contextDir ctx) in (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "cg-generate-start") else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (v_unitCacheEnabled nEnv)) (fun enabled -> (if (if (pkg = "") then true else (B_dData_dBool.v_not enabled)) then (((((((Driver_dSplitGen.v_generateDtSplitProgram moduleParts) entryDecls) prog) printResult) roots) cdir) extraDefLocs) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Driver_dPerfCache.v_unitCacheDir nFs) nEnv) nProcess) pkg)) (fun base -> (let keys = ((((v_unitKeysOf modIds) modules) entryDecls) printResult) in (let dir = ((Driver_dPerfCache.v_unitCacheEntryDir base) bucketKey) in (let keepNames = ((B_dData_dList.v_map (fun (p : (string, string) B_dData_dPair.t_Pair) -> ((Driver_dPerfCache.v_unitCacheFileName (B_dData_dPair.v_firstOf p)) (B_dData_dPair.v_secondOf p)))) keys) in (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "cg-keys-done") else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Driver_dPerfCache.v_unitCacheBucketGc nFs) nProcess) dir) keepNames)) (fun _u -> (((((((((Driver_dSplitGen.v_generateDtSplitProgramWith ((((v_unitCacheLookup nFs) nEnv) dir) keys)) (((((v_unitCacheStore nFs) nEnv) nProcess) dir) keys)) moduleParts) entryDecls) prog) printResult) roots) cdir) extraDefLocs))))))))))))))))))
-
-# 1800 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtGenerateIncremental = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (checked : t_CheckedPackage) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let modules = (v_topoModules (B_dData_dPair.v_secondOf parts)) in (let moduleParts = ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((((((((v_splitGenerateCached nFs) nConsole) nEnv) nProcess) ctx) entry) modIds) modules) moduleParts) (B_dData_dPair.v_firstOf parts)) (checked).f_CheckedPackage_checkedProgram) printResult) extraDefLocs)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
-  | Base_dDiag.C_Check_ErrC (dtb__304) -> (Base_dDiag.C_Check_ErrC (dtb__304))
-  | Base_dDiag.C_Check_OkC (dtb__305) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__305; B_dData_dPair.f_Pair_second = checked }))
+# 1696 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtGenerateIncremental = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (checked : t_CheckedPackage) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let modules = (v_topoModules (B_dData_dPair.v_secondOf parts)) in (let moduleParts = ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_splitGenerate nFs) nConsole) nEnv) nProcess) ctx) moduleParts) (B_dData_dPair.v_firstOf parts)) (checked).f_CheckedPackage_checkedProgram) printResult) extraDefLocs)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
+  | Base_dDiag.C_Check_ErrC (dtb__295) -> (Base_dDiag.C_Check_ErrC (dtb__295))
+  | Base_dDiag.C_Check_OkC (dtb__296) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__296; B_dData_dPair.f_Pair_second = checked }))
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-# 1841 "Vuna/Compiler/Driver/Dt.vuna"
+# 1728 "Vuna/Compiler/Driver/Dt.vuna"
 let v_moduleOfIface = (fun (mi : Driver_dIface.t_ModuleIface) -> { Loader_dModules.f_Module_moduleNameOf = (Driver_dIface.v_miNameOf mi); Loader_dModules.f_Module_modulePackageOf = (Driver_dIface.v_miPackageOf mi); Loader_dModules.f_Module_moduleImportsOf = (Driver_dIface.v_miImportsOf mi); Loader_dModules.f_Module_moduleImplicitImportsOf = (Driver_dIface.v_miImplicitImportsOf mi); Loader_dModules.f_Module_moduleDeclsOf = (Driver_dIface.v_miDeclsOf mi); Loader_dModules.f_Module_moduleExportsOf = (Driver_dIface.v_miExportsOf mi); Loader_dModules.f_Module_moduleFixitiesOf = (Driver_dIface.v_miFixitiesOf mi); Loader_dModules.f_Module_moduleReexportsOf = B_dData_dList.C_List_Nil; Loader_dModules.f_Module_moduleOpaqueOf = (Driver_dCache.v_cachedOpaqueOf (Driver_dIface.v_miCachedOf mi)); Loader_dModules.f_Module_moduleExportIndexOf = (Loader_dModules.v_exportIndexOf (Driver_dIface.v_miExportsOf mi)); Loader_dModules.f_Module_moduleFixFactsOf = Frontend_dCst.v_emptyFixityFacts })
 
 # 1237 "Vuna/Compiler/Driver/Dt.vuna"
 let v_modulesOfIfaces = (fun (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) ifaces)))
 
-# 1861 "Vuna/Compiler/Driver/Dt.vuna"
+# 1748 "Vuna/Compiler/Driver/Dt.vuna"
 let v_importsOfModuleNames = (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_map v_findModuleNameField) ((B_dData_dList.v_append (m).Loader_dModules.f_Module_moduleImportsOf) (m).Loader_dModules.f_Module_moduleImplicitImportsOf)))
 
-# 1870 "Vuna/Compiler/Driver/Dt.vuna"
+# 1757 "Vuna/Compiler/Driver/Dt.vuna"
 let rec v_importsEdgeCount = (fun (mc0 : Loader_dModules.t_Module B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__306, dtb__307) -> ((B_dData_dList.v_length (v_importsOfModuleNames dtb__306)) + (v_importsEdgeCount dtb__307))
+  | B_dData_dList.C_List__x58__x58_ (dtb__297, dtb__298) -> ((B_dData_dList.v_length (v_importsOfModuleNames dtb__297)) + (v_importsEdgeCount dtb__298))
   | B_dData_dList.C_List_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1867 "Vuna/Compiler/Driver/Dt.vuna"
+# 1754 "Vuna/Compiler/Driver/Dt.vuna"
 let v_closureFuel = (fun (mods : Loader_dModules.t_Module B_dData_dList.t_List) (starts : string B_dData_dList.t_List) -> ((((B_dData_dList.v_length starts) + (B_dData_dList.v_length mods)) + (v_importsEdgeCount mods)) + 1))
 
-# 1874 "Vuna/Compiler/Driver/Dt.vuna"
+# 1761 "Vuna/Compiler/Driver/Dt.vuna"
 let rec v_closureGo = (fun (mc0 : int) (mc1 : Loader_dModules.t_Module B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) (mc3 : string B_dData_dList.t_List) -> (match mc3 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__308, dtb__309) -> (if (mc0 <= 0) then mc2 else (if ((B_dData_dList.v_memName dtb__308) mc2) then ((((v_closureGo mc0) mc1) mc2) dtb__309) else (match ((v_findModuleNamed mc1) dtb__308) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_closureGo (mc0 - 1)) mc1) (B_dData_dList.C_List__x58__x58_ (dtb__308, mc2))) dtb__309)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__310) -> ((((v_closureGo (mc0 - 1)) mc1) (B_dData_dList.C_List__x58__x58_ (dtb__308, mc2))) ((B_dData_dList.v_append dtb__309) (v_importsOfModuleNames dtb__310)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__299, dtb__300) -> (if (mc0 <= 0) then mc2 else (if ((B_dData_dList.v_memName dtb__299) mc2) then ((((v_closureGo mc0) mc1) mc2) dtb__300) else (match ((v_findModuleNamed mc1) dtb__299) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((((v_closureGo (mc0 - 1)) mc1) (B_dData_dList.C_List__x58__x58_ (dtb__299, mc2))) dtb__300)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__301) -> ((((v_closureGo (mc0 - 1)) mc1) (B_dData_dList.C_List__x58__x58_ (dtb__299, mc2))) ((B_dData_dList.v_append dtb__300) (v_importsOfModuleNames dtb__301)))
   | _ -> failwith "DT: impossible branch"
 )))
   | B_dData_dList.C_List_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1886 "Vuna/Compiler/Driver/Dt.vuna"
+# 1773 "Vuna/Compiler/Driver/Dt.vuna"
 let v_filterProjectToImports = (fun (mc0 : string) (mc1 : Loader_dModules.t_Project) -> (match mc1 with
-  | { Loader_dModules.f_Project_projectEntryDecls = dtb__311; Loader_dModules.f_Project_projectEntryImports = dtb__312; Loader_dModules.f_Project_projectImplicitImports = dtb__313; Loader_dModules.f_Project_projectModules = dtb__314; Loader_dModules.f_Project_projectEntryPkg = dtb__315; Loader_dModules.f_Project_projectEntryFixities = dtb__316; Loader_dModules.f_Project_projectEntryName = dtb__317; Loader_dModules.f_Project_projectEntryFacts = dtb__318 } -> (let entryStarts = ((B_dData_dList.v_map v_findModuleNameField) ((B_dData_dList.v_append dtb__312) dtb__313)) in (let ownNames = ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = mc0))) dtb__314)) in (let starts = ((B_dData_dList.v_append entryStarts) ownNames) in (let closed = ((((v_closureGo ((v_closureFuel dtb__314) starts)) dtb__314) B_dData_dList.C_List_Nil) starts) in (let kept = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_memName (Loader_dModules.v_moduleNameOf m)) closed))) dtb__314) in { B_dData_dPair.f_Pair_first = { Loader_dModules.f_Project_projectEntryDecls = dtb__311; Loader_dModules.f_Project_projectEntryImports = dtb__312; Loader_dModules.f_Project_projectImplicitImports = dtb__313; Loader_dModules.f_Project_projectModules = kept; Loader_dModules.f_Project_projectEntryPkg = dtb__315; Loader_dModules.f_Project_projectEntryFixities = dtb__316; Loader_dModules.f_Project_projectEntryName = dtb__317; Loader_dModules.f_Project_projectEntryFacts = dtb__318 }; B_dData_dPair.f_Pair_second = kept })))))
+  | { Loader_dModules.f_Project_projectEntryDecls = dtb__302; Loader_dModules.f_Project_projectEntryImports = dtb__303; Loader_dModules.f_Project_projectImplicitImports = dtb__304; Loader_dModules.f_Project_projectModules = dtb__305; Loader_dModules.f_Project_projectEntryPkg = dtb__306; Loader_dModules.f_Project_projectEntryFixities = dtb__307; Loader_dModules.f_Project_projectEntryName = dtb__308; Loader_dModules.f_Project_projectEntryFacts = dtb__309 } -> (let entryStarts = ((B_dData_dList.v_map v_findModuleNameField) ((B_dData_dList.v_append dtb__303) dtb__304)) in (let ownNames = ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = mc0))) dtb__305)) in (let starts = ((B_dData_dList.v_append entryStarts) ownNames) in (let closed = ((((v_closureGo ((v_closureFuel dtb__305) starts)) dtb__305) B_dData_dList.C_List_Nil) starts) in (let kept = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_memName (Loader_dModules.v_moduleNameOf m)) closed))) dtb__305) in { B_dData_dPair.f_Pair_first = { Loader_dModules.f_Project_projectEntryDecls = dtb__302; Loader_dModules.f_Project_projectEntryImports = dtb__303; Loader_dModules.f_Project_projectImplicitImports = dtb__304; Loader_dModules.f_Project_projectModules = kept; Loader_dModules.f_Project_projectEntryPkg = dtb__306; Loader_dModules.f_Project_projectEntryFixities = dtb__307; Loader_dModules.f_Project_projectEntryName = dtb__308; Loader_dModules.f_Project_projectEntryFacts = dtb__309 }; B_dData_dPair.f_Pair_second = kept })))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1896 "Vuna/Compiler/Driver/Dt.vuna"
+# 1783 "Vuna/Compiler/Driver/Dt.vuna"
 let v_preloadKeepOf = (fun (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (mods : Loader_dModules.t_Module B_dData_dList.t_List) -> ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ((B_dData_dList.v_filter (fun (mi : Driver_dIface.t_ModuleIface) -> ((B_dData_dList.v_memName (Driver_dIface.v_miNameOf mi)) ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) mods)))) ifaces)))
 
 # 1247 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadPartsIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectWithPreloaded nFs) nEnv) nProcess) ctx) entry) preloaded)) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__319) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__319)))
-  | Base_dDiag.C_Check_OkC (dtb__320) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__320) with
-  | { B_dData_dPair.f_Pair_first = dtb__321; B_dData_dPair.f_Pair_second = dtb__322 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__322)) dtb__321))))
+let v_dtLoadPartsIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectWithPreloaded nFs) ctx) entry) preloaded)) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__310) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__310)))
+  | Base_dDiag.C_Check_OkC (dtb__311) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__311) with
+  | { B_dData_dPair.f_Pair_first = dtb__312; B_dData_dPair.f_Pair_second = dtb__313 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__313)) dtb__312))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))))))))
 
-# 1900 "Vuna/Compiler/Driver/Dt.vuna"
+# 1787 "Vuna/Compiler/Driver/Dt.vuna"
 let v_materializedDeps = (fun (pkg : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let depNames = ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) <> pkg))) (B_dData_dPair.v_secondOf parts))) in ((B_dData_dList.v_filter (fun (mi : Driver_dIface.t_ModuleIface) -> ((B_dData_dList.v_memName (Driver_dIface.v_miNameOf mi)) depNames))) ifaces)))
 
 # 483 "Vuna/Compiler/Driver/Dt.vuna"
-let v_replProgramWithIfacesAux = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-source=repl modules=" ^ (bi_strFromInt (B_dData_dList.v_length ifaces)))) else 0) in (let src = (String.concat "" [program; "\n"; v_replExprName; " = "; exprSource; "\n"]) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((Loader_dFlatten.v_loadProjectSourceWithPreloaded nFs) nEnv) nProcess) ctx) "<repl>") src) (v_modulesOfIfaces ifaces))) (fun loaded -> (match loaded with
-  | Base_dDiag.C_Check_ErrC (dtb__323) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__323)))
-  | Base_dDiag.C_Check_OkC (dtb__324) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__324) with
-  | { B_dData_dPair.f_Pair_first = dtb__325; B_dData_dPair.f_Pair_second = dtb__326 } -> (let missing = (((v_missingDepModules (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__326) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ifaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=repl missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) = 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__326)) dtb__325) with
-  | Base_dDiag.C_Check_ErrC (dtb__327) -> (Base_dDiag.C_Check_ErrC (dtb__327))
-  | Base_dDiag.C_Check_OkC (dtb__328) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__328)) ifaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__329) -> (Base_dDiag.C_Check_ErrC (dtb__329))
-  | Base_dDiag.C_Check_OkC (dtb__330) -> (let parts = (B_dData_dPair.v_secondOf dtb__328) in ((((((v_replCheckPartsAux (v_depStartOf dtb__330)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__330) parts) ifaces) cache))
+let v_replProgramWithIfacesAux = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-source=repl modules=" ^ (bi_strFromInt (B_dData_dList.v_length ifaces)))) else 0) in (let src = (String.concat "" [program; "\n"; v_replExprName; " = "; exprSource; "\n"]) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadProjectSourceWithPreloaded nFs) ctx) "<repl>") src) (v_modulesOfIfaces ifaces))) (fun loaded -> (match loaded with
+  | Base_dDiag.C_Check_ErrC (dtb__314) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__314)))
+  | Base_dDiag.C_Check_OkC (dtb__315) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__315) with
+  | { B_dData_dPair.f_Pair_first = dtb__316; B_dData_dPair.f_Pair_second = dtb__317 } -> (let missing = (((v_missingDepModules (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__317) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ifaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=repl missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) = 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__317)) dtb__316) with
+  | Base_dDiag.C_Check_ErrC (dtb__318) -> (Base_dDiag.C_Check_ErrC (dtb__318))
+  | Base_dDiag.C_Check_OkC (dtb__319) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__319)) (Driver_dIface.v_restoreDefLocsSpans ifaces))) with
+  | Base_dDiag.C_Check_ErrC (dtb__320) -> (Base_dDiag.C_Check_ErrC (dtb__320))
+  | Base_dDiag.C_Check_OkC (dtb__321) -> (let parts = (B_dData_dPair.v_secondOf dtb__319) in ((((((v_replCheckPartsAux (v_depStartOf dtb__321)) (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__321) parts) ifaces) cache))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )) else (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_replProgramFull nFs) nEnv) nProcess) ctx) program) exprSource)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
-  | Base_dDiag.C_Check_ErrC (dtb__331) -> (Base_dDiag.C_Check_ErrC (dtb__331))
-  | Base_dDiag.C_Check_OkC (dtb__332) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__332; B_dData_dPair.f_Pair_second = cache }))
+  | Base_dDiag.C_Check_ErrC (dtb__322) -> (Base_dDiag.C_Check_ErrC (dtb__322))
+  | Base_dDiag.C_Check_OkC (dtb__323) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__323; B_dData_dPair.f_Pair_second = cache }))
   | _ -> failwith "DT: impossible branch"
 )))))))
   | _ -> failwith "DT: impossible branch"
@@ -992,17 +928,17 @@ let v_replProgramWithIfacesAux = (fun (nFs : string) (nEnv : string) (nProcess :
 
 # 472 "Vuna/Compiler/Driver/Dt.vuna"
 let v_replProgramWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_replProgramWithIfacesAux nFs) nEnv) nProcess) nExit) nArgs) ctx) program) exprSource) ifaces) B_dData_dMaybe.C_Maybe_Nothing)) (fun r -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match r with
-  | Base_dDiag.C_Check_ErrC (dtb__333) -> (Base_dDiag.C_Check_ErrC (dtb__333))
-  | Base_dDiag.C_Check_OkC (dtb__334) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__334)))
+  | Base_dDiag.C_Check_ErrC (dtb__324) -> (Base_dDiag.C_Check_ErrC (dtb__324))
+  | Base_dDiag.C_Check_OkC (dtb__325) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__325)))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 520 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExprInfoWithAuxCache = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_replProgramWithIfacesAux nFs) nEnv) nProcess) nExit) nArgs) ctx) program) exprSource) ifaces) cache)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
-  | Base_dDiag.C_Check_ErrC (dtb__335) -> (Base_dDiag.C_Check_ErrC (dtb__335))
-  | Base_dDiag.C_Check_OkC (dtb__336) -> (match ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf dtb__336))) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf dtb__336)))) with
-  | Base_dDiag.C_Check_ErrC (dtb__337) -> (Base_dDiag.C_Check_ErrC (dtb__337))
-  | Base_dDiag.C_Check_OkC (dtb__338) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__338; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__336) }))
+  | Base_dDiag.C_Check_ErrC (dtb__326) -> (Base_dDiag.C_Check_ErrC (dtb__326))
+  | Base_dDiag.C_Check_OkC (dtb__327) -> (match ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf dtb__327))) (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf dtb__327))) with
+  | Base_dDiag.C_Check_ErrC (dtb__328) -> (Base_dDiag.C_Check_ErrC (dtb__328))
+  | Base_dDiag.C_Check_OkC (dtb__329) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__329; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__327) }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1010,10 +946,10 @@ let v_dtEvalExprInfoWithAuxCache = (fun (nFs : string) (nEnv : string) (nProcess
 
 # 533 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExprWithAuxCache = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_replProgramWithIfacesAux nFs) nEnv) nProcess) nExit) nArgs) ctx) program) exprSource) ifaces) cache)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
-  | Base_dDiag.C_Check_ErrC (dtb__339) -> (Base_dDiag.C_Check_ErrC (dtb__339))
-  | Base_dDiag.C_Check_OkC (dtb__340) -> (match ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf dtb__340))) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf dtb__340)))) with
-  | Base_dDiag.C_Check_ErrC (dtb__341) -> (Base_dDiag.C_Check_ErrC (dtb__341))
-  | Base_dDiag.C_Check_OkC (dtb__342) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__342; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__340) }))
+  | Base_dDiag.C_Check_ErrC (dtb__330) -> (Base_dDiag.C_Check_ErrC (dtb__330))
+  | Base_dDiag.C_Check_OkC (dtb__331) -> (match ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf dtb__331))) (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf dtb__331))) with
+  | Base_dDiag.C_Check_ErrC (dtb__332) -> (Base_dDiag.C_Check_ErrC (dtb__332))
+  | Base_dDiag.C_Check_OkC (dtb__333) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__333; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__331) }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1021,30 +957,30 @@ let v_dtEvalExprWithAuxCache = (fun (nFs : string) (nEnv : string) (nProcess : s
 
 # 546 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExprInfoWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((((v_replProgramWithIfaces nFs) nEnv) nProcess) nExit) nArgs) ctx) program) exprSource) ifaces)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
-  | Base_dDiag.C_Check_ErrC (dtb__343) -> (Base_dDiag.C_Check_ErrC (dtb__343))
-  | Base_dDiag.C_Check_OkC (dtb__344) -> ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf dtb__344)) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf dtb__344)))
+  | Base_dDiag.C_Check_ErrC (dtb__334) -> (Base_dDiag.C_Check_ErrC (dtb__334))
+  | Base_dDiag.C_Check_OkC (dtb__335) -> ((Elab_dDriver.v_dtEvalExprInInfo (B_dData_dPair.v_firstOf dtb__335)) (B_dData_dPair.v_secondOf dtb__335))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 556 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalExprWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (program : string) (exprSource : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((((v_replProgramWithIfaces nFs) nEnv) nProcess) nExit) nArgs) ctx) program) exprSource) ifaces)) (fun pR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match pR with
-  | Base_dDiag.C_Check_ErrC (dtb__345) -> (Base_dDiag.C_Check_ErrC (dtb__345))
-  | Base_dDiag.C_Check_OkC (dtb__346) -> ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf dtb__346)) (Frontend_dRast_dBridge.v_toRastExpr (B_dData_dPair.v_secondOf dtb__346)))
+  | Base_dDiag.C_Check_ErrC (dtb__336) -> (Base_dDiag.C_Check_ErrC (dtb__336))
+  | Base_dDiag.C_Check_OkC (dtb__337) -> ((Elab_dDriver.v_dtEvalExprIn (B_dData_dPair.v_firstOf dtb__337)) (B_dData_dPair.v_secondOf dtb__337))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 1906 "Vuna/Compiler/Driver/Dt.vuna"
+# 1793 "Vuna/Compiler/Driver/Dt.vuna"
 let v_materializedOwn = (fun (pkg : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let ourNames = ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkg))) (B_dData_dPair.v_secondOf parts))) in ((B_dData_dList.v_filter (fun (mi : Driver_dIface.t_ModuleIface) -> ((B_dData_dList.v_memName (Driver_dIface.v_miNameOf mi)) ourNames))) ifaces)))
 
 # 1520 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) (needPackage : bool) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) nEnv) nProcess) ctx) label) source) preloaded)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__347) -> (Base_dDiag.C_Check_ErrC (dtb__347))
-  | Base_dDiag.C_Check_OkC (dtb__348) -> (match ((v_filterProjectToImports pkgName) dtb__348) with
-  | { B_dData_dPair.f_Pair_first = dtb__349; B_dData_dPair.f_Pair_second = dtb__350 } -> (let missing = (((v_missingDepModules pkgName) dtb__350) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) allIfaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=check-incremental missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) > 0) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = cache } } })) else (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__350)) dtb__349) with
-  | Base_dDiag.C_Check_ErrC (dtb__351) -> (Base_dDiag.C_Check_ErrC (dtb__351))
-  | Base_dDiag.C_Check_OkC (dtb__352) -> (match ((((((v_dtIncrementalCheckedCore ctx) dtb__352) (((v_materializedDeps pkgName) (B_dData_dPair.v_secondOf dtb__352)) depIfaces)) (((v_materializedOwn pkgName) (B_dData_dPair.v_secondOf dtb__352)) cleanIfaces)) cache) needPackage) with
-  | Base_dDiag.C_Check_ErrC (dtb__353) -> (Base_dDiag.C_Check_ErrC (dtb__353))
-  | Base_dDiag.C_Check_OkC (dtb__354) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__354 }))
+let v_dtCheckSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) (needPackage : bool) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) ctx) label) source) preloaded)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__338) -> (Base_dDiag.C_Check_ErrC (dtb__338))
+  | Base_dDiag.C_Check_OkC (dtb__339) -> (match ((v_filterProjectToImports pkgName) dtb__339) with
+  | { B_dData_dPair.f_Pair_first = dtb__340; B_dData_dPair.f_Pair_second = dtb__341 } -> (let missing = (((v_missingDepModules pkgName) dtb__341) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) allIfaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=check-incremental missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) > 0) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = cache } } })) else (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__341)) dtb__340) with
+  | Base_dDiag.C_Check_ErrC (dtb__342) -> (Base_dDiag.C_Check_ErrC (dtb__342))
+  | Base_dDiag.C_Check_OkC (dtb__343) -> (match ((((((v_dtIncrementalCheckedCore ctx) dtb__343) (((v_materializedDeps pkgName) (B_dData_dPair.v_secondOf dtb__343)) depIfaces)) (((v_materializedOwn pkgName) (B_dData_dPair.v_secondOf dtb__343)) cleanIfaces)) cache) needPackage) with
+  | Base_dDiag.C_Check_ErrC (dtb__344) -> (Base_dDiag.C_Check_ErrC (dtb__344))
+  | Base_dDiag.C_Check_OkC (dtb__345) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__345 }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1055,14 +991,14 @@ let v_dtCheckSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess :
 ))))))))
 
 # 1551 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtGoalsSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) nEnv) nProcess) ctx) label) source) preloaded)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__355) -> (Base_dDiag.C_Check_ErrC (dtb__355))
-  | Base_dDiag.C_Check_OkC (dtb__356) -> (match ((v_filterProjectToImports pkgName) dtb__356) with
-  | { B_dData_dPair.f_Pair_first = dtb__357; B_dData_dPair.f_Pair_second = dtb__358 } -> (let missing = (((v_missingDepModules pkgName) dtb__358) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) allIfaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (Base_dObs.v_obsMark "vuna.lsp.goals.fallback") else 0) in (if ((B_dData_dList.v_length missing) > 0) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = cache } })) else (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__358)) dtb__357) with
-  | Base_dDiag.C_Check_ErrC (dtb__359) -> (Base_dDiag.C_Check_ErrC (dtb__359))
-  | Base_dDiag.C_Check_OkC (dtb__360) -> (match (((((v_dtGoalsIncrementalCore ctx) dtb__360) (((v_materializedDeps pkgName) (B_dData_dPair.v_secondOf dtb__360)) depIfaces)) (((v_materializedOwn pkgName) (B_dData_dPair.v_secondOf dtb__360)) cleanIfaces)) cache) with
-  | Base_dDiag.C_Check_ErrC (dtb__361) -> (Base_dDiag.C_Check_ErrC (dtb__361))
-  | Base_dDiag.C_Check_OkC (dtb__362) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__362 }))
+let v_dtGoalsSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) ctx) label) source) preloaded)) (fun projectR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__346) -> (Base_dDiag.C_Check_ErrC (dtb__346))
+  | Base_dDiag.C_Check_OkC (dtb__347) -> (match ((v_filterProjectToImports pkgName) dtb__347) with
+  | { B_dData_dPair.f_Pair_first = dtb__348; B_dData_dPair.f_Pair_second = dtb__349 } -> (let missing = (((v_missingDepModules pkgName) dtb__349) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) allIfaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (Base_dObs.v_obsMark "vuna.lsp.goals.fallback") else 0) in (if ((B_dData_dList.v_length missing) > 0) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = cache } })) else (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__349)) dtb__348) with
+  | Base_dDiag.C_Check_ErrC (dtb__350) -> (Base_dDiag.C_Check_ErrC (dtb__350))
+  | Base_dDiag.C_Check_OkC (dtb__351) -> (match (((((v_dtGoalsIncrementalCore ctx) dtb__351) (((v_materializedDeps pkgName) (B_dData_dPair.v_secondOf dtb__351)) depIfaces)) (((v_materializedOwn pkgName) (B_dData_dPair.v_secondOf dtb__351)) cleanIfaces)) cache) with
+  | Base_dDiag.C_Check_ErrC (dtb__352) -> (Base_dDiag.C_Check_ErrC (dtb__352))
+  | Base_dDiag.C_Check_OkC (dtb__353) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__353 }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1074,118 +1010,96 @@ let v_dtGoalsSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess :
 
 # 1583 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtEvalSourceIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cache : t_AuxCache B_dData_dMaybe.t_Maybe) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((((v_dtCheckSourceIncremental nFs) nEnv) nProcess) nExit) nArgs) ctx) label) source) depIfaces) B_dData_dList.C_List_Nil) cache) true)) (fun rR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match rR with
-  | Base_dDiag.C_Check_ErrC (dtb__363) -> (Base_dDiag.C_Check_ErrC (dtb__363))
-  | Base_dDiag.C_Check_OkC (dtb__364) -> (match (B_dData_dPair.v_secondOf dtb__364) with
-  | { B_dData_dPair.f_Pair_first = dtb__365; B_dData_dPair.f_Pair_second = dtb__366 } -> (match (B_dData_dPair.v_firstOf dtb__366) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__367) -> (match (v_evalDtMain (dtb__367).f_CheckedPackage_checkedProgram) with
-  | Base_dDiag.C_Check_ErrC (dtb__368) -> (Base_dDiag.C_Check_ErrC (dtb__368))
-  | Base_dDiag.C_Check_OkC (dtb__369) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__364); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb__369; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__366) } }))
+  | Base_dDiag.C_Check_ErrC (dtb__354) -> (Base_dDiag.C_Check_ErrC (dtb__354))
+  | Base_dDiag.C_Check_OkC (dtb__355) -> (match (B_dData_dPair.v_secondOf dtb__355) with
+  | { B_dData_dPair.f_Pair_first = dtb__356; B_dData_dPair.f_Pair_second = dtb__357 } -> (match (B_dData_dPair.v_firstOf dtb__357) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__358) -> (match (v_evalDtMain (dtb__358).f_CheckedPackage_checkedProgram) with
+  | Base_dDiag.C_Check_ErrC (dtb__359) -> (Base_dDiag.C_Check_ErrC (dtb__359))
+  | Base_dDiag.C_Check_OkC (dtb__360) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__355); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb__360; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__357) } }))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__364); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = ""; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__366) } }))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf dtb__355); B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = ""; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb__357) } }))
   | _ -> failwith "DT: impossible branch"
 )
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-# 1614 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckPackageIncrementalParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_dtLoadPartsIncremental nFs) nEnv) nProcess) ctx) entry) depIfaces) cleanIfaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__370) -> (Base_dDiag.C_Check_ErrC (dtb__370))
-  | Base_dDiag.C_Check_OkC (dtb__371) -> (match ((((v_dtIncrementalChecked ctx) dtb__371) (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__371)) depIfaces)) (((v_materializedOwn (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__371)) cleanIfaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__372) -> (Base_dDiag.C_Check_ErrC (dtb__372))
-  | Base_dDiag.C_Check_OkC (dtb__373) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (dtb__373).f_CheckedPackage_checkedWarnings; B_dData_dPair.f_Pair_second = dtb__373 }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 1823 "Vuna/Compiler/Driver/Dt.vuna"
+# 1710 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtSplitProjectIncremental = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (printResult : bool) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_dtLoadPartsIncremental nFs) nEnv) nProcess) ctx) entry) depIfaces) cleanIfaces)) (fun partsR -> (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__374) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__374)))
-  | Base_dDiag.C_Check_OkC (dtb__375) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let parts = (B_dData_dPair.v_secondOf dtb__375) in (let cleanOwn = (((v_materializedOwn pkgName) parts) cleanIfaces) in (let extraDefLocs = ((B_dData_dList.v_concatMap Driver_dIface.v_miDefLocsOf) cleanOwn) in (match ((((v_dtIncrementalChecked ctx) dtb__375) (((v_materializedDeps pkgName) parts) depIfaces)) cleanOwn) with
-  | Base_dDiag.C_Check_ErrC (dtb__376) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__376)))
-  | Base_dDiag.C_Check_OkC (dtb__377) -> (((((((((((v_dtGenerateIncremental nFs) nConsole) nEnv) nProcess) ctx) entry) B_dData_dList.C_List_Nil) parts) dtb__377) printResult) extraDefLocs)
+  | Base_dDiag.C_Check_ErrC (dtb__361) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__361)))
+  | Base_dDiag.C_Check_OkC (dtb__362) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let parts = (B_dData_dPair.v_secondOf dtb__362) in (let cleanOwn = (((v_materializedOwn pkgName) parts) (Driver_dIface.v_restoreDefLocsSpans cleanIfaces)) in (let depsOwn = (((v_materializedDeps pkgName) parts) (Driver_dIface.v_restoreDefLocsSpans depIfaces)) in (match ((((v_dtIncrementalChecked ctx) dtb__362) depsOwn) cleanOwn) with
+  | Base_dDiag.C_Check_ErrC (dtb__363) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__363)))
+  | Base_dDiag.C_Check_OkC (dtb__364) -> ((((((((((v_dtGenerateIncremental nFs) nConsole) nEnv) nProcess) ctx) entry) parts) dtb__364) printResult) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 1912 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadPartsWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectWithPreloaded nFs) nEnv) nProcess) ctx) entry) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__378) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__378)))
-  | Base_dDiag.C_Check_OkC (dtb__379) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__379) with
-  | { B_dData_dPair.f_Pair_first = dtb__380; B_dData_dPair.f_Pair_second = dtb__381 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__381)) dtb__380))))
+# 1799 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoadPartsWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectWithPreloaded nFs) ctx) entry) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__365) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__365)))
+  | Base_dDiag.C_Check_OkC (dtb__366) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__366) with
+  | { B_dData_dPair.f_Pair_first = dtb__367; B_dData_dPair.f_Pair_second = dtb__368 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__368)) dtb__367))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 1926 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadModulesPartsWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectModulesWithPreloaded nFs) nEnv) nProcess) ctx) names) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__382) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__382)))
-  | Base_dDiag.C_Check_OkC (dtb__383) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__383) with
-  | { B_dData_dPair.f_Pair_first = dtb__384; B_dData_dPair.f_Pair_second = dtb__385 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__385)) dtb__384))))
+# 1813 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoadModulesPartsWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectModulesWithPreloaded nFs) ctx) names) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__369) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__369)))
+  | Base_dDiag.C_Check_OkC (dtb__370) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__370) with
+  | { B_dData_dPair.f_Pair_first = dtb__371; B_dData_dPair.f_Pair_second = dtb__372 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__372)) dtb__371))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 1953 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtLoadModulesPartsIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadProjectModulesWithPreloaded nFs) nEnv) nProcess) ctx) names) preloaded)) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__386) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__386)))
-  | Base_dDiag.C_Check_OkC (dtb__387) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__387) with
-  | { B_dData_dPair.f_Pair_first = dtb__388; B_dData_dPair.f_Pair_second = dtb__389 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__389)) dtb__388))))
+# 1840 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtLoadModulesPartsIncremental = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let preloaded = ((B_dData_dList.v_append (v_modulesOfIfaces depIfaces)) (B_dData_dList.v_reverse ((B_dData_dList.v_map v_moduleOfIface) cleanIfaces))) in (let allIfaces = ((B_dData_dList.v_append depIfaces) cleanIfaces) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.load")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadProjectModulesWithPreloaded nFs) ctx) names) preloaded)) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__373) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__373)))
+  | Base_dDiag.C_Check_OkC (dtb__374) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__374) with
+  | { B_dData_dPair.f_Pair_first = dtb__375; B_dData_dPair.f_Pair_second = dtb__376 } -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf allIfaces) dtb__376)) dtb__375))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))))))))
 
-# 1970 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckLibraryPackageIncrementalParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_dtLoadModulesPartsIncremental nFs) nEnv) nProcess) ctx) names) depIfaces) cleanIfaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__390) -> (Base_dDiag.C_Check_ErrC (dtb__390))
-  | Base_dDiag.C_Check_OkC (dtb__391) -> (match ((((v_dtIncrementalChecked ctx) dtb__391) (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__391)) depIfaces)) (((v_materializedOwn (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__391)) cleanIfaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__392) -> (Base_dDiag.C_Check_ErrC (dtb__392))
-  | Base_dDiag.C_Check_OkC (dtb__393) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (dtb__393).f_CheckedPackage_checkedWarnings; B_dData_dPair.f_Pair_second = dtb__393 }))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-# 2026 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtSplitPartsOursWith = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let modules = (B_dData_dList.v_reverse (B_dData_dPair.v_secondOf parts)) in (let ours = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkgName))) modules) in (let depsOnly = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) <> pkgName))) modules) in (let allDecls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) ours)) (B_dData_dPair.v_firstOf parts)) in (let termAux = ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) depsOnly) in (let start = (v_depStartOf deps) in (match ((((Elab_dDriver.v_elabProgramFullWithAux (B_dData_dPair.v_firstOf start)) (B_dData_dPair.v_secondOf start)) (Frontend_dRast_dBridge.v_toRastDecls termAux)) (Frontend_dRast_dBridge.v_toRastDecls allDecls)) with
-  | Base_dDiag.C_Check_ErrC (dtb__394) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__394)))
-  | Base_dDiag.C_Check_OkC (dtb__395) -> (let assembled = { Elab_dTypes.f_DtProgram_dtProgDatas = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) deps)) (Elab_dTypes.v_dtProgDatas dtb__395)); Elab_dTypes.f_DtProgram_dtProgDefs = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDefs) deps)) (Elab_dTypes.v_dtProgDefs dtb__395)); Elab_dTypes.f_DtProgram_dtProgGoals = (Elab_dTypes.v_dtProgGoals dtb__395); Elab_dTypes.f_DtProgram_dtProgSols = (Elab_dTypes.v_dtProgSols dtb__395); Elab_dTypes.f_DtProgram_dtProgGlobals = (Elab_dTypes.v_dtProgGlobals dtb__395); Elab_dTypes.f_DtProgram_dtProgInsts = (Elab_dTypes.v_dtProgInsts dtb__395); Elab_dTypes.f_DtProgram_dtProgClasses = (Elab_dTypes.v_dtProgClasses dtb__395); Elab_dTypes.f_DtProgram_dtProgNext = (dtb__395).Elab_dTypes.f_DtProgram_dtProgNext; Elab_dTypes.f_DtProgram_dtProgDepths = (dtb__395).Elab_dTypes.f_DtProgram_dtProgDepths; Elab_dTypes.f_DtProgram_dtProgWarnings = (Elab_dTypes.v_dtProgWarnings dtb__395) } in (let moduleParts = ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules) in (let checked = { f_CheckedPackage_checkedProgram = dtb__395; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = (v_cachedNamesOf deps); f_CheckedPackage_checkedWarnings = (Elab_dTypes.v_dtProgWarnings dtb__395) } in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((((((((v_splitGenerateCached nFs) nConsole) nEnv) nProcess) ctx) entry) modIds) modules) moduleParts) (B_dData_dPair.v_firstOf parts)) assembled) printResult) extraDefLocs)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
-  | Base_dDiag.C_Check_ErrC (dtb__396) -> (Base_dDiag.C_Check_ErrC (dtb__396))
-  | Base_dDiag.C_Check_OkC (dtb__397) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__397; B_dData_dPair.f_Pair_second = checked }))
+# 1905 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtSplitPartsOursWith = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (printResult : bool) (extraDefLocs : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let modules = (B_dData_dList.v_reverse (B_dData_dPair.v_secondOf parts)) in (let ours = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkgName))) modules) in (let depsOnly = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) <> pkgName))) modules) in (let allDecls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) ours)) (B_dData_dPair.v_firstOf parts)) in (let termAux = ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) depsOnly) in (let start = (v_depStartOf deps) in (match ((((Elab_dDriver.v_elabProgramFullWithAux (B_dData_dPair.v_firstOf start)) (B_dData_dPair.v_secondOf start)) termAux) allDecls) with
+  | Base_dDiag.C_Check_ErrC (dtb__377) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__377)))
+  | Base_dDiag.C_Check_OkC (dtb__378) -> (let assembled = { Elab_dTypes.f_DtProgram_dtProgDatas = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) deps)) (Elab_dTypes.v_dtProgDatas dtb__378)); Elab_dTypes.f_DtProgram_dtProgDefs = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDefs) deps)) (Elab_dTypes.v_dtProgDefs dtb__378)); Elab_dTypes.f_DtProgram_dtProgGoals = (Elab_dTypes.v_dtProgGoals dtb__378); Elab_dTypes.f_DtProgram_dtProgSols = (Elab_dTypes.v_dtProgSols dtb__378); Elab_dTypes.f_DtProgram_dtProgGlobals = (Elab_dTypes.v_dtProgGlobals dtb__378); Elab_dTypes.f_DtProgram_dtProgInsts = (Elab_dTypes.v_dtProgInsts dtb__378); Elab_dTypes.f_DtProgram_dtProgClasses = (Elab_dTypes.v_dtProgClasses dtb__378); Elab_dTypes.f_DtProgram_dtProgNext = (dtb__378).Elab_dTypes.f_DtProgram_dtProgNext; Elab_dTypes.f_DtProgram_dtProgDepths = (dtb__378).Elab_dTypes.f_DtProgram_dtProgDepths; Elab_dTypes.f_DtProgram_dtProgWarnings = (Elab_dTypes.v_dtProgWarnings dtb__378) } in (let moduleParts = ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules) in (let checked = { f_CheckedPackage_checkedProgram = dtb__378; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = (v_cachedNamesOf deps); f_CheckedPackage_checkedWarnings = (Elab_dTypes.v_dtProgWarnings dtb__378) } in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_splitGenerate nFs) nConsole) nEnv) nProcess) ctx) moduleParts) (B_dData_dPair.v_firstOf parts)) assembled) printResult) extraDefLocs)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
+  | Base_dDiag.C_Check_ErrC (dtb__379) -> (Base_dDiag.C_Check_ErrC (dtb__379))
+  | Base_dDiag.C_Check_OkC (dtb__380) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__380; B_dData_dPair.f_Pair_second = checked }))
   | _ -> failwith "DT: impossible branch"
 )))))))
   | _ -> failwith "DT: impossible branch"
 )))))))))
 
-# 1999 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtSplitProjectWithIfaces = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (printResult : bool) (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.codegen.split")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_dtLoadPartsWithIfaces nFs) nEnv) nProcess) ctx) entry) ifaces)) (fun partsR -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__398) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__398)))
-  | Base_dDiag.C_Check_OkC (dtb__399) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__399)) ifaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__400) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__400)))
-  | Base_dDiag.C_Check_OkC (dtb__401) -> (((((((((((v_dtSplitPartsOursWith nFs) nConsole) nEnv) nProcess) ctx) entry) modIds) (B_dData_dPair.v_secondOf dtb__399)) dtb__401) printResult) ((B_dData_dList.v_concatMap Driver_dIface.v_miDefLocsOf) ifaces))
+# 1886 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtSplitProjectWithIfaces = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (printResult : bool) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.codegen.split")) (fun _u -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_dtLoadPartsWithIfaces nFs) nEnv) nProcess) ctx) entry) ifaces)) (fun partsR -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
+  | Base_dDiag.C_Check_ErrC (dtb__381) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__381)))
+  | Base_dDiag.C_Check_OkC (dtb__382) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__382)) (Driver_dIface.v_restoreDefLocsSpans ifaces))) with
+  | Base_dDiag.C_Check_ErrC (dtb__383) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__383)))
+  | Base_dDiag.C_Check_OkC (dtb__384) -> ((((((((((v_dtSplitPartsOursWith nFs) nConsole) nEnv) nProcess) ctx) entry) (B_dData_dPair.v_secondOf dtb__382)) dtb__384) printResult) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )) (fun r -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.codegen.split")) (fun _u -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) r))))))))))
 
-# 2022 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtSplitPartsOurs = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (printResult : bool) -> (((((((((((v_dtSplitPartsOursWith nFs) nConsole) nEnv) nProcess) ctx) entry) B_dData_dList.C_List_Nil) parts) deps) printResult) B_dData_dList.C_List_Nil))
+# 1901 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtSplitPartsOurs = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (printResult : bool) -> ((((((((((v_dtSplitPartsOursWith nFs) nConsole) nEnv) nProcess) ctx) entry) parts) deps) printResult) B_dData_dList.C_List_Nil))
 
-# 2080 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtSplitProjectParts = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (printResult : bool) (modIds : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoadParts nFs) nEnv) nProcess) ctx) entry)) (fun partsR -> (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__402) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__402)))
-  | Base_dDiag.C_Check_OkC (dtb__403) -> (let parts = (B_dData_dPair.v_secondOf dtb__403) in (let loaderWarns = (B_dData_dPair.v_firstOf dtb__403) in (let modules = (v_topoModules (B_dData_dPair.v_secondOf parts)) in (let allDecls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) modules)) (B_dData_dPair.v_firstOf parts)) in (match (Elab_dDriver.v_elabProgramFull (Frontend_dRast_dBridge.v_toRastDecls allDecls)) with
-  | Base_dDiag.C_Check_ErrC (dtb__404) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__404)))
-  | Base_dDiag.C_Check_OkC (dtb__405) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((((((((v_splitGenerateCached nFs) nConsole) nEnv) nProcess) ctx) entry) modIds) modules) ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules)) (B_dData_dPair.v_firstOf parts)) dtb__405) printResult) B_dData_dList.C_List_Nil)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
-  | Base_dDiag.C_Check_ErrC (dtb__406) -> (Base_dDiag.C_Check_ErrC (dtb__406))
-  | Base_dDiag.C_Check_OkC (dtb__407) -> (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings dtb__405)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__407; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = dtb__405; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = B_dData_dList.C_List_Nil; f_CheckedPackage_checkedWarnings = warns } })))
+# 1949 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtSplitProjectParts = (fun (nFs : string) (nConsole : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (printResult : bool) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoadParts nFs) nEnv) nProcess) ctx) entry)) (fun partsR -> (match partsR with
+  | Base_dDiag.C_Check_ErrC (dtb__385) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__385)))
+  | Base_dDiag.C_Check_OkC (dtb__386) -> (let parts = (B_dData_dPair.v_secondOf dtb__386) in (let loaderWarns = (B_dData_dPair.v_firstOf dtb__386) in (let modules = (v_topoModules (B_dData_dPair.v_secondOf parts)) in (let allDecls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) modules)) (B_dData_dPair.v_firstOf parts)) in (match (Elab_dDriver.v_elabProgramFull allDecls) with
+  | Base_dDiag.C_Check_ErrC (dtb__387) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__387)))
+  | Base_dDiag.C_Check_OkC (dtb__388) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((((((v_splitGenerate nFs) nConsole) nEnv) nProcess) ctx) ((B_dData_dList.v_map (fun (m : Loader_dModules.t_Module) -> { B_dData_dPair.f_Pair_first = (Loader_dModules.v_moduleNameOf m); B_dData_dPair.f_Pair_second = (Loader_dModules.v_moduleDeclsOf m) })) modules)) (B_dData_dPair.v_firstOf parts)) dtb__388) printResult) B_dData_dList.C_List_Nil)) (fun filesR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match filesR with
+  | Base_dDiag.C_Check_ErrC (dtb__389) -> (Base_dDiag.C_Check_ErrC (dtb__389))
+  | Base_dDiag.C_Check_OkC (dtb__390) -> (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings dtb__388)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__390; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = dtb__388; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = B_dData_dList.C_List_Nil; f_CheckedPackage_checkedWarnings = warns } })))
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
@@ -1193,76 +1107,140 @@ let v_dtSplitProjectParts = (fun (nFs : string) (nConsole : string) (nEnv : stri
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 2127 "Vuna/Compiler/Driver/Dt.vuna"
+# 2001 "Vuna/Compiler/Driver/Dt.vuna"
 let v_maybeTermGlobals = (fun (mc0 : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__408) -> (Core_dTerm.v_termGlobalNames dtb__408)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__391) -> (Core_dTerm.v_termGlobalNames dtb__391)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2123 "Vuna/Compiler/Driver/Dt.vuna"
+# 1997 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtDefGlobalNames = (fun (d : Elab_dTypes.t_DtDef) -> ((B_dData_dList.v_append (v_maybeTermGlobals (Elab_dTypes.v_dtDefBody d))) (Core_dTerm.v_termGlobalNames (Elab_dTypes.v_dtDefType d))))
 
-# 2139 "Vuna/Compiler/Driver/Dt.vuna"
-let rec v_warnUnusedDefsTbl = (fun (mc0 : Elab_dTypes.t_DtDef B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__409, dtb__410) -> (let name = (Elab_dTypes.v_dtDefName dtb__409) in (let skip = (if (if (name = "main") then true else ((B_dData_dString.v_startsWith "_") name)) then true else ((B_dData_dString.v_startsWith "$") name)) in (if skip then ((v_warnUnusedDefsTbl dtb__410) mc1) else (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) mc1) then ((v_warnUnusedDefsTbl dtb__410) mc1) else (match (Elab_dTypes.v_dtDefSpan dtb__409) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__411) -> (B_dData_dList.C_List__x58__x58_ (((((Base_dDiagnostics_dWarning.v_warnDiagAtMod (fun (x : Base_dDiag.t_Diagnostic) -> ((Base_dDiag.v_withSuggestion { Base_dDiag.f_Suggestion_suggestionTitle = (String.concat "" ["remove unused definition `"; name; "`"]); Base_dDiag.f_Suggestion_suggestionApplicability = Base_dDiag.C_Applicability_MachineApplicable; Base_dDiag.f_Suggestion_suggestionEdits = (B_dData_dList.C_List__x58__x58_ ({ Base_dDiag.f_DiagEdit_editSpan = dtb__411; Base_dDiag.f_DiagEdit_editNewText = "" }, B_dData_dList.C_List_Nil)) }) x))) dtb__411) (Base_dDiagnostics_dWarning.C_WarnErr_UnusedDefinition (name))) (B_dData_dVec.C_Vec_VCons (name, B_dData_dVec.C_Vec_Nil))), ((v_warnUnusedDefsTbl dtb__410) mc1)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_warnUnusedDefsTbl dtb__410) mc1)
+# 2010 "Vuna/Compiler/Driver/Dt.vuna"
+let rec v_warnUnusedDefsTbl = (fun (mc0 : (string) -> bool) (mc1 : Elab_dTypes.t_DtDef B_dData_dList.t_List) (mc2 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__392, dtb__393) -> (let name = (Elab_dTypes.v_dtDefName dtb__392) in (let skip = (if (if (if (mc0 name) then true else ((Base_dSource.v_lastSeg name) = "main")) then true else ((B_dData_dString.v_startsWith "_") name)) then true else ((B_dData_dString.v_startsWith "$") name)) in (if skip then (((v_warnUnusedDefsTbl mc0) dtb__393) mc2) else (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) name) mc2) then (((v_warnUnusedDefsTbl mc0) dtb__393) mc2) else (match (Elab_dTypes.v_dtDefSpan dtb__392) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__394) -> (B_dData_dList.C_List__x58__x58_ (((((Base_dDiagnostics_dWarning.v_warnDiagAtMod (fun (x : Base_dDiag.t_Diagnostic) -> ((Base_dDiag.v_withSuggestion { Base_dDiag.f_Suggestion_suggestionTitle = (String.concat "" ["remove unused definition `"; name; "`"]); Base_dDiag.f_Suggestion_suggestionApplicability = Base_dDiag.C_Applicability_MachineApplicable; Base_dDiag.f_Suggestion_suggestionEdits = (B_dData_dList.C_List__x58__x58_ ({ Base_dDiag.f_DiagEdit_editSpan = dtb__394; Base_dDiag.f_DiagEdit_editNewText = "" }, B_dData_dList.C_List_Nil)) }) x))) dtb__394) (Base_dDiagnostics_dWarning.C_WarnErr_UnusedDefinition (name))) (B_dData_dVec.C_Vec__x58__x58_ (name, B_dData_dVec.C_Vec_Nil))), (((v_warnUnusedDefsTbl mc0) dtb__393) mc2)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((v_warnUnusedDefsTbl mc0) dtb__393) mc2)
   | _ -> failwith "DT: impossible branch"
 )))))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2136 "Vuna/Compiler/Driver/Dt.vuna"
-let v_warnUnusedDefsGo = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (used : string B_dData_dList.t_List) -> ((v_warnUnusedDefsTbl defs) (B_dContainer_dHashMap.v_ofNames used)))
+# 1989 "Vuna/Compiler/Driver/Dt.vuna"
+let v_warnUnusedDefsKeeping = (fun (keep : (string) -> bool) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let used = ((B_dData_dList.v_concatMap v_dtDefGlobalNames) defs) in (((v_warnUnusedDefsTbl keep) defs) (B_dContainer_dHashMap.v_ofNames used))))
 
-# 2115 "Vuna/Compiler/Driver/Dt.vuna"
-let v_warnUnusedDefsIn = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let used = ((B_dData_dList.v_concatMap v_dtDefGlobalNames) defs) in ((v_warnUnusedDefsGo defs) used)))
+# 1984 "Vuna/Compiler/Driver/Dt.vuna"
+let v_warnUnusedDefsIn = (fun (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> ((v_warnUnusedDefsKeeping (fun (_u : string) -> false)) defs))
 
-# 2158 "Vuna/Compiler/Driver/Dt.vuna"
+# 2029 "Vuna/Compiler/Driver/Dt.vuna"
+let v_ownModuleNamesOf = (fun (pkg : string) (mods : Loader_dModules.t_Module B_dData_dList.t_List) -> ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkg))) mods)))
+
+# 2033 "Vuna/Compiler/Driver/Dt.vuna"
+let v_packageDefsOf = (fun (pkg : string) (mods : Loader_dModules.t_Module B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let own = (B_dData_dList.C_List__x58__x58_ ("", ((v_ownModuleNamesOf pkg) mods))) in ((B_dData_dList.v_filter (fun (d : Elab_dTypes.t_DtDef) -> ((B_dData_dList.v_memName (Base_dSource.v_prefixOfName (Elab_dTypes.v_dtDefName d))) own))) defs)))
+
+# 2046 "Vuna/Compiler/Driver/Dt.vuna"
+let rec v_findRootByName = (fun (mc0 : string) (mc1 : Frontend_dPackages_dPkg.t_Root B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__395, dtb__396) -> (if ((Frontend_dPackages_dPkg.v_rootName dtb__395) = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__395)) else ((v_findRootByName mc0) dtb__396))
+  | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 2040 "Vuna/Compiler/Driver/Dt.vuna"
+let v_pkgExportedModulesOf = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) -> (match ((v_findRootByName (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (Frontend_dPackages_dPkg.v_contextRoots ctx)) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Just (dtb__397) -> (dtb__397).Frontend_dPackages_dPkg.f_Root_rootExports
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 2062 "Vuna/Compiler/Driver/Dt.vuna"
+let v_exportTargetName = (fun (e : Loader_dModules.t_ExportEntry) -> (e).Loader_dModules.f_ExportEntry_target)
+
+# 2052 "Vuna/Compiler/Driver/Dt.vuna"
+let v_pkgExportedNamesOf = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (mods : Loader_dModules.t_Module B_dData_dList.t_List) -> (let publicMods = (match (v_pkgExportedModulesOf ctx) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dData_dList.v_map Loader_dModules.v_moduleNameOf) mods)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__398) -> dtb__398
+  | _ -> failwith "DT: impossible branch"
+) in (let entries = ((B_dData_dList.v_concatMap Loader_dModules.v_moduleExportsOf) ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((B_dData_dList.v_memName (Loader_dModules.v_moduleNameOf m)) publicMods))) mods)) in ((B_dData_dList.v_map v_exportTargetName) entries))))
+
+# 2066 "Vuna/Compiler/Driver/Dt.vuna"
+let v_addUnusedWarnsPair = (fun (f : (Loader_dModules.t_Module B_dData_dList.t_List) -> (Elab_dTypes.t_DtDef B_dData_dList.t_List) -> Base_dDiag.t_Diagnostic B_dData_dList.t_List) (p : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, t_CheckedPackage) B_dData_dPair.t_Pair) -> (let checked = (B_dData_dPair.v_secondOf p) in (let warns = ((B_dData_dList.v_append (B_dData_dPair.v_firstOf p)) ((f (checked).f_CheckedPackage_checkedModules) (Elab_dTypes.v_dtProgDefs (checked).f_CheckedPackage_checkedProgram))) in { B_dData_dPair.f_Pair_first = warns; B_dData_dPair.f_Pair_second = { checked with f_CheckedPackage_checkedWarnings = warns } })))
+
+# 2073 "Vuna/Compiler/Driver/Dt.vuna"
+let v_addUnusedWarns = (fun (f : (Loader_dModules.t_Module B_dData_dList.t_List) -> (Elab_dTypes.t_DtDef B_dData_dList.t_List) -> Base_dDiag.t_Diagnostic B_dData_dList.t_List) (r : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, t_CheckedPackage) B_dData_dPair.t_Pair Base_dDiag.t_Check) -> ((Base_dCommon.v_bind r) (fun (p : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, t_CheckedPackage) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC (((v_addUnusedWarnsPair f) p))))))
+
+# 2077 "Vuna/Compiler/Driver/Dt.vuna"
+let v_unusedWarnsForPackage = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (mods : Loader_dModules.t_Module B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (v_warnUnusedDefsIn (((v_packageDefsOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) mods) defs)))
+
+# 1614 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtCheckPackageIncrementalParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_dtLoadPartsIncremental nFs) nEnv) nProcess) ctx) entry) depIfaces) cleanIfaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
+  | Base_dDiag.C_Check_ErrC (dtb__399) -> (Base_dDiag.C_Check_ErrC (dtb__399))
+  | Base_dDiag.C_Check_OkC (dtb__400) -> (match ((((v_dtIncrementalChecked ctx) dtb__400) (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__400)) depIfaces)) (((v_materializedOwn (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__400)) cleanIfaces)) with
+  | Base_dDiag.C_Check_ErrC (dtb__401) -> (Base_dDiag.C_Check_ErrC (dtb__401))
+  | Base_dDiag.C_Check_OkC (dtb__402) -> (Base_dDiag.C_Check_OkC (((v_addUnusedWarnsPair (v_unusedWarnsForPackage ctx)) { B_dData_dPair.f_Pair_first = (dtb__402).f_CheckedPackage_checkedWarnings; B_dData_dPair.f_Pair_second = dtb__402 })))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+# 2083 "Vuna/Compiler/Driver/Dt.vuna"
+let v_unusedWarnsForLibrary = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (mods : Loader_dModules.t_Module B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) -> (let own = (((v_packageDefsOf (Frontend_dPackages_dPkg.v_contextPackageName ctx)) mods) defs) in (let pub = ((v_pkgExportedNamesOf ctx) mods) in ((v_warnUnusedDefsKeeping (fun (n : string) -> ((B_dData_dList.v_memName n) pub))) own))))
+
+# 1857 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtCheckLibraryPackageIncrementalParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (nExit : string) (nArgs : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (depIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) (cleanIfaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((v_dtLoadModulesPartsIncremental nFs) nEnv) nProcess) ctx) names) depIfaces) cleanIfaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
+  | Base_dDiag.C_Check_ErrC (dtb__403) -> (Base_dDiag.C_Check_ErrC (dtb__403))
+  | Base_dDiag.C_Check_OkC (dtb__404) -> (match ((((v_dtIncrementalChecked ctx) dtb__404) (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__404)) depIfaces)) (((v_materializedOwn (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__404)) cleanIfaces)) with
+  | Base_dDiag.C_Check_ErrC (dtb__405) -> (Base_dDiag.C_Check_ErrC (dtb__405))
+  | Base_dDiag.C_Check_OkC (dtb__406) -> (Base_dDiag.C_Check_OkC (((v_addUnusedWarnsPair (v_unusedWarnsForLibrary ctx)) { B_dData_dPair.f_Pair_first = (dtb__406).f_CheckedPackage_checkedWarnings; B_dData_dPair.f_Pair_second = dtb__406 })))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+# 2094 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckRecovering = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoad nFs) nEnv) nProcess) ctx) entry)) (fun declsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match declsR with
-  | Base_dDiag.C_Check_ErrC (dtb__412) -> (Base_dDiag.C_Check_ErrC (dtb__412))
-  | Base_dDiag.C_Check_OkC (dtb__413) -> (Elab_dDriver.v_elabProgramErrors (Frontend_dRast_dBridge.v_toRastDecls (B_dData_dPair.v_firstOf dtb__413)))
+  | Base_dDiag.C_Check_ErrC (dtb__407) -> (Base_dDiag.C_Check_ErrC (dtb__407))
+  | Base_dDiag.C_Check_OkC (dtb__408) -> (Elab_dDriver.v_elabProgramErrors (B_dData_dPair.v_firstOf dtb__408))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 2169 "Vuna/Compiler/Driver/Dt.vuna"
+# 2105 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckLibraryRecovering = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoadModulesParts nFs) nEnv) nProcess) ctx) names)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__414) -> (Base_dDiag.C_Check_ErrC (dtb__414))
-  | Base_dDiag.C_Check_OkC (dtb__415) -> (Elab_dDriver.v_elabProgramErrors (Frontend_dRast_dBridge.v_toRastDecls (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__415))))
+  | Base_dDiag.C_Check_ErrC (dtb__409) -> (Base_dDiag.C_Check_ErrC (dtb__409))
+  | Base_dDiag.C_Check_OkC (dtb__410) -> (Elab_dDriver.v_elabProgramErrors (v_dtProjectDecls (B_dData_dPair.v_secondOf dtb__410)))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 2181 "Vuna/Compiler/Driver/Dt.vuna"
+# 2117 "Vuna/Compiler/Driver/Dt.vuna"
 let v_checkDtProgramOf = (fun (datas : Elab_dTypes.t_DtData B_dData_dList.t_List) (defs : Elab_dTypes.t_DtDef B_dData_dList.t_List) (globals : (string, Core_dTerm.t_Term) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.lower") (fun (_u : int) -> (((Lowering_dProgram.v_lowerProgramOf datas) defs) globals)))) (fun (programIr : Vuna_dIr_dModel.t_IrProgram) -> ((Base_dCommon.v_bind ((Base_dObs.v_obsCheck "vuna.codegen.gen") (fun (_u : int) -> ((Vuna_dTarget_dOcaml_dAssembly.v_checkUnitParts (Vuna_dIr_dModel.v_irProgSharedOf programIr)) (Vuna_dIr_dModel.v_irProgUnitOf programIr))))) (fun (_u : int) -> (Base_dDiag.C_Check_OkC (0)))))))
 
-# 143 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkDeclsWithWarns = (fun (loaderWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "decls-ready") else 0) in (match ((Base_dObs.v_obsCheck "vuna.elab") (fun (_u : int) -> (Elab_dDriver.v_elabProgramFull ((Base_dObs.v_obsPure "vuna.elab.rast") (fun (_u : int) -> (Frontend_dRast_dBridge.v_toRastDecls decls)))))) with
-  | Base_dDiag.C_Check_ErrC (dtb__416) -> (Base_dDiag.C_Check_ErrC (dtb__416))
-  | Base_dDiag.C_Check_OkC (dtb__417) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "elab-done") else 0) in ((Base_dObs.v_obsCheck "vuna.codegen.check") (fun (_u : int) -> (match (((v_checkDtProgramOf (Elab_dTypes.v_dtProgDatas dtb__417)) (Elab_dTypes.v_dtProgDefs dtb__417)) (Elab_dTypes.v_dtProgGlobals dtb__417)) with
-  | Base_dDiag.C_Check_ErrC (dtb__418) -> (Base_dDiag.C_Check_ErrC (dtb__418))
-  | Base_dDiag.C_Check_OkC (dtb__419) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "codegen-check-done") else 0) in (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append loaderWarns) ((B_dData_dList.v_append (Elab_dTypes.v_dtProgWarnings dtb__417)) (v_warnUnusedDefsIn (Elab_dTypes.v_dtProgDefs dtb__417)))))))
+# 141 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkDeclsWithWarns = (fun (loaderWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (decls : Frontend_dAst.t_Decl B_dData_dList.t_List) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "decls-ready") else 0) in (match ((Base_dObs.v_obsCheck "vuna.elab") (fun (_u : int) -> (Elab_dDriver.v_elabProgramFull ((Base_dObs.v_obsPure "vuna.elab.rast") (fun (_u : int) -> decls))))) with
+  | Base_dDiag.C_Check_ErrC (dtb__411) -> (Base_dDiag.C_Check_ErrC (dtb__411))
+  | Base_dDiag.C_Check_OkC (dtb__412) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "elab-done") else 0) in ((Base_dObs.v_obsCheck "vuna.codegen.check") (fun (_u : int) -> (match (((v_checkDtProgramOf (Elab_dTypes.v_dtProgDatas dtb__412)) (Elab_dTypes.v_dtProgDefs dtb__412)) (Elab_dTypes.v_dtProgGlobals dtb__412)) with
+  | Base_dDiag.C_Check_ErrC (dtb__413) -> (Base_dDiag.C_Check_ErrC (dtb__413))
+  | Base_dDiag.C_Check_OkC (dtb__414) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "codegen-check-done") else 0) in (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append loaderWarns) ((B_dData_dList.v_append (Elab_dTypes.v_dtProgWarnings dtb__412)) (v_warnUnusedDefsIn (Elab_dTypes.v_dtProgDefs dtb__412)))))))
   | _ -> failwith "DT: impossible branch"
 ))))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 133 "Vuna/Compiler/Driver/Dt.vuna"
+# 131 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckDecls = (fun (loaded : (Frontend_dAst.t_Decl B_dData_dList.t_List, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair Base_dDiag.t_Check B_dEffect_dCore.t_Eff) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) loaded) (fun loadedR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match loadedR with
-  | Base_dDiag.C_Check_ErrC (dtb__420) -> (Base_dDiag.C_Check_ErrC (dtb__420))
-  | Base_dDiag.C_Check_OkC (dtb__421) -> ((v_checkDeclsWithWarns (B_dData_dPair.v_secondOf dtb__421)) (B_dData_dPair.v_firstOf dtb__421))
+  | Base_dDiag.C_Check_ErrC (dtb__415) -> (Base_dDiag.C_Check_ErrC (dtb__415))
+  | Base_dDiag.C_Check_OkC (dtb__416) -> ((v_checkDeclsWithWarns (B_dData_dPair.v_secondOf dtb__416)) (B_dData_dPair.v_firstOf dtb__416))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 173 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckPartsWithProgram = (fun (pkg : string) (loaded : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair Base_dDiag.t_Check B_dEffect_dCore.t_Eff) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) loaded) (fun loadedR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match loadedR with
-  | Base_dDiag.C_Check_ErrC (dtb__422) -> (Base_dDiag.C_Check_ErrC (dtb__422))
-  | Base_dDiag.C_Check_OkC (dtb__423) -> (let parts = (B_dData_dPair.v_secondOf dtb__423) in (let loaderWarns = (B_dData_dPair.v_firstOf dtb__423) in (let decls = ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf parts)) (B_dData_dPair.v_firstOf parts)) in (match ((Base_dObs.v_obsCheck "vuna.elab") (fun (_u : int) -> (Elab_dDriver.v_elabProgramFull ((Base_dObs.v_obsPure "vuna.elab.rast") (fun (_u : int) -> (Frontend_dRast_dBridge.v_toRastDecls decls)))))) with
-  | Base_dDiag.C_Check_ErrC (dtb__424) -> (Base_dDiag.C_Check_ErrC (dtb__424))
-  | Base_dDiag.C_Check_OkC (dtb__425) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "elab-done") else 0) in (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings dtb__425)) in ((Base_dObs.v_obsCheck "vuna.codegen.check") (fun (_u : int) -> (match (((v_checkDtProgramOf (Elab_dTypes.v_dtProgDatas dtb__425)) (Elab_dTypes.v_dtProgDefs dtb__425)) (Elab_dTypes.v_dtProgGlobals dtb__425)) with
-  | Base_dDiag.C_Check_ErrC (dtb__426) -> (Base_dDiag.C_Check_ErrC (dtb__426))
-  | Base_dDiag.C_Check_OkC (dtb__427) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "codegen-check-done") else 0) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = warns; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = dtb__425; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = B_dData_dList.C_List_Nil; f_CheckedPackage_checkedWarnings = warns } })))
+  | Base_dDiag.C_Check_ErrC (dtb__417) -> (Base_dDiag.C_Check_ErrC (dtb__417))
+  | Base_dDiag.C_Check_OkC (dtb__418) -> (let parts = (B_dData_dPair.v_secondOf dtb__418) in (let loaderWarns = (B_dData_dPair.v_firstOf dtb__418) in (let decls = ((v_sealOpaqueDecls (B_dData_dPair.v_secondOf parts)) (B_dData_dPair.v_firstOf parts)) in (match ((Base_dObs.v_obsCheck "vuna.elab") (fun (_u : int) -> (Elab_dDriver.v_elabProgramFull ((Base_dObs.v_obsPure "vuna.elab.rast") (fun (_u : int) -> decls))))) with
+  | Base_dDiag.C_Check_ErrC (dtb__419) -> (Base_dDiag.C_Check_ErrC (dtb__419))
+  | Base_dDiag.C_Check_OkC (dtb__420) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "elab-done") else 0) in (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings dtb__420)) in ((Base_dObs.v_obsCheck "vuna.codegen.check") (fun (_u : int) -> (match (((v_checkDtProgramOf (Elab_dTypes.v_dtProgDatas dtb__420)) (Elab_dTypes.v_dtProgDefs dtb__420)) (Elab_dTypes.v_dtProgGlobals dtb__420)) with
+  | Base_dDiag.C_Check_ErrC (dtb__421) -> (Base_dDiag.C_Check_ErrC (dtb__421))
+  | Base_dDiag.C_Check_OkC (dtb__422) -> (let _u = (if ((dtp_log_on 2) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 2) "Vuna.Compiler.Driver.Dt") "codegen-check-done") else 0) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = warns; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = dtb__420; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = B_dData_dList.C_List_Nil; f_CheckedPackage_checkedWarnings = warns } })))
   | _ -> failwith "DT: impossible branch"
 )))))
   | _ -> failwith "DT: impossible branch"
@@ -1270,33 +1248,33 @@ let v_dtCheckPartsWithProgram = (fun (pkg : string) (loaded : (Base_dDiag.t_Diag
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 165 "Vuna/Compiler/Driver/Dt.vuna"
+# 163 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckWithProgramParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> ((v_dtCheckPartsWithProgram (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (((((v_dtLoadPartsForCheck nFs) nEnv) nProcess) ctx) entry)))
 
-# 169 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckLibraryWithProgramParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> ((v_dtCheckPartsWithProgram (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (((((v_dtLoadModulesParts nFs) nEnv) nProcess) ctx) names)))
+# 167 "Vuna/Compiler/Driver/Dt.vuna"
+let v_dtCheckLibraryWithProgramParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_dtCheckPartsWithProgram (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (((((v_dtLoadModulesParts nFs) nEnv) nProcess) ctx) names))) (fun r -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((v_addUnusedWarns (v_unusedWarnsForLibrary ctx)) r)))))
 
 # 249 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheck = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((v_dtLoadPartsForCheck nFs) nEnv) nProcess) ctx) entry)) (fun loadedR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match loadedR with
-  | Base_dDiag.C_Check_ErrC (dtb__428) -> (Base_dDiag.C_Check_ErrC (dtb__428))
-  | Base_dDiag.C_Check_OkC (dtb__429) -> (let parts = (B_dData_dPair.v_secondOf dtb__429) in (let modules = (B_dData_dPair.v_secondOf parts) in (let decls = ((v_sealOpaqueDecls modules) (B_dData_dPair.v_firstOf parts)) in ((v_checkDeclsWithWarns (B_dData_dPair.v_firstOf dtb__429)) decls))))
+  | Base_dDiag.C_Check_ErrC (dtb__423) -> (Base_dDiag.C_Check_ErrC (dtb__423))
+  | Base_dDiag.C_Check_OkC (dtb__424) -> (let parts = (B_dData_dPair.v_secondOf dtb__424) in (let modules = (B_dData_dPair.v_secondOf parts) in (let decls = ((v_sealOpaqueDecls modules) (B_dData_dPair.v_firstOf parts)) in ((v_checkDeclsWithWarns (B_dData_dPair.v_firstOf dtb__424)) decls))))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 1052 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckOursParts = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (resolved : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) -> (let parts = (B_dData_dPair.v_secondOf resolved) in (let loaderWarns = (B_dData_dPair.v_firstOf resolved) in (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let modules = (B_dData_dList.v_reverse (B_dData_dPair.v_secondOf parts)) in (let ours = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkgName))) modules) in (let depsOnly = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) <> pkgName))) modules) in (let decls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_sealModule) ours)) (B_dData_dPair.v_firstOf parts)) in (let termAux = ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) depsOnly) in (let start = (v_depStartOf deps) in ((Base_dCommon.v_bind ((((Elab_dDriver.v_elabProgramFullWithAux (B_dData_dPair.v_firstOf start)) (B_dData_dPair.v_secondOf start)) (Frontend_dRast_dBridge.v_toRastDecls termAux)) (Frontend_dRast_dBridge.v_toRastDecls decls))) (fun (prog : Elab_dTypes.t_DtProgram) -> (let allDatas = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) deps)) (Elab_dTypes.v_dtProgDatas prog)) in ((Base_dCommon.v_bind (((v_checkDtProgramOf allDatas) (Elab_dTypes.v_dtProgDefs prog)) (Elab_dTypes.v_dtProgGlobals prog))) (fun (_u : int) -> (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings prog)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = warns; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = prog; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = (v_cachedNamesOf deps); f_CheckedPackage_checkedWarnings = warns } }))))))))))))))))))
+let v_dtCheckOursParts = (fun (ctx : Frontend_dPackages_dPkg.t_PackageContext) (resolved : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) (deps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) -> (let parts = (B_dData_dPair.v_secondOf resolved) in (let loaderWarns = (B_dData_dPair.v_firstOf resolved) in (let pkgName = (Frontend_dPackages_dPkg.v_contextPackageName ctx) in (let modules = (B_dData_dList.v_reverse (B_dData_dPair.v_secondOf parts)) in (let ours = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) = pkgName))) modules) in (let depsOnly = ((B_dData_dList.v_filter (fun (m : Loader_dModules.t_Module) -> ((Loader_dModules.v_modulePackageOf m) <> pkgName))) modules) in (let decls = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap v_sealModule) ours)) (B_dData_dPair.v_firstOf parts)) in (let termAux = ((B_dData_dList.v_concatMap Loader_dModules.v_moduleDeclsOf) depsOnly) in (let start = (v_depStartOf deps) in ((Base_dCommon.v_bind ((((Elab_dDriver.v_elabProgramFullWithAux (B_dData_dPair.v_firstOf start)) (B_dData_dPair.v_secondOf start)) termAux) decls)) (fun (prog : Elab_dTypes.t_DtProgram) -> (let allDatas = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) deps)) (Elab_dTypes.v_dtProgDatas prog)) in ((Base_dCommon.v_bind (((v_checkDtProgramOf allDatas) (Elab_dTypes.v_dtProgDefs prog)) (Elab_dTypes.v_dtProgGlobals prog))) (fun (_u : int) -> (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings prog)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = warns; B_dData_dPair.f_Pair_second = { f_CheckedPackage_checkedProgram = prog; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = (v_cachedNamesOf deps); f_CheckedPackage_checkedWarnings = warns } }))))))))))))))))))
 
 # 394 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckSourceWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-source=check modules=" ^ (bi_strFromInt (B_dData_dList.v_length ifaces)))) else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) nEnv) nProcess) ctx) label) source) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__430) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__430)))
-  | Base_dDiag.C_Check_OkC (dtb__431) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__431) with
-  | { B_dData_dPair.f_Pair_first = dtb__432; B_dData_dPair.f_Pair_second = dtb__433 } -> (let missing = (((v_missingDepModules (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__433) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ifaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=check missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) = 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__433)) dtb__432) with
-  | Base_dDiag.C_Check_ErrC (dtb__434) -> (Base_dDiag.C_Check_ErrC (dtb__434))
-  | Base_dDiag.C_Check_OkC (dtb__435) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__435)) ifaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__436) -> (Base_dDiag.C_Check_ErrC (dtb__436))
-  | Base_dDiag.C_Check_OkC (dtb__437) -> (match (((v_dtCheckOursParts ctx) dtb__435) dtb__437) with
-  | Base_dDiag.C_Check_ErrC (dtb__438) -> (Base_dDiag.C_Check_ErrC (dtb__438))
-  | Base_dDiag.C_Check_OkC (dtb__439) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__439)))
+let v_dtCheckSourceWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (let _u = (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-source=check modules=" ^ (bi_strFromInt (B_dData_dList.v_length ifaces)))) else 0) in (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((((Loader_dFlatten.v_loadModuleSourceWithPreloaded nFs) ctx) label) source) (v_modulesOfIfaces ifaces))) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__425) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__425)))
+  | Base_dDiag.C_Check_OkC (dtb__426) -> (match ((v_filterProjectToImports (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__426) with
+  | { B_dData_dPair.f_Pair_first = dtb__427; B_dData_dPair.f_Pair_second = dtb__428 } -> (let missing = (((v_missingDepModules (Frontend_dPackages_dPkg.v_contextPackageName ctx)) dtb__428) ((B_dData_dList.v_map Driver_dIface.v_miNameOf) ifaces)) in (let _u = (if ((B_dData_dList.v_length missing) > 0) then (if ((dtp_log_on 3) "Vuna.Compiler.Driver.Dt") then (((dtp_log_emit 3) "Vuna.Compiler.Driver.Dt") ("iface-fallback=check missing=" ^ ((B_dData_dString.v_join ",") missing))) else 0) else 0) in (if ((B_dData_dList.v_length missing) = 0) then ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match (((Loader_dFlatten.v_resolveProjectKeeping (Frontend_dPackages_dPkg.v_contextRelease ctx)) ((v_preloadKeepOf ifaces) dtb__428)) dtb__427) with
+  | Base_dDiag.C_Check_ErrC (dtb__429) -> (Base_dDiag.C_Check_ErrC (dtb__429))
+  | Base_dDiag.C_Check_OkC (dtb__430) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__430)) (Driver_dIface.v_restoreDefLocsSpans ifaces))) with
+  | Base_dDiag.C_Check_ErrC (dtb__431) -> (Base_dDiag.C_Check_ErrC (dtb__431))
+  | Base_dDiag.C_Check_OkC (dtb__432) -> (match (((v_dtCheckOursParts ctx) dtb__430) dtb__432) with
+  | Base_dDiag.C_Check_ErrC (dtb__433) -> (Base_dDiag.C_Check_ErrC (dtb__433))
+  | Base_dDiag.C_Check_OkC (dtb__434) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__434)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -1312,181 +1290,181 @@ let v_dtCheckSourceWithIfaces = (fun (nFs : string) (nEnv : string) (nProcess : 
 let v_dtFinishPackage = (fun (loaderWarns : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (depCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (cleanCps : Driver_dCache.t_CachedProgram B_dData_dList.t_List) (prog : Elab_dTypes.t_DtProgram) (parts : (Frontend_dAst.t_Decl B_dData_dList.t_List, Loader_dModules.t_Module B_dData_dList.t_List) B_dData_dPair.t_Pair) (next : t_AuxCache B_dData_dMaybe.t_Maybe) -> (let assembled = { Elab_dTypes.f_DtProgram_dtProgDatas = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) depCps)) ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDatas) cleanCps)) (Elab_dTypes.v_dtProgDatas prog))); Elab_dTypes.f_DtProgram_dtProgDefs = ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDefs) depCps)) ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedDefs) cleanCps)) (Elab_dTypes.v_dtProgDefs prog))); Elab_dTypes.f_DtProgram_dtProgGoals = (Elab_dTypes.v_dtProgGoals prog); Elab_dTypes.f_DtProgram_dtProgSols = (Elab_dTypes.v_dtProgSols prog); Elab_dTypes.f_DtProgram_dtProgGlobals = (v_dedupGlobals ((B_dData_dList.v_append ((B_dData_dList.v_concatMap Driver_dCache.v_cachedGlobals) cleanCps)) (Elab_dTypes.v_dtProgGlobals prog))); Elab_dTypes.f_DtProgram_dtProgInsts = (Elab_dTypes.v_dtProgInsts prog); Elab_dTypes.f_DtProgram_dtProgClasses = (Elab_dTypes.v_dtProgClasses prog); Elab_dTypes.f_DtProgram_dtProgNext = (prog).Elab_dTypes.f_DtProgram_dtProgNext; Elab_dTypes.f_DtProgram_dtProgDepths = (prog).Elab_dTypes.f_DtProgram_dtProgDepths; Elab_dTypes.f_DtProgram_dtProgWarnings = (Elab_dTypes.v_dtProgWarnings prog) } in (let warns = ((B_dData_dList.v_append loaderWarns) (Elab_dTypes.v_dtProgWarnings prog)) in (let checked = { f_CheckedPackage_checkedProgram = assembled; f_CheckedPackage_checkedModules = (B_dData_dPair.v_secondOf parts); f_CheckedPackage_checkedEntryDecls = (B_dData_dPair.v_firstOf parts); f_CheckedPackage_checkedInherited = (v_cachedNamesOf depCps); f_CheckedPackage_checkedWarnings = warns } in ((Base_dCommon.v_bind (((v_checkDtProgramOf (Elab_dTypes.v_dtProgDatas assembled)) (Elab_dTypes.v_dtProgDefs assembled)) (Elab_dTypes.v_dtProgGlobals assembled))) (fun (_u : int) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dMaybe.C_Maybe_Just (checked)); B_dData_dPair.f_Pair_second = next }))))))))
 
 # 1603 "Vuna/Compiler/Driver/Dt.vuna"
-let v_dtCheckSourceChecked = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((Loader_dFlatten.v_loadModuleSource nFs) nEnv) nProcess) ctx) label) source)) (fun projectR -> (match projectR with
-  | Base_dDiag.C_Check_ErrC (dtb__440) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__440)))
-  | Base_dDiag.C_Check_OkC (dtb__441) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((v_dtCheckPartsWithProgram (Frontend_dPackages_dPkg.v_contextPackageName ctx)) ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__441)))))
+let v_dtCheckSourceChecked = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (label : string) (source : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((Loader_dFlatten.v_loadModuleSource nFs) ctx) label) source)) (fun projectR -> (match projectR with
+  | Base_dDiag.C_Check_ErrC (dtb__435) -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dDiag.C_Check_ErrC (dtb__435)))
+  | Base_dDiag.C_Check_OkC (dtb__436) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Base_dObs.v_obsMarkEff "vuna.resolve")) (fun _u -> ((v_dtCheckPartsWithProgram (Frontend_dPackages_dPkg.v_contextPackageName ctx)) ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((Loader_dFlatten.v_resolveProjectWith (Frontend_dPackages_dPkg.v_contextRelease ctx)) dtb__436)))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 285 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckModuleFile = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (path : string) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dEffect_dFs.v_fsReadFile nFs) path)) (fun text -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_dtCheckSourceChecked nFs) nEnv) nProcess) ctx) path) text)) (fun checked -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match checked with
-  | Base_dDiag.C_Check_ErrC (dtb__442) -> (Base_dDiag.C_Check_ErrC (dtb__442))
-  | Base_dDiag.C_Check_OkC (dtb__443) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__443)))
+  | Base_dDiag.C_Check_ErrC (dtb__437) -> (Base_dDiag.C_Check_ErrC (dtb__437))
+  | Base_dDiag.C_Check_OkC (dtb__438) -> (Base_dDiag.C_Check_OkC ((B_dData_dPair.v_firstOf dtb__438)))
   | _ -> failwith "DT: impossible branch"
 )))))))
 
-# 1940 "Vuna/Compiler/Driver/Dt.vuna"
+# 1827 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckPackageWithIfacesParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (entry : string) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_dtLoadPartsWithIfaces nFs) nEnv) nProcess) ctx) entry) ifaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__444) -> (Base_dDiag.C_Check_ErrC (dtb__444))
-  | Base_dDiag.C_Check_OkC (dtb__445) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__445)) ifaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__446) -> (Base_dDiag.C_Check_ErrC (dtb__446))
-  | Base_dDiag.C_Check_OkC (dtb__447) -> (((v_dtCheckOursParts ctx) dtb__445) dtb__447)
+  | Base_dDiag.C_Check_ErrC (dtb__439) -> (Base_dDiag.C_Check_ErrC (dtb__439))
+  | Base_dDiag.C_Check_OkC (dtb__440) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__440)) (Driver_dIface.v_restoreDefLocsSpans ifaces))) with
+  | Base_dDiag.C_Check_ErrC (dtb__441) -> (Base_dDiag.C_Check_ErrC (dtb__441))
+  | Base_dDiag.C_Check_OkC (dtb__442) -> ((Base_dCommon.v_bind (((v_dtCheckOursParts ctx) dtb__440) dtb__442)) (fun (p : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, t_CheckedPackage) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC (((v_addUnusedWarnsPair (v_unusedWarnsForPackage ctx)) p)))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 1983 "Vuna/Compiler/Driver/Dt.vuna"
+# 1870 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dtCheckLibraryPackageWithIfacesParts = (fun (nFs : string) (nEnv : string) (nProcess : string) (ctx : Frontend_dPackages_dPkg.t_PackageContext) (names : string B_dData_dList.t_List) (ifaces : Driver_dIface.t_ModuleIface B_dData_dList.t_List) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((((((v_dtLoadModulesPartsWithIfaces nFs) nEnv) nProcess) ctx) names) ifaces)) (fun partsR -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (match partsR with
-  | Base_dDiag.C_Check_ErrC (dtb__448) -> (Base_dDiag.C_Check_ErrC (dtb__448))
-  | Base_dDiag.C_Check_OkC (dtb__449) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__449)) ifaces)) with
-  | Base_dDiag.C_Check_ErrC (dtb__450) -> (Base_dDiag.C_Check_ErrC (dtb__450))
-  | Base_dDiag.C_Check_OkC (dtb__451) -> (((v_dtCheckOursParts ctx) dtb__449) dtb__451)
+  | Base_dDiag.C_Check_ErrC (dtb__443) -> (Base_dDiag.C_Check_ErrC (dtb__443))
+  | Base_dDiag.C_Check_OkC (dtb__444) -> (match (v_shiftedDepPrograms (((v_materializedDeps (Frontend_dPackages_dPkg.v_contextPackageName ctx)) (B_dData_dPair.v_secondOf dtb__444)) (Driver_dIface.v_restoreDefLocsSpans ifaces))) with
+  | Base_dDiag.C_Check_ErrC (dtb__445) -> (Base_dDiag.C_Check_ErrC (dtb__445))
+  | Base_dDiag.C_Check_OkC (dtb__446) -> ((Base_dCommon.v_bind (((v_dtCheckOursParts ctx) dtb__444) dtb__446)) (fun (p : (Base_dDiag.t_Diagnostic B_dData_dList.t_List, t_CheckedPackage) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC (((v_addUnusedWarnsPair (v_unusedWarnsForLibrary ctx)) p)))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 )))))
+
+# 63 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedProgram = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__447; f_CheckedPackage_checkedModules = dtb__448; f_CheckedPackage_checkedEntryDecls = dtb__449; f_CheckedPackage_checkedInherited = dtb__450; f_CheckedPackage_checkedWarnings = dtb__451 } -> dtb__447
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 64 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedModules = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__452; f_CheckedPackage_checkedModules = dtb__453; f_CheckedPackage_checkedEntryDecls = dtb__454; f_CheckedPackage_checkedInherited = dtb__455; f_CheckedPackage_checkedWarnings = dtb__456 } -> dtb__453
+  | _ -> failwith "DT: impossible branch"
+))
 
 # 65 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedProgram = (fun (p : t_CheckedPackage) -> (match p with
-  | { f_CheckedPackage_checkedProgram = dtb__452; f_CheckedPackage_checkedModules = dtb__453; f_CheckedPackage_checkedEntryDecls = dtb__454; f_CheckedPackage_checkedInherited = dtb__455; f_CheckedPackage_checkedWarnings = dtb__456 } -> dtb__452
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 66 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedModules = (fun (p : t_CheckedPackage) -> (match p with
-  | { f_CheckedPackage_checkedProgram = dtb__457; f_CheckedPackage_checkedModules = dtb__458; f_CheckedPackage_checkedEntryDecls = dtb__459; f_CheckedPackage_checkedInherited = dtb__460; f_CheckedPackage_checkedWarnings = dtb__461 } -> dtb__458
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 67 "Vuna/Compiler/Driver/Dt.vuna"
 let v_checkedEntryDecls = (fun (p : t_CheckedPackage) -> (match p with
-  | { f_CheckedPackage_checkedProgram = dtb__462; f_CheckedPackage_checkedModules = dtb__463; f_CheckedPackage_checkedEntryDecls = dtb__464; f_CheckedPackage_checkedInherited = dtb__465; f_CheckedPackage_checkedWarnings = dtb__466 } -> dtb__464
+  | { f_CheckedPackage_checkedProgram = dtb__457; f_CheckedPackage_checkedModules = dtb__458; f_CheckedPackage_checkedEntryDecls = dtb__459; f_CheckedPackage_checkedInherited = dtb__460; f_CheckedPackage_checkedWarnings = dtb__461 } -> dtb__459
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 68 "Vuna/Compiler/Driver/Dt.vuna"
+let v_checkedInherited = (fun (p : t_CheckedPackage) -> (match p with
+  | { f_CheckedPackage_checkedProgram = dtb__462; f_CheckedPackage_checkedModules = dtb__463; f_CheckedPackage_checkedEntryDecls = dtb__464; f_CheckedPackage_checkedInherited = dtb__465; f_CheckedPackage_checkedWarnings = dtb__466 } -> dtb__465
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 70 "Vuna/Compiler/Driver/Dt.vuna"
-let v_checkedInherited = (fun (p : t_CheckedPackage) -> (match p with
-  | { f_CheckedPackage_checkedProgram = dtb__467; f_CheckedPackage_checkedModules = dtb__468; f_CheckedPackage_checkedEntryDecls = dtb__469; f_CheckedPackage_checkedInherited = dtb__470; f_CheckedPackage_checkedWarnings = dtb__471 } -> dtb__470
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 72 "Vuna/Compiler/Driver/Dt.vuna"
 let v_checkedWarnings = (fun (p : t_CheckedPackage) -> (match p with
-  | { f_CheckedPackage_checkedProgram = dtb__472; f_CheckedPackage_checkedModules = dtb__473; f_CheckedPackage_checkedEntryDecls = dtb__474; f_CheckedPackage_checkedInherited = dtb__475; f_CheckedPackage_checkedWarnings = dtb__476 } -> dtb__476
+  | { f_CheckedPackage_checkedProgram = dtb__467; f_CheckedPackage_checkedModules = dtb__468; f_CheckedPackage_checkedEntryDecls = dtb__469; f_CheckedPackage_checkedInherited = dtb__470; f_CheckedPackage_checkedWarnings = dtb__471 } -> dtb__471
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 578 "Vuna/Compiler/Driver/Dt.vuna"
 let v_genMetaId = (fun (p : t_GenMeta) -> (match p with
-  | { f_GenMeta_genMetaId = dtb__477; f_GenMeta_genMetaName = dtb__478; f_GenMeta_genMetaKind = dtb__479 } -> dtb__477
+  | { f_GenMeta_genMetaId = dtb__472; f_GenMeta_genMetaName = dtb__473; f_GenMeta_genMetaKind = dtb__474 } -> dtb__472
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 579 "Vuna/Compiler/Driver/Dt.vuna"
 let v_genMetaName = (fun (p : t_GenMeta) -> (match p with
-  | { f_GenMeta_genMetaId = dtb__480; f_GenMeta_genMetaName = dtb__481; f_GenMeta_genMetaKind = dtb__482 } -> dtb__481
+  | { f_GenMeta_genMetaId = dtb__475; f_GenMeta_genMetaName = dtb__476; f_GenMeta_genMetaKind = dtb__477 } -> dtb__476
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 580 "Vuna/Compiler/Driver/Dt.vuna"
 let v_genMetaKind = (fun (p : t_GenMeta) -> (match p with
-  | { f_GenMeta_genMetaId = dtb__483; f_GenMeta_genMetaName = dtb__484; f_GenMeta_genMetaKind = dtb__485 } -> dtb__485
+  | { f_GenMeta_genMetaId = dtb__478; f_GenMeta_genMetaName = dtb__479; f_GenMeta_genMetaKind = dtb__480 } -> dtb__480
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 882 "Vuna/Compiler/Driver/Dt.vuna"
 let v_miKind = (fun (p : t_MainInfo) -> (match p with
-  | { f_MainInfo_miKind = dtb__486; f_MainInfo_miHostTags = dtb__487 } -> dtb__486
+  | { f_MainInfo_miKind = dtb__481; f_MainInfo_miHostTags = dtb__482 } -> dtb__481
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 883 "Vuna/Compiler/Driver/Dt.vuna"
 let v_miHostTags = (fun (p : t_MainInfo) -> (match p with
-  | { f_MainInfo_miKind = dtb__488; f_MainInfo_miHostTags = dtb__489 } -> dtb__489
+  | { f_MainInfo_miKind = dtb__483; f_MainInfo_miHostTags = dtb__484 } -> dtb__484
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1311 "Vuna/Compiler/Driver/Dt.vuna"
 let v_auxCacheKey = (fun (p : t_AuxCache) -> (match p with
-  | { f_AuxCache_auxCacheKey = dtb__490; f_AuxCache_auxCacheDecls = dtb__491; f_AuxCache_auxCacheStart = dtb__492; f_AuxCache_auxCacheDepCps = dtb__493; f_AuxCache_auxCacheCleanCps = dtb__494 } -> dtb__490
+  | { f_AuxCache_auxCacheKey = dtb__485; f_AuxCache_auxCacheDecls = dtb__486; f_AuxCache_auxCacheStart = dtb__487; f_AuxCache_auxCacheDepCps = dtb__488; f_AuxCache_auxCacheCleanCps = dtb__489 } -> dtb__485
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1312 "Vuna/Compiler/Driver/Dt.vuna"
 let v_auxCacheDecls = (fun (p : t_AuxCache) -> (match p with
-  | { f_AuxCache_auxCacheKey = dtb__495; f_AuxCache_auxCacheDecls = dtb__496; f_AuxCache_auxCacheStart = dtb__497; f_AuxCache_auxCacheDepCps = dtb__498; f_AuxCache_auxCacheCleanCps = dtb__499 } -> dtb__496
+  | { f_AuxCache_auxCacheKey = dtb__490; f_AuxCache_auxCacheDecls = dtb__491; f_AuxCache_auxCacheStart = dtb__492; f_AuxCache_auxCacheDepCps = dtb__493; f_AuxCache_auxCacheCleanCps = dtb__494 } -> dtb__491
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1313 "Vuna/Compiler/Driver/Dt.vuna"
 let v_auxCacheStart = (fun (p : t_AuxCache) -> (match p with
-  | { f_AuxCache_auxCacheKey = dtb__500; f_AuxCache_auxCacheDecls = dtb__501; f_AuxCache_auxCacheStart = dtb__502; f_AuxCache_auxCacheDepCps = dtb__503; f_AuxCache_auxCacheCleanCps = dtb__504 } -> dtb__502
+  | { f_AuxCache_auxCacheKey = dtb__495; f_AuxCache_auxCacheDecls = dtb__496; f_AuxCache_auxCacheStart = dtb__497; f_AuxCache_auxCacheDepCps = dtb__498; f_AuxCache_auxCacheCleanCps = dtb__499 } -> dtb__497
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1314 "Vuna/Compiler/Driver/Dt.vuna"
 let v_auxCacheDepCps = (fun (p : t_AuxCache) -> (match p with
-  | { f_AuxCache_auxCacheKey = dtb__505; f_AuxCache_auxCacheDecls = dtb__506; f_AuxCache_auxCacheStart = dtb__507; f_AuxCache_auxCacheDepCps = dtb__508; f_AuxCache_auxCacheCleanCps = dtb__509 } -> dtb__508
+  | { f_AuxCache_auxCacheKey = dtb__500; f_AuxCache_auxCacheDecls = dtb__501; f_AuxCache_auxCacheStart = dtb__502; f_AuxCache_auxCacheDepCps = dtb__503; f_AuxCache_auxCacheCleanCps = dtb__504 } -> dtb__503
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1315 "Vuna/Compiler/Driver/Dt.vuna"
 let v_auxCacheCleanCps = (fun (p : t_AuxCache) -> (match p with
-  | { f_AuxCache_auxCacheKey = dtb__510; f_AuxCache_auxCacheDecls = dtb__511; f_AuxCache_auxCacheStart = dtb__512; f_AuxCache_auxCacheDepCps = dtb__513; f_AuxCache_auxCacheCleanCps = dtb__514 } -> dtb__514
+  | { f_AuxCache_auxCacheKey = dtb__505; f_AuxCache_auxCacheDecls = dtb__506; f_AuxCache_auxCacheStart = dtb__507; f_AuxCache_auxCacheDepCps = dtb__508; f_AuxCache_auxCacheCleanCps = dtb__509 } -> dtb__509
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1348 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsStartEc = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__515; f_DtIncrSetup_dsStartGlobals = dtb__516; f_DtIncrSetup_dsTermAux = dtb__517; f_DtIncrSetup_dsPrepared = dtb__518; f_DtIncrSetup_dsDecls = dtb__519; f_DtIncrSetup_dsWarns = dtb__520; f_DtIncrSetup_dsDepCps = dtb__521; f_DtIncrSetup_dsCleanCps = dtb__522; f_DtIncrSetup_dsNext = dtb__523 } -> dtb__515
+  | { f_DtIncrSetup_dsStartEc = dtb__510; f_DtIncrSetup_dsStartGlobals = dtb__511; f_DtIncrSetup_dsTermAux = dtb__512; f_DtIncrSetup_dsPrepared = dtb__513; f_DtIncrSetup_dsDecls = dtb__514; f_DtIncrSetup_dsWarns = dtb__515; f_DtIncrSetup_dsDepCps = dtb__516; f_DtIncrSetup_dsCleanCps = dtb__517; f_DtIncrSetup_dsNext = dtb__518 } -> dtb__510
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1349 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsStartGlobals = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__524; f_DtIncrSetup_dsStartGlobals = dtb__525; f_DtIncrSetup_dsTermAux = dtb__526; f_DtIncrSetup_dsPrepared = dtb__527; f_DtIncrSetup_dsDecls = dtb__528; f_DtIncrSetup_dsWarns = dtb__529; f_DtIncrSetup_dsDepCps = dtb__530; f_DtIncrSetup_dsCleanCps = dtb__531; f_DtIncrSetup_dsNext = dtb__532 } -> dtb__525
+  | { f_DtIncrSetup_dsStartEc = dtb__519; f_DtIncrSetup_dsStartGlobals = dtb__520; f_DtIncrSetup_dsTermAux = dtb__521; f_DtIncrSetup_dsPrepared = dtb__522; f_DtIncrSetup_dsDecls = dtb__523; f_DtIncrSetup_dsWarns = dtb__524; f_DtIncrSetup_dsDepCps = dtb__525; f_DtIncrSetup_dsCleanCps = dtb__526; f_DtIncrSetup_dsNext = dtb__527 } -> dtb__520
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1350 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsTermAux = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__533; f_DtIncrSetup_dsStartGlobals = dtb__534; f_DtIncrSetup_dsTermAux = dtb__535; f_DtIncrSetup_dsPrepared = dtb__536; f_DtIncrSetup_dsDecls = dtb__537; f_DtIncrSetup_dsWarns = dtb__538; f_DtIncrSetup_dsDepCps = dtb__539; f_DtIncrSetup_dsCleanCps = dtb__540; f_DtIncrSetup_dsNext = dtb__541 } -> dtb__535
+  | { f_DtIncrSetup_dsStartEc = dtb__528; f_DtIncrSetup_dsStartGlobals = dtb__529; f_DtIncrSetup_dsTermAux = dtb__530; f_DtIncrSetup_dsPrepared = dtb__531; f_DtIncrSetup_dsDecls = dtb__532; f_DtIncrSetup_dsWarns = dtb__533; f_DtIncrSetup_dsDepCps = dtb__534; f_DtIncrSetup_dsCleanCps = dtb__535; f_DtIncrSetup_dsNext = dtb__536 } -> dtb__530
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1351 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsPrepared = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__542; f_DtIncrSetup_dsStartGlobals = dtb__543; f_DtIncrSetup_dsTermAux = dtb__544; f_DtIncrSetup_dsPrepared = dtb__545; f_DtIncrSetup_dsDecls = dtb__546; f_DtIncrSetup_dsWarns = dtb__547; f_DtIncrSetup_dsDepCps = dtb__548; f_DtIncrSetup_dsCleanCps = dtb__549; f_DtIncrSetup_dsNext = dtb__550 } -> dtb__545
+  | { f_DtIncrSetup_dsStartEc = dtb__537; f_DtIncrSetup_dsStartGlobals = dtb__538; f_DtIncrSetup_dsTermAux = dtb__539; f_DtIncrSetup_dsPrepared = dtb__540; f_DtIncrSetup_dsDecls = dtb__541; f_DtIncrSetup_dsWarns = dtb__542; f_DtIncrSetup_dsDepCps = dtb__543; f_DtIncrSetup_dsCleanCps = dtb__544; f_DtIncrSetup_dsNext = dtb__545 } -> dtb__540
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1352 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsDecls = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__551; f_DtIncrSetup_dsStartGlobals = dtb__552; f_DtIncrSetup_dsTermAux = dtb__553; f_DtIncrSetup_dsPrepared = dtb__554; f_DtIncrSetup_dsDecls = dtb__555; f_DtIncrSetup_dsWarns = dtb__556; f_DtIncrSetup_dsDepCps = dtb__557; f_DtIncrSetup_dsCleanCps = dtb__558; f_DtIncrSetup_dsNext = dtb__559 } -> dtb__555
+  | { f_DtIncrSetup_dsStartEc = dtb__546; f_DtIncrSetup_dsStartGlobals = dtb__547; f_DtIncrSetup_dsTermAux = dtb__548; f_DtIncrSetup_dsPrepared = dtb__549; f_DtIncrSetup_dsDecls = dtb__550; f_DtIncrSetup_dsWarns = dtb__551; f_DtIncrSetup_dsDepCps = dtb__552; f_DtIncrSetup_dsCleanCps = dtb__553; f_DtIncrSetup_dsNext = dtb__554 } -> dtb__550
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1353 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsWarns = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__560; f_DtIncrSetup_dsStartGlobals = dtb__561; f_DtIncrSetup_dsTermAux = dtb__562; f_DtIncrSetup_dsPrepared = dtb__563; f_DtIncrSetup_dsDecls = dtb__564; f_DtIncrSetup_dsWarns = dtb__565; f_DtIncrSetup_dsDepCps = dtb__566; f_DtIncrSetup_dsCleanCps = dtb__567; f_DtIncrSetup_dsNext = dtb__568 } -> dtb__565
+  | { f_DtIncrSetup_dsStartEc = dtb__555; f_DtIncrSetup_dsStartGlobals = dtb__556; f_DtIncrSetup_dsTermAux = dtb__557; f_DtIncrSetup_dsPrepared = dtb__558; f_DtIncrSetup_dsDecls = dtb__559; f_DtIncrSetup_dsWarns = dtb__560; f_DtIncrSetup_dsDepCps = dtb__561; f_DtIncrSetup_dsCleanCps = dtb__562; f_DtIncrSetup_dsNext = dtb__563 } -> dtb__560
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1354 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsDepCps = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__569; f_DtIncrSetup_dsStartGlobals = dtb__570; f_DtIncrSetup_dsTermAux = dtb__571; f_DtIncrSetup_dsPrepared = dtb__572; f_DtIncrSetup_dsDecls = dtb__573; f_DtIncrSetup_dsWarns = dtb__574; f_DtIncrSetup_dsDepCps = dtb__575; f_DtIncrSetup_dsCleanCps = dtb__576; f_DtIncrSetup_dsNext = dtb__577 } -> dtb__575
+  | { f_DtIncrSetup_dsStartEc = dtb__564; f_DtIncrSetup_dsStartGlobals = dtb__565; f_DtIncrSetup_dsTermAux = dtb__566; f_DtIncrSetup_dsPrepared = dtb__567; f_DtIncrSetup_dsDecls = dtb__568; f_DtIncrSetup_dsWarns = dtb__569; f_DtIncrSetup_dsDepCps = dtb__570; f_DtIncrSetup_dsCleanCps = dtb__571; f_DtIncrSetup_dsNext = dtb__572 } -> dtb__570
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1355 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsCleanCps = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__578; f_DtIncrSetup_dsStartGlobals = dtb__579; f_DtIncrSetup_dsTermAux = dtb__580; f_DtIncrSetup_dsPrepared = dtb__581; f_DtIncrSetup_dsDecls = dtb__582; f_DtIncrSetup_dsWarns = dtb__583; f_DtIncrSetup_dsDepCps = dtb__584; f_DtIncrSetup_dsCleanCps = dtb__585; f_DtIncrSetup_dsNext = dtb__586 } -> dtb__585
+  | { f_DtIncrSetup_dsStartEc = dtb__573; f_DtIncrSetup_dsStartGlobals = dtb__574; f_DtIncrSetup_dsTermAux = dtb__575; f_DtIncrSetup_dsPrepared = dtb__576; f_DtIncrSetup_dsDecls = dtb__577; f_DtIncrSetup_dsWarns = dtb__578; f_DtIncrSetup_dsDepCps = dtb__579; f_DtIncrSetup_dsCleanCps = dtb__580; f_DtIncrSetup_dsNext = dtb__581 } -> dtb__580
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 1356 "Vuna/Compiler/Driver/Dt.vuna"
 let v_dsNext = (fun (p : t_DtIncrSetup) -> (match p with
-  | { f_DtIncrSetup_dsStartEc = dtb__587; f_DtIncrSetup_dsStartGlobals = dtb__588; f_DtIncrSetup_dsTermAux = dtb__589; f_DtIncrSetup_dsPrepared = dtb__590; f_DtIncrSetup_dsDecls = dtb__591; f_DtIncrSetup_dsWarns = dtb__592; f_DtIncrSetup_dsDepCps = dtb__593; f_DtIncrSetup_dsCleanCps = dtb__594; f_DtIncrSetup_dsNext = dtb__595 } -> dtb__595
+  | { f_DtIncrSetup_dsStartEc = dtb__582; f_DtIncrSetup_dsStartGlobals = dtb__583; f_DtIncrSetup_dsTermAux = dtb__584; f_DtIncrSetup_dsPrepared = dtb__585; f_DtIncrSetup_dsDecls = dtb__586; f_DtIncrSetup_dsWarns = dtb__587; f_DtIncrSetup_dsDepCps = dtb__588; f_DtIncrSetup_dsCleanCps = dtb__589; f_DtIncrSetup_dsNext = dtb__590 } -> dtb__590
   | _ -> failwith "DT: impossible branch"
 ))

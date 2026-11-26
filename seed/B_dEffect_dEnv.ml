@@ -29,3 +29,6 @@ let v_handleEnvHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_han
 
 # 72 "Base/Effect/Env.vuna"
 let v_runEnvHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleEnvHostHost "default") comp)))
+
+# 76 "Base/Effect/Env.vuna"
+let v_runEnvEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runEnvHost comp)))
