@@ -149,6 +149,10 @@ if [ -z \"$JOBS\" ]; then
 fi
 C_MODULES=\"${spaceJoin cFiles}\"
 C_OBJS=\"\"
+# 宿主运行时（`dtHostRuntime`）是唯一引用 `Unix.` 的块；不用宿主原语的程序不链接
+# `unix.cmxa`——它的模块初始化在进程启动时值几百微秒。
+UNIX=\"\"
+if grep -q 'Unix\\.' Vuna_runtime.ml 2>/dev/null; then UNIX=\"unix.cmxa\"; fi
 if [ -n \"$C_MODULES\" ]; then
   for c in $C_MODULES; do ocamlopt -I +unix -c \"$c\"; b=\${c##*/}; C_OBJS=\"$C_OBJS \${b%.c}.o\"; done
 fi
@@ -218,14 +222,14 @@ if [ \"$clean\" -eq 1 ] && [ \"$JOBS\" -le 1 ]; then
   SOURCES=\"\"
   CMXS=\"\"
   each_unit source
-  ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $SOURCES $C_OBJS
+  ocamlopt $FLAGS -I +unix -o \"$OUT\" $UNIX $SOURCES $C_OBJS
   each_unit stamps
   echo \"built $OUT\"
   exit 0
 fi
 CMXS=\"\"
 each_unit parallel
-ocamlopt $FLAGS -I +unix -o \"$OUT\" unix.cmxa $CMXS $C_OBJS
+ocamlopt $FLAGS -I +unix -o \"$OUT\" $UNIX $CMXS $C_OBJS
 echo \"built $OUT\"
 """
 

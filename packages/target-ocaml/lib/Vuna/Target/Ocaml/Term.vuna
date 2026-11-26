@@ -232,19 +232,6 @@ let dtp_eprint s =
 let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
 let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
 let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
-let dtp_hostCode (e : exn) : int =
-  match e with
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
-  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
-  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
-  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
-  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
-  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
-  | _ -> 9
-(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
-let dtp_hostCodeAt path (e : exn) : int =
-  try ignore (Unix.stat path); dtp_hostCode e
-  with e2 -> dtp_hostCode e2
 let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
 let dtp_hostReset () = dtp_hostSetStatus 0
 let dtp_hostMark code e =
@@ -274,13 +261,6 @@ let dtp_writeFile path contents =
       (fun () -> output_string ch contents);
     String.length contents
   with Sys_error msg -> failwith (\"writeFile: \" ^ msg)
-let dtp_writeFileAtomic path contents =
-  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
-  let write () =
-    let ch = open_out_bin tmp in
-    Fun.protect ~finally:(fun () -> close_out_noerr ch) (fun () -> output_string ch contents) in
-  (try write (); Sys.rename tmp path; String.length contents
-   with e -> (try Sys.remove tmp with _ -> ()); raise e)
 let dtp_getArgs () =
   let argv = Sys.argv in
   let n = Array.length argv in
@@ -306,131 +286,8 @@ let dtp_removeFile path =
   try (if Sys.file_exists path then (Sys.remove path; 0) else 0)
   with Sys_error msg -> failwith (\"removeFile: \" ^ msg)
 let dtp_fileExists path = Sys.file_exists path
-let dtp_fileMtime path =
-  (try dtp_hostReset (); int_of_float (Unix.stat path).Unix.st_mtime
-   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
-let dtp_fileSize path =
-  (try dtp_hostReset (); (Unix.stat path).Unix.st_size
-   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
-let dtp_tryReadFile path =
-  (try
-     dtp_hostReset ();
-     let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
-     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
-       (fun () ->
-          let buf = Buffer.create 65536 in
-          let tmp = Bytes.create 65536 in
-          let rec go () =
-            let n = Unix.read fd tmp 0 (Bytes.length tmp) in
-            if n > 0 then (Buffer.add_subbytes buf tmp 0 n; go ()) in
-          go (); Buffer.contents buf)
-   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
-let dtp_tryReadFileRange path offset length =
-  (try
-     dtp_hostReset ();
-     if offset < 0 || length <= 0 then \"\"
-     else
-       let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
-       Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
-         (fun () ->
-            let size = (Unix.stat path).Unix.st_size in
-            if offset >= size then \"\"
-            else
-              let want = min length (size - offset) in
-              ignore (Unix.lseek fd offset Unix.SEEK_SET);
-              let b = Bytes.create want in
-              let rec go pos =
-                if pos < want then
-                  let k = Unix.read fd b pos (want - pos) in
-                  if k > 0 then go (pos + k) in
-              go 0; Bytes.sub_string b 0 want)
-   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
-let dtp_tryWriteFile path contents =
-  (try
-     dtp_hostReset ();
-     let fd = Unix.openfile path [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
-     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
-       (fun () ->
-          let b = Bytes.of_string contents in
-          let n = Bytes.length b in
-          let rec go off =
-            if off < n then
-              let k = Unix.write fd b off (n - off) in
-              if k > 0 then go (off + k) in
-          go 0);
-     String.length contents
-   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
-let dtp_tryWriteFileAtomic path contents =
-  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
-  (try
-     dtp_hostReset ();
-     (let fd = Unix.openfile tmp [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
-      Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
-        (fun () ->
-           let b = Bytes.of_string contents in
-           let n = Bytes.length b in
-           let rec go off =
-             if off < n then
-               let k = Unix.write fd b off (n - off) in
-               if k > 0 then go (off + k) in
-           go 0));
-     Unix.rename tmp path;
-     String.length contents
-   with e -> (try Unix.unlink tmp with _ -> ()); dtp_hostFail (dtp_hostCode e); 0)
-let dtp_tryReadDir path =
-  (try dtp_hostReset (); List.sort compare (Array.to_list (Sys.readdir path))
-   with e -> dtp_hostFail (dtp_hostCodeAt path e); [])
-let dtp_tryIsDirectory path =
-  (try dtp_hostReset (); (Unix.stat path).Unix.st_kind = Unix.S_DIR
-   with e -> dtp_hostMark (dtp_hostCode e) e; false)
-let dtp_tryMakeDir path =
-  (try
-     dtp_hostReset ();
-     (try Unix.mkdir path 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
-     0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_tryRemoveFile path =
-  (try
-     dtp_hostReset ();
-     (try Unix.unlink path with Unix.Unix_error (Unix.ENOENT, _, _) -> ());
-     0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_tryRemoveTree path =
-  let rec go p =
-    try
-      let st = Unix.lstat p in
-      (match st.Unix.st_kind with
-       | Unix.S_DIR ->
-           Array.iter (fun e -> go (Filename.concat p e)) (Sys.readdir p);
-           Unix.rmdir p
-       | _ -> Unix.unlink p)
-    with Unix.Unix_error (Unix.ENOENT, _, _) -> () in
-  (try dtp_hostReset (); go path; 0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_tryRename src dst =
-  (try dtp_hostReset (); Unix.rename src dst; 0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_trySymlink target link =
-  (try dtp_hostReset (); Unix.symlink target link; 0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_tryMakeDirExclusive path =
-  (try dtp_hostReset (); Unix.mkdir path 0o755; 0
-   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
-let dtp_isTty () = Unix.isatty Unix.stdout
-let dtp_tryRunIn dir args =
-  let cmd = String.concat \" \" (List.map Filename.quote args) in
-  (try
-     dtp_hostReset ();
-     let old = Sys.getcwd () in
-     Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
-   with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
-let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
-let dtp_sleep us =
-  (if us > 0 then Unix.sleepf (float_of_int us /. 1000000.0));
-  0
 let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
 let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
-let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name
 let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
   let b = Array.copy a in
   Array.set b i v; b
@@ -490,53 +347,8 @@ let dtp_runIn dir args =
      125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
   let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
   if code = 125 then (dtp_hostSetStatus 1; -1) else code
-let dtp_spawn (args : string list) : int =
-  let prog = Sys.executable_name in
-  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
-let dtp_wait (pid : int) : int =
-  let (_, st) = Unix.waitpid [] pid in
-  match st with Unix.WEXITED c -> c | _ -> 1
-let dtp_net_tbl : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 16
-(* 监听句柄绑定的 unix socket 路径与当时的 inode：关闭句柄时只删仍然指向自己的那份文件。
-   没有这条记录（tcp 句柄 / 已被替换的路径）就不删，免得删掉同一路径上后继进程的 socket。 *)
 let dtp_net_owned : (int, string * int) Hashtbl.t = Hashtbl.create 4
 let dtp_net_next = ref 1
-let dtp_net_put (fd : Unix.file_descr) : int =
-  let k = !dtp_net_next in
-  dtp_net_next := k + 1;
-  Hashtbl.replace dtp_net_tbl k fd;
-  k
-let dtp_net_put_owned (fd : Unix.file_descr) (path : string) : int =
-  let h = dtp_net_put fd in
-  (try Hashtbl.replace dtp_net_owned h (path, (Unix.stat path).Unix.st_ino) with _ -> ());
-  h
-let dtp_net_get (h : int) : Unix.file_descr =
-  match Hashtbl.find_opt dtp_net_tbl h with
-  | Some fd -> fd
-  | None -> dtp_hostSetStatus 8; failwith \"net: invalid handle\"
-let dtp_net_unlink_owned (h : int) =
-  match Hashtbl.find_opt dtp_net_owned h with
-  | Some (path, ino) ->
-    (try if (Unix.stat path).Unix.st_ino = ino then Sys.remove path with _ -> ())
-  | None -> ()
-let dtp_net_drop (h : int) =
-  (try Hashtbl.remove dtp_net_tbl h with _ -> ());
-  (try Hashtbl.remove dtp_net_owned h with _ -> ())
-let dtp_netCodeOf (ue : Unix.error) : int =
-  match ue with
-  | Unix.ECONNREFUSED | Unix.ENOENT -> 2
-  | Unix.ETIMEDOUT -> 3
-  | Unix.EPIPE | Unix.ECONNRESET -> 4
-  | Unix.EADDRINUSE -> 5
-  | _ -> 9
-let dtp_net_error (what : string) (e : exn) : 'a =
-  (match e with
-   | Unix.Unix_error (ue, _, _) -> dtp_hostSetStatus (dtp_netCodeOf ue)
-   | _ -> dtp_hostSetStatus 9);
-  match e with
-  | Unix.Unix_error (ue, fn, arg) ->
-    failwith (\"net: \" ^ what ^ \": \" ^ Unix.error_message ue ^ (if arg = \"\" then \"\" else \" (\" ^ arg ^ \")\"))
-  | _ -> failwith (\"net: \" ^ what ^ \": \" ^ Printexc.to_string e)
 let dtp_net_parse (addr : string) =
   let n = String.length addr in
   if n > 5 && String.sub addr 0 5 = \"unix:\" then `Unix (String.sub addr 5 (n - 5))
@@ -550,132 +362,7 @@ let dtp_net_parse (addr : string) =
        let port = try int_of_string portstr with _ -> failwith (\"net: invalid port: \" ^ portstr) in
        `Tcp (host, port))
   else failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
-let dtp_net_listen (addr : string) : int =
-  match dtp_net_parse addr with
-  | `Unix path ->
-    (try if Sys.file_exists path then Sys.remove path with _ -> ());
-    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-    (try Unix.bind s (Unix.ADDR_UNIX path); Unix.listen s 8; dtp_net_put_owned s path
-     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
-  | `Tcp (host, port) ->
-    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    (try
-       Unix.setsockopt s Unix.SO_REUSEADDR true;
-       Unix.bind s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port));
-       Unix.listen s 8;
-       dtp_net_put s
-     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
-let dtp_net_port (h : int) : int =
-  match Unix.getsockname (dtp_net_get h) with
-  | Unix.ADDR_INET (_, p) -> p
-  | Unix.ADDR_UNIX _ -> 0
-let dtp_net_accept (h : int) : int =
-  (try let (fd, _) = Unix.accept (dtp_net_get h) in dtp_net_put fd
-   with e -> dtp_net_error \"accept\" e)
-let dtp_net_recv (h : int) (n : int) : string =
-  if n <= 0 then \"\"
-  else
-    let b = Bytes.create n in
-    (try
-       let k = Unix.read (dtp_net_get h) b 0 n in
-       if k <= 0 then \"\" else Bytes.sub_string b 0 k
-     with e -> dtp_net_error \"recv\" e)
-let dtp_net_send (h : int) (s : string) : int =
-  let fd = dtp_net_get h in
-  let n = String.length s in
-  let rec go off =
-    if off >= n then ()
-    else
-      let k = (try Unix.write_substring fd s off (n - off) with e -> dtp_net_error \"send\" e) in
-      if k <= 0 then failwith \"net: send: connection closed\" else go (off + k)
-  in
-  go 0; n
-let dtp_net_close (h : int) : int =
-  (try Unix.close (dtp_net_get h) with _ -> ());
-  dtp_net_unlink_owned h;
-  dtp_net_drop h; 0
-let dtp_netStatus (e : exn) : int =
-  match e with
-  | Unix.Unix_error (ue, _, _) -> dtp_netCodeOf ue
-  | _ -> 6
-let dtp_netMarkStatus (e : exn) =
-  let c = dtp_hostStatus () in
-  dtp_hostMark (if c = 0 then dtp_netStatus e else c) e
-let dtp_try_net_listen addr =
-  (try dtp_hostReset (); dtp_net_listen addr
-   with e -> dtp_netMarkStatus e; -1)
-let dtp_try_net_port h =
-  (try dtp_hostReset (); dtp_net_port h
-   with e -> dtp_netMarkStatus e; -1)
-let dtp_try_net_accept h =
-  (try dtp_hostReset (); dtp_net_accept h
-   with e -> dtp_netMarkStatus e; -1)
-let dtp_try_net_send h s =
-  (try dtp_hostReset (); dtp_net_send h s
-   with e -> dtp_netMarkStatus e; 0)
-let dtp_try_net_recv h n =
-  if n <= 0 then (dtp_hostSetStatus 1; \"\")
-  else
-    let b = Bytes.create n in
-    (try
-       let k = Unix.read (dtp_net_get h) b 0 n in
-       if k <= 0 then (dtp_hostSetStatus 1; \"\")
-       else (dtp_hostReset (); Bytes.sub_string b 0 k)
-     with e -> dtp_netMarkStatus e; \"\")
-let dtp_try_net_close h =
-  (try dtp_hostReset (); dtp_net_close h
-   with e -> dtp_netMarkStatus e; 0)
-let dtp_net_connect (addr : string) : int =
-  match dtp_net_parse addr with
-  | `Unix path ->
-    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
-    (try Unix.connect s (Unix.ADDR_UNIX path); dtp_net_put s
-     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
-  | `Tcp (host, port) ->
-    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
-     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
-let dtp_try_net_connect addr =
-  (try dtp_hostReset (); dtp_net_connect addr
-   with e -> dtp_netMarkStatus e; -1)
-let dtp_try_net_accept_within h micros =
-  (try
-     dtp_hostReset ();
-     let lfd = dtp_net_get h in
-     let (r, _, _) = Unix.select [lfd] [] [] (float_of_int micros /. 1000000.0) in
-     if r = [] then (dtp_hostSetStatus 7; -1)
-     else let (fd, _) = Unix.accept lfd in dtp_net_put fd
-   with e -> dtp_netMarkStatus e; -1)
-let dtp_try_net_recv_within h n micros =
-  if n <= 0 then (dtp_hostReset (); dtp_hostSetStatus 1; \"\")
-  else
-    (try
-       dtp_hostReset ();
-       let fd = dtp_net_get h in
-       let b = Bytes.create n in
-       let (r, _, _) = Unix.select [fd] [] [] (float_of_int micros /. 1000000.0) in
-       if r = [] then (dtp_hostSetStatus 7; \"\")
-       else
-         let k = Unix.read fd b 0 n in
-         if k <= 0 then (dtp_hostSetStatus 1; \"\") else Bytes.sub_string b 0 k
-     with e -> dtp_netMarkStatus e; \"\")
-let dtp_try_net_send_within h s micros =
-  (try
-     dtp_hostReset ();
-     let fd = dtp_net_get h in
-     let n = String.length s in
-     let secs = float_of_int micros /. 1000000.0 in
-     let rec go off =
-       if off >= n then true
-       else
-         let (_, w, _) = Unix.select [] [fd] [] secs in
-         if w = [] then false
-         else
-           let k = Unix.write_substring fd s off (n - off) in
-           if k <= 0 then false else go (off + k) in
-     if go 0 then n else (dtp_hostSetStatus 7; 0)
-   with e -> dtp_netMarkStatus e; 0)
-""") ++ dtSchedRuntime ++ dtThreadRuntime
+""") ++ dtSchedRuntime
 
 -- 单线程协作式 fiber 调度器运行时。
 -- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
@@ -1206,6 +893,324 @@ let dtp_atomic_compare_exchange (a : Obj.t) (expected : int) (desired : int) : i
   in
   loop ()
 """
+
+-- | 宿主与线程运行时：只有程序用到宿主 / 线程原语（`irSharedUsesHost`）时追加。
+-- 单独成块是为了让不用宿主原语的程序不引入 `unix.cmxa` 的初始化成本。
+dtHostRuntime : String
+dtHostRuntime = ("""let dtp_hostCode (e : exn) : int =
+  match e with
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
+  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
+  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
+  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
+  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
+  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
+  | _ -> 9
+(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
+let dtp_hostCodeAt path (e : exn) : int =
+  try ignore (Unix.stat path); dtp_hostCode e
+  with e2 -> dtp_hostCode e2
+let dtp_writeFileAtomic path contents =
+  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
+  let write () =
+    let ch = open_out_bin tmp in
+    Fun.protect ~finally:(fun () -> close_out_noerr ch) (fun () -> output_string ch contents) in
+  (try write (); Sys.rename tmp path; String.length contents
+   with e -> (try Sys.remove tmp with _ -> ()); raise e)
+let dtp_fileMtime path =
+  (try dtp_hostReset (); int_of_float (Unix.stat path).Unix.st_mtime
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
+let dtp_fileSize path =
+  (try dtp_hostReset (); (Unix.stat path).Unix.st_size
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
+let dtp_tryReadFile path =
+  (try
+     dtp_hostReset ();
+     let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
+     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+       (fun () ->
+          let buf = Buffer.create 65536 in
+          let tmp = Bytes.create 65536 in
+          let rec go () =
+            let n = Unix.read fd tmp 0 (Bytes.length tmp) in
+            if n > 0 then (Buffer.add_subbytes buf tmp 0 n; go ()) in
+          go (); Buffer.contents buf)
+   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
+let dtp_tryReadFileRange path offset length =
+  (try
+     dtp_hostReset ();
+     if offset < 0 || length <= 0 then \"\"
+     else
+       let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
+       Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+         (fun () ->
+            let size = (Unix.stat path).Unix.st_size in
+            if offset >= size then \"\"
+            else
+              let want = min length (size - offset) in
+              ignore (Unix.lseek fd offset Unix.SEEK_SET);
+              let b = Bytes.create want in
+              let rec go pos =
+                if pos < want then
+                  let k = Unix.read fd b pos (want - pos) in
+                  if k > 0 then go (pos + k) in
+              go 0; Bytes.sub_string b 0 want)
+   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
+let dtp_tryWriteFile path contents =
+  (try
+     dtp_hostReset ();
+     let fd = Unix.openfile path [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
+     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+       (fun () ->
+          let b = Bytes.of_string contents in
+          let n = Bytes.length b in
+          let rec go off =
+            if off < n then
+              let k = Unix.write fd b off (n - off) in
+              if k > 0 then go (off + k) in
+          go 0);
+     String.length contents
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
+let dtp_tryWriteFileAtomic path contents =
+  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
+  (try
+     dtp_hostReset ();
+     (let fd = Unix.openfile tmp [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
+      Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+        (fun () ->
+           let b = Bytes.of_string contents in
+           let n = Bytes.length b in
+           let rec go off =
+             if off < n then
+               let k = Unix.write fd b off (n - off) in
+               if k > 0 then go (off + k) in
+           go 0));
+     Unix.rename tmp path;
+     String.length contents
+   with e -> (try Unix.unlink tmp with _ -> ()); dtp_hostFail (dtp_hostCode e); 0)
+let dtp_tryReadDir path =
+  (try dtp_hostReset (); List.sort compare (Array.to_list (Sys.readdir path))
+   with e -> dtp_hostFail (dtp_hostCodeAt path e); [])
+let dtp_tryIsDirectory path =
+  (try dtp_hostReset (); (Unix.stat path).Unix.st_kind = Unix.S_DIR
+   with e -> dtp_hostMark (dtp_hostCode e) e; false)
+let dtp_tryMakeDir path =
+  (try
+     dtp_hostReset ();
+     (try Unix.mkdir path 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+     0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryRemoveFile path =
+  (try
+     dtp_hostReset ();
+     (try Unix.unlink path with Unix.Unix_error (Unix.ENOENT, _, _) -> ());
+     0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryRemoveTree path =
+  let rec go p =
+    try
+      let st = Unix.lstat p in
+      (match st.Unix.st_kind with
+       | Unix.S_DIR ->
+           Array.iter (fun e -> go (Filename.concat p e)) (Sys.readdir p);
+           Unix.rmdir p
+       | _ -> Unix.unlink p)
+    with Unix.Unix_error (Unix.ENOENT, _, _) -> () in
+  (try dtp_hostReset (); go path; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryRename src dst =
+  (try dtp_hostReset (); Unix.rename src dst; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_trySymlink target link =
+  (try dtp_hostReset (); Unix.symlink target link; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryMakeDirExclusive path =
+  (try dtp_hostReset (); Unix.mkdir path 0o755; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_isTty () = Unix.isatty Unix.stdout
+let dtp_tryRunIn dir args =
+  let cmd = String.concat \" \" (List.map Filename.quote args) in
+  (try
+     dtp_hostReset ();
+     let old = Sys.getcwd () in
+     Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+   with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
+let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
+let dtp_sleep us =
+  (if us > 0 then Unix.sleepf (float_of_int us /. 1000000.0));
+  0
+let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name
+let dtp_spawn (args : string list) : int =
+  let prog = Sys.executable_name in
+  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
+let dtp_wait (pid : int) : int =
+  let (_, st) = Unix.waitpid [] pid in
+  match st with Unix.WEXITED c -> c | _ -> 1
+let dtp_net_tbl : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 16
+(* 监听句柄绑定的 unix socket 路径与当时的 inode：关闭句柄时只删仍然指向自己的那份文件。
+   没有这条记录（tcp 句柄 / 已被替换的路径）就不删，免得删掉同一路径上后继进程的 socket。 *)
+let dtp_net_put (fd : Unix.file_descr) : int =
+  let k = !dtp_net_next in
+  dtp_net_next := k + 1;
+  Hashtbl.replace dtp_net_tbl k fd;
+  k
+let dtp_net_put_owned (fd : Unix.file_descr) (path : string) : int =
+  let h = dtp_net_put fd in
+  (try Hashtbl.replace dtp_net_owned h (path, (Unix.stat path).Unix.st_ino) with _ -> ());
+  h
+let dtp_net_get (h : int) : Unix.file_descr =
+  match Hashtbl.find_opt dtp_net_tbl h with
+  | Some fd -> fd
+  | None -> dtp_hostSetStatus 8; failwith \"net: invalid handle\"
+let dtp_net_unlink_owned (h : int) =
+  match Hashtbl.find_opt dtp_net_owned h with
+  | Some (path, ino) ->
+    (try if (Unix.stat path).Unix.st_ino = ino then Sys.remove path with _ -> ())
+  | None -> ()
+let dtp_net_drop (h : int) =
+  (try Hashtbl.remove dtp_net_tbl h with _ -> ());
+  (try Hashtbl.remove dtp_net_owned h with _ -> ())
+let dtp_netCodeOf (ue : Unix.error) : int =
+  match ue with
+  | Unix.ECONNREFUSED | Unix.ENOENT -> 2
+  | Unix.ETIMEDOUT -> 3
+  | Unix.EPIPE | Unix.ECONNRESET -> 4
+  | Unix.EADDRINUSE -> 5
+  | _ -> 9
+let dtp_net_error (what : string) (e : exn) : 'a =
+  (match e with
+   | Unix.Unix_error (ue, _, _) -> dtp_hostSetStatus (dtp_netCodeOf ue)
+   | _ -> dtp_hostSetStatus 9);
+  match e with
+  | Unix.Unix_error (ue, fn, arg) ->
+    failwith (\"net: \" ^ what ^ \": \" ^ Unix.error_message ue ^ (if arg = \"\" then \"\" else \" (\" ^ arg ^ \")\"))
+  | _ -> failwith (\"net: \" ^ what ^ \": \" ^ Printexc.to_string e)
+let dtp_net_listen (addr : string) : int =
+  match dtp_net_parse addr with
+  | `Unix path ->
+    (try if Sys.file_exists path then Sys.remove path with _ -> ());
+    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+    (try Unix.bind s (Unix.ADDR_UNIX path); Unix.listen s 8; dtp_net_put_owned s path
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
+  | `Tcp (host, port) ->
+    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    (try
+       Unix.setsockopt s Unix.SO_REUSEADDR true;
+       Unix.bind s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port));
+       Unix.listen s 8;
+       dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"listen\" e)
+let dtp_net_port (h : int) : int =
+  match Unix.getsockname (dtp_net_get h) with
+  | Unix.ADDR_INET (_, p) -> p
+  | Unix.ADDR_UNIX _ -> 0
+let dtp_net_accept (h : int) : int =
+  (try let (fd, _) = Unix.accept (dtp_net_get h) in dtp_net_put fd
+   with e -> dtp_net_error \"accept\" e)
+let dtp_net_recv (h : int) (n : int) : string =
+  if n <= 0 then \"\"
+  else
+    let b = Bytes.create n in
+    (try
+       let k = Unix.read (dtp_net_get h) b 0 n in
+       if k <= 0 then \"\" else Bytes.sub_string b 0 k
+     with e -> dtp_net_error \"recv\" e)
+let dtp_net_send (h : int) (s : string) : int =
+  let fd = dtp_net_get h in
+  let n = String.length s in
+  let rec go off =
+    if off >= n then ()
+    else
+      let k = (try Unix.write_substring fd s off (n - off) with e -> dtp_net_error \"send\" e) in
+      if k <= 0 then failwith \"net: send: connection closed\" else go (off + k)
+  in
+  go 0; n
+let dtp_net_close (h : int) : int =
+  (try Unix.close (dtp_net_get h) with _ -> ());
+  dtp_net_unlink_owned h;
+  dtp_net_drop h; 0
+let dtp_netStatus (e : exn) : int =
+  match e with
+  | Unix.Unix_error (ue, _, _) -> dtp_netCodeOf ue
+  | _ -> 6
+let dtp_netMarkStatus (e : exn) =
+  let c = dtp_hostStatus () in
+  dtp_hostMark (if c = 0 then dtp_netStatus e else c) e
+let dtp_try_net_listen addr =
+  (try dtp_hostReset (); dtp_net_listen addr
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_port h =
+  (try dtp_hostReset (); dtp_net_port h
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_accept h =
+  (try dtp_hostReset (); dtp_net_accept h
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_send h s =
+  (try dtp_hostReset (); dtp_net_send h s
+   with e -> dtp_netMarkStatus e; 0)
+let dtp_try_net_recv h n =
+  if n <= 0 then (dtp_hostSetStatus 1; \"\")
+  else
+    let b = Bytes.create n in
+    (try
+       let k = Unix.read (dtp_net_get h) b 0 n in
+       if k <= 0 then (dtp_hostSetStatus 1; \"\")
+       else (dtp_hostReset (); Bytes.sub_string b 0 k)
+     with e -> dtp_netMarkStatus e; \"\")
+let dtp_try_net_close h =
+  (try dtp_hostReset (); dtp_net_close h
+   with e -> dtp_netMarkStatus e; 0)
+let dtp_net_connect (addr : string) : int =
+  match dtp_net_parse addr with
+  | `Unix path ->
+    let s = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
+    (try Unix.connect s (Unix.ADDR_UNIX path); dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
+  | `Tcp (host, port) ->
+    let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
+     with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
+let dtp_try_net_connect addr =
+  (try dtp_hostReset (); dtp_net_connect addr
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_accept_within h micros =
+  (try
+     dtp_hostReset ();
+     let lfd = dtp_net_get h in
+     let (r, _, _) = Unix.select [lfd] [] [] (float_of_int micros /. 1000000.0) in
+     if r = [] then (dtp_hostSetStatus 7; -1)
+     else let (fd, _) = Unix.accept lfd in dtp_net_put fd
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_recv_within h n micros =
+  if n <= 0 then (dtp_hostReset (); dtp_hostSetStatus 1; \"\")
+  else
+    (try
+       dtp_hostReset ();
+       let fd = dtp_net_get h in
+       let b = Bytes.create n in
+       let (r, _, _) = Unix.select [fd] [] [] (float_of_int micros /. 1000000.0) in
+       if r = [] then (dtp_hostSetStatus 7; \"\")
+       else
+         let k = Unix.read fd b 0 n in
+         if k <= 0 then (dtp_hostSetStatus 1; \"\") else Bytes.sub_string b 0 k
+     with e -> dtp_netMarkStatus e; \"\")
+let dtp_try_net_send_within h s micros =
+  (try
+     dtp_hostReset ();
+     let fd = dtp_net_get h in
+     let n = String.length s in
+     let secs = float_of_int micros /. 1000000.0 in
+     let rec go off =
+       if off >= n then true
+       else
+         let (_, w, _) = Unix.select [] [fd] [] secs in
+         if w = [] then false
+         else
+           let k = Unix.write_substring fd s off (n - off) in
+           if k <= 0 then false else go (off + k) in
+     if go 0 then n else (dtp_hostSetStatus 7; 0)
+   with e -> dtp_netMarkStatus e; 0)
+""") ++ dtThreadRuntime
 
 -- 运行时错误报告器。位置表的键是 `单元.值名`（如 `Main.v_main`）；回栈帧名形如
 -- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器跳过 `(fun)`
@@ -1978,14 +1983,16 @@ inlineText _ _ = Nothing
 
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
--- `usesFloat` / `usesTrace` / `usesObs` 为 False 时对应 helper 不出现：不用 Float /
--- tracing / 观测的程序 runtime 逐字节稳定（产物身份与缓存都依赖这一点）。
-export dtRuntimeWith : String -> Bool -> Bool -> Bool -> String
-dtRuntimeWith locs usesFloat usesTrace usesObs =
+-- `usesFloat` / `usesTrace` / `usesObs` / `usesHost` 为 False 时对应 helper 不出现：
+-- 不用 Float / tracing / 观测 / 宿主原语的程序 runtime 逐字节稳定（产物身份与缓存
+-- 都依赖这一点）；`usesHost` 为 False 时产物也不链接 `unix.cmxa`。
+export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> String
+dtRuntimeWith locs usesFloat usesTrace usesObs usesHost =
   dtRuntime
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
+    ++ (if usesHost then dtHostRuntime else "")
     ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")
 
 -- `strUnpack` / `strPack` 的运行时桥接。

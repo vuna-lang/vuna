@@ -91,6 +91,7 @@ sampleShared =
     [Pair "main" (Pair "M.vuna" 3)]
     [Pair "Wrap" (Pair "WrapCtor" 0)]
     [Pair "Some" (Pair "Opt" [True, False])]
+    True
 
 sampleProgram : IrProgram
 sampleProgram = IrProgram sampleShared sampleUnit

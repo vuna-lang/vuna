@@ -263,14 +263,15 @@ addName name (x :: rest) = if x == name then (::) x rest else (::) x (addName na
 -- 依赖只记**运行时位置**（擦除实参里的引用不算）；旗标覆盖全部位置，与
 -- `Core.termUsesFloat` 同口径（类型层里出现也算）。分组邻接表、`IrDef` 依赖、
 -- `IrShared` 的 float / tracing / obs 开关都吃这一份结果，不再各自遍历。
--- | 三类隐藏原语的使用旗标。
+-- | 四类隐藏原语的使用旗标（宿主 / 浮点 / tracing / 观测）。
 export record UseFlags where
   useFlagsFloat : Bool
   useFlagsTrace : Bool
   useFlagsObs : Bool
+  useFlagsHost : Bool
 
 export noUseFlags : UseFlags
-noUseFlags = UseFlags False False False
+noUseFlags = UseFlags False False False False
 
 orUseFlags : UseFlags -> UseFlags -> UseFlags
 orUseFlags a b =
@@ -278,6 +279,7 @@ orUseFlags a b =
     (a.useFlagsFloat || b.useFlagsFloat)
     (a.useFlagsTrace || b.useFlagsTrace)
     (a.useFlagsObs || b.useFlagsObs)
+    (a.useFlagsHost || b.useFlagsHost)
 
 -- | 一个定义体的使用事实。
 export record TermUse where
