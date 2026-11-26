@@ -1,6 +1,8 @@
 # vuna-base：标准库包（编译器与用户程序的第一个依赖）。
 [package]
 name = "vuna-base"
+# base 自己的模块不注入 Prelude：`Prelude` 只作为依赖方（compiler 等）的自动入口。
+implicit-prelude = false
 
 
 # 标准库的模块面就是公开面：所有 `Base.*` 模块都可跨包 import（叶子模块不设隐藏边界）。
