@@ -32,15 +32,20 @@ let
       groups = import ../checks/groups.nix;
       prGates = import ../checks/pr-gates.nix;
       refs = builtins.concatLists (
-        map (g: groups.${g}) [
-          "deep"
-          "gate"
-          "slices"
-          "suite"
-          "backends"
-          "native"
-          "browser"
-        ]
+        map (g: groups.${g}) (
+          [
+            "deep"
+            "gate"
+            "slices"
+            "suite"
+            "backends"
+            "native"
+            "browser"
+          ]
+          ++ builtins.filter (n: builtins.match "(gate|e2e)-shard-[0-9]+" n != null) (
+            builtins.attrNames groups
+          )
+        )
       );
       prGateRefs =
         builtins.concatLists (builtins.attrValues prGates.types)

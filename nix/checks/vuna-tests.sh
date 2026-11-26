@@ -53,11 +53,17 @@ AREA_ARGS=""
 for area in ${VUNA_TEST_AREAS:-}; do
   AREA_ARGS="$AREA_ARGS --area $area"
 done
+# CI 分片：VUNA_TEST_SHARD=i/N 把选中 case 按耗时均衡切成 N 份、只跑第 i 份。
+# 每份仍是完整 case 集合的一部分（不是采样），union 由 runner 的分桶覆盖保证。
+SHARD_ARGS=""
+if [ -n "${VUNA_TEST_SHARD:-}" ]; then
+  SHARD_ARGS="--shard $VUNA_TEST_SHARD"
+fi
 # 切片过滤后 case 数下限：先 `--list` 数一遍，低于下限直接失败——挡住「area 名打错 /
 # family 掉出切片」变成 0 个 case 的全绿。`--list` 不编译、不执行 case。
 if [ -n "${VUNA_TEST_MIN_CASES:-}" ]; then
   # shellcheck disable=SC2086
-  selected=$("$VUNA" dev suite --all --list $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS | grep -cE '^[A-Za-z][A-Za-z-]*/[A-Za-z0-9_]+/' || true)
+  selected=$("$VUNA" dev suite --all --list $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS | grep -cE '^[A-Za-z][A-Za-z-]*/[A-Za-z0-9_]+/' || true)
   if [ "$selected" -lt "$VUNA_TEST_MIN_CASES" ]; then
     echo "vuna-tests: only $selected case(s) selected, VUNA_TEST_MIN_CASES requires >= $VUNA_TEST_MIN_CASES" >&2
     exit 1
@@ -66,7 +72,7 @@ fi
 # `--all` 读 test/suite.toml 的 driver 清单；清单只维护这一份。
 rc=0
 # shellcheck disable=SC2086
-"$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS || rc=1
+"$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS || rc=1
 
 # 包内单测（`vuna test <pkg>`：顶层 test/*.vuna）；http/web 的行为面不在 suite corpus 里。
 # 切片按 VUNA_TEST_UNIT_PKGS 只跑相关包；未设置时跑全部。
@@ -91,7 +97,7 @@ fi
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
     # shellcheck disable=SC2086
-    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS || rc=1
+    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS || rc=1
     ;;
 esac
 

@@ -138,8 +138,11 @@ PR 标题与分支名仍按 `<type>/<slug>`、`<type>(scope): 中文描述` 的�
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
 | `pr` | fmt / lint / typecheck | 所有 PR 与 main push（`pr / run`） |
+| `gate` / `gate-shard-0..3` | tests-gate（fast+integration）+ 单测；CI 里拆 4 片并行 | main push、定时、手动 |
+| `e2e-shard-0..3` | tests-e2e（steps / 长 case）4 片并行 | 定时、手动 |
+| `units` | 各包 `vuna test`（与 suite 解耦） | main push、定时、手动 |
 | `deep` | pr + 全部便宜门禁 | 定时、手动、`deep` 标签 |
-| `suite` | tests-gate + tests-e2e | 定时、手动、`suite` 标签 |
+| `suite` | tests-gate + units + tests-e2e（未分片） | 本地全量；`suite` 标签 |
 | `backends` | wasm / native suite 矩阵 | 本地手动 |
 | `native` | native 自举 conformance | 本地手动 |
 | `browser` | 浏览器 smoke | 定时、手动、`browser` 标签 |
@@ -177,8 +180,8 @@ GitHub 只在 required checks 全绿、分支满足 strict up-to-date 时执行 
 `git rebase origin/main && git push --force-with-lease`。
 
 合并身份是 `github-actions[bot]`（`GITHUB_TOKEN`），GitHub 不为该身份的推送创建工作流，
-所以 main push 的 `gate` 只覆盖人工 / break-glass 推送。配 `AUTOMERGE_TOKEN` 后合并会触发
-push 门禁；否则 main 的完整基线由定时 `suite` 组（gate + e2e）承担。
+所以 main push 的 `gate-shards` 只覆盖人工 / break-glass 推送。配 `AUTOMERGE_TOKEN` 后合并会
+触发 push 门禁；否则 main 的完整基线由定时任务承担（gate 4 片 + e2e 4 片 + units 并行）。
 
 `AUTOMERGE_TOKEN` 用**细粒度 PAT**（仓库 secret，不是 org secret）：
 
