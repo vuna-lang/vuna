@@ -103,7 +103,7 @@ bench/programs/
 | t7 | 全部 | — |
 | t8 | 全部 | — |
 | t9 | 全部 | — |
-| t10 | `micro_mut_ref` `mut_array` `mut_barrier` | `mut_dyn` `mut_buffer` → `ocaml,native`；`mut_vec` → `ocaml,wasm` |
+| t10 | `micro_mut_ref` `mut_array` `mut_barrier` `mut_dyn` `mut_buffer` | `mut_vec` → `ocaml,wasm` |
 | t11 | `thread_par_map` `thread_par_fold` `thread_par_map_eff` | 其余线程用例 → `ocaml,native` |
 | t12 | `host_clock` `host_env` | `fs_roundtrip` `fs_cursor` → `ocaml,native`；`ffi_arith` → `ocaml` |
 
@@ -113,10 +113,9 @@ bench/programs/
   限制后再降级并在本表登记。
 - t5 的 `gc_low_live` / `gc_array_churn` / `gc_pressure` 保留非尾累加循环（机制本身），在
   V8 默认栈上 trap；同层的 `gc_retain` / `gc_large_obj` / `gc_promote` 已给 wasm 覆盖。
-- t10 的 `mut_dyn` / `mut_buffer` 在 wasm 上被 `dynGrow` / `mbufGrow` 缺少 `need <= cap`
-  提前返回拖成指数扩容（约 24 次后 `requested new array is too large`），因此只开
-  `ocaml,native`；`mut_vec` 的 native codegen 对动态 `Fin` 结果错误，因此只开
-  `ocaml,wasm`。native 的 pure 包装 CAF 初始化顺序问题已在用例源码用
+- t10 的 `mut_vec` 的 native codegen 对动态 `Fin` 结果错误，因此只开 `ocaml,wasm`；
+  `Base.Container.MutDynArray` / `MutBuffer` 的 `dynGrow` / `mbufGrow` 在容量足够时
+  早退（三端一致）。native 的 pure 包装 CAF 初始化顺序问题已在用例源码用
   `runPure (…with… )` 绕过（语料 `effect_common/66` / `71` 仍保留原形）。
 - 非 wasm 用例必须在 `.bench` 写 `targets=`；`--check` 把它记成 `excluded`，不是
   `run_ok=false`。

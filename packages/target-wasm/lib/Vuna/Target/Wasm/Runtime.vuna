@@ -1275,6 +1275,7 @@ rtMArraySet =
 -- 变长字节缓冲（`@vuna@MBuffer` = `$buf { data: (ref $str), len: i32, cap: i32 }`）
 -- ---------------------------------------------------------------
 -- | 容量不足时扩到 `max(cap*2, need, 8)` 并复制已有字节；`$p1` 是装盒的目标长度。
+-- 容量足够（`need <= cap`）时直接返回，不重新分配。
 rtMBufGrow : WatFunc
 rtMBufGrow =
   let
@@ -1288,7 +1289,7 @@ rtMBufGrow =
       ]
     body =
       cat
-        [unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$need", ILocalGet "$p0", IRefCast "$buf", IStructGet "$buf" 2, ILocalSet "$cap", ILocalGet "$cap", IConstI32 1, IBinop "i32.shl", ILocalSet "$ncap", ILocalGet "$ncap", ILocalGet "$need", IBinop "i32.lt_s", IIf "" [ILocalGet "$need", ILocalSet "$ncap"] [], ILocalGet "$ncap", IConstI32 8, IBinop "i32.lt_s", IIf "" [IConstI32 8, ILocalSet "$ncap"] [], ILocalGet "$ncap", ILocalGet "$cap", IBinop "i32.gt_s", IIf "" (cat [[ILocalGet "$p0", IRefCast "$buf", IStructGet "$buf" 0, ILocalSet "$data"], [ILocalGet "$ncap", IArrayNewDefault "$str", ILocalSet "$ndata"], [ILocalGet "$ndata", IConstI32 0, ILocalGet "$data", IConstI32 0, ILocalGet "$cap", IArrayCopy "$str" "$str"], [ILocalGet "$p0", IRefCast "$buf", ILocalGet "$ndata", IStructSet "$buf" 0], [ILocalGet "$p0", IRefCast "$buf", ILocalGet "$ncap", IStructSet "$buf" 2]]) []]]
+        [unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$need", ILocalGet "$p0", IRefCast "$buf", IStructGet "$buf" 2, ILocalSet "$cap", ILocalGet "$need", ILocalGet "$cap", IBinop "i32.le_s", IIf "" [ILocalGet "$cap", ILocalSet "$ncap"] [ILocalGet "$cap", IConstI32 1, IBinop "i32.shl", ILocalSet "$ncap", ILocalGet "$ncap", ILocalGet "$need", IBinop "i32.lt_s", IIf "" [ILocalGet "$need", ILocalSet "$ncap"] [], ILocalGet "$ncap", IConstI32 8, IBinop "i32.lt_s", IIf "" [IConstI32 8, ILocalSet "$ncap"] []], ILocalGet "$ncap", ILocalGet "$cap", IBinop "i32.gt_s", IIf "" (cat [[ILocalGet "$p0", IRefCast "$buf", IStructGet "$buf" 0, ILocalSet "$data"], [ILocalGet "$ncap", IArrayNewDefault "$str", ILocalSet "$ndata"], [ILocalGet "$ndata", IConstI32 0, ILocalGet "$data", IConstI32 0, ILocalGet "$cap", IArrayCopy "$str" "$str"], [ILocalGet "$p0", IRefCast "$buf", ILocalGet "$ndata", IStructSet "$buf" 0], [ILocalGet "$p0", IRefCast "$buf", ILocalGet "$ncap", IStructSet "$buf" 2]]) []]]
   in rtFunc "$rt_mbufGrow" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [] locals body
 
 -- | `@vuna@prim_mbufNew`：初始容量（0 也合法，首次追加时扩到至少 8）。
@@ -1365,6 +1366,7 @@ rtDynNew =
   in rtFunc "$rt_dynNew" [("$p0", WvAnyRef)] [WvAnyRef] locals body
 
 -- | 容量不足时扩到 `max(cap*2, need, 8)` 并复制已有元素；`$p1` 是装盒的目标长度。
+-- 容量足够（`need <= cap`）时直接返回，不重新分配。
 rtDynGrow : WatFunc
 rtDynGrow =
   let
@@ -1378,7 +1380,7 @@ rtDynGrow =
       ]
     body =
       cat
-        [unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$need", ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 2, ILocalSet "$cap", ILocalGet "$cap", IConstI32 1, IBinop "i32.shl", ILocalSet "$ncap", ILocalGet "$ncap", ILocalGet "$need", IBinop "i32.lt_s", IIf "" [ILocalGet "$need", ILocalSet "$ncap"] [], ILocalGet "$ncap", IConstI32 8, IBinop "i32.lt_s", IIf "" [IConstI32 8, ILocalSet "$ncap"] [], ILocalGet "$ncap", ILocalGet "$cap", IBinop "i32.gt_s", IIf "" (cat [[ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 0, ILocalSet "$data"], [ILocalGet "$ncap", IArrayNewDefault "$arr", ILocalSet "$ndata"], [ILocalGet "$ndata", IConstI32 0, ILocalGet "$data", IConstI32 0, ILocalGet "$cap", IArrayCopy "$arr" "$arr"], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ndata", IStructSet "$dyn" 0], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ncap", IStructSet "$dyn" 2]]) []]]
+        [unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$need", ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 2, ILocalSet "$cap", ILocalGet "$need", ILocalGet "$cap", IBinop "i32.le_s", IIf "" [ILocalGet "$cap", ILocalSet "$ncap"] [ILocalGet "$cap", IConstI32 1, IBinop "i32.shl", ILocalSet "$ncap", ILocalGet "$ncap", ILocalGet "$need", IBinop "i32.lt_s", IIf "" [ILocalGet "$need", ILocalSet "$ncap"] [], ILocalGet "$ncap", IConstI32 8, IBinop "i32.lt_s", IIf "" [IConstI32 8, ILocalSet "$ncap"] []], ILocalGet "$ncap", ILocalGet "$cap", IBinop "i32.gt_s", IIf "" (cat [[ILocalGet "$p0", IRefCast "$dyn", IStructGet "$dyn" 0, ILocalSet "$data"], [ILocalGet "$ncap", IArrayNewDefault "$arr", ILocalSet "$ndata"], [ILocalGet "$ndata", IConstI32 0, ILocalGet "$data", IConstI32 0, ILocalGet "$cap", IArrayCopy "$arr" "$arr"], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ndata", IStructSet "$dyn" 0], [ILocalGet "$p0", IRefCast "$dyn", ILocalGet "$ncap", IStructSet "$dyn" 2]]) []]]
   in rtFunc "$rt_dynGrow" [("$p0", WvAnyRef), ("$p1", WvAnyRef)] [] locals body
 
 -- | `@vuna@prim_dynPush`：末尾追加元素（必要时增长）。
