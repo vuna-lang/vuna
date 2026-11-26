@@ -944,7 +944,7 @@ export ifacesForContextEff : Member nFs FsOp r, Member nClock ClockOp r, Member 
 ifacesForContextEff ctx =
   do
     mods <- ifaceModsEff ctx
-    readIfaceListEff mods
+    readIfaceListInEff ctx mods
 
 -- | 同上，但上下文只有 roots（无包记录）：按 root 名建身份表。
 export ifacesForRootsEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
@@ -952,42 +952,82 @@ ifacesForRootsEff ctx =
   do
     pkgs <- rootPkgTableEff ctx
     mods <- ifaceModsWithEff ctx pkgs
-    readIfaceListEff mods
+    readIfaceListInEff ctx mods
 
--- | 按地址读一个模块接口（载荷自证：解码失败即 `Nothing`）。
-export readIfaceAtEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe ModuleIface)
-readIfaceAtEff a =
+-- ---------------------------------------------------------------
+-- 模块接口的物理位置：包的 `.vuna/iface/<地址>`（平铺 CAS）。
+--
+-- 地址已含包身份，所以同一目录里放本包 + 依赖模块也安全；依赖模块默认读它自己包的
+-- `.vuna`，`VUNA_PKG_STATE` 非空时所有包共享重定向目录。写侧只写本包模块。
+-- ---------------------------------------------------------------
+rootOfName : String -> List Root -> Maybe Root
+rootOfName _ [] = Nothing
+rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
+
+-- | 模块所属包的状态目录（不创建）。
+moduleStateDirEff : Member nEnv EnvOp r => PackageContext -> ClosureMod -> Eff r String
+moduleStateDirEff ctx m =
+  case rootOfName m.cmPkg (contextRoots ctx) of
+    Just root => pkgStateDirEff (rootDir root)
+    Nothing => pkgStateDirEff (contextDir ctx)
+
+-- | 模块接口目录（读路径，不创建）。
+moduleIfaceDirEff : Member nEnv EnvOp r => PackageContext -> ClosureMod -> Eff r String
+moduleIfaceDirEff ctx m =
   do
-    payload <- storeObjectReadEff "module-iface" ifaceObjectCodec a
-    pure (
-        case payload of
-          Nothing => Nothing
-          Just bytes => decModuleIfaceComplete bytes
-      )
+    state <- moduleStateDirEff ctx m
+    pure (ifaceDirOf state)
 
--- 按地址读整条闭包的接口。缓存计数（`vuna.counter.cache.hit` / `.miss`）：每个模块
--- 一次 `ph:"C"`——计数实参是常量 1（无 O(n) 表达式），关闭时只多一次 `Lazy.force` +
--- 分支与一个 `Eff` 绑定（相对这里的读对象/解码成本可忽略）。
+-- | 本包的接口目录（写路径：确保存在）。
+ownIfaceDirEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r String
+ownIfaceDirEff ctx =
+  do
+    state <- ensurePkgStateDirEff (contextDir ctx)
+    let
+      dir = ifaceDirOf state
+    in do
+      _ <- fsMakeDir dir
+      pure dir
+
+-- | 按目录 + 地址读一个模块接口（载荷自证：解码失败即 `Nothing`）。
+readIfaceInEff : Member nFs FsOp r => String -> String -> Eff r (Maybe ModuleIface)
+readIfaceInEff dir a =
+  obsSpanEff "vuna.cache.lookup" "vuna.cache" (
+      do
+        payload <- storeReadEff (storeObjectTag "module-iface") ifaceObjectCodec "${dir}/${a}"
+        pure (
+            case payload of
+              Nothing => Nothing
+              Just bytes => decModuleIfaceComplete bytes
+          )
+    )
+
+readIfaceOfModEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> ClosureMod -> Eff r (Maybe ModuleIface)
+readIfaceOfModEff ctx m =
+  do
+    dir <- moduleIfaceDirEff ctx m
+    readIfaceInEff dir m.cmAddr
+
 -- 逐地址读接口，**跳过缺失项**：本包干净模块是纯优化，缺一个模块的接口不应该让整组
--- 干净模块作废（依赖它的模块会被 `moduleDepsOk` 一并拒掉，安全性不变）。依赖包仍用
--- all-or-nothing 的 `readIfaceListEff`：缺依赖必须整包回退，不能静默少装一个。
-export readIfaceListPartialEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (List ModuleIface)
-readIfaceListPartialEff [] = pure []
-readIfaceListPartialEff (m :: rest) =
+-- 干净模块作废（依赖它的模块会被 `moduleDepsOk` 一并拒掉，安全性不变）。
+-- 依赖面仍用 all-or-nothing 的 `readIfaceListInEff` 版本：缺依赖必须整包回退。
+export readIfaceListPartialEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List ModuleIface)
+readIfaceListPartialEff ctx [] = pure []
+readIfaceListPartialEff ctx (m :: rest) =
   do
-    mi <- readIfaceAtEff m.cmAddr
-    xs <- readIfaceListPartialEff rest
+    mi <- readIfaceOfModEff ctx m
+    xs <- readIfaceListPartialEff ctx rest
     pure (
         case mi of
           Nothing => xs
           Just x => x :: xs
       )
 
-readIfaceListEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (Maybe (List ModuleIface))
-readIfaceListEff [] = pure (Just [])
-readIfaceListEff (m :: rest) =
+readIfaceListInEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
+readIfaceListInEff ctx [] = pure (Just [])
+readIfaceListInEff ctx (m :: rest) =
   do
-    mi <- readIfaceAtEff m.cmAddr
+    mi <- readIfaceOfModEff ctx m
     case mi of
       Nothing =>
         do
@@ -1000,7 +1040,7 @@ readIfaceListEff (m :: rest) =
       Just x =>
         do
           _ <- obsCountEff "vuna.counter.cache.hit" 1
-          xs <- readIfaceListEff rest
+          xs <- readIfaceListInEff ctx rest
           pure (
               case xs of
                 Nothing => Nothing
@@ -1066,12 +1106,12 @@ distinctPkgs (m :: rest) acc =
   if memName m.cmPkg acc then distinctPkgs rest acc else distinctPkgs rest (m.cmPkg :: acc)
 
 -- | 按地址探测一个包的模块接口：存在的读出，缺失的跳过（内部模块可能没有接口）。
-probePairs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (List (ClosureMod, ModuleIface))
-probePairs [] = pure []
-probePairs (m :: rest) =
+probePairs : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List (ClosureMod, ModuleIface))
+probePairs ctx [] = pure []
+probePairs ctx (m :: rest) =
   do
-    mi <- readIfaceAtEff m.cmAddr
-    xs <- probePairs rest
+    mi <- readIfaceOfModEff ctx m
+    xs <- probePairs ctx rest
     case mi of
       Nothing =>
         do
@@ -1086,7 +1126,7 @@ probePairs (m :: rest) =
 depPairsOfPkg : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> String -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
 depPairsOfPkg ctx mods p =
   do
-    pairs <- probePairs (filter (pkgEq p) mods)
+    pairs <- probePairs ctx (filter (pkgEq p) mods)
     let
       present = map (\pair => modNameOf (firstOf pair)) pairs
       required = map modNameOf (exportedDepModsOf ctx p mods)
@@ -1211,7 +1251,7 @@ depIfacesForToolSource ctx label source =
           depMods = toolDepModsOf ctx mods needed
           _ = log! "debug" "tool-closure modules=${length depMods}"
         in do
-          readIfaceListEff depMods
+          readIfaceListInEff ctx depMods
     else
       pure Nothing
 
@@ -1337,7 +1377,7 @@ depIfacesForToolSourceDetailed ctx label source =
           ownNames = map modNameOf (selfModsOf ctx mods)
           _ = log! "debug" "tool-closure modules=${length depMods}"
         in do
-          ifaces <- readIfaceListEff depMods
+          ifaces <- readIfaceListInEff ctx depMods
           case ifaces of
             Nothing =>
               do
@@ -1373,7 +1413,7 @@ toolCleanOwnModules ctx tool builtSec exclude needed =
       let
         _ = obsCounter "vuna.tool.clean.cands" (length cands)
       in do
-        clean <- readIfaceListPartialEff cands
+        clean <- readIfaceListPartialEff ctx cands
         let
           _ = obsCounter "vuna.tool.clean.read" (length clean)
         in toolCleanGo builtSec tool.tcDepHashes clean []
@@ -1476,7 +1516,11 @@ writeModuleIfaceGuarded ctx mi =
       mods <- ifaceModsEff ctx
       case findClosureMod (miNameOf mi) mods of
         Nothing => pure 0
-        Just m => storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
+        Just m =>
+          do
+            dir <- ownIfaceDirEff ctx
+            _ <- obsSpanEff "vuna.cache.write" "vuna.cache" (storeWriteIfChangedEff (storeObjectTag "module-iface") ifaceObjectCodec "${dir}/${m.cmAddr}" (encModuleIface mi))
+            pure 0
 
 -- 冷启动（没有工具会话）：依赖哈希从磁盘接口汇总，干净模块按现有判定重算；
 -- 写回尽力而为（LSP-only 会话逐步变热），失败不影响诊断。
@@ -1656,10 +1700,10 @@ packageEnvHash ctx =
 -- 与 `ownCleanModules` 同一次读取，同时回报「已有整包接口是否可完整读回」（按模块跳过
 -- 的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
 -- 这次结果，不必把同样的 65 个模块文件读 + decode 第二遍。
-readOneModIface : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ClosureMod -> Eff r (ClosureMod, Maybe ModuleIface)
-readOneModIface m =
+readOneModIface : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> ClosureMod -> Eff r (ClosureMod, Maybe ModuleIface)
+readOneModIface ctx m =
   do
-    mi <- readIfaceAtEff m.cmAddr
+    mi <- readIfaceOfModEff ctx m
     pure (m, mi)
 
 ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
@@ -1672,7 +1716,7 @@ ownCleanInfo ctx =
 ownCleanInfoWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
 ownCleanInfoWith ctx mods =
   do
-    reads <- mapEff readOneModIface (selfModsOf ctx mods)
+    reads <- mapEff (readOneModIface ctx) (selfModsOf ctx mods)
     let
       ownNames = map modNameOf (selfModsOf ctx mods)
       cands = readIfaces reads
@@ -1939,7 +1983,7 @@ writeIfaceShadowGo ctx checked pre clean =
                           -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
                           -- 阶段拆分靠文本行，结构化只报「写发生了」。
                           _ <- obsMarkEff "vuna.iface.write"
-                          n <- writeIfaceObjects own toWrite
+                          n <- writeIfaceObjects ctx own toWrite
                           t4 <- clockNow
                           let
                             _ = log! "info" "iface-write=${n}/${length modules} closure=${length own} phases mods=${strFromInt ((t1 - t0) / 1000)}ms sources=${strFromInt ((t2 - t1) / 1000)}ms compute=${strFromInt ((t3 - t2) / 1000)}ms write=${strFromInt ((t4 - t3) / 1000)}ms"
@@ -1981,17 +2025,22 @@ ifaceSelfCheckGo (m :: rest) =
 -- 按地址写模块接口（同一地址重复写幂等）。
 -- 只统计**内容变化**的写入（`storeObjectWriteEff` 在字节相同时返回 0）：收敛后的
 -- 第二次 check 应报 `iface-write=0/N`，这是「缓存已稳定」最直接的可观测信号。
-writeIfaceObjects : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> List ModuleIface -> Eff r Int
-writeIfaceObjects _ [] = pure 0
-writeIfaceObjects mods (mi :: rest) =
+writeIfaceObjects : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> List ModuleIface -> Eff r Int
+writeIfaceObjects ctx _ [] = pure 0
+writeIfaceObjects ctx mods (mi :: rest) =
   case findClosureMod (miNameOf mi) mods of
-    Nothing => writeIfaceObjects mods rest
+    Nothing => writeIfaceObjects ctx mods rest
     Just m =>
       do
-        prev <- readIfaceAtEff m.cmAddr
+        dir <- ownIfaceDirEff ctx
+        prev <- readIfaceInEff dir m.cmAddr
         let mi2 = mergeDefLocsFrom prev mi
-        bytes <- storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi2)
-        n <- writeIfaceObjects mods rest
+        bytes <-
+          obsSpanEff
+            "vuna.cache.write"
+            "vuna.cache"
+            (storeWriteIfChangedEff (storeObjectTag "module-iface") ifaceObjectCodec "${dir}/${m.cmAddr}" (encModuleIface mi2))
+        n <- writeIfaceObjects ctx mods rest
         pure (if bytes > 0 then n + 1 else n)
 
 -- 真正写接口：入口-only 包（没有 lib 模块）不写（没有可复用的模块接口；写空包只会让

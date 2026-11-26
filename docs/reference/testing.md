@@ -225,11 +225,11 @@ end:
 - 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
 - 父进程只预热一次 `vuna check packages/base`（需要时 `check .`），worker 不各自 warmIfaces。
-- 单文件对象（`objects/module-iface`）是输入寻址 + 原子写：
+- 模块接口（`$VUNA_PKG_STATE/iface` 或各包 `.vuna/iface`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 对象库的写入（原子写）与 `roots/` 只追加见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
-- 对象库的 GC 用 `vuna store gc`（宽限窗口 + 容量上限，只淘汰 `objects/module-iface`）。
+- `vuna store gc` 只清理旧版 `objects/module-iface` 遗留；包内接口按包清理。
 - **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例走进程内全量精化
   （`InProc.checkFile`），warning 必然重算，不需要 `-W` / 私有 store；`warning`
   的「让退出码变 1」语义由 steps 的 `--deny-warnings` 覆盖。

@@ -3,7 +3,8 @@
 --
 -- 一个 store 根、两类生命周期：
 --
--- - `--store`：**缓存族** —— `objects/module-iface/`、`views/{bin,testbin}/`、`.tmp/`。
+-- - `--store`：**缓存族** —— `views/{bin,testbin}/`、`.tmp/` 与旧版
+--   `objects/module-iface/`（接口已迁到各包 `.vuna/iface/`，这里只做遗留清理）。
 --   保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
@@ -71,6 +72,7 @@ cleanTargets wantStore wantPackages wantGc dry dir =
     else if wantPackages then cleanPackages wantGc dir dry else pure 0
 
 -- | 内部：缓存族按 kind 分目录的对象子目录名（`objects/<kind>`）。
+-- 接口迁到包内 `.vuna/iface` 后这里只剩遗留目录的清理。
 cacheKindNames : List String
 cacheKindNames = ["module-iface"]
 

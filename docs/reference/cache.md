@@ -3,12 +3,13 @@
 本文记录 vuna **唯一对象库的形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
 命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。
 
-对象库只保留两个域：
+输入寻址对象库只剩取包域：
 
 | 域 | 内容 | 生命周期 |
 | --- | --- | --- |
-| `module-iface` | 模块级精化结果（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`） | 缓存；可删可重建，`clean --store` / `gc` 管理 |
 | `pkg` | 取来的包源码（`pkg-source 1`，见 [package-store.md](package-store.md)） | 显式 fetch；`clean --packages` 管理 |
+
+编译产生的模块接口不再进对象库，按包落在 `<pkg>/.vuna/iface/<模块接口地址>`（见下）。
 
 `views/`、`check-outcome`、`tool-context`、`target-out`、`module-header`、`units`、`blobs`、
 `splitptr` 都已删除。默认 `vuna build` 直接写 `<pkg>/.output`；effect 测试与 REPL 动作在
@@ -18,9 +19,6 @@
 
 ```
 $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store
-  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 6；带实例/方法 span）。
-                                    # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
-                                    # 供 LSP/REPL 把本包模块当干净模块预置
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
   roots/<项目摘要>/.project         # 项目绝对目录（包 GC 据此清理已消失的项目根）
@@ -33,15 +31,17 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 包目录里还有两类按包存放的状态：
 
 - `<pkg>/.output/`：构建产物（见 [packages.md](packages.md)）；
-- `<pkg>/.vuna/`：包状态（接口等中间产物的默认位置）。`VUNA_PKG_STATE=<dir>` 整体重定向；
-  只读源码树（Nix store / 共享只读快照）拿不到可写目录时显式报错，不回退共享 store。
-  该目录已进包内容 / 工具遍历的跳过名单，不进入 `contentHash` 与包摘要。
+- `<pkg>/.vuna/`：包状态。模块接口落在 `<pkg>/.vuna/iface/<模块接口地址>`（codec
+  `module-iface 6`；入口包也写，模块面 = 入口闭包）。`VUNA_PKG_STATE=<dir>` 整体重定向
+  （此时所有包共享同一个平铺 CAS；地址含包身份）。只读源码树（Nix store / 共享只读快照）
+  拿不到可写目录时显式报错，不回退共享 store。该目录已进包内容 / 工具遍历的跳过名单，
+  不进入 `contentHash` 与包摘要。
 
 ## 命中判定
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
-| 包级 `check` | 按地址读依赖与同包模块的 `objects/module-iface/<addr>` | 精化脏模块；缺任一依赖模块 ⇒ 回退全量 |
+| 包级 `check` | 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自的状态目录） | 精化脏模块；依赖导出面缺件 ⇒ 回退全量 |
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
 | 同树重复 `build` | `<pkg>/.output/build-meta.json` 与当前输入一致（含二进制身份 `cache-tag`） | 重跑 codegen + `ocamlopt` |
 | 依赖身份 | 不读缓存：`manifest:<toml 摘要>:<根源闭包摘要>`（源码 + manifest 现场算） | —（依赖源码变化即换地址） |
@@ -132,7 +132,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   build 的 `.output` 由 `build-meta.json` 判新鲜。
 - **模块顺序不落盘**：依赖模块接口的串接顺序由编译器按（内容键, 模块名）确定性排序，
   与缓存状态无关；同一输入恒得同一顺序。
-- **依赖接口按地址探测**：读依赖接口时逐模块探测 `objects/module-iface/<addr>`，缺失的
+- **依赖接口按地址探测**：读依赖接口时逐模块探测 `<包状态>/iface/<addr>`，缺失的
   内部模块跳过；该包对外承诺的 `[export]` 模块面必须全部读得到，否则整包回退全量
   （`iface-reject=dep-iface-missing`）。没有单独的覆盖集对象。
 - **依赖身份由源码 + manifest 现场算**：`manifest:<toml 摘要>:<根源闭包摘要>`，不读身份快照。
@@ -148,7 +148,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
     布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉；
-  - 候选 = `objects/module-iface` 里 mtime 早于宽限窗口（默认 3600s）的文件；
+  - 候选 = 旧版 `objects/module-iface`（接口迁移前的遗留）里 mtime 早于宽限窗口（默认 3600s）的文件；
   - `--max-size` 有值时按 mtime 从旧到新淘汰，直到降到上限以下；
   - `objects/pkg/` 永不进入候选（源对象族归 `clean --packages`）。
 

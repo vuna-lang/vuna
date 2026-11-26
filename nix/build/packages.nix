@@ -267,9 +267,9 @@ let
   };
 
   # 预热对象库：对「插件构建会当依赖读」的包逐个 check，写出接口 / 模块顺序 / 包身份。
-  # 插件派生把这份 store 拷进自己的 $TMPDIR 再构建；没有预热时每个插件都会把同一份依赖
-  # 闭包重新精化一遍（同机实测：toolchain 冷构建 71 s → 预热后 36 s）。对象按输入摘要
-  # 寻址，跨派生复用不需要额外身份；缺对象只影响命中率。
+  # 插件派生把这份包状态拷进自己的 $TMPDIR 再构建；没有预热时每个插件都会把同一份依赖
+  # 闭包重新精化一遍（同机实测：toolchain 冷构建 71 s → 预热后 36 s）。接口按地址寻址，
+  # 跨派生复用不需要额外身份；缺对象只影响命中率。
   vuna-store =
     pkgs.runCommand "vuna-store-${version}"
       {
@@ -281,7 +281,10 @@ let
         mkdir -p "$out"
         cp -r ${srcFor "store" storeDeps}/packages packages
         chmod -R u+w packages
-        export VUNA_STORE="$out/store"
+        mkdir -p "$out/store"
+        # 接口落盘在 `VUNA_PKG_STATE/iface/`；预热产物直接就是一份可拷贝的包状态目录。
+        export VUNA_PKG_STATE="$out/store"
+        export VUNA_STORE="$TMPDIR/vuna-store"
         # 依赖在前：后面的 check 读得到前面的接口与模块顺序。
         for pkg in ${lib.concatStringsSep " " storeDeps}; do
           ${vuna-compiler}/bin/vuna-compiler check "packages/$pkg"
@@ -289,7 +292,7 @@ let
       '';
 
   # 单个插件派生：拷贝工作树 + 预热 store，只构建一个包，安装成 `$out/bin/<installAs>`。
-  # `propagateStore` 把构建后的 store（预热 + 本包写的接口）留在 `$out/store`，供依赖它的
+  # `propagateStore` 把构建后的包状态（预热 + 本包写的接口）留在 `$out/store`，供依赖它的
   # 插件派生复用（`extraStores`）。
   mkPlugin =
     {
@@ -310,12 +313,13 @@ let
         mkdir -p "$out/bin"
         cp -r ${srcFor pkg deps}/packages packages
         chmod -R u+w packages
-        cp -a --reflink=auto ${store}/store "$TMPDIR/vuna-store"
-        chmod -R u+w "$TMPDIR/vuna-store"
+        cp -a --reflink=auto ${store}/store "$TMPDIR/vuna-state"
+        chmod -R u+w "$TMPDIR/vuna-state"
         ${lib.concatMapStringsSep "\n" (
-          s: ''cp -a --reflink=auto --no-preserve=mode ${s}/store/. "$TMPDIR/vuna-store/"''
+          s: ''cp -a --reflink=auto --no-preserve=mode ${s}/store/. "$TMPDIR/vuna-state/"''
         ) extraStores}
-        chmod -R u+w "$TMPDIR/vuna-store"
+        chmod -R u+w "$TMPDIR/vuna-state"
+        export VUNA_PKG_STATE="$TMPDIR/vuna-state"
         export VUNA_STORE="$TMPDIR/vuna-store"
         ${vuna-compiler}/bin/vuna-compiler build "packages/${dir}" --out "$TMPDIR/vuna-out"
         cp "$TMPDIR/vuna-out/bin/${pkg}" "$out/bin/${installAs}"
@@ -324,7 +328,7 @@ let
         cp ${vuna-compiler}/cache-tag "$out/cache-tag"
         if [ -f ${vuna-compiler}/build-id ]; then cp ${vuna-compiler}/build-id "$out/build-id"; fi
         ${lib.optionalString propagateStore ''
-          cp -a --reflink=auto "$TMPDIR/vuna-store" "$out/store"
+          cp -a --reflink=auto "$TMPDIR/vuna-state" "$out/store"
         ''}
       '';
     };
