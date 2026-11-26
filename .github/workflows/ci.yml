@@ -2,14 +2,14 @@ name: ci
 
 # PR 的固定必需检查是 `pr`（fmt + lint + 自检）；增量检查由 gates.yml 按 type + area
 # 选择（area → `vuna-tests-*` 切片，见 nix/checks/slices.nix）。main push 额外跑完整
-# `gate`（fast+integration）；`deep` / `suite` / `browser` 在定时与手动 dispatch 上跑整组，
-# PR 需要强制整组时加对应标签由 gates 计划器带上。
+# `gate`（fast+integration）；定时 / 手动再跑 `e2e` 与 `deep` / `browser`。完整 suite
+# 在 CI 里按 case 耗时拆成 4 个 shard matrix job 并行；包内单测是独立 job。
 #
 # 注意：GitHub 不为 `GITHUB_TOKEN` 执行的推送创建工作流运行。auto-merge 的合并归
 # `github-actions[bot]`，因此不会触发 main push 的 `gate`（人工 / break-glass 推送会）。
 # 需要覆盖自动合并时，给仓库配置 `AUTOMERGE_TOKEN`（automerge.yml 已优先使用它；
 # 创建步骤见 docs/reference/github-workflow.md「自动合并」）；
-# 在此之前 main 的完整基线由定时 `suite` 组（gate + e2e）承担。
+# 在此之前 main 的完整基线由定时任务承担（gate 4 片 + e2e 4 片 + units 并行）。
 #
 # `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
 # 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。
