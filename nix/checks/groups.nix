@@ -57,8 +57,8 @@ in
     "check:vuna-tests-native"
   ];
 
-  # native 自举 conformance（package，不在 flake check 里）。
-  native = [ "package:backend-check" ];
+  # native 自举 conformance（package：构建即运行，不在 flake check 里）。
+  native = [ "package:vuna-native-conformance" ];
 
   # 浏览器可跑面实跑（package，不在 flake check 里）。
   browser = [ "package:vuna-wasm-browser-smoke" ];

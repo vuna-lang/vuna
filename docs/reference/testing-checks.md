@@ -30,7 +30,7 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、带 `deep` 标签的 PR |
 | `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、带 `suite` 标签的 PR |
 | `backends` | `vuna-tests-wasm` + `vuna-tests-native` | 定时、手动、带 `backend` 标签的 PR |
-| `native` | `backend-check`（package） | 同上 |
+| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | 同上 |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动 |
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
@@ -129,11 +129,12 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 `vuna-native` 把「编译器编译自己」固化成可执行入口，CI 用它跑与 OCaml 版同规格的检查。
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
 自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
-它在 `.github/workflows/ci.yml` 的 `backend-native` job 里只跑**定时（每晚）、手动
-dispatch 与带 `backend` 标签的 PR**——整轮成本高、且 native 后端仍有未关闭的边界（[native-runtime.md](native-runtime.md) §4），
-放在每次 push 上只会占满 runner 又被下一次 push 取消（`cancel-in-progress`），
-既拿不到读数也拖慢反馈。push 路径上的 native 覆盖由 flake check 的
-`vuna-tests-native`（fast+integration 矩阵）承担。
+CI 里由 `nix run .#ci -- native` 构建 `vuna-native-conformance`（构建即运行
+`backend-check --scope all`），只在**定时（每晚）、手动 dispatch 与带 `backend` 标签的
+PR** 上跑——整轮成本高，且 native 后端仍有未关闭的边界
+（[native-runtime.md](native-runtime.md) §4），放在每次 push 上只会占满 runner 又被
+下一次 push 取消（`cancel-in-progress`），既拿不到读数也拖慢反馈。push 路径上的
+native 覆盖由 `vuna-tests-native`（fast+integration 矩阵，在 `backends` 组）承担。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
@@ -166,9 +167,10 @@ nix run .#backend-check -- --compiler native --scope selfhost
 nix run .#backend-check -- --compiler native --scope selfhost-stress
 ```
 
-CI 里 native 任务仍是 `continue-on-error`（边界见 [native-runtime.md](native-runtime.md) §4）。
-三个 scope 的当前读数、逐包耗时、单进程整仓检查的成本形状与已知边界见
-[native-selfhost.md](native-selfhost.md)；本页只保留门禁语义与运行方式。
+CI 里 native 组的 job 就是 `vuna-native-conformance` 派生的构建结果：失败即 job 红
+（边界见 [native-runtime.md](native-runtime.md) §4）。三个 scope 的当前读数、逐包耗时、
+单进程整仓检查的成本形状与已知边界见 [native-selfhost.md](native-selfhost.md)；
+本页只保留门禁语义与运行方式。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
 `nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是

@@ -4,7 +4,7 @@
 #   每个插件派生只构建自己的包，改哪个插件只重建哪个派生；vuna-native = stage 1 把编译器
 #   源码编到 native 的自举产物（后端 conformance 用）
 #   vuna-web-cli / vuna-wasm-browser-smoke 按需构建；vuna-run-tests / vuna-bench /
-#   vuna-perf / vuna-artifacts / backend-check 是开发用包装
+#   vuna-perf / vuna-artifacts / backend-check / vuna-native-conformance 是开发用包装
 #   （nix run .#vuna-run-tests / .#vuna-bench / .#vuna-perf / .#vuna-artifacts）。
 {
   pkgs,
@@ -645,6 +645,38 @@ let
     // {
       meta.description = "跨编译器 conformance（native 自举；CI 与本地按需）";
     };
+
+  # native 自举 conformance 的 CI 派生：构建即运行 `backend-check --scope all`。
+  # 放在 packages 而不是 checks：`nix flake check` 不跑它（整轮成本高），
+  # `nix run .#ci -- native` 构建它。
+  vuna-native-conformance =
+    pkgs.runCommand "vuna-native-conformance"
+      {
+        nativeBuildInputs =
+          shellTools
+          ++ e2eTools
+          ++ [
+            pkgs.bash
+            pkgs.coreutils
+            vuna-native
+          ];
+        VUNA_ALT_NATIVE = "${vuna-native}/bin/vuna-native";
+        # 编译器整体坏掉时跑完几百条夹具没有额外信息，20 条失败足以给出清单。
+        VUNA_BACKEND_MAX_FAILS = "20";
+        # 每成员一个编译器进程（峰值 5–6 GiB），runner 16 GiB 跑 2 路。
+        VUNA_BACKEND_SELFHOST_JOBS = "2";
+        allowSubstitutes = false;
+        meta.description = "native 自举 conformance（selfhost + parity + corpus）";
+      }
+      ''
+        cp -r ${../../.} repo
+        cd repo
+        chmod -R u+w .
+        export TMPDIR="$PWD/.tmp"
+        mkdir -p "$TMPDIR"
+        bash nix/tools/backend-check.sh --compiler native --scope all --jobs 8
+        touch "$out"
+      '';
 in
 {
   default = vuna;
@@ -668,6 +700,7 @@ in
     vuna-native
     vuna-wasm-browser-smoke
     backend-check
+    vuna-native-conformance
     ci
     ;
 }
