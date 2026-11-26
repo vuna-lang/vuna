@@ -2,6 +2,9 @@
 # 由 vuna 生成：分离编译构建脚本（直接依赖表 + 内容哈希增量 + 分层并行）。用法: ./build.sh [OUT]
 # 单元表在本文件末尾的 `VUNA_UNIT_TABLE` 里：`@` 分隔并行层，其余每行 `单元 直接依赖...`
 # （拓扑序）。干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml；其余按内容哈希逐单元编译。
+# 增量的判据是「本单元 .ml/.mli + 直接依赖的 .cmx」：依赖实现变了就重编下游，依赖
+# 只是重新生成了同样的 .cmx 则跳过。程序自己的定义位置表在独立单元（`Vuna_deflocs`），
+# `Vuna_runtime` 与 base 单元跨程序保持同一份 .cmx。
 set -eu
 cd "$(dirname "$0")"
 OUT=${1:-program}
@@ -33,7 +36,7 @@ stamp_want() {
   base=$1
   shift
   deps=""
-  for d in "$@"; do deps="$deps $d.stamp"; done
+  for d in "$@"; do deps="$deps $d.cmx"; done
   hash_of "$base.ml" "$base.mli" $deps
 }
 compile_mod() {
@@ -97,6 +100,7 @@ B_dInternal_dOperator Vuna_runtime
 B_dData Vuna_runtime
 B_dTrait_dApplicative Vuna_runtime
 Prelude Vuna_runtime
+Vuna_deflocs Vuna_runtime
 Base_dVersion Vuna_runtime
 B_dTrait_dEq Vuna_runtime
 B_dData_dBits Vuna_runtime
@@ -272,7 +276,7 @@ Driver_dTargetBuild Vuna_runtime Driver_dTarget Base_dDiag Driver_dCompile B_dEf
 @
 Driver_dCompilerCli Base_dDiagnostics_dSink Vuna_runtime Loader_dFingerprint Driver_dTarget Base_dDiag Driver_dCompile B_dEffect_dConsole Base_dDiag_dFormat B_dData_dBool Driver_dTargetBuild B_dEffect_dProcess B_dData_dString B_dEffect_dEnv B_dData_dList Frontend_dPackages_dPkg Frontend_dManifest B_dTrait_dApplicative B_dEffect_dTty Driver_dDt Base_dVersion B_dData_dPair B_dEffect_dFs B_dTrait_dEq Base_dSource B_dEffect_dCore B_dTrait_dMonad B_dData_dMaybe
 @
-Main Vuna_runtime B_dEffect_dClock B_dEffect_dConsole Driver_dCompilerCli Base_dObs B_dEffect_dProcess B_dEffect_dEnv B_dData_dList B_dTrait_dApplicative B_dEffect_dTty B_dEffect_dExit B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad B_dEffect_dArgs
+Main Vuna_runtime B_dEffect_dClock B_dEffect_dConsole Driver_dCompilerCli Base_dObs B_dEffect_dProcess B_dEffect_dEnv B_dData_dList B_dTrait_dApplicative B_dEffect_dTty Vuna_deflocs B_dEffect_dExit B_dEffect_dFs B_dEffect_dCore B_dTrait_dMonad B_dEffect_dArgs
 VUNA_UNIT_TABLE
   flush_layer
 }
