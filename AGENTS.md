@@ -137,7 +137,7 @@ nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
 nix run .#ci -- pr                        # push / PR 的最小门禁（fmt + lint + 自检）
 nix run .#ci -- deep                      # 本地完整便宜门禁（与 CI 的 deep 同一条命令）
-nix run .#ci -- --list                    # 门禁分组：pr / gate / slices / deep / suite / backends / native / browser
+nix run .#ci -- --list                    # 门禁分组：pr / gate / units / gate-shard-* / e2e-shard-* / slices / deep / suite / backends / native / browser
 nix flake check                           # 本地全量兜底（CI 不再用；清单见 testing-checks.md）
 git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devShell/direnv 自动设置）
 git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）

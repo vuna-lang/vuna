@@ -8,13 +8,15 @@
 | `checks/` | CI 门禁：`default.nix` 声明 check 与源集合，`groups.nix` 是门禁分组（唯一事实来源），`*.sh` 是入口脚本，`lib/` 是共享实现，`data/` 是基线 / 白名单 / 预算 |
 | `seed/` | seed rotation 与 TCB 断言：`rotate.sh`、`tcb-check.sh`、`tcb-allowlist.sh`、`forbidden.txt`、`files.txt`、`rotation.txt` |
 | `tools/` | 非门禁的开发工具：`metrics.sh`、`context-budget.sh`、`obs.sh`、`backend-check.sh`（跨编译器 conformance，`nix run .#backend-check`） |
-| `checks/groups.nix` | 门禁分组（`pr` / `deep` / `suite` / `backends` / `native` / `browser`）；`nix run .#ci -- <group>` 是本地与 CI 的同一入口 |
+| `checks/groups.nix` | 门禁分组（`pr` / `gate` / `gate-shard-*` / `e2e-shard-*` / `units` / `slices` / `deep` / `suite` / `backends` / `native` / `browser`）；`nix run .#ci -- <group>` 是本地与 CI 的同一入口 |
 
 ## 约定
 
 - 新增 check：入口脚本放 `checks/`，共享实现放 `checks/lib/`，在 `checks/default.nix`
   登记，并在 `checks/groups.nix` 放进至少一个门禁分组；`checks.vuna-checks-inventory`
   拒绝 orphan 脚本，`default.nix` 求值拒绝未分组的 check。
+- `build/outputs.nix` 求值还要求 `.github/workflows/ci.yml` 的 `with: group:` 都是
+  `groups.nix` 里的分组名（matrix 表达式按前缀匹配），改名分组时两边一起改。
 - 门禁数据（allowlist / min / budget / baseline）放 `checks/data/`，由对应脚本读取。
 - 独立工具只放 `tools/`，不直接作为 check；check 通过 shell 调用。
 - `seed/` 的文件只能由 `seed/rotate.sh` 更新；`files.txt` 与 `rotation.txt` 是生成物。

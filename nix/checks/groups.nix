@@ -27,6 +27,9 @@ in
     "check:vuna-tests-units"
   ];
 
+  # 包内单测独立成 job（`ci.yml` 的 units）：不随 suite shard 重复。
+  units = [ "check:vuna-tests-units" ];
+
   # PR 增量 suite 切片（`nix/checks/slices.nix`）：按 area 组合选择器，PR 计划器只
   # 构建命中的那几个；`nix run .#ci -- slices` 一次跑全部。
   slices = [
