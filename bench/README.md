@@ -76,6 +76,10 @@
   短用例（参照 1–5 ms）的进程启动占比高：`repeat=` 放大的是采样内耗时，不改变启动地板。
 - 采样顺序按轮交替（偶数轮先跑参照、奇数轮先跑被测）：参照与被测在同一次测量里交错，
   避免宿主负载的单调漂移系统性偏向先跑的一方。
+- **对象库默认隔离**：每次运行把 `VUNA_STORE` 指到 `$WORK/store` 的独立空库。热
+  `~/.vuna/store` 可能留着旧编译器生成的模块接口 / split 产物，跨编译器改动后会被
+  复用（runtime 文本、GC 参数都是旧的），读数不可比；要快速迭代用 `--shared-store`。
+  `meta.store_mode` 记录本次口径。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
   JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
@@ -93,6 +97,7 @@ nix run .#vuna-perf -- --target all --check            # 与 baselines/programs.
 nix run .#vuna-perf -- --only eff_tick --only eff_deep --only eff_bracket --check  # 效应子集
 nix run .#vuna-perf -- --only micro_apply --only micro_concat --target both --runs 5  # 原语级（ns/op）
 nix run .#vuna-perf -- --check --strict                # WARN 也 exit 1
+nix run .#vuna-perf -- --shared-store --only arith     # 复用热 store（快；跨编译器改动时读数可能失真）
 nix run .#vuna-perf -- --target ocaml --runs 9 --warmup 3 --gate-ratio 1.2  # 1.2x 绝对门禁
 nix run .#vuna-perf -- --target all --runs 5 --warmup 2 \
   --json bench/baselines/programs.json                 # 重新生成唯一一份程序基线
