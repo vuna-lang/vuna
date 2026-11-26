@@ -336,11 +336,14 @@ instanceLandingOk allDecls sp cls headExpr =
 checkSuperClasses : List (String, Term) -> Ctx -> Int -> String -> Span -> List Term -> List Term -> Ec -> Check Ec
 checkSuperClasses globals ctx nCtx instName sp args [] ec = OkC ec
 checkSuperClasses globals ctx nCtx instName sp args (s :: rest) ec =
-  let
-    goal = evalCtx ctx (shift 0 nCtx (substInstParams args s))
-  in case searchInstanceIn globals ctx ec goal sp of
-    ErrC e => tcErr2 sp (SuperclassNotSatisfied instName (showValue goal)) instName (showValue goal)
-    OkC (t, ec1) => checkSuperClasses globals ctx nCtx instName sp args rest ec1
+  Vuna.Compiler.Base.Common.bind (substInstParams args s) (
+      \s2 =>
+        let
+          goal = evalCtx ctx (shift 0 nCtx s2)
+        in case searchInstanceIn globals ctx ec goal sp of
+          ErrC e => tcErr2 sp (SuperclassNotSatisfied instName (showValue goal)) instName (showValue goal)
+          OkC (t, ec1) => checkSuperClasses globals ctx nCtx instName sp args rest ec1
+    )
 
 -- 实例落点通过后的正常实例精化（方法检查 + 字典项构造）。
 elabInstanceWithClass : List (String, Term) -> List (Decl, Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Check (List (String, Term), Ec)
@@ -885,74 +888,94 @@ zipMethodFields (m :: rest) (t :: rest2) = (firstOf m, t) :: zipMethodFields res
 -- `args` 按声明顺序（p1 最外、pn 最内）；field type 里的 p_i 索引是 n-1-i。
 -- 注意 **嵌套 binder 下要 shift**：`eq : a -> a -> Bool` 的第二个 `a` 在 1 层 Pi 之下，
 -- 直接复用 Core.substVarAt 会把实参里的 tele 变量指向方法形参（`Box a` 的 a 指错）。
-substInstParams : List Term -> Term -> Term
+substInstParams : List Term -> Term -> Check Term
 substInstParams args t = substInstParamsGo (length args) args 0 t
 
-substInstParamsGo : Int -> List Term -> Int -> Term -> Term
+substInstParamsGo : Int -> List Term -> Int -> Term -> Check Term
 substInstParamsGo n args depth (t@(TVar nm i sp)) =
   if i >= depth then
-    if i - depth < n then shift 0 depth (instArgAt (n - 1 - (i - depth)) args) else t
+    if i - depth < n then
+      case instArgAt (n - 1 - (i - depth)) args of
+        Just a => OkC (shift 0 depth a)
+        Nothing => icInternal "substInstParams: instance head argument index out of range"
+    else
+      OkC t
   else
-    t
+    OkC t
 substInstParamsGo n args depth (TPi nm i r dom cod) =
-  TPi nm i r (substInstParamsGo n args depth dom) (substInstParamsGo n args (depth + 1) cod)
+  Vuna.Compiler.Base.Common.bind
+    (substInstParamsGo n args depth dom)
+    (\dom2 => Vuna.Compiler.Base.Common.bind (substInstParamsGo n args (depth + 1) cod) (\cod2 => OkC (TPi nm i r dom2 cod2)))
 substInstParamsGo n args depth (TLam nm r slot sp body) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (substInstParamsGo n args depth t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (substInstParamsGo n args (depth + 1) t)
-          in Just (mark, bt2, rt2)
-  in TLam nm r slot2 sp (substInstParamsGo n args (depth + 1) body)
+  Vuna.Compiler.Base.Common.bind
+    (substInstParamsSlot n args depth slot)
+    (\slot2 => Vuna.Compiler.Base.Common.bind (substInstParamsGo n args (depth + 1) body) (\body2 => OkC (TLam nm r slot2 sp body2)))
 substInstParamsGo n args depth (TApp f a r) =
-  TApp (substInstParamsGo n args depth f) (substInstParamsGo n args depth a) r
+  Vuna.Compiler.Base.Common.bind
+    (substInstParamsGo n args depth f)
+    (\f2 => Vuna.Compiler.Base.Common.bind (substInstParamsGo n args depth a) (\a2 => OkC (TApp f2 a2 r)))
 substInstParamsGo n args depth (TCon c cs) =
-  TCon c (map (\p => (substInstParamsGo n args depth (firstOf p), secondOf p)) cs)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (substInstParamsPair n args depth) cs)
+    (\cs2 => OkC (TCon c cs2))
 substInstParamsGo n args depth (TMk c cs) =
-  TMk c (map (\p => (substInstParamsGo n args depth (firstOf p), secondOf p)) cs)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (substInstParamsPair n args depth) cs)
+    (\cs2 => OkC (TMk c cs2))
 substInstParamsGo n args depth (TCase scrut alts) =
-  TCase
+  Vuna.Compiler.Base.Common.bind
     (substInstParamsGo n args depth scrut)
-    (map (\alt => substInstParamsAlt n args depth alt) alts)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (substInstParamsAlt n args depth) alts) (\alts2 => OkC (TCase scrut2 alts2)))
 substInstParamsGo n args depth (TIf c th el) =
-  TIf
+  Vuna.Compiler.Base.Common.bind
     (substInstParamsGo n args depth c)
-    (substInstParamsGo n args depth th)
-    (substInstParamsGo n args depth el)
-substInstParamsGo n args depth t = t
+    (\c2 => Vuna.Compiler.Base.Common.bind (substInstParamsGo n args depth th) (\th2 => Vuna.Compiler.Base.Common.bind (substInstParamsGo n args depth el) (\el2 => OkC (TIf c2 th2 el2))))
+substInstParamsGo n args depth t = OkC t
 
-substInstParamsAlt : Int -> List Term -> Int -> CaseAlt -> CaseAlt
+substInstParamsSlot : Int -> List Term -> Int -> Maybe (LamMark, Maybe Term, Maybe Term) -> Check (Maybe (LamMark, Maybe Term, Maybe Term))
+substInstParamsSlot n args depth Nothing = OkC Nothing
+substInstParamsSlot n args depth (Just (mark, bt, rt)) =
+  Vuna.Compiler.Base.Common.bind
+    (substInstParamsMaybe n args depth bt)
+    (\bt2 => Vuna.Compiler.Base.Common.bind (substInstParamsMaybe n args (depth + 1) rt) (\rt2 => OkC (Just (mark, bt2, rt2))))
+
+substInstParamsMaybe : Int -> List Term -> Int -> Maybe Term -> Check (Maybe Term)
+substInstParamsMaybe n args depth Nothing = OkC Nothing
+substInstParamsMaybe n args depth (Just t) =
+  Vuna.Compiler.Base.Common.bind (substInstParamsGo n args depth t) (\t2 => OkC (Just t2))
+
+substInstParamsPair : Int -> List Term -> Int -> (Term, Rig) -> Check (Term, Rig)
+substInstParamsPair n args depth (t, r) =
+  Vuna.Compiler.Base.Common.bind (substInstParamsGo n args depth t) (\t2 => OkC (t2, r))
+
+substInstParamsAlt : Int -> List Term -> Int -> CaseAlt -> Check CaseAlt
 substInstParamsAlt n args depth (CaseAlt c bs b) =
-  CaseAlt c bs (substInstParamsGo n args (depth + length bs) b)
+  Vuna.Compiler.Base.Common.bind
+    (substInstParamsGo n args (depth + length bs) b)
+    (\b2 => OkC (CaseAlt c bs b2))
 
-instArgAt : Int -> List Term -> Term
-instArgAt k [] = TGlobal "Int"
-instArgAt k (a :: rest) = if k <= 0 then a else instArgAt (k - 1) rest
+instArgAt : Int -> List Term -> Maybe Term
+instArgAt k [] = Nothing
+instArgAt k (a :: rest) = if k <= 0 then Just a else instArgAt (k - 1) rest
 
 export elabInstanceMethodsGo : List (String, Term) -> Ctx -> Int -> Ec -> List (String, Term) -> List Term -> List Decl -> List Term -> List (Term, Rig) -> Span -> Check (List Term, List (Term, Rig), Ec)
 elabInstanceMethodsGo globals ctx nCtx ec [] headArgs decls terms args sp =
   OkC (reverse terms, reverse args, ec)
 elabInstanceMethodsGo globals ctx nCtx ec ((mname, fty) :: rest) headArgs decls terms args sp =
-  let
-    clauses = methodClausesNamed mname decls
-    instTy = shift 0 nCtx (substInstParams headArgs fty)
-  in case clauses of
-    [] => tcErr0 sp InstanceMissingMethod
-    _ =>
-      Vuna.Compiler.Base.Common.bind (elabInstanceMethodIn globals ctx ec instTy clauses) (
-          \p =>
-            case p of
-              (term, ec1) => elabInstanceMethodsGo globals ctx nCtx ec1 rest headArgs decls (term :: terms) ((term, RigOmega) :: args) sp
-        )
+  Vuna.Compiler.Base.Common.bind (substInstParams headArgs fty) (
+      \instTy0 =>
+        let
+          clauses = methodClausesNamed mname decls
+          instTy = shift 0 nCtx instTy0
+        in case clauses of
+          [] => tcErr0 sp InstanceMissingMethod
+          _ =>
+            Vuna.Compiler.Base.Common.bind (elabInstanceMethodIn globals ctx ec instTy clauses) (
+                \p =>
+                  case p of
+                    (term, ec1) => elabInstanceMethodsGo globals ctx nCtx ec1 rest headArgs decls (term :: terms) ((term, RigOmega) :: args) sp
+              )
+    )
 
 -- 实例体里某个方法的**全部**子句（多 clause 方法：`fmp g (MkBox2 x) = ...` 后紧跟
 -- 同名 clause）。这些子句一起走 `elabFunDef` 的模式矩阵，不是只取第一条。
