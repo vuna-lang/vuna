@@ -1,0 +1,2 @@
+-- `length` 来自 Prelude；本包关闭注入后不再可见。
+main = length [1]
