@@ -63,6 +63,9 @@ record Env where
   envBase : String
   -- | `ocamlopt` 命令名（子进程环境里的 `OCAMLOPT`）。
   envOcamlopt : String
+  -- | 子进程里单次 `build.sh` 的并行度（`VUNA_BUILD_JOBS`）。worker 已经按 `--jobs`
+  -- 并行，单个 case 再按核数展开会把 `NIX_BUILD_CORES` 乘进每一路，造成超订。
+  envBuildJobs : String
   -- | 子进程捕获 helper 脚本的路径（`writeHelper` 产出）。
   envHelper : String
   -- | 结果缓存与构建桶的根（`--cache-dir`，默认 `<root>/.local/test-cache`）。
@@ -413,6 +416,11 @@ writeHelper tmp =
 -- ---------------------------------------------------------------
 -- 子进程
 -- ---------------------------------------------------------------
+-- | 内部：`build.sh` 的 argv 前缀——单次构建只给 `VUNA_BUILD_JOBS` 这么多并行度
+-- （测试环境默认 1；worker 已经按 `--jobs` 并行，再乘核数会超订）。
+withBuildJobs : Env -> List String -> List String
+withBuildJobs env argv = append ["env", "VUNA_BUILD_JOBS=${env.envBuildJobs}"] argv
+
 -- | 内部：读文件；不存在时给空串。
 readMaybeFile : Member nFs FsOp r => String -> Eff r String
 readMaybeFile path =
@@ -445,12 +453,12 @@ runCmd env tag cwd secs argv = runCmdWith False env tag cwd secs argv
 runCmdMerged : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> String -> Int -> List String -> Eff r CmdResult
 runCmdMerged env tag cwd secs argv = runCmdWith True env tag cwd secs argv
 
--- | 内部：给 argv 前置 `env VUNA=… VUNA_SEED=… VUNA_BASE=… OCAMLOPT=… VUNA_SUITE_ROOT=…`
--- （父进程不能 setenv，只能给子进程注入）。
+-- | 内部：给 argv 前置 `env VUNA=… VUNA_SEED=… VUNA_BASE=… OCAMLOPT=… VUNA_BUILD_JOBS=…
+-- VUNA_SUITE_ROOT=…`（父进程不能 setenv，只能给子进程注入）。
 withEnv : Env -> List String -> List String
 withEnv env argv =
   append
-    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}", "VUNA_TEST_ROOT=${env.envTestRoot}"]
+    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_BUILD_JOBS=${env.envBuildJobs}", "VUNA_SUITE_ROOT=${env.envRoot}", "VUNA_TEST_ROOT=${env.envTestRoot}"]
     argv
 
 -- 对象库是输入寻址的：同一输入同一路径、原子写，日常 check/build 与测试共用同一根
@@ -770,53 +778,43 @@ goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCom
     [timeoutAssert c gr.grMs]
     (append interpA (append checkA (append compileA (append syncA (append buildA (append runA compareA))))))
 
--- | 内部：把 staging 同步进按模块集选出的共享构建桶，返回拷贝退出码。
-syncStaging : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Eff r Int
-syncStaging env staging =
-  do
-    target <- buildCacheDir env staging
-    syncBuildDir staging target
-
 -- | 执行一个 golden case：读期望文本，按开关依次 interp / check / compile / 同步构建桶 /
 -- 跑 `build.sh` / 跑产物，再汇总断言。`env.envBless` 且失败时把期望文件回写成实际输出，
 -- 结果状态记成 `blessed`（断言全算通过）。
+--
+-- `build.sh` 跑在共享构建桶里（与 `runtimeCase` 同一口径）：staging 只有本次 codegen 的
+-- `.ml`/`.mli`，桶里保留上次的 `.cmx`/`.o`/`.stamp`；生成内容相同的重复运行只重编变化的
+-- 单元并链接，不必每次从零编译整棵依赖闭包。
 goldenCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Eff r CaseResult
 goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
-  do
+  let
+    staging = "${env.envTmp}/stage-${safeName c.caseId}"
+  in do
     start <- clockNow
     expectedText <- fmap trimNewlines (fsReadFile expected)
     interpR <-
       if wantInterp then probeInterpIn env source else pure (ErrC (caseSkipDiag "interp off"))
     checkR <- if wantCheck then probeCheckIn env source else pure (OkC [])
     compileR <-
-      if wantCompile then
-        compileFile source "${env.envTmp}/stage-${safeName c.caseId}"
-      else
-        pure (ErrC (caseSkipDiag "compile off"))
+      if wantCompile then compileFile source staging else pure (ErrC (caseSkipDiag "compile off"))
+    buildDir <-
+      if wantCompile && checkPassed compileR then buildCacheDir env staging else pure staging
     syncCode <-
-      if wantCompile && checkPassed compileR then
-        syncStaging env "${env.envTmp}/stage-${safeName c.caseId}"
-      else
-        pure 0
+      if wantCompile && checkPassed compileR then syncBuildDir staging buildDir else pure 0
     buildR <-
       if wantCompile && checkPassed compileR then
         runCmdMerged
           env
           "${c.caseId}-build"
-          "${env.envTmp}/stage-${safeName c.caseId}"
+          buildDir
           c.caseTimeout
-          ["sh", "build.sh", "prog"]
+          (withBuildJobs env ["sh", "build.sh", "prog"])
       else
         pure (CmdResult 1 "" "" False)
     runOk <- pure (wantRun && wantCompile && checkPassed compileR && buildR.cmdCode == 0)
     runR <-
       if runOk then
-        runCmdMerged
-          env
-          "${c.caseId}-run"
-          env.envCwd
-          c.caseTimeout
-          ["${env.envTmp}/stage-${safeName c.caseId}/prog"]
+        runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${buildDir}/prog"]
       else
         pure (CmdResult 1 "" "" False)
     end <- clockNow
@@ -1333,7 +1331,7 @@ runtimeCase env c source expectedErr expectedExit =
     buildA <-
       if checkPassed comp then
         do
-          b <- runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
+          b <- runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout (withBuildJobs env ["sh", "build.sh", "prog"])
           if b.cmdCode == 0 then
             do
               r <- runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
@@ -1965,7 +1963,7 @@ seedCase env c source expected =
     buildA <-
       if comp.cmdCode == 0 then
         do
-          b <- runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
+          b <- runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout (withBuildJobs env ["sh", "build.sh", "prog"])
           if b.cmdCode == 0 then
             do
               r <- runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
@@ -2268,24 +2266,48 @@ not False = True
 -- LPT 调度（仅用于非 e2e tier）
 --
 -- e2e 的冷隔离长 case 对顺序敏感，仍按发现顺序；gate（fast/integration）按
--- `.local/test-suite/costs.tsv` 的实测耗时做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
--- worker 各自读同一份 costs，确定性地算出同一组 bins，再取自己的 bin。
+-- 耗时表做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
+-- worker 各自读同一份耗时表，确定性地算出同一组 bins，再取自己的 bin。
+--
+-- 耗时表有两层：入库的 `test/suite/costs.baseline`（CI 与全新 checkout 的初值）与
+-- `.local/test-suite/costs.tsv`（本机实测，覆盖基线）。写入时**按 case id 合并**，
+-- 不整文件覆盖——`--all` 依次跑各包 suite，覆盖写会让前面的 suite 丢掉权重。
 -- ---------------------------------------------------------------
--- | 内部：实测耗时表路径（`.local/test-suite/costs.tsv`）。
+-- | 内部：本机实测耗时表路径（`.local/test-suite/costs.tsv`）。
 costsPath : Env -> String
 costsPath env = "${env.envRoot}/.local/test-suite/costs.tsv"
 
--- | 内部：读耗时表；文件不存在时给空列表。
-loadCosts : Member nFs FsOp r => Env -> Eff r (List (String, Int))
-loadCosts env =
+-- | 内部：入库的调度权重基线（`.local` 表优先）。
+costsBaselinePath : Env -> String
+costsBaselinePath env = "${env.envRoot}/test/suite/costs.baseline"
+
+-- | 内部：读一份 `id<TAB><ms>` 表；文件不存在时给空列表。
+readCostFile : Member nFs FsOp r => String -> Eff r (List (String, Int))
+readCostFile path =
   do
-    exists <- pathExistsFile (costsPath env)
+    exists <- pathExistsFile path
     if not exists then
       pure []
     else
       do
-        text <- fsReadFile (costsPath env)
+        text <- fsReadFile path
         pure (mapMaybe parseCostLine (lines text))
+
+-- | 内部：合并两份耗时表；`new` 里的同 id 行覆盖 `old`。
+mergeCosts : List (String, Int) -> List (String, Int) -> List (String, Int)
+mergeCosts old new =
+  let
+    newIds = map firstOf new
+    kept = filter (\p => not (memName (firstOf p) newIds)) old
+  in append kept new
+
+-- | 内部：读耗时表（基线 + 本机实测，后者覆盖前者）。
+loadCosts : Member nFs FsOp r => Env -> Eff r (List (String, Int))
+loadCosts env =
+  do
+    baseline <- readCostFile (costsBaselinePath env)
+    local <- readCostFile (costsPath env)
+    pure (mergeCosts baseline local)
 
 -- | 内部：`id<TAB><ms>` → `(id, ms)`；没有第二个字段时跳过（`Nothing`），第二个字段不是数字时按 100。
 parseCostLine : String -> Maybe (String, Int)
@@ -2389,26 +2411,35 @@ nthBin : Int -> List (List (Int, Case)) -> List (Int, Case)
 nthBin _ [] = []
 nthBin n (b :: rest) = if n <= 0 then b else nthBin (n - 1) rest
 
--- | 内部：耗时表的一行：`id<TAB><ms>`。
-costRowText : CaseResult -> String
-costRowText r = "${r.resId}\t${strOfInt r.resMs}"
-
 -- | 内部：是否参与写耗时表（非 `cached` 且有正耗时）。
 isCostRow : CaseResult -> Bool
 isCostRow r = r.resStatus /= "cached" && r.resMs > 0
 
--- | 内部：把本次实测耗时写回耗时表；没有可写的行时不动文件，返回写入字节数。
+-- | 内部：把本次实测耗时**合并**写回耗时表（同 id 覆盖、其余保留）；没有可写的行时不动文件，
+-- 返回写入字节数。
 recordCosts : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> List CaseResult -> Eff r Int
 recordCosts env results =
   let
     rows = filter isCostRow results
-    text = join "\n" (map costRowText rows)
   in if listLength rows == 0 then
     pure 0
   else
     do
-      _ <- ensureDirPath "${env.envRoot}/.local/test-suite"
-      fmap natToInt (fsWriteFile (costsPath env) text)
+      old <- readCostFile (costsPath env)
+      let
+        merged = mergeCosts old (map costPairOf rows)
+        text = join "\n" (map costPairText merged)
+      in do
+        _ <- ensureDirPath "${env.envRoot}/.local/test-suite"
+        fmap natToInt (fsWriteFile (costsPath env) text)
+
+-- | 内部：一条结果 → 耗时表的一行（`(id, ms)`）。
+costPairOf : CaseResult -> (String, Int)
+costPairOf r = (r.resId, r.resMs)
+
+-- | 内部：耗时表的一行（`id<TAB><ms>`）。
+costPairText : (String, Int) -> String
+costPairText p = "${firstOf p}\t${strOfInt (secondOf p)}"
 
 -- | 一个 worker 的入口：按 LPT（非 e2e tier）或静态分片取自己那份 case，顺序执行并把结果
 -- 写成 TSV。返回 0（无失败）/ 1。
@@ -2495,8 +2526,13 @@ spawnWorkers env opts resultsDir jobs fuel index pids =
           Just rev => ["--changed", rev]
           Nothing => []
       timeoutArgs = if opts.suiteTimeout > 0 then ["--timeout", strOfInt opts.suiteTimeout] else []
-      flagArgs = append (if opts.suiteFailFast then ["--fail-fast"] else []) (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs)))))
-      args = append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir] (append filters (append timeoutArgs flagArgs))
+      shardArgs =
+        case opts.suiteShard of
+          Just (i, n) => ["--shard", "${strOfInt i}/${strOfInt n}"]
+          Nothing => []
+      verboseArgs = if opts.suiteVerbose then ["--verbose"] else []
+      flagArgs = append (if opts.suiteFailFast then ["--fail-fast"] else []) (append (if opts.suiteJSON then ["--quiet"] else []) (append verboseArgs (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs))))))
+      args = append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir] (append filters (append timeoutArgs (append shardArgs flagArgs)))
     in do
       pid <- processSpawn args
       spawnWorkers env opts resultsDir jobs (fuel - 1) (index + 1) (pid :: pids)
@@ -2679,6 +2715,21 @@ runParent env opts suite cases =
           _ <- waitPids pids
           results <- collectResults resultsDir n indexed
           finishResults env opts results
+
+-- | 内部：`--shard i/N` 的筛选——按耗时把选中 case 切成 N 个均衡桶，取第 i 桶。
+-- 每个 suite 独立分桶（`--all` 逐份调用），各 shard 拿到的同名桶在 suite 内均衡，
+-- 跨 suite 的总量因此也接近均衡。分桶覆盖全部 case；数量对不上时注入一条失败 case，
+-- 而不是静默少跑。
+applyShard : Member nFs FsOp r => Env -> SuiteOpts -> List Case -> Eff r (List Case)
+applyShard env opts cases =
+  case opts.suiteShard of
+    Nothing => pure cases
+    Just (index, count) =>
+      do
+        bins <- lptBins env count (indexAll cases 0 [])
+        let
+          total = sumInts (map listLength bins)
+        in if total /= listLength cases then pure [Case "audit/shard" ["audit"] (CBroken "shard partition lost ${strOfInt (listLength cases - total)} case(s)") 0 "e2e" "tool"] else pure (map (\p => secondOf p) (nthBin index bins))
 
 -- | 内部：给 case 配全局下标（从 0 起，保持发现顺序）。
 indexAll : List Case -> Int -> List (Int, Case) -> List (Int, Case)
@@ -3119,6 +3170,8 @@ runSuiteOnce sess opts suite =
     vuna <- envOr "VUNA" "${Vuna.Cli.Args.parentOf vunaSelf}/vuna"
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
+    -- 每个 case 的 build.sh 单线程：并行度由 worker 数（`--jobs`）提供。
+    buildJobs <- envOr "VUNA_TEST_BUILD_JOBS" "1"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
     buildFp <- toolCompilerFingerprint
     buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
@@ -3130,7 +3183,7 @@ runSuiteOnce sess opts suite =
     let
       knownAreas = filter (\a => a /= "") (split " " areaText)
       discovered = applyTimeoutOverride opts.suiteTimeout discovered0
-      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir opts.suiteBackends sess
+      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt buildJobs helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir opts.suiteBackends sess
       -- 三层默认护栏（局部 --only/--filter/--area 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到；
@@ -3146,13 +3199,14 @@ runSuiteOnce sess opts suite =
           Just rev => changedFilter env rev cases0
           Nothing => pure cases0
       cases <- if opts.suiteLastFailed then filterLastFailed env cases1 else pure cases1
+      sharded <- applyShard env opts cases
       result <-
         if opts.suiteListOnly then
-          listSuite env cases
+          listSuite env sharded
         else
           case opts.suiteWorker of
-            Just (index, count) => runWorker env opts cases index count
-            Nothing => runParent env opts suite cases
+            Just (index, count) => runWorker env opts sharded index count
+            Nothing => runParent env opts suite sharded
       _ <- processRunIn "/" ["rm", "-rf", tmp]
       pure result
 
