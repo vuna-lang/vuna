@@ -253,6 +253,43 @@ setPrepared prepared mi =
     mi.miCached
     mi.miDefLocs
 
+-- | 换位置表（`setPrepared` 的同族：只改一个字段，其余原样）。
+export setDefLocs : List (String, String, Int) -> ModuleIface -> ModuleIface
+setDefLocs locs mi =
+  ModuleIface
+    mi.miName
+    mi.miPackage
+    mi.miSource
+    mi.miIfaceHash
+    mi.miDepHashes
+    mi.miImports
+    mi.miImplicitImports
+    mi.miExports
+    mi.miFixities
+    mi.miDecls
+    mi.miRecords
+    mi.miPrepared
+    mi.miCached
+    locs
+
+hasLocName : List String -> (String, String, Int) -> Bool
+hasLocName names p = memName (firstOf p) names
+
+-- | 写接口时的位置表保底：程序若来自缓存视图（视图不带 span），新算出的 `miDefLocs`
+-- 会是空的——直接用它会**覆盖掉**同一地址上原本正确的位置表，之后所有增量构建都丢
+-- `#line` 与 `dt_def_locs`。这里按定义名精确取旧表（只补新载荷里仍存在的定义），
+-- 位置表只服务 `#line` 与错误回溯，多补一分也不会改变语义。
+export mergeDefLocsFrom : Maybe ModuleIface -> ModuleIface -> ModuleIface
+mergeDefLocsFrom Nothing mi = mi
+mergeDefLocsFrom (Just old) mi =
+  if length mi.miDefLocs > 0 then
+    mi
+  else
+    let
+      names = map dtDefName (cachedDefs mi.miCached)
+      kept = filter (hasLocName names) old.miDefLocs
+    in if length kept == 0 then mi else setDefLocs kept mi
+
 -- 接口格式版本：载荷布局或字段语义变化必须 bump（地址随之换代，旧载荷自然失效）。
 export ifaceSchema : String
 ifaceSchema = "vuna-iface 36"
