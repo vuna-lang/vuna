@@ -6,6 +6,9 @@
 #     夹具 $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #     vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/c32-pkg" "$TMPDIR/c32-cache" "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"; cp -r $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary "$TMPDIR/c32-pkg"; for mf in "$TMPDIR/c32-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-clean" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
+# 精简后的对象库不再产生 module-header / splitptr / blobs / units。
+run: sh -c 'test ! -d "$VUNA_STORE/objects/module-header" && test ! -d "$VUNA_STORE/objects/splitptr" && test ! -d "$VUNA_STORE/blobs" && test ! -d "$VUNA_STORE/units"'
+exit: 0
 # 52d) check 判定：**输入寻址对象的存在性**（`objects/check-outcome/<checkIn>`，空载荷）。
 #      判过就写一个 marker；删掉它必须视为未命中（重算并重新写回），不能静默当成功。
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
