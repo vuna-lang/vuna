@@ -18,7 +18,6 @@ import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Packages.Source
@@ -82,7 +81,6 @@ main =
     _ <- consolePrint (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
     _ <- consolePrint (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
     _ <- consolePrint (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
-    _ <- consolePrint (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
     -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
     -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
     _ <-
@@ -416,20 +414,6 @@ parentCovered : Bool
 parentCovered =
   not
     (encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "") == encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "M.T"))
-
--- | 工具会话载荷（`ToolContext`）的编码 roundtrip：空上下文也要逐字节稳定。
--- 真实上下文含 iface 列表（`encModuleIfaceAt`），这里只验证字段顺序 / Maybe / 列表 / 尾部
--- 检查这条骨架——载荷结构变了（schema bump）这条断言会立刻失败。
-toolContextSample : ToolContext
-toolContextSample = ToolContext [] [] ["Base.Data.Int"] ["Main"] []
-
-toolContextRoundtrip : Bool
-toolContextRoundtrip =
-  let
-    bytes = encToolContext toolContextSample
-  in case decToolContextComplete bytes of
-    Nothing => False
-    Just ctx => encToolContext ctx == bytes
 
 -- | 名字身份：局部 / 全局 / 内建 / 宏 / 洞的字符串编码必须逐字节可还原。
 nameIdentityOk : Bool

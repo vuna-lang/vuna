@@ -1,16 +1,8 @@
--- | parse 级扫描、符号抽取、全量构建与索引缓存。
+-- | parse 级扫描、符号抽取与全量构建。
 --
--- 缓存走 [Vuna.Tool.Session] 的输入寻址对象：依赖表两条路径——CLI / LSP / `search` 用逐源文件
--- 内容哈希 `f:<path>:<hash>`（同 size + 同 mtime 的内容变更也必须失效），REPL 用 stat 键
--- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希，见 `indexStatsOf`）。命中 ⇒ 读
--- `objects/tool-context/<addr>` 载荷解码（[Vuna.Index.Codec]）；未命中 ⇒ 全量重建 + 写载荷对象
--- （同一输入同一地址），每次 miss 只提交调用方选定的一个 key。
---
--- 没有「刷新索引」命令：`vuna map` / `vuna api` / REPL 自己判新鲜度。`Store` 是唯一写盘层，
--- 帧格式与内容地址校验见 [Vuna.Compiler.Base.Store]。
---
--- 效果显式化：目录遍历、读文件、缓存写、时钟全部在 `Eff r` 里；纯数据逻辑（路径、哈希、
--- 文本渲染、序列化解析）保持纯函数，`indexStatsOf` 只产出 stat 快照。
+-- 每次 `vuna map` / `vuna api` / LSP 浏览都重建索引；没有索引持久化，也没有「刷新索引」
+-- 命令。效果显式化：目录遍历与读文件在 `Eff r` 里；纯数据逻辑（路径、哈希、文本渲染、
+-- 序列化解析）保持纯函数。
 module Vuna.Index.Scan where
 
 import Vuna.Compiler.Base.Common
@@ -18,7 +10,6 @@ import Vuna.Compiler.Base.Walk
 import Base.Data.Nat as Nat
 import Base.Data.Maybe as Maybe
 import Base.Container.HashMap as HashMap
-import Base.Trait.Hashable as Hashable
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
@@ -29,13 +20,11 @@ import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Index.Types
 import Vuna.Sig
-import Vuna.Index.Codec
-import Vuna.Tool.Session
-import Base.Effect.Clock as EffClock
 import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 import Base.Effect.Process as EffProcess
+import Base.Effect.Clock as EffClock
 import Base.Data.Sort
 import Base.Thread.Par as Par
 
@@ -789,109 +778,11 @@ buildIndex repo =
             in pure (OkC (Index (reverse acc.accModules) (dedupeSymbols (reverse acc.accSymbols)) (reverse acc.accRefs)))
 
 -- ---------------------------------------------------------------
--- 缓存：工具会话对象 + 输入寻址载荷
+-- 索引构建入口
 -- ---------------------------------------------------------------
--- 会话 key、载荷与依赖表的分层见模块头；这里只构造 key 与依赖键。
--- | 内部：强依赖路径（CLI / LSP / `search`）的会话 key，`index:<dir>`（同时用作桶名）。
-indexNodeKey : String -> String
-indexNodeKey repo = "index:${repo}"
-
--- | 内部：REPL 路径的会话 key，`index-cheap:<dir>`（与 CLI 的强依赖缓存互不污染）。
-indexNodeKeyCheap : String -> String
-indexNodeKeyCheap repo = "index-cheap:${repo}"
-
--- | 内部：mtime 安全窗（秒）。
---
--- mtime 只有秒级分辨率：`builtSec` 前这么多秒内改过的文件必须回落内容哈希，否则
--- 「同秒同 size 的编辑」会被漏掉。
-indexMtimeSafetyWindowSec : Int
-indexMtimeSafetyWindowSec = 5
-
--- | 单个源文件的 stat 快照，即依赖表的一项。
-record SourceStat where
-  -- | 源文件路径。
-  ssPath : String
-  -- | 文件大小（窗口外取 `fsFileSize`，窗口内取读入内容的 `strLength`）。
-  ssBytes : Int
-  -- | mtime（秒）。
-  ssMtime : Int
-  -- | 内容哈希：安全窗内为哈希，窗口外为空串（键里带上，两侧规则一致就不会假失配）。
-  ssHash : String
-
--- | 内部：当前 stat 面（含安全窗内的内容哈希），是廉价依赖表的唯一来源。
-indexStatsOf : Member nFs FsOp r, Member nEnv EnvOp r => Int -> String -> Eff r (List SourceStat)
-indexStatsOf builtSec repo =
-  do
-    dirs <- packageDirs repo
-    sources <- concatMapEff packageSources (map firstOf dirs)
-    mapEff (sourceStatOf builtSec) sources
-
--- | 内部：单个文件的 stat 快照；mtime 落在安全窗内时额外读内容算哈希。
-sourceStatOf : Member nFs FsOp r => Int -> String -> Eff r SourceStat
-sourceStatOf builtSec path =
-  do
-    exists <- fsFileExists path
-    if exists then
-      do
-        bytes <- fmap (\o => natToInt (fromMaybe 0 o)) (fsFileSize path)
-        mtime <- fmap (fromMaybe 0) (fsFileMtime path)
-        if mtime + indexMtimeSafetyWindowSec > builtSec then
-          do
-            source <- fsReadFile path
-            pure (SourceStat path (strLength source) mtime (contentHash source))
-        else
-          pure (SourceStat path bytes mtime "")
-    else
-      pure (SourceStat path 0 0 "")
-
--- | 内部：内容哈希——拼接两个不同前缀的 `Base.Trait.Hashable.hashStr` 结果，依赖键用。
-contentHash : String -> String
-contentHash content = "${Hashable.hashStr content}-${Hashable.hashStr "v2:${content}"}"
-
--- | 内部：stat 快照 → 廉价依赖键 `st:<path>:<bytes>:<mtime>:<hash>`。
-indexDepKey : SourceStat -> String
-indexDepKey s = "st:${s.ssPath}:${strFromInt s.ssBytes}:${strFromInt s.ssMtime}:${s.ssHash}"
-
--- | 内部：强依赖表（CLI 路径）——逐源文件内容哈希 `f:<path>:<hash>`。
---
--- 同 size + 同 mtime 的内容变更也必须失效；文件不存在时哈希段留空。
-indexStrongDeps : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List String)
-indexStrongDeps repo =
-  do
-    dirs <- packageDirs repo
-    sources <- concatMapEff packageSources (map firstOf dirs)
-    mapEff strongDepOf sources
-
--- | 内部：单个文件的强依赖键。
-strongDepOf : Member nFs FsOp r => String -> Eff r String
-strongDepOf path =
-  do
-    exists <- fsFileExists path
-    if exists then
-      do
-        source <- fsReadFile path
-        pure "f:${path}:${contentHash source}"
-    else
-      pure "f:${path}:"
-
--- | 带缓存的入口（CLI 与 LSP）：强依赖 + `index:<dir>` 节点。
---
--- 命中就读 blob 解码，未命中重建并写回。非 workspace（向上找不到 `vuna.toml`）是输入错误，
--- 不静默建空索引。
+-- | CLI / LSP 入口：每次重建索引。非 workspace（向上找不到 `vuna.toml`）是输入错误。
 export loadOrBuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
-loadOrBuild repo = indexLoadOrBuild repo False
-
--- | 廉价入口（REPL 每会话首次 `:browse` / `:info` / `:search`）：依赖表用 stat 键
--- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希），不读全部源码算哈希。
---
--- 节点 key 前缀不同（`index-cheap:`），与 CLI 的强依赖缓存互不污染。
-export loadOrBuildCheap : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
-loadOrBuildCheap repo = indexLoadOrBuild repo True
-
--- | 内部：两条入口的共同实现——判 workspace、算依赖表、命中解码，否则 `rebuildIndex`；
--- `cheap` 选择 stat 键路径与节点 key。
-indexLoadOrBuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Eff r (Check Index)
-indexLoadOrBuild repo cheap =
+loadOrBuild repo =
   do
     found <- findManifestDirMaybe repo
     case found of
@@ -901,53 +792,23 @@ indexLoadOrBuild repo cheap =
           pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
       Just _ =>
         do
-          now <- clockNow
-          let
-            builtSec = now / 1000000
-          in do
-            deps <- if cheap then cheapDeps builtSec repo else indexStrongDeps repo
-            let
-              node = if cheap then indexNodeKeyCheap repo else indexNodeKey repo
-            in do
-              -- 节点 key 同时用作会话桶名：索引按目录分桶，CLI/REPL 各一条。
-              ts0 <- pure (toolSessionNew "tool" node)
-              hit <- toolHitValue ts0 node deps
-              case hit of
-                Just (Just digest) =>
-                  do
-                    payload <- toolLoadPayload digest indexPayloadCodec
-                    case payload of
-                      Just bytes =>
-                        case decIndexComplete bytes of
-                          Just idx =>
-                            do
-                              _ <- indexNote "index-path=cache"
-                              pure (OkC idx)
-                          Nothing => rebuildIndex ts0 repo node deps
-                      Nothing => rebuildIndex ts0 repo node deps
-                _ => rebuildIndex ts0 repo node deps
+          _ <- indexNote "index-path=build"
+          buildIndex repo
 
--- | 内部：廉价依赖表——stat 快照转成依赖键。
-cheapDeps : Member nFs FsOp r, Member nEnv EnvOp r => Int -> String -> Eff r (List String)
-cheapDeps builtSec repo =
+-- | REPL 入口：与 CLI 相同，每次重建。
+export loadOrBuildCheap : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
+loadOrBuildCheap repo =
   do
-    stats <- indexStatsOf builtSec repo
-    pure (map indexDepKey stats)
-
--- | 内部：重建并写回——全量扫描、编码载荷、写载荷对象（`toolStorePayload`；输入寻址，地址
--- 存在即命中，无需单独提交依赖表）；一次 miss 只提交调用方选定的 `node`（`index:` 或
--- `index-cheap:`）。
-rebuildIndex : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> String -> List String -> Eff r (Check Index)
-rebuildIndex ts repo node deps =
-  do
-    _ <- indexNote "index-path=build"
-    built <- buildIndex repo
-    case built of
-      ErrC e => pure (ErrC e)
-      OkC idx =>
+    found <- findManifestDirMaybe repo
+    case found of
+      Nothing =>
         do
-          _ <- toolStorePayload ts node deps indexPayloadCodec (encIndex idx)
-          pure (OkC idx)
+          cwd <- envGetCwd
+          pure (err "index: no vuna.toml found from ${cwd} (searched upward)")
+      Just _ =>
+        do
+          _ <- indexNote "index-path=build"
+          buildIndex repo
 
 -- | 工具链侧的 debug 行：与编译器探针共用内置宏 `log!`（`VUNA_LOG` 门控，stderr，
 -- 带时间戳与模块 scope）；工具链不进 TCB，但宏展开不需要 import。

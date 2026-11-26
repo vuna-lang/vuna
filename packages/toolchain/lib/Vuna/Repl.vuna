@@ -25,11 +25,9 @@
 -- 实现结构：只有主循环（`replLoop` / 本模块外的 `editLoop`）是尾递归循环；其余步骤函数返回新状态
 -- （`ReplState` / `ReplOutcome`）。主循环用显式 fuel（`replFuelBound`）防失控。
 --
--- 会话缓存分两层：工具接口会话（`stateToolSession`）把 `depIfacesForToolSourceDetailed`
--- 的结果（依赖接口 + 依赖表 + 本包 manifest + import 闭包 + 校验面）提交成
--- [Vuna.Tool.Session] 的输入寻址对象，每条表达式先判命中、miss 才重建，不必逐条重读
--- manifest / iface；源码索引（`stateBrowseIndex`）的索引入口自身也是工具会话客户端（命中
--- 就从载荷解码、未命中才扫描重建），REPL 只额外在会话内记住解出来的 `Index`。
+-- 会话缓存：工具接口会话（`stateToolSession`）在内存里保留 `depIfacesForToolSourceDetailed`
+-- 的结果（依赖接口 + 本包 manifest + import 闭包 + 校验面），每条表达式先按内容校验判新鲜，
+-- 失效才重建；源码索引（`stateBrowseIndex`）在会话内复用，跨进程不持久化。
 module Vuna.Repl where
 
 import Vuna.Cli.Args
@@ -50,7 +48,6 @@ import Vuna.EffectRun
 import Vuna.Interp
 import Vuna.Repl.Edit
 import Vuna.Repl.History
-import Vuna.Tool.Session
 import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
@@ -145,12 +142,13 @@ replOutCell = "replOut"
 replErrCell : String
 replErrCell = "replErr"
 
--- | 一次 `depIfacesForToolSourceDetailed` 的结果提交成的输入寻址对象（key =
--- `tooliface:<pkg>:<dirHash>`，依赖表 = 校验面 stat + import 闭包）。每条表达式先按地址
--- 判命中：命中就复用这份 `ToolContext`；依赖源码 / manifest 改动后依赖表变化 ⇒ miss ⇒ 重建。
+-- | 一次 `depIfacesForToolSourceDetailed` 的结果（依赖接口 + 校验面 + 闭包名单）。
+-- 内存会话按校验面判新鲜；依赖源码或 manifest 改动后重建。
 record ReplToolSession where
-  -- | 会话身份（工具会话对象；REPL 内是纯内存 + 落盘对象）。
-  sessionDb : ToolSession
+  -- | 建立会话的时间戳（秒）；校验面的安全窗以它为基准。
+  sessionBuiltSec : Int
+  -- | 建立会话时的 import 名单。
+  sessionImports : List String
   -- | 解出来 / 复用的工具上下文（依赖接口 + 校验面 + 闭包名单）。
   sessionTool : ToolContext
 
@@ -1337,29 +1335,6 @@ dropSigName n (s :: rest) = if firstOf s == n then rest else s :: dropSigName n 
 -- ---------------------------------------------------------------
 -- 复用判定：key 保持稳定（`tooliface:<pkg>:<dirHash>`），失效全靠依赖表——编译器重编或
 -- `:load DIR` 换上下文会换 key，依赖源码 stat 变化 / 新增 import 只改依赖表。
--- | 工具会话对象的依赖表：校验面 stat + import 闭包。
-toolSessionDeps : ToolContext -> List String -> List String
-toolSessionDeps tool imports =
-  append (map statDepKey tool.tcStats) ["closure:${join "," (sortStrings imports)}"]
-
--- | 内部：单个 stat 依赖项（`st:<path>:<mtime>:<size>`，覆盖依赖源码与本包 manifest）。
-statDepKey : SourceInfo -> String
-statDepKey si = "st:${si.siPath}:${strFromInt si.siMtime}:${strFromInt si.siSize}"
-
--- | 内部：字符串插入排序（闭包名单很短，避免为排序多 import 一个模块）。
-sortStrings : List String -> List String
-sortStrings [] = []
-sortStrings (x :: rest) = insertStr x (sortStrings rest)
-
--- | 内部：插入排序的单步插入。
-insertStr : String -> List String -> List String
-insertStr x [] = [x]
-insertStr x (y :: rest) = if x <= y then x :: y :: rest else y :: insertStr x rest
-
--- | 内部：会话节点 key = `tooliface:<包名>:<包目录哈希>`（`:load DIR` 换目录即换 key）。
-toolNodeKey : PackageContext -> String
-toolNodeKey ctx = "tooliface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
-
 -- | 内部：从程序源码里取 import 的模块名；解析失败按空名单处理（保守复用，解析错误稍后由
 -- 求值本身报出来）。
 bufferImports : String -> List String
@@ -1382,13 +1357,8 @@ replToolSession ctx program =
       Nothing => pure Nothing
       Just tool =>
         do
-          let
-            deps = toolSessionDeps tool (bufferImports program)
-            base = toolSessionNewMemory "tool"
-            key = toolNodeKey ctx
-          in do
-            ts <- toolCommitValue base key deps
-            pure (Just (ReplToolSession ts tool))
+          builtSec <- toolNowSec
+          pure (Just (ReplToolSession builtSec (bufferImports program) tool))
 
 -- | 复用判定：会话存在且图节点在当前依赖表下仍命中；命中即沿用内存里的 `ToolContext`。
 sessionUsable : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ReplState -> String -> Eff r Bool
@@ -1396,16 +1366,10 @@ sessionUsable st program =
   case st.stateToolSession of
     Nothing => pure False
     Just session =>
-      do
-        let
-          deps = toolSessionDeps session.sessionTool (bufferImports program)
-        in do
-          hit <- toolHitValue session.sessionDb (toolNodeKey st.stateCtx) deps
-          pure (
-              case hit of
-                Nothing => False
-                Just _ => True
-            )
+      if session.sessionImports /= bufferImports program then
+        pure False
+      else
+        toolSessionFresh session.sessionBuiltSec session.sessionTool.tcStats
 
 -- | 优先复用可用会话，否则重建；返回值带上本次实际使用的会话（由调用方写回状态），依赖接口
 -- 不全时不记会话。
