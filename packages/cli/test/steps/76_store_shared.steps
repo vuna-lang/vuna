@@ -1,29 +1,33 @@
-# 76) 共享对象库：同一 VUNA_STORE 连续 check 复用 module-iface，且对象落盘。
-#     本 case 自己指定临时 store（不依赖 suite 状态），验证 runner 透传的
-#     VUNA_STORE 可被命令行覆盖。
-run: sh -c 'rm -rf "$TMPDIR/share-store" "$TMPDIR/share-pkg"; mkdir -p "$TMPDIR/share-pkg/app"; printf "[package]\nname = \"share-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/share-pkg/vuna.toml"; printf "main : Int\nmain = 1\n" > "$TMPDIR/share-pkg/app/Main.vuna"'
+# store-isolated: 断言包状态目录 / 对象库行为，使用 case 私有 store 与状态目录。
+# 76) 共享包状态：模块接口落在 `$VUNA_PKG_STATE/iface`（默认 `<包目录>/.vuna/iface`），
+#     同一状态目录连续 check 只精化一次；内容相同的两个包目录复用同一批接口地址。
+#     本 case 自己指定临时 store / 状态目录（不依赖 suite 状态），验证 runner 透传的
+#     `VUNA_STORE` / `VUNA_PKG_STATE` 可被命令行覆盖。
+run: sh -c 'rm -rf "$TMPDIR/share-store" "$TMPDIR/share-state" "$TMPDIR/share-pkg"; mkdir -p "$TMPDIR/share-pkg/app" "$TMPDIR/share-pkg/lib"; printf "[package]\nname = \"share-pkg\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/share-pkg/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$TMPDIR/share-pkg/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$TMPDIR/share-pkg/app/Main.vuna"'
 exit: 0
-run: sh -c 'VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1'
+run: sh -c 'VUNA_STORE="$TMPDIR/share-store" VUNA_PKG_STATE="$TMPDIR/share-state" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1'
 exit: 0
-run: sh -c 'n1=$(find "$TMPDIR/share-store/objects" -type f | wc -l); VUNA_STORE="$TMPDIR/share-store" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1; n2=$(find "$TMPDIR/share-store/objects" -type f | wc -l); [ "$n1" -eq "$n2" ] && [ "$n1" -gt 0 ]'
+# 第二次 check 不重写接口（内容不变的写入在 `writeIfaceObjects` 里被跳过）。
+run: sh -c 'n1=$(find "$TMPDIR/share-state/iface" -type f | wc -l); VUNA_STORE="$TMPDIR/share-store" VUNA_PKG_STATE="$TMPDIR/share-state" "$VUNA" check "$TMPDIR/share-pkg" >/dev/null 2>&1; n2=$(find "$TMPDIR/share-state/iface" -type f | wc -l); [ "$n1" -eq "$n2" ] && [ "$n1" -gt 0 ]'
 exit: 0
 
-# 两个内容相同的包目录（一个 store）：模块接口按输入地址复用。
+# 两个内容相同的包目录（一个状态目录）：模块接口按输入地址复用。
 run: sh -c 'S="$TMPDIR/uni"; rm -rf "$S"; mkdir -p "$S/a/app" "$S/b/app"; for d in a b; do mkdir -p "$S/$d/lib"; printf "[package]\nname = \"uni\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/$d/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/$d/app/Main.vuna"; done'
 exit: 0
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" check "$S/a" >/dev/null 2>&1; n1=$(find "$S/store/objects/module-iface" -type f | wc -l); VUNA_STORE="$S/store" "$VUNA" check "$S/b" >/dev/null 2>&1; n2=$(find "$S/store/objects/module-iface" -type f | wc -l); [ "$n1" -gt 0 ] && [ "$n1" -eq "$n2" ]'
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check "$S/a" >/dev/null 2>&1; n1=$(find "$S/state/iface" -type f | wc -l); VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" check "$S/b" >/dev/null 2>&1; n2=$(find "$S/state/iface" -type f | wc -l); [ "$n1" -gt 0 ] && [ "$n1" -eq "$n2" ]'
 exit: 0
 
 # 默认 build 写入当前包目录的 `.output`（真目录，不是共享视图）。
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" build "$S/a" >/dev/null 2>&1; test -x "$S/a/.output/bin/uni"; test ! -L "$S/a/.output"'
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" build "$S/a" >/dev/null 2>&1; test -x "$S/a/.output/bin/uni"; test ! -L "$S/a/.output"'
 exit: 0
-run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" "$VUNA" build "$S/a" 2>&1 | grep -q "up to date"'
+run: sh -c 'S="$TMPDIR/uni"; VUNA_STORE="$S/store" VUNA_PKG_STATE="$S/state" "$VUNA" build "$S/a" 2>&1 | grep -q "up to date"'
 exit: 0
 
 # 项目根裁剪：legacy（无 `.project`）与目录已消失的项目根都被删；活项目保留。
 run: sh -c 'S="$TMPDIR/uni"; store="$S/store"; mkdir -p "$store/roots/live-root"; printf "%s" "$S/a" > "$store/roots/live-root/.project"; mkdir -p "$store/roots/legacy-root"; : > "$store/roots/legacy-root/deadbeef"; mkdir -p "$store/roots/gone-root"; printf "%s" "$S/does-not-exist" > "$store/roots/gone-root/.project"; : > "$store/roots/gone-root/deadbeef"; VUNA_STORE="$store" "$VUNA" store gc 2>&1 | grep -q "2 dead project root(s)"; test ! -e "$store/roots/legacy-root" && test ! -e "$store/roots/gone-root" && test -d "$store/roots/live-root"'
 exit: 0
 
-# 默认根：`VUNA_STORE` 未设 ⇒ `$HOME/.vuna/store`（`XDG_DATA_HOME` 也未设）。
-run: sh -c 'S="$TMPDIR/uni"; H="$S/home"; rm -rf "$H"; mkdir -p "$H"; env -u VUNA_STORE -u XDG_DATA_HOME HOME="$H" "$VUNA" check "$S/b" >/dev/null 2>&1; test -n "$(find "$H/.vuna/store/objects" -type f | head -1)"'
+# 默认根：`VUNA_PKG_STATE` / `VUNA_STORE` 未设 ⇒ 包内 `.vuna/iface` 与
+# `$HOME/.vuna/store`（`XDG_DATA_HOME` 也未设）。
+run: sh -c 'S="$TMPDIR/uni"; H="$S/home"; rm -rf "$H"; mkdir -p "$H"; env -u VUNA_STORE -u VUNA_PKG_STATE -u XDG_DATA_HOME HOME="$H" "$VUNA" check "$S/b" >/dev/null 2>&1 && test -n "$(find "$S/b/.vuna/iface" -type f | head -1)"; env -u VUNA_STORE -u VUNA_PKG_STATE -u XDG_DATA_HOME HOME="$H" "$VUNA" store gc 2>&1 | grep -q "$H/.vuna/store"'
 exit: 0

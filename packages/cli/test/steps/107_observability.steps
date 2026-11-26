@@ -212,10 +212,13 @@ run: sh -c 'for f in "$TMPDIR"/nspan-trace/*.jsonl; do grep -q "vuna-target-nati
 exit: 0
 out-contains: native-sampled
 
-# ---------------------------------------------------------------- 对象库读写 span
+# ---------------------------------------------------------------- 包状态读写 span
 # `Store` 的对象读/写是工作单元：`VUNA_OBS=1` 的 trace 必须出现 vuna.cache.lookup /
-# vuna.cache.write 的 ph:"X" 事件（不是零宽 mark）。
-run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_OBS=1 VUNA_OBS_DIR="$TMPDIR/cache-trace" "$VUNA" check "$TMPDIR/app" >/dev/null 2>&1'
+# vuna.cache.write 的 ph:"X" 事件（不是零宽 mark）。接口落在 `$VUNA_PKG_STATE/iface`，
+# 所以给 case 私有状态目录：先 check base（写接口），再 check 依赖它的 `$TMPDIR/app`（读接口）。
+run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_PKG_STATE="$TMPDIR/cache-state" VUNA_OBS=1 VUNA_OBS_DIR="$TMPDIR/cache-trace" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_PKG_STATE="$TMPDIR/cache-state" VUNA_OBS=1 VUNA_OBS_DIR="$TMPDIR/cache-trace" "$VUNA" check "$TMPDIR/app" >/dev/null 2>&1'
 exit: 0
 run: sh -c 'grep -q "\"name\":\"vuna.cache.lookup\"" "$TMPDIR"/cache-trace/*.jsonl && grep -q "\"name\":\"vuna.cache.write\"" "$TMPDIR"/cache-trace/*.jsonl'
 exit: 0
