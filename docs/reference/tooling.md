@@ -242,7 +242,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:reload` | 上次是文件则重读；是模块则重新校验导入；都没有给可操作提示 |
 | `:browse [MODULE]` | 惰性构建 `Vuna.Index`（进程内，不落对象库）后打印模块接口；无参列出模块。会话内后续 `:browse`/`:info`/`:search` 直接用 `stateBrowseIndex` 的内存索引，不再逐条比较。索引只覆盖 workspace 内源码，非 workspace 的外部依赖模块用 `:load <模块名>` 导入（`:browse` 查不到） |
 | `:defs` | 缓冲区定义的名字 + zonk 后类型；`:load` 文件来源标 `(文件)` |
-| `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」） |
+| `:imports` | 当前显式 import 行 + 隐式自动导入的 Prelude（标「隐式自动导入」；当前包 `implicit-prelude = false` 时没有这一项） |
 | `:delete NAME` | 删除 REPL 内定义（含同名签名块）；文件来源报错，提示改文件后 `:reload` |
 | `:set …` | `+t/-t`（求值后打印类型）、`+s/-s`（耗时）、`editing auto\|on\|off`、`color auto\|on\|off`、`prompt TEXT`（保留尾随空格）；无参列出 |
 | `:history` / `:again N` | 编号列出历史 / 把第 N 条完整输入重新提交（命令与定义都可以） |
@@ -252,7 +252,8 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | `:reset` / `:quit` / `:help` | `:reset` 清缓冲与加载目标（保留设置/历史）；`:quit` 同 Ctrl-D |
 
 **名字作用域**：REPL 与普通源文件共用同一套 Loader 语义——Prelude **隐式自动导入**
-（`:imports` 会标为隐式，显式 `import Prelude` 时不再重复）；`:type` 直接走表达式精化，
+（`:imports` 会标为隐式，显式 `import Prelude` 时不再重复；当前包 manifest 设
+`implicit-prelude = false` 时不注入）；`:type` 直接走表达式精化，
 而导入模块的类型名与本地 `data` 名一样可以作为项，所以 `:type Maybe` 打印 kind
 （`Maybe : (a : Type) -> Type`）、`:type Maybe Int` 打印 `Type`；限定名需先 import
 （`:load Base.Data.Maybe` 后 `:type Base.Data.Maybe.Maybe`）。裸运算符会按值形式自动补括号

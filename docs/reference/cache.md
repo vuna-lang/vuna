@@ -8,7 +8,7 @@
 | 域 | 内容 | 生命周期 |
 | --- | --- | --- |
 | `module-iface` | 模块级精化结果（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`） | 缓存；可删可重建，`clean --store` / `gc` 管理 |
-| `pkg-summary` | 包摘要：模块精化顺序 + 依赖方消费的 `pkgIfaceHash` | 身份/决策记录；GC 不淘汰，仅显式 `clean --store` 清理 |
+| `pkg-summary` | 包摘要：依赖方消费的 `pkgIfaceHash` + 已写接口的模块名集合（完整性标记） | 身份/决策记录；GC 不淘汰，仅显式 `clean --store` 清理 |
 | `pkg` | 取来的包源码（`pkg-source 1`，见 [package-store.md](package-store.md)） | 显式 fetch；`clean --packages` 管理 |
 
 `views/`、`check-outcome`、`tool-context`、`target-out`、`module-header`、`units`、`blobs`、
@@ -22,7 +22,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 6；带实例/方法 span）。
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
-  objects/pkg-summary/<键>          # 包摘要：模块顺序 + 接口身份（codec pkg-summary 1）
+  objects/pkg-summary/<键>          # 包摘要：pkgIfaceHash + 已写接口的模块面
+                                    # （codec `pkg-summary 2`；键含包的 implicit-prelude 开关）
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
   roots/<项目摘要>/.project         # 项目绝对目录（包 GC 据此清理已消失的项目根）
@@ -40,7 +41,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
 | 同树重复 `build` | `<pkg>/.output` 的 `meta` 与当前输入一致 | 重跑 codegen + `ocamlopt` |
 | 依赖身份 | `objects/pkg-summary/<键>` 命中 ⇒ `iface:<pkgIfaceHash>` | 回退 `manifest:<toml 摘要>:<根源闭包摘要>` |
-| 模块顺序 | 同一 `pkg-summary` 载荷里的 `psOrder` | 回退全量（宁可慢，不产错序） |
+| 依赖模块顺序 | 不读缓存：按（内容键, 模块名）确定性排序 | —（同一输入恒得同一顺序） |
 
 `buildViewKey` / `checkIn` 已随 `views` / `check-outcome` 删除；包的构建输入由
 `buildMetaText` 直接写进 `.output/build-meta.json`。
@@ -124,8 +125,11 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   不符即 `Nothing`；调用方按 miss 处理。输入寻址的接口对象用 `storeReadAsEff` 比对期望地址。
 - **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；同一输入重复
   build 的 `.output` 由 `build-meta.json` 判新鲜。
-- **模块顺序与缓存状态无关**：split 串接顺序取 `pkg-summary.psOrder`（精化顺序，非拓扑序，
-  因为 `base`/`compiler` 的 import 图有环）；缺失 ⇒ 回退全量，不产错序。
+- **模块顺序不落盘**：依赖模块接口的串接顺序由编译器按（内容键, 模块名）确定性排序，
+  与缓存状态无关；同一输入恒得同一顺序。
+- **pkg-summary 的完整性标记是「已写接口的模块名集合」**：摘要缺失，或集合未覆盖该包
+  对外承诺的 `[export]` 模块面时无法确认依赖接口齐全 ⇒ 回退全量（`iface-reject=pkg-summary`）。
+  键含包的 `implicit-prelude` 开关，切换开关即换键，不会复用旧摘要。
 - **pkg-summary 缺失的回退**：`manifest:<toml 摘要>:<根源闭包摘要>`；依赖源闭包在回退里，
   所以依赖源码变了而依赖方先跑，也必然换地址，不会复用旧判定。
 
@@ -152,8 +156,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | `cache-own-clean=N` | 本包可复用的干净模块数 |
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 没覆盖 `[export].modules` 的全部模块（日志带 `closure=`/`required=`/`covered=`/`missing=`） |
-| `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（order 覆盖）⇒ 不再补跑第二遍 lib check |
-| `iface-reject=pkg-summary` | 依赖包缺 `pkg-summary`，无法确定模块顺序 ⇒ 回退全量 |
+| `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（写覆盖）⇒ 不再补跑第二遍 lib check |
+| `iface-reject=pkg-summary` | 依赖包缺 `pkg-summary`，或已写集合未覆盖导出面 ⇒ 回退全量 |
 | `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `pkg-summary` 还是 manifest 回退 |
 | `store-gc candidates=… delete=… total=…` | GC 决策 |
 
@@ -168,9 +172,10 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 - **warning 可能不完整**：`-W` / `--deny-warnings` 强制本包模块重新精化（依赖包仍复用接口），
   普通 `vuna check` 不显示 warning。
-- **依赖未重跑时回退身份含源闭包**：`objects/pkg-summary` 缺失（依赖还没 check，或依赖源码
-  变了还没重跑）时，回退值是 `manifest:<toml 摘要>:<根源闭包摘要>`；依赖方先跑也不会复用
-  旧判定，代价是依赖**未重跑**时注释变更也会多一次 miss。
+- **依赖未重跑时回退身份含源闭包**：`objects/pkg-summary` 缺失或未写全（依赖还没 check、
+  只检查了部分模块，或依赖源码变了还没重跑）时，回退值是
+  `manifest:<toml 摘要>:<根源闭包摘要>`；依赖方先跑也不会复用旧判定，代价是依赖**未重跑**时
+  注释变更也会多一次 miss。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **没有 check 结果重放**：失败的 `check` 每次都重新精化（干净模块仍复用），不再落盘 Pass/Fail。

@@ -56,7 +56,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Frontend.Reserved` | 保留 / 合成名的唯一编码：`?hole`、表面语法糖标记（`data Reserved`：list / tuple / ascribe / perform / handle / row / app / inst-arg / over-ctor / over-value / macro / do，载荷是构造子字段）、`classify` / `reservedText` 是唯一一对线上字符串编解码，以及编译器合成的 `#...` 名（`#section` / `#dict…` / `#eta…` / `#tele` / `#ov…`）。`isParserSurface` 是 Loader 放行普通包 `@vuna@…` 的白名单（无通配分支）。`Frontend.Ast` 重导出它 | `Reserved`、`classify`、`reservedText`、`isParserSurface`、`isInternalSyntaxName`、`sectionBinderName`、`isSynthName` |
 | `Frontend.Name` | 名字身份与字符串分类：`RName`（局部、全局(module,name)、内建、宏、洞）与 `classifyName`（唯一按前缀分类的入口，`Loader` / 工具不得自行按包名前缀判别）；`splitGlobalKey` 按最后一个点切 canonical 名。注：`Elab` 不读 `RName`——引用名就是字符串，变量解析按名字先查局部 ctx，特殊形式名（`Type` / `->` / `@vuna@…`）不可能被 binder 遮蔽 | `RName`、`classifyName`、`splitGlobalKey` |
 | `Frontend.AstQuery` | 语法树规模查询：`patWeight` / `exprWeight` 与入口预算 `patBudget` / `exprBudget`（节点数派生步数预算；权重按 `weightCap` 截断，纯遍历也用它作显式燃料） | `exprBudget`、`patBudget`、`exprWeight` || `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
-| `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name`；`[layers]` 的键/值形状；不做 I/O） | `parseManifest`、`validateManifest` |
+| `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name` 与可选 `implicit-prelude`；`[layers]` 的键/值形状；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Frontend.Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
 | `Frontend.Packages.Source` | 包内容收集与摘要：`vuna.toml` + `lib/`/`app/`/`test/` 源文件 → `PackageSource` → 内容摘要 / 语义身份 | `packageSourceEff`、`contentHashOf`、`identityHashOf`、`skipSourceDir` |
 | `Frontend.Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
@@ -68,7 +68,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | --- | --- | --- |
 | `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构；模块名查找与按名查导出各有一张表（`moduleTblOf` / `moduleExportIndexOf`），解析期不再线性扫模块表或导出表 | `collectModuleFiles`、`moduleAllImportsOf`、`moduleTblOf`、`exportIndexOfModuleIn` |
 | `Loader.Resolve` | 名字解析：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity / prelude 放行消费 `Base.Intrinsics` | `resolveProgram` |
-| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；`parseFileWithPath` 每次从源文本 lex + 语法分析（不做 token/AST 缓存）；加载完成后调 `Loader.Layers` 跑一次层约束检查 | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（lint/index/doc 的程序级 fixity） |
+| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件，按包 manifest 的 `implicit-prelude` 开关、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；`parseFileWithPath` 每次从源文本 lex + 语法分析（不做 token/AST 缓存）；加载完成后调 `Loader.Layers` 跑一次层约束检查 | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（lint/index/doc 的程序级 fixity） |
 | `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（内置宏 `log!` / `mark!`，展开到隐藏 runtime 原语；插入节点 span = 调用点、id 取 `Ast.synthNodeRef`，生成节点因此可反查调用点） | `expandDecls` |
 | `Loader.Fixity` | 按每模块可见表重排中缀 / 换别名 / 展开 section（`->` 恒可见；未知符号运算符报错） | `reorderProgram` |
 | `Loader.Selectors` | record 字段选择器的生成与冲突判据（`Loader.Flatten` 在解析后、导出表计算前调用）：模块内唯一的字段名生成 `f : {params} -> R params -> T`，同名字段要在一处 `deriving (Selectors)` 认领，与顶层声明撞名报错；`export R` / `R(..)` 都带上生成的选择器，导出表按源码声明计算（生成的声明不在 `topNames` 里） | `selectorDecls`、`selectedFieldNames`、`selectorDerivingName` |
@@ -159,7 +159,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
 | `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/module-iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 按地址读依赖与同包模块的 `objects/module-iface/<addr>`（缺任一模块 ⇒ 回退全量），同树 build 由 `<pkg>/.output` 的 `build-meta.json` 判新鲜、显式 `--no-compile --out` 每次重跑 codegen；依赖身份与模块顺序取 `objects/pkg-summary`；接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；判据见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 按地址读依赖与同包模块的 `objects/module-iface/<addr>`（缺任一模块 ⇒ 回退全量），同树 build 由 `<pkg>/.output` 的 `build-meta.json` 判新鲜、显式 `--no-compile --out` 每次重跑 codegen；依赖身份与已写接口的模块面取 `objects/pkg-summary`（依赖模块顺序按内容键 / 模块名排序，不落盘）；接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；判据见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`buildMetaText`、`metaUpToDate` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Target` | 非 OCaml 目标的后端驱动：检查 + lowering，把 `IrProgram` 编码后经临时文件交独立进程 `vuna-target-<t>`（`--ir` / `--out` / `--print` / `--diag`）；产物不缓存，每次启动插件；不 import 任何后端实现 | `compileBackend`、`dispatch` |
 
@@ -195,7 +195,8 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 - `Pkg.contextForFile` / `contextForDir` 给出唯一 `PackageContext`（最近 manifest + 依赖
   闭包；无 manifest 为 base-only）；
 - `Loader.Flatten.loadProject` / `loadProjectModules` / `loadProjectSource` 解析 import 图并
-  flatten（内部名字带模块前缀；ad-hoc 单文件自动注入 `Prelude`），随后 `Loader.Expand`
+  flatten（内部名字带模块前缀；ad-hoc 单文件自动注入 `Prelude`，包内模块按该包 manifest 的
+  `implicit-prelude` 决定），随后 `Loader.Expand`
   在名字解析前展开内置宏；
 - `Loader.Resolve` 的内建 arity / prelude 放行、`Elab.Prelude` 的签名全部来自
   `Vuna.Compiler.Base.Intrinsics`；没有 manifest 能力/特权/信任检查；
@@ -227,7 +228,9 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 - **模块级接口**：`Driver.Iface.ModuleIface`，每模块一个对象
   `objects/module-iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
   装载、逐项校验；
-- **包级身份**：`objects/pkg-summary/<键>`，载荷是包的 `pkgIfaceHash` 与模块精化顺序。
+- **包级身份**：`objects/pkg-summary/<键>`，载荷是包的 `pkgIfaceHash` 与**已写接口的模块名
+  集合**（按名排序编码；写覆盖的模块面是完整性标记），键含包的 `implicit-prelude` 开关。
+  依赖模块接口的顺序不在载荷里：由编译器按（内容键, 模块名）确定性排序。
 
 设计、字段、失效判定与 `ifaceHash` 口径见 [cache.md](cache.md)。
 

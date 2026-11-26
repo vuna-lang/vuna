@@ -108,7 +108,8 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 
 `>>` 留在 Loader 的 do 派生里：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**
 的 `>>=`（模块内自定义 Monad trait 时也要绑对）；`Base.Trait.Monad` 提供它的 fixity 声明
-以及 `(>>) : Monad m => m a -> m b -> m b` 的等价定义。base 包模块**不**自动注入 Prelude，因此每个模块用到的运算符
+以及 `(>>) : Monad m => m a -> m b -> m b` 的等价定义。base 包模块**不**自动注入 Prelude
+（`packages/base/vuna.toml` 设 `implicit-prelude = false`），因此每个模块用到的运算符
 必须由本模块声明或 import 闭包可见。
 
 `pure` 在 `Base.Trait.Applicative`（`Base.Trait.Monad` 重导出）；`Applicative` 的三个方法 `pure` / `ap` /

@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
 | **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna deps pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
-| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`objects/pkg-summary` 载荷里的接口身份） | 下游可见接口/透明体变化 |
+| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`objects/pkg-summary` 载荷里的接口身份；摘要键另含包 manifest 的 `implicit-prelude` 开关） | 下游可见接口/透明体变化 |
 
 规范编码在 `Vuna.Compiler.Frontend.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
 `Base.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。

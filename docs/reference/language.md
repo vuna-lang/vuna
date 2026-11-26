@@ -331,15 +331,16 @@ import / 导出的形式表见 [frontend-syntax.md](frontend-syntax.md) §6；�
   ⇔ 模块 `Vuna.Compiler.Frontend.Parser`；
 - **无 manifest 的文件只有 base 上下文**：base 由 `VUNA_BASE` 覆盖，否则按可执行文件
   相对布局探测 `<exeDir>/base`、`<exeDir>/../base`、`<exeDir>/../../base`、
-  `<exeDir>/../../../base`，都找不到时明确报错；这类 ad-hoc 单文件与包内模块一样
-  **自动导入 `Prelude`**（显式 `import` 仍可用）；
+  `<exeDir>/../../../base`，都找不到时明确报错；这类 ad-hoc 单文件**恒自动导入 `Prelude`**
+  （显式 `import` 仍可用）；
 - 模块按可用根查找；同名模块出现在多个根时是硬错误（不静默覆盖）；
 - 路径段必须匹配 `[A-Z][A-Za-z0-9_]*`，路径 / 文件名与模块名**精确一致**，没有大小写映射；
 - 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；目录入口
   （`check/build <dir>`）只认该目录自己的 `vuna.toml`，**不向上找**；
 - 包模式下模块根由 `vuna.toml` 解析：本包 `lib/` + 依赖包 `lib/`（按依赖 DAG 排序，
   跨包只看得见依赖包 `[export]` 里的模块）；`app/` 是纯入口目录，不是模块根；
-  包内每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块），
+  包内每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块；包 manifest
+  设 `implicit-prelude = false` 时关闭本包全部模块的注入，入口文件同样关闭），
   显式 `import Prelude` 时不重复注入，Prelude 自身不注入；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入是硬错误。重复 import 合并；重复 alias
   或 alias 与模块名同名不再在 import 期报错，而是形成限定名候选集，只在**使用点**无法

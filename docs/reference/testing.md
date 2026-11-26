@@ -416,10 +416,12 @@ entry 预装的宿主 handler 下执行；它们背后的 `@vuna@prim_eff_print`
   `type_modules/`、`corpus/packages/*`）各自补 `vuna.toml`（默认只依赖 `vuna-base`）；
 - `VUNA_BASE` 由脚本导出给无 manifest 的临时夹具；corpus 内的夹具通过 `vuna-base` 依赖
   获得 base；
-- 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
-  直接可用；显式 `import Prelude` 仍合法；
-- 夹具 manifest 只有 `[package]` / `[export]` / `[dependencies]`（没有能力 / 信任 /
-  特权 section）：corpus 代码用效果也只经标签 + handler（`consolePrint` / `fsReadFile` …），
+- 两类上下文都**自动注入 `Prelude`**（corpus 包的 `implicit-prelude` 取默认值 `true`），因此
+  夹具需要 `show` / `==` / 比较 / `deriving` 时直接可用；显式 `import Prelude` 仍合法；
+  若某个 corpus manifest 写 `implicit-prelude = false`，该包夹具改为只认显式 import；
+- 夹具 manifest 只有 `[package]`（`name` + 可选 `implicit-prelude`）/ `[export]` /
+  `[dependencies]`（没有能力 / 信任 / 特权 section）：corpus 代码用效果也只经标签 +
+  handler（`consolePrint` / `fsReadFile` …），
   纯原语 `prim_*` 可直接调用；标签正例是 `corpus/packages/07_prim_direct`（`fsFileExists`，
   没有能力 section 也照常检查）；
 - `corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
