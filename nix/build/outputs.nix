@@ -34,6 +34,8 @@ let
       refs = builtins.concatLists (
         map (g: groups.${g}) [
           "deep"
+          "gate"
+          "slices"
           "suite"
           "backends"
           "native"
@@ -102,7 +104,7 @@ let
         else if unknownPackages != [ ] then
           "分组引用了不存在的 package：${toString unknownPackages}"
         else if missing != [ ] then
-          "check 未进入任何门禁分组（deep/suite/backends）：${toString missing}"
+          "check 未进入任何门禁分组（deep/gate/slices/suite/backends）：${toString missing}"
         else if prGateMalformed != [ ] then
           "pr-gates 项必须是 check:<name> 或 package:<name>：${toString prGateMalformed}"
         else if prGateUnknownChecks != [ ] then

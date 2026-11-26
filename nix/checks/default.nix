@@ -21,6 +21,12 @@ let
 
   repo = ../..;
 
+  # PR 增量 suite 切片（area → 选择器）；area 词表以 pr-gates 的 area 名为准，
+  # 注入给 suite runner 做 `audit/areas` 一致性检查。
+  slices = import ./slices.nix;
+  prGates = import ./pr-gates.nix;
+  knownAreas = lib.concatStringsSep " " (builtins.attrNames prGates.areas);
+
   # 可复用的源集合；check 处只组合，不重复写路径。
   src = {
     seed = ../../seed;
@@ -165,6 +171,25 @@ let
       // env;
     };
 
+  # PR 增量切片：按 area 组合选择器跑同一份 suite（`slices.nix`）。
+  # `VUNA_SUITE_AREAS` 是 runner `audit/areas` 的词表（area 名 ⊆ pr-gates 的 area 名）。
+  sliceCheck =
+    name: spec:
+    vunaCheck {
+      name = "vuna-tests-${name}";
+      srcs = testTree;
+      env = {
+        VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+        VUNA_TEST_AREAS = lib.concatStringsSep " " spec.areas;
+        VUNA_TEST_TIERS = lib.concatStringsSep " " spec.tiers;
+        VUNA_TEST_MIN_CASES = toString spec.minCases;
+        VUNA_TEST_UNIT_PKGS = lib.concatStringsSep " " spec.unitTests;
+        VUNA_SUITE_AREAS = knownAreas;
+      };
+      nativeBuildInputs = e2eTools;
+      script = ./vuna-tests.sh;
+    };
+
   # seed → stage0 → stage1 → stage2，逐字节 fixed point（alias 已并入 seed-selfhost）。
   # rotation 按需：seed 落后于源码只报告滞后，不失败；元数据在 nix/seed/rotation.txt。
   seed-selfhost = mkCheck {
@@ -222,6 +247,7 @@ in
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
+      VUNA_SUITE_AREAS = knownAreas;
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;
@@ -233,6 +259,7 @@ in
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
+      VUNA_SUITE_AREAS = knownAreas;
       # 109_web_static 的 smoke 需要 web-cli 产物；`nix run .#vuna-run-tests` 已注入，
       # 派生环境必须同样提供，否则 step 拿到空路径。
       VUNA_WEB_CLI = "${vuna-web-cli}/bin/vuna-web-cli";
@@ -252,6 +279,7 @@ in
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
+      VUNA_SUITE_AREAS = knownAreas;
       VUNA_TEST_BACKENDS = "wasm";
       VUNA_TEST_ALLOW_FAIL = "test/suite/wasm-allow-fail.txt";
     };
@@ -279,6 +307,7 @@ in
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
+      VUNA_SUITE_AREAS = knownAreas;
       VUNA_TEST_BACKENDS = "native";
     };
     nativeBuildInputs = e2eTools;
@@ -550,6 +579,10 @@ in
       src.stepsWebCli
       src.processBound
       ../../test/suite.toml
+      ../../packages/compiler/test/suite.toml
+      ../../packages/base/test/suite.toml
+      ../../packages/cli/test/suite.toml
+      ../../packages/web-cli/test/suite.toml
       ./lib
       ../../nix/checks/data/eff-boundary.allowlist
       ../../nix/checks/data/steps-inproc.max
@@ -640,3 +673,4 @@ in
     script = ./inventory.sh;
   };
 }
+// lib.mapAttrs' (name: spec: lib.nameValuePair "vuna-tests-${name}" (sliceCheck name spec)) slices
