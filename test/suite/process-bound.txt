@@ -91,7 +91,6 @@
 77_store_concurrent.steps	build,check,store	pkg-store;build-link
 78_determinism.steps	build,check	artifact-exec;build-link
 79_dep_identity.steps	check	cli-text
-80_code_identity.steps	build	build-link;cli-text
 82_layers.steps	check,fmt	cli-text
 81_pkg_errors.steps	add,check,fetch	pkg-store;cli-text
 114_wasm_engine_probe.steps	(indirect)	artifact-exec;build-link
@@ -107,3 +106,5 @@
 71_suite_jobs.steps	dev suite	runner-process-semantics
 116_fixity_global.steps	check	pkg-store;cli-text
 118_derived_bool_literal.steps	compile	cli-text
+31_fmt_parallel.steps	fmt	parallel-worker-file-io
+115_lint_parallel.steps	lint	parallel-worker-file-io
