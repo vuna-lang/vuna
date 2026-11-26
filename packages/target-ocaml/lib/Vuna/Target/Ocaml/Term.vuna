@@ -28,20 +28,43 @@ import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 import Base.Effect.Stdin as EffStdin
 
--- | 生成程序的前缀运行时。`minor_heap_size` 的单位是 word（262144 words = 2 MB，与
--- OCaml 默认一致）：更大的 minor heap 会让分配密集的短程序在 minor GC 里多扫描/提升，
--- 实测 micro_concat / sort_lib / hashmap / gc_retain 都是 2 MB 更快；RSS 也更低。
+-- | 生成程序的前缀运行时。**不设置 GC 参数**：OCaml 默认的 minor heap 就是
+-- 262144 words = 2 MB（16 MB 会让分配密集的短程序在 minor GC 里多扫描/提升，实测
+-- micro_concat / sort_lib / hashmap / gc_retain 都是默认值更快）；显式调用 `Gc.*`
+-- 还会把 Gc / Printexc / Printf / Buffer 整串拖进产物。
 export dtRuntime : String
-dtRuntime = """let () =
-  let c = Gc.get () in
-  Gc.set { c with minor_heap_size = 262144; space_overhead = 200 }
+dtRuntime = """type dt_gc_stat = {
+  dt_gs_minor_words : float;
+  dt_gs_promoted_words : float;
+  dt_gs_major_words : float;
+  dt_gs_minor_collections : int;
+  dt_gs_major_collections : int;
+  dt_gs_heap_words : int;
+  dt_gs_heap_chunks : int;
+  dt_gs_live_words : int;
+  dt_gs_live_blocks : int;
+  dt_gs_free_words : int;
+  dt_gs_free_blocks : int;
+  dt_gs_largest_free : int;
+  dt_gs_fragments : int;
+  dt_gs_compactions : int;
+  dt_gs_top_heap_words : int;
+  dt_gs_stack_size : int;
+}
+external dt_gc_quick_stat : unit -> dt_gc_stat = \"caml_gc_quick_stat\"
 let () =
   if (try Sys.getenv \"VN_PERF_STATS\" with Not_found -> \"\") <> \"\" then
     at_exit (fun () ->
-      let s = Gc.quick_stat () in
-      Printf.eprintf \"VN_PERF minor_words=%.0f major_words=%.0f minor_collections=%d major_collections=%d top_heap_words=%d allocated_words=%.0f\\n\"
-        s.Gc.minor_words s.Gc.major_words s.Gc.minor_collections s.Gc.major_collections s.Gc.top_heap_words
-        (Gc.allocated_bytes () /. (float_of_int Sys.word_size /. 8.)))
+      let s = dt_gc_quick_stat () in
+      let w = float_of_int Sys.word_size /. 8. in
+      let allocated = (s.dt_gs_minor_words +. s.dt_gs_major_words -. s.dt_gs_promoted_words) *. w in
+      prerr_string
+        (\"VN_PERF minor_words=\" ^ string_of_int (int_of_float s.dt_gs_minor_words)
+         ^ \" major_words=\" ^ string_of_int (int_of_float s.dt_gs_major_words)
+         ^ \" minor_collections=\" ^ string_of_int s.dt_gs_minor_collections
+         ^ \" major_collections=\" ^ string_of_int s.dt_gs_major_collections
+         ^ \" top_heap_words=\" ^ string_of_int s.dt_gs_top_heap_words
+         ^ \" allocated_words=\" ^ string_of_int (int_of_float allocated) ^ \"\\n\"))
 let bi_add a b = a + b
 let bi_sub a b = a - b
 let bi_mul a b = a * b
@@ -87,18 +110,20 @@ let bi_natToInt (n : int) = n
 let bi_natFromInt (n : int) = if n <= 0 then 0 else n
 let dt_show_bool b = if b then \"True\" else \"False\"
 let dt_show_string s =
-  let buf = Buffer.create 16 in
-  Buffer.add_char buf (Char.chr 34);
+  let n = String.length s in
+  let b = Bytes.create (2 * n + 2) in
+  Bytes.set b 0 (Char.chr 34);
+  let o = ref 1 in
   String.iter (fun c ->
-    let n = Char.code c in
-    if n = 34 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 34))
-    else if n = 92 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ String.make 1 (Char.chr 92))
-    else if n = 10 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"n\")
-    else if n = 9 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"t\")
-    else if n = 13 then Buffer.add_string buf (String.make 1 (Char.chr 92) ^ \"r\")
-    else Buffer.add_char buf c) s;
-  Buffer.add_char buf (Char.chr 34);
-  Buffer.contents buf
+    let k = Char.code c in
+    if k = 34 then (Bytes.set b !o (Char.chr 92); Bytes.set b (!o + 1) (Char.chr 34); o := !o + 2)
+    else if k = 92 then (Bytes.set b !o (Char.chr 92); Bytes.set b (!o + 1) (Char.chr 92); o := !o + 2)
+    else if k = 10 then (Bytes.set b !o (Char.chr 92); Bytes.set b (!o + 1) (Char.chr 110); o := !o + 2)
+    else if k = 9 then (Bytes.set b !o (Char.chr 92); Bytes.set b (!o + 1) (Char.chr 116); o := !o + 2)
+    else if k = 13 then (Bytes.set b !o (Char.chr 92); Bytes.set b (!o + 1) (Char.chr 114); o := !o + 2)
+    else (Bytes.set b !o c; incr o)) s;
+  Bytes.set b !o (Char.chr 34);
+  Bytes.sub_string b 0 (!o + 1)
 ${dtPrimRuntime}"""
 
 -- effectful 内建（`prim_*`）的 DT 运行时实现。
@@ -129,20 +154,25 @@ let dtp_effectId (s : string) : int =
    的效应在该点不可用）；执行期异常被吞掉，避免污染 abort 结果。 *)
 type dtp_cleanup_state = {
   mutable dtp_cs_fiber : int;
-  dtp_cs_stacks : (int, (unit -> unit) list ref) Hashtbl.t;
+  mutable dtp_cs_stacks : (int * (unit -> unit) list ref) list;
 }
 let dtp_cleanup_stateK =
-  Domain.DLS.new_key (fun () -> { dtp_cs_fiber = -1; dtp_cs_stacks = Hashtbl.create 8 })
+  Domain.DLS.new_key (fun () -> { dtp_cs_fiber = -1; dtp_cs_stacks = [] })
 let dtp_cleanup_state () = Domain.DLS.get dtp_cleanup_stateK
 let dtp_cleanup_fiber_get () = (dtp_cleanup_state ()).dtp_cs_fiber
 let dtp_cleanup_fiber_set (fid : int) = (dtp_cleanup_state ()).dtp_cs_fiber <- fid
+(* 每 domain 的活纤程数很小（通常 1–2 条），关联表比 Hashtbl 更轻；Hashtbl 会
+   把 Random / Printexc / Printf / Buffer 整串拖进产物，纯程序的启动成本明显变高。 *)
+let rec dtp_cs_lookup fid = function
+  | [] -> None
+  | (k, r) :: rest -> if k = fid then Some r else dtp_cs_lookup fid rest
 let dtp_cleanup_stack_of (fid : int) =
   let s = dtp_cleanup_state () in
-  match Hashtbl.find_opt s.dtp_cs_stacks fid with
+  match dtp_cs_lookup fid s.dtp_cs_stacks with
   | Some r -> r
   | None ->
     let r = ref [] in
-    Hashtbl.replace s.dtp_cs_stacks fid r;
+    s.dtp_cs_stacks <- (fid, r) :: s.dtp_cs_stacks;
     r
 let dtp_cleanup_current () = dtp_cleanup_stack_of (dtp_cleanup_fiber_get ())
 let dtp_cleanup_mark () = List.length !(dtp_cleanup_current ())
@@ -177,10 +207,10 @@ let dtp_cleanup_run_all_for (fid : int) =
   go (List.length !r)
 let dtp_cleanup_forget (fid : int) =
   let s = dtp_cleanup_state () in
-  Hashtbl.remove s.dtp_cs_stacks fid
+  s.dtp_cs_stacks <- List.filter (fun (k, _) -> k <> fid) s.dtp_cs_stacks
 let dtp_cleanup_reset () =
   let s = dtp_cleanup_state () in
-  Hashtbl.reset s.dtp_cs_stacks;
+  s.dtp_cs_stacks <- [];
   s.dtp_cs_fiber <- -1
 
 (* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
@@ -203,10 +233,10 @@ let dtp_effect_run key name kid nid ret h th =
               let st = Domain.DLS.get dtp_selfK in
               let saved = !st in
               st := (kid, nid, key, name, Obj.repr ret, Obj.repr h) :: saved;
-              Fun.protect
-                ~finally:(fun () -> st := saved)
-                (fun () ->
-                  (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v))))
+              (try
+                 let r = (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)) in
+                 st := saved; r
+               with e -> st := saved; raise e))
           | _ -> None) }
     with
     | r -> run_cleanups (); r
@@ -220,7 +250,10 @@ let dtp_effect_self th =
 let dtp_output_mutex = Mutex.create ()
 let dtp_with_output_lock (f : unit -> int) : int =
   Mutex.lock dtp_output_mutex;
-  Fun.protect ~finally:(fun () -> Mutex.unlock dtp_output_mutex) f
+  (try
+     let r = f () in
+     Mutex.unlock dtp_output_mutex; r
+   with e -> Mutex.unlock dtp_output_mutex; raise e)
 let dtp_print s =
   (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止。
      锁保证多 domain 并发打印时每次调用整体输出、不交错。 *)
@@ -241,25 +274,29 @@ let dtp_hostMark code e =
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
-    Fun.protect ~finally:(fun () -> close_in_noerr ch)
-      (fun () -> really_input_string ch (in_channel_length ch))
+    (try
+       let r = really_input_string ch (in_channel_length ch) in
+       close_in_noerr ch; r
+     with e -> close_in_noerr ch; raise e)
   with Sys_error msg -> failwith (\"readFile: \" ^ msg)
 let dtp_readFileRange path offset length =
   try
     if offset < 0 || length <= 0 then \"\"
     else
       let ch = open_in_bin path in
-      Fun.protect ~finally:(fun () -> close_in_noerr ch)
-        (fun () ->
+      (try
+         let r =
            let size = in_channel_length ch in
            if offset >= size then \"\"
-           else (seek_in ch offset; really_input_string ch (min length (size - offset))))
+           else (seek_in ch offset; really_input_string ch (min length (size - offset))) in
+         close_in_noerr ch; r
+       with e -> close_in_noerr ch; raise e)
   with Sys_error msg -> failwith (\"readFileRange: \" ^ msg)
 let dtp_writeFile path contents =
   try
     let ch = open_out_bin path in
-    Fun.protect ~finally:(fun () -> close_out_noerr ch)
-      (fun () -> output_string ch contents);
+    (try output_string ch contents; close_out_noerr ch
+     with e -> close_out_noerr ch; raise e);
     String.length contents
   with Sys_error msg -> failwith (\"writeFile: \" ^ msg)
 let dtp_getArgs () =
@@ -320,15 +357,34 @@ let dtp_dynClear (r : Obj.t ref) =
   let (a, _) = (Obj.obj !r : Obj.t array * int) in
   r := Obj.repr (a, 0); 0
 let dtp_mbufNew cap =
-  ref (Obj.repr (Buffer.create (if cap < 1 then 16 else cap)))
+  ref (Obj.repr (Bytes.create (if cap < 1 then 16 else cap), 0))
+let dtp_mbufEnsure (r : Obj.t ref) need =
+  let (b, n) = (Obj.obj !r : bytes * int) in
+  if need <= Bytes.length b then (b, n)
+  else
+    let cap = ref (Bytes.length b * 2) in
+    (while !cap < need do cap := !cap * 2 done;
+     let nb = Bytes.create !cap in
+     Bytes.blit b 0 nb 0 n;
+     (nb, n))
 let dtp_mbufAppend (r : Obj.t ref) s =
-  Buffer.add_string (Obj.obj !r) s; 0
+  let (_, n) = (Obj.obj !r : bytes * int) in
+  let k = String.length s in
+  let (b2, n2) = dtp_mbufEnsure r (n + k) in
+  Bytes.blit_string s 0 b2 n2 k;
+  r := Obj.repr (b2, n2 + k); 0
 let dtp_mbufAppendChar (r : Obj.t ref) c =
-  Buffer.add_char (Obj.obj !r) (Char.chr c); 0
-let dtp_mbufLen (r : Obj.t ref) = Buffer.length (Obj.obj !r)
+  let (_, n) = (Obj.obj !r : bytes * int) in
+  let (b2, n2) = dtp_mbufEnsure r (n + 1) in
+  Bytes.set b2 n2 (Char.chr c);
+  r := Obj.repr (b2, n2 + 1); 0
+let dtp_mbufLen (r : Obj.t ref) = snd (Obj.obj !r : bytes * int)
 let dtp_mbufClear (r : Obj.t ref) =
-  Buffer.clear (Obj.obj !r); 0
-let dtp_mbufToString (r : Obj.t ref) = Buffer.contents (Obj.obj !r)
+  let (b, _) = (Obj.obj !r : bytes * int) in
+  r := Obj.repr (b, 0); 0
+let dtp_mbufToString (r : Obj.t ref) =
+  let (b, n) = (Obj.obj !r : bytes * int) in
+  Bytes.sub_string b 0 n
 let dtp_strHash (s : string) =
   let h = ref 0 in
   String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
@@ -340,15 +396,20 @@ let dtp_substring start len s =
   let ln = if len < 0 then 0 else if st + len > n then n - st else len in
   String.sub s st ln
 let dtp_exit n = exit n
+(* POSIX shell 单引号转义（与 Filename.quote 同形）：只给 Sys.command 用。
+   不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
+let dtp_shell_quote s =
+  let q = String.make 1 (Char.chr 39) in
+  let esc = q ^ String.make 1 (Char.chr 92) ^ q in
+  q ^ String.concat esc (String.split_on_char (Char.chr 39) s) ^ q
 let dtp_runIn dir args =
   dtp_hostReset ();
-  let quote s = Filename.quote s in
+  let quote s = dtp_shell_quote s in
   let cmd = String.concat \" \" (List.map quote args) in
   (* `cd` 在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。
      125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
   let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
   if code = 125 then (dtp_hostSetStatus 1; -1) else code
-let dtp_net_owned : (int, string * int) Hashtbl.t = Hashtbl.create 4
 let dtp_net_next = ref 1
 let dtp_net_parse (addr : string) =
   let n = String.length addr in
@@ -363,7 +424,7 @@ let dtp_net_parse (addr : string) =
        let port = try int_of_string portstr with _ -> failwith (\"net: invalid port: \" ^ portstr) in
        `Tcp (host, port))
   else failwith (\"net: invalid address (want tcp:HOST:PORT or unix:PATH): \" ^ addr)
-""") ++ dtSchedRuntime
+""")
 
 -- 单线程协作式 fiber 调度器运行时。
 -- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
@@ -898,7 +959,9 @@ let dtp_atomic_compare_exchange (a : Obj.t) (expected : int) (desired : int) : i
 -- | 宿主与线程运行时：只有程序用到宿主 / 线程原语（`irSharedUsesHost`）时追加。
 -- 单独成块是为了让不用宿主原语的程序不引入 `unix.cmxa` 的初始化成本。
 dtHostRuntime : String
-dtHostRuntime = ("""let dtp_hostCode (e : exn) : int =
+dtHostRuntime = ("""(* net 句柄的属主路径表（只有宿主网络原语用到）。 *)
+let dtp_net_owned : (int, string * int) Hashtbl.t = Hashtbl.create 4
+let dtp_hostCode (e : exn) : int =
   match e with
   | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
   | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
@@ -1227,8 +1290,31 @@ let dt_frame_key nm =
   match dt_frame_parts (List.rev (String.split_on_char '.' nm)) with
   | value :: unit :: _ -> Some (unit ^ \".\" ^ value)
   | _ -> None
+type dt_raw_backtrace = int array
+type dt_backtrace_slot =
+  | Known_location of {
+      is_raise : bool;
+      filename : string;
+      start_lnum : int;
+      start_char : int;
+      end_offset : int;
+      end_lnum : int;
+      end_char : int;
+      is_inline : bool;
+      defname : string;
+    }
+  | Unknown_location of { is_raise : bool }
+external dt_record_backtrace : bool -> unit = \"caml_record_backtrace\"
+external dt_get_raw_backtrace_prim : unit -> dt_raw_backtrace = \"caml_get_exception_raw_backtrace\"
+external dt_convert_raw_backtrace : dt_raw_backtrace -> dt_backtrace_slot array = \"caml_convert_raw_backtrace\"
+let dt_get_raw_backtrace () = try dt_get_raw_backtrace_prim () with _ -> [||]
+let dt_backtrace_slots bt = (try Some (dt_convert_raw_backtrace bt) with Failure _ -> None)
+let dt_slot_defname slot =
+  match slot with
+  | Unknown_location _ -> None
+  | Known_location l -> if l.defname = \"\" then None else Some l.defname
 let dt_frame_label slot =
-  match Printexc.Slot.name slot with
+  match dt_slot_defname slot with
   | None -> None
   | Some nm ->
     match dt_frame_key nm with
@@ -1237,8 +1323,8 @@ let dt_frame_label slot =
       (match List.assoc_opt key dt_def_locs with
        | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
        | None -> None)
-let dt_bt_labels (bt : Printexc.raw_backtrace) : string list =
-  match Printexc.backtrace_slots bt with
+let dt_bt_labels (bt : dt_raw_backtrace) : string list =
+  match dt_backtrace_slots bt with
   | None -> []
   | Some slots ->
     let rec go rest shown last acc =
@@ -1250,10 +1336,23 @@ let dt_bt_labels (bt : Printexc.raw_backtrace) : string list =
          | Some s -> if s = last then go tl shown last acc else go tl (shown + 1) s (s :: acc)
          | None -> go tl shown last acc)
     in go (Array.to_list slots) 0 \"\" []
+let dt_exn_quote m = String.make 1 (Char.chr 34) ^ m ^ String.make 1 (Char.chr 34)
+let dt_exn_msg e =
+  match e with
+  | Effect.Unhandled (Perform (_, _, key, name, _)) -> \"unhandled effect \" ^ key ^ \" (instance \" ^ name ^ \")\"
+  | Failure m -> m
+  | Invalid_argument m -> \"Invalid_argument(\" ^ dt_exn_quote m ^ \")\"
+  | Sys_error m -> \"Sys_error(\" ^ dt_exn_quote m ^ \")\"
+  | Not_found -> \"Not_found\"
+  | End_of_file -> \"End_of_file\"
+  | Division_by_zero -> \"Division_by_zero\"
+  | Stack_overflow -> \"Stack_overflow\"
+  | Out_of_memory -> \"Out_of_memory\"
+  | Sys.Break -> \"Sys.Break\"
+  | _ -> \"<exception>\"
 let dt_report_exn e bt =
-  let msg = match e with Effect.Unhandled (Perform (_, _, key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
-  Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
-  List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt)
+  prerr_string (\"vuna: runtime error: \" ^ dt_exn_msg e ^ \"\\n\");
+  List.iter (fun s -> prerr_string (\"  at \" ^ s ^ \"\\n\")) (dt_bt_labels bt)
 """
 
 -- | 浮点 runtime helper（仅在程序使用 Float 时追加；见 `dtRuntimeWith`）。单独的文本块
@@ -1995,12 +2094,13 @@ inlineText _ _ = Nothing
 -- `usesFloat` / `usesTrace` / `usesObs` / `usesHost` 为 False 时对应 helper 不出现：
 -- 不用 Float / tracing / 观测 / 宿主原语的程序 runtime 逐字节稳定（产物身份与缓存
 -- 都依赖这一点）；`usesHost` 为 False 时产物也不链接 `unix.cmxa`。
-export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> String
-dtRuntimeWith locs usesFloat usesTrace usesObs usesHost =
+export dtRuntimeWith : String -> Bool -> Bool -> Bool -> Bool -> Bool -> String
+dtRuntimeWith locs usesFloat usesTrace usesObs usesHost usesSched =
   dtRuntime
     ++ (if usesFloat then dtFloatRuntime else "")
     ++ (if locs == "" then "let dt_def_locs = []\n" else "let dt_def_locs = [\n${locs}]\n")
     ++ dtReporterRuntime
+    ++ (if usesSched then dtSchedRuntime else "")
     ++ (if usesHost then dtHostRuntime else "")
     ++ (if usesTrace then dtLogRuntime else "") ++ (if usesObs then dtObsRuntime else "")
 
@@ -2049,21 +2149,42 @@ let dtp_concatMany xs =
 let dtp_substTemplate tmpl xs =
   let args = Array.of_list (dtp_ocamlOf xs) in
   let n = String.length tmpl and na = Array.length args in
-  let buf = Buffer.create (n + 32) in
-  let rec go i =
-    if i >= n then ()
+  let rec scan_len i acc =
+    if i >= n then acc
     else if tmpl.[i] = '<' then begin
       let j = ref (i + 1) and k = ref 0 in
       while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
         k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
       done;
-      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin
-        (if !k < na then Buffer.add_string buf args.(!k)
-         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));
-        go (!j + 1)
-      end else (Buffer.add_char buf '<'; go (i + 1))
-    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
-  in go 0; Buffer.contents buf
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then
+        if !k < na then scan_len (!j + 1) (acc + String.length args.(!k))
+        else scan_len (!j + 1) (acc + (!j - i + 1))
+      else scan_len (i + 1) (acc + 1)
+    end else scan_len (i + 1) (acc + 1)
+  in
+  let out = Bytes.create (scan_len 0 0) in
+  let rec fill i o =
+    if i >= n then o
+    else if tmpl.[i] = '<' then begin
+      let j = ref (i + 1) and k = ref 0 in
+      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do
+        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j
+      done;
+      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then
+        if !k < na then begin
+          let s = args.(!k) in
+          Bytes.blit_string s 0 out o (String.length s);
+          fill (!j + 1) (o + String.length s)
+        end else begin
+          let l = !j - i + 1 in
+          Bytes.blit_string tmpl i out o l;
+          fill (!j + 1) (o + l)
+        end
+      else (Bytes.set out o '<'; fill (i + 1) (o + 1))
+    end else (Bytes.set out o tmpl.[i]; fill (i + 1) (o + 1))
+  in
+  let m = fill 0 0 in
+  Bytes.sub_string out 0 m
 """
 
 -- 定义位置表：`单元.值名` → (vuna 定义名, 文件:行)。
@@ -2703,7 +2824,7 @@ genDef st d =
                 case p of
                   (bodyTerm, st1) =>
                     let
-                      guarded = if irDefInitGuard d then ORaw "(try ${renderTerm bodyTerm} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)" else bodyTerm
+                      guarded = if irDefInitGuard d then ORaw "(try ${renderTerm bodyTerm} with e -> dt_report_exn e (dt_get_raw_backtrace ()); exit 2)" else bodyTerm
                     in OkC (ODValue (valueName (irDefName d)) guarded, st1)
             )
 
@@ -2759,4 +2880,4 @@ hookText : String -> String -> Bool -> String
 hookText showText body printResult =
   let
     action = if printResult then "print_endline (${showText} (${body}))" else "ignore (${body})"
-  in "\nlet () =\n  Printexc.record_backtrace true;\n  try ${action}\n  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"
+  in "\nlet () =\n  dt_record_backtrace true;\n  try ${action}\n  with e -> dt_report_exn e (dt_get_raw_backtrace ()); exit 2\n"

@@ -119,8 +119,9 @@ load/parse 前缀 + iface 摘要 **~2.6 s** → 逐定义精化（`collectSigs-d
 
    **`sort_lib` 的 3.9× 不是排序算法**：`Base.Data.Sort.sortBy` 的 20k 排序在同进程
    循环里约 3.9 ms（与手写 OCaml 同量级），bench 的 wall 里主要是分配与 minor heap
-   （单次排序分配 ~3.3M words ≈ 27 MB）。`dtRuntime` 的 `minor_heap_size` 现在是
-   262144 words = 2 MB（与 OCaml 默认一致）：16M words = 128 MB → 2M words = 16 MB 时
+   （单次排序分配 ~3.3M words ≈ 27 MB）。生成程序现在**不设置 GC 参数**（OCaml 默认 minor heap
+   就是 2 MB；显式 `Gc.*` 会把 Gc / Printexc / Printf / Buffer 拖进产物）：16M words =
+   128 MB → 2M words = 16 MB 时
    RSS `gc_retain` −69% / `gc_array_churn` −50% / `sort_lib` −30%，CPU `gc_retain` −47% /
    `gc_array_churn` −19% / `sort_lib` −16%；16 MB → 2 MB 后分配密集的短程序继续变快
    （同窗口 CPU：`micro_concat` 20.1 → 13.4 ms、`sort_lib` 13.5 → 9.0 ms、

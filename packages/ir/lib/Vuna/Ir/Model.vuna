@@ -421,6 +421,9 @@ export record IrShared(..) where
   -- | 程序是否用到需要 `unix.cmxa` 的原语（宿主 IO / 进程 / 网络 / 时钟 / 线程）。
   -- 决定 `Vuna_runtime.ml` 是否追加 `dtHostRuntime`，以及产物是否链接 `unix.cmxa`。
   irSharedUsesHost : Bool
+  -- | 程序是否用到调度器原语（`Base.EffSched`）。动作入口总会用到（`dtp_sched_main`），
+  -- 由装配侧再并上；决定是否追加 `dtSchedRuntime`。
+  irSharedUsesSched : Bool
 
 export irSharedUnboxedOf : String -> List (String, String, Int) -> Maybe (String, Int)
 irSharedUnboxedOf family [] = Nothing

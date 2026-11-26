@@ -92,6 +92,7 @@ sampleShared =
     [Pair "Wrap" (Pair "WrapCtor" 0)]
     [Pair "Some" (Pair "Opt" [True, False])]
     True
+    True
 
 sampleProgram : IrProgram
 sampleProgram = IrProgram sampleShared sampleUnit
