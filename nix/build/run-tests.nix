@@ -1,8 +1,8 @@
 # vuna 原生测试 runner：`nix run .#vuna-run-tests`。
 #
-# 没有 shell 编排层：逐个调用各包独立 suite（`vuna dev suite <suite.toml>`），
-# 共享同一个 VUNA_STORE。编译器固定为同一个 Nix 构建产物（stage 1），种子通过 VUNA_SEED 注入；
-# case 的并行度由 runner 的 `--jobs auto` 探测全部可用核。
+# 没有 shell 编排层：`vuna dev suite --all` 按 test/suite.toml 的 driver 清单逐个调用
+# 各包独立 suite，共享同一个 VUNA_STORE。编译器固定为同一个 Nix 构建产物（stage 1），
+# 种子通过 VUNA_SEED 注入；case 的并行度由 runner 的 `--jobs auto` 探测全部可用核。
 {
   pkgs,
   tools,
@@ -34,12 +34,10 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   # `--only <owner/family>` 反复跑仍有命中；`VUNA_STORE` 已设置时尊重调用方。
   export VUNA_STORE="''${VUNA_STORE:-$HOME/.vuna/test-store}"
   mkdir -p "$VUNA_STORE"
-  # 每个包独立 suite；共享同一个 VUNA_STORE。
+  cd "$repo"
+  # `--all` 读 test/suite.toml 的 driver 清单；清单只维护这一份。
   failed=0
-  for suite in packages/compiler/test/suite.toml packages/base/test/suite.toml packages/cli/test/suite.toml packages/web-cli/test/suite.toml; do
-    [ -f "$repo/$suite" ] || continue
-    "${vuna}/bin/vuna" dev suite "$repo/$suite" "$@" || failed=1
-  done
+  "${vuna}/bin/vuna" dev suite --all "$@" || failed=1
   # 包内单测（顶层 test/*.vuna）。
   for pkg in "$repo"/packages/*; do
     [ -d "$pkg/test" ] || continue

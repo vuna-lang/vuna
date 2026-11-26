@@ -2,14 +2,16 @@
 # checks.vuna-tests：在沙箱里跑原生 suite（vuna dev suite）。
 #
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，
-# $VUNA / $VUNA_SEED 由 Nix 注入。章节脚本需要 VUNA_BASE 指向仓库 base。
+# $VUNA / $VUNA_SEED 由 Nix 注入。章节脚本需要 VUNA_BASE / VUNA_OBS_PKG
+# 指向仓库内的包目录。
 set -eu
 
 OUT=${1:?usage: vuna-tests.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 : "${VUNA_SEED:?VUNA_SEED 未设置}"
 VUNA_BASE=$PWD/packages/base
-export VUNA_BASE VUNA_SEED
+VUNA_OBS_PKG=$PWD/packages/obs
+export VUNA_BASE VUNA_OBS_PKG VUNA_SEED
 
 # 沙箱内一个 check 用私有对象库：worker/case 共享同一根（父进程预热一次），
 # 但不写进源码树，也不依赖宿主 ~/.vuna/store。
@@ -45,14 +47,10 @@ MATRIX_ARGS=""
 for matrix in ${VUNA_TEST_MATRICES:-}; do
   MATRIX_ARGS="$MATRIX_ARGS --matrix $matrix"
 done
-# 每个包的 suite 独立调用；共享上面那一次预热与同一个 VUNA_STORE。
-SUITES="packages/compiler/test/suite.toml packages/base/test/suite.toml packages/cli/test/suite.toml packages/web-cli/test/suite.toml"
+# `--all` 读 test/suite.toml 的 driver 清单；清单只维护这一份。
 rc=0
-for suite in $SUITES; do
-  [ -f "$suite" ] || continue
-  # shellcheck disable=SC2086
-  "$VUNA" dev suite "$suite" --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS || rc=1
-done
+# shellcheck disable=SC2086
+"$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS || rc=1
 
 # 包内单测（`vuna test <pkg>`：顶层 test/*.vuna）；http/web 的行为面不在 suite corpus 里。
 for pkg in packages/*; do
@@ -66,11 +64,8 @@ done
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
-    for suite in $SUITES; do
-      [ -f "$suite" ] || continue
-      # shellcheck disable=SC2086
-      "$VUNA" dev suite "$suite" --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS || rc=1
-    done
+    # shellcheck disable=SC2086
+    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS || rc=1
     ;;
 esac
 
