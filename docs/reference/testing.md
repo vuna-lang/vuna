@@ -377,8 +377,8 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - golden 与 runtime case 都把 `build.sh` 跑在桶目录里（staging 只提供生成物），
   单次 `build.sh` 的并行度固定为 `VUNA_BUILD_JOBS`（测试环境默认 1）。
 
-实测（本机 16 核）：空 `--cache-dir` 下同一夹具 compile 2.9–5.5s，复用已有桶 7ms；
-`vuna check packages/base` 7.25s → 13ms。
+实测（本机 12 核、热 store）：空桶首例 compile ≈0.9s（整棵依赖编译），同 helper 集合的
+后续 case ≈0.5s（只重编 `Vuna_deflocs` + 入口）；`vuna check packages/base` 7.25s → 13ms。
 `--cache-dir` 只放构建桶与测试临时根（对象库另在 `VUNA_STORE`，
 [test-architecture.md](test-architecture.md)）。
 ### 包内测试（`packages/<pkg>/test/`）
