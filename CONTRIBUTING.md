@@ -67,16 +67,17 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 | --- | --- | --- |
 | `packages/compiler/` / `base/` / `ir/` / `target-ocaml/` / `nix/` / `seed/` | `deep` | `deep` |
 | `test/`、语言 / 运行时行为 | `suite` | `suite` |
-| `packages/target-native/` / `target-wasm/`、运行时 | `backend` | `backends` + `native` |
+| `packages/target-native/` / `target-wasm/`、运行时 | `backend` | —（GitHub CI 暂不跑；本地 `nix run .#ci -- backends` / `native`） |
 | `wasm-host/`、浏览器可跑面 | `browser` | `browser` |
 | 只改文档 / `.github` / `.agents` | 无 | `pr` |
 
 ```console
-gh pr edit <n> --add-label deep,suite,backend
+gh pr edit <n> --add-label deep,suite
 gh pr checks <n> --watch
 ```
 
-`deep` / `suite` / `backends` / `native` / `browser` 另由 nightly 与手动 dispatch 兜底。
+`deep` / `suite` / `browser` 另由 nightly 与手动 dispatch 兜底；`backends` / `native`
+暂不在 GitHub CI 跑，只在本地手动。
 分组与清单见 [`docs/reference/testing-checks.md`](docs/reference/testing-checks.md)。
 
 ## 6. 合并

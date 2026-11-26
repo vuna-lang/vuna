@@ -2,6 +2,9 @@ name: label-checks
 
 # PR 标签触发的长尾门禁。与 ci.yml 分开：标签事件不会重跑或取消 required 的 `pr / run`，
 # 不同标签各自分组，加 suite 不会取消正在跑的 deep。新增提交时，已带标签的组会重跑。
+#
+# `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑；
+# `backend` 标签只保留给本地手动门禁（`nix run .#ci -- backends` / `-- native`）。
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
@@ -35,26 +38,6 @@ jobs:
     with:
       group: suite
       timeout: 60
-      jobs: 1
-
-  backends:
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'backend') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'backend')
-    uses: ./.github/workflows/_check.yml
-    with:
-      group: backends
-      timeout: 60
-      jobs: 1
-
-  native:
-    if: >-
-      contains(github.event.pull_request.labels.*.name, 'backend') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'backend')
-    uses: ./.github/workflows/_check.yml
-    with:
-      group: native
-      timeout: 120
       jobs: 1
 
   browser:

@@ -1,8 +1,11 @@
 name: ci
 
-# PR 的常跑门禁只有 `pr`（fmt + lint + 自检）；`deep` / `suite` / `backends` / `native`
-# 由 PR 标签在 label-checks.yml 里按需触发，nightly 与手动 dispatch 兜底。这样标签事件
-# 不会重跑或取消 required 的 `pr / run`。
+# PR 的常跑门禁只有 `pr`（fmt + lint + 自检）；`deep` / `suite` 由 PR 标签在
+# label-checks.yml 里按需触发，nightly 与手动 dispatch 兜底。这样标签事件不会重跑或
+# 取消 required 的 `pr / run`。
+#
+# `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
+# 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。
 on:
   push:
     branches: [main]
@@ -51,22 +54,6 @@ jobs:
     with:
       group: suite
       timeout: 60
-      jobs: 1
-
-  backends:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: ./.github/workflows/_check.yml
-    with:
-      group: backends
-      timeout: 60
-      jobs: 1
-
-  native:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    uses: ./.github/workflows/_check.yml
-    with:
-      group: native
-      timeout: 120
       jobs: 1
 
   browser:

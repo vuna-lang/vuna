@@ -29,13 +29,14 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（PR 必需检查） |
 | `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、带 `deep` 标签的 PR |
 | `suite` | `vuna-tests-gate` + `vuna-tests-e2e` | 定时、手动、带 `suite` 标签的 PR |
-| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | 定时、手动、带 `backend` 标签的 PR |
-| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | 同上 |
+| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
+| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | **本地手动**（GitHub CI 暂不跑） |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、带 `browser` 标签的 PR |
 
 PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.yml` 里跑，与 `ci.yml`
 分开，避免标签事件重跑或取消 required 的 `pr / run`。合并前 `pr` 必须绿；加了
-`deep` / `suite` / `backend` 标签时对应长尾也必须绿（见 [CONTRIBUTING.md](../../CONTRIBUTING.md)）。
+`deep` / `suite` 标签时对应长尾也必须绿；`backend` 标签当前不触发任何 GitHub job（见
+[CONTRIBUTING.md](../../CONTRIBUTING.md)）。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。
@@ -44,7 +45,8 @@ PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.
 `continue-on-error` + 汇总 job：每个组的 job 状态就是结论。
 
 `CI_JOBS` 控制 `nix build` 的并行度：`pr` / `deep` 用默认 2（`--cores` 为核数/2），
-`suite` / `backends` / `native` / `browser` 用 1，把 runner 的 4 核全给单个 derivation。
+`suite` / `browser` 用 1，把 runner 的 4 核全给单个 derivation（`backends` / `native`
+本地手动跑时同样是 1）。
 
 保存前还有一个 `Drop builder lock files` 步：Nix 在 store 里留下 `<out>.lock`
 （root 0600），非 root 的 tar 读不动会让整次保存失败。
@@ -134,11 +136,11 @@ PR 的常跑门禁只有 `pr`；标签长尾在 `.github/workflows/label-checks.
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
 自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
 CI 里由 `nix run .#ci -- native` 构建 `vuna-native-conformance`（构建即运行
-`backend-check --scope all`），只在**定时（每晚）、手动 dispatch 与带 `backend` 标签的
-PR** 上跑——整轮成本高，且 native 后端仍有未关闭的边界
+`backend-check --scope all`），只在**本地手动**（`nix run .#ci -- native`）上跑——
+GitHub CI 暂不跑，整轮成本高，且 native 后端仍有未关闭的边界
 （[native-runtime.md](native-runtime.md) §4），放在每次 push 上只会占满 runner 又被
-下一次 push 取消（`cancel-in-progress`），既拿不到读数也拖慢反馈。push 路径上的
-native 覆盖由 `vuna-tests-native`（fast+integration 矩阵，在 `backends` 组）承担。
+下一次 push 取消（`cancel-in-progress`），既拿不到读数也拖慢反馈。本地手动跑
+native 覆盖用 `nix run .#ci -- backends`（fast+integration 矩阵）。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |

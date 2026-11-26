@@ -1,6 +1,6 @@
 ---
 name: vuna-pr
-description: 在 vuna 仓库开、更新、合并 GitHub PR 时使用——开 PR 前的 rebase -i 提交整理、按改动面加 deep/suite/backend 标签、等待门禁、rebase merge、worktree 收尾与 break-glass。用户说「开 PR」「提 PR」「走 PR 流程」「合并 PR」时加载。
+description: 在 vuna 仓库开、更新、合并 GitHub PR 时使用——开 PR 前的 rebase -i 提交整理、按改动面加 deep/suite 标签、等待门禁、rebase merge、worktree 收尾与 break-glass。用户说「开 PR」「提 PR」「走 PR 流程」「合并 PR」时加载。
 ---
 
 # vuna 的 GitHub PR 流程
@@ -54,7 +54,7 @@ PR 的必需检查只有 `pr / run`。其余组由标签在
 | --- | --- | --- |
 | `packages/compiler/` / `base/` / `ir/` / `target-ocaml/` / `nix/` / `seed/` | `deep` | deep |
 | `test/`、语言/运行时行为 | `suite` | suite |
-| `packages/target-native/` / `target-wasm/` / 运行时 | `backend` | backends + native |
+| `packages/target-native/` / `target-wasm/` / 运行时 | `backend` | —（GitHub CI 暂不跑；本地 `nix run .#ci -- backends` / `native`） |
 | `wasm-host/`、浏览器可跑面 | `browser` | browser |
 | 只改文档 / `.github` / `.agents` | 无 | pr |
 
@@ -87,7 +87,8 @@ gh pr merge <n> --rebase
 ```
 
 - 只允许 rebase merge；不要用 squash / merge commit。
-- 加了 `deep` / `suite` / `backend` 标签时，合并前确认对应 workflow 已绿。
+- 加了 `deep` / `suite` 标签时，合并前确认对应 workflow 已绿；`backend` 标签当前不触发
+  GitHub job（wasm / native 矩阵只在本地手动跑）。
 - 在副 worktree 内**不要**加 `--delete-branch`（本地分支被 checkout，删除会失败）；
   先合并，再 teardown 时删分支。
 
