@@ -18,7 +18,6 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Base.Diag.Codec
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Driver.TargetCache
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Lowering.Program
@@ -91,25 +90,10 @@ dispatch target program printResult outDir =
       Nothing => pure (ErrC (missingBackendDiag target))
       Just bin => dispatchWith target bin program printResult outDir
 
--- | 内部：先查产物缓存；未命中才编码 IR、写临时文件并起插件。
+-- | 内部：编码 IR、写临时文件并起插件。
 dispatchWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> IrProgram -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
 dispatchWith target bin program printResult outDir =
-  let
-    irText = encodeProgram program
-    irHash = irHashOf irText
-  in do
-    version <- backendVersionEff bin
-    let
-      key = outputsKeyOf target version irHash printResult
-    in do
-      cached <- readOutputsEff key
-      case cached of
-        Just (files, diags) =>
-          do
-            _ <- pure (log! "debug" "target-cache=hit ${target}")
-            _ <- materializeEff outDir files
-            pure (OkC (map firstOf files, diags))
-        Nothing => runBackend target bin key irText irHash printResult outDir
+  runBackend target bin (encodeProgram program) printResult outDir
 
 -- | 内部：插件调用的超时（秒，允许小数）：`VUNA_PLUGIN_TIMEOUT`（缺省 `300`；`0` = 关闭；
 -- 其它解析不了的值回落缺省）。小数用于短超时的回归（`0.001`）。插件挂死时不再静默卡住整条命令。
@@ -164,11 +148,10 @@ pluginRunArgv bin target outDir duration printResult =
     ["sh", "-c", "timeout -s KILL ${duration}s \"$@\"\ncode=$?\nif [ $code -eq 137 ] || [ $code -eq 124 ]; then printf timeout > \"${pluginTimedOutPath outDir target}\"; fi\nexit $code\n", "sh"]
     (pluginArgv bin target outDir printResult)
 
--- | 内部：缓存未命中——写 IR、起插件、读回诊断与产物，最后写产物缓存。
-runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
-runBackend target bin key irText irHash printResult outDir =
+-- | 内部：写 IR、起插件、读回诊断与产物。
+runBackend : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> Eff r (Check (List String, List Diagnostic))
+runBackend target bin irText printResult outDir =
   do
-    _ <- pure (log! "debug" "target-cache=miss ${target}")
     _ <- fsWriteFile (irPathOf outDir target) irText
     duration <- pluginTimeoutEff
     hasTimeout <- if duration == "0" then pure False else hasTimeoutCmd
@@ -195,10 +178,7 @@ runBackend target bin key irText irHash printResult outDir =
       let
         names = splitNames filesPayload
         diags = decodedDiags payload
-      in do
-        contents <- readProducedEff outDir names
-        _ <- writeOutputsEff key contents diags
-        pure (OkC (names, diags))
+      in pure (OkC (names, diags))
     else
       pure (ErrC (firstDiagOr (decodedDiags payload) target code))
 
