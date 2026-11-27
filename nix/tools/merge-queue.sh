@@ -6,13 +6,16 @@
 #   nix/tools/merge-queue.sh enqueue <pr> [--jump]
 #   nix/tools/merge-queue.sh dequeue <pr>
 #   nix/tools/merge-queue.sh wait <pr> [timeout-seconds]
+#   nix/tools/merge-queue.sh arm <pr>
+#   nix/tools/merge-queue.sh disarm <pr>
 #   nix/tools/merge-queue.sh sweep [--dry-run] [<pr>...]
 #
 # 依赖：gh（已登录，且有 pull-requests: write）、jq。
 #
 # 说明：正常合并只需 arm auto-merge（automerge.yml 会做）；enqueue / dequeue 用于手动干预。
-# sweep 补 enqueue：GitHub 回归（community#209348）后，已 arm 的 PR 在 required checks
-# 变绿时不会自动进入规则集合并队列，需要外部再调用一次 enqueuePullRequest。
+# stack 的 arm/disarm 用 includeStack 覆盖整条；入队走 REST merge-async（GraphQL 没有
+# stack 参数）。sweep 补 enqueue：GitHub 回归（community#209348）后，已 arm 的 PR 在
+# required checks 变绿时不会自动进入规则集合并队列，需要外部再调用一次 enqueue。
 # wait 会阻塞轮询，适合明确要等结果的终端会话；agent 会话 arm 完即可退出。
 # shellcheck disable=SC2016
 set -euo pipefail
@@ -25,6 +28,8 @@ usage: merge-queue.sh <command> [args]
   enqueue <pr> [--jump]      手动入队；--jump 插到队首（会重建后面的组）
   dequeue <pr>               移出队列
   wait <pr> [timeout]        等待合并 / 被移除，默认 1800 秒
+  arm <pr>                   arm auto-merge；stack 用 includeStack 覆盖整条
+  disarm <pr>                关闭 auto-merge；stack 用 includeStack 覆盖整条
   sweep [--dry-run] [<pr>...] 把已 arm 且可合并的 PR 补入队列（默认扫全部 open）
 EOF
 }
@@ -57,18 +62,91 @@ pr_state() {
     query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
         pullRequest(number:$number){
+          id
           state
           mergedAt
           isDraft
           isInMergeQueue
+          isMergeQueueEnabled
           mergeStateStatus
           labels(first:50) { nodes { name } }
-          stack { number }
+          stack {
+            number
+            size
+            entries(first:50) {
+              nodes {
+                position
+                pullRequest {
+                  id
+                  number
+                  state
+                  isDraft
+                  isInMergeQueue
+                  mergeStateStatus
+                  headRefOid
+                  labels(first:50) { nodes { name } }
+                  autoMergeRequest(includeStack: true) { mergeMethod }
+                }
+              }
+            }
+          }
           autoMergeRequest { mergeMethod }
+          stackAutoMergeRequest: autoMergeRequest(includeStack: true) { mergeMethod }
           mergeQueueEntry { position state estimatedTimeToMerge }
         }
       }
     }'
+}
+
+stack_number_of() {
+  jq -r '.data.repository.pullRequest.stack.number // empty' <<<"$1"
+}
+
+# stack 里最上层 open、非 draft 的 PR：number<TAB>id<TAB>headRefOid
+stack_top_open() {
+  jq -r '
+    [.data.repository.pullRequest.stack.entries.nodes[]
+     | select(.pullRequest.state == "OPEN" and .pullRequest.isDraft == false)] as $open
+    | if ($open | length) == 0 then empty
+      else ($open | max_by(.position).pullRequest | [.number, .id, .headRefOid] | @tsv)
+      end'
+}
+
+# stack 可以 arm：有 open 层、都不是 draft、没有 hold 标签（checks 可以还没绿）。
+stack_armable() {
+  jq -e '
+    [.data.repository.pullRequest.stack.entries.nodes[]
+     | select(.pullRequest.state == "OPEN")] as $open
+    | ($open | length) > 0
+      and all($open[]; (.pullRequest.isDraft | not))
+      and all($open[]; ([.pullRequest.labels.nodes[].name]
+            | map(select(. == "blocked" or . == "needs-info" or . == "wontfix"))
+            | length) == 0)' >/dev/null <<<"$1"
+}
+
+# 所有 open 层都可合并：非 draft、不在队列、checks 绿、没有 hold 标签。
+stack_ready() {
+  jq -e '
+    [.data.repository.pullRequest.stack.entries.nodes[]
+     | select(.pullRequest.state == "OPEN")] as $open
+    | ($open | length) > 0
+      and all($open[]; (.pullRequest.isDraft | not))
+      and all($open[]; (.pullRequest.isInMergeQueue | not))
+      and all($open[]; (.pullRequest.mergeStateStatus == "CLEAN"
+                       or .pullRequest.mergeStateStatus == "UNSTABLE"))
+      and all($open[]; ([.pullRequest.labels.nodes[].name]
+            | map(select(. == "blocked" or . == "needs-info" or . == "wontfix"))
+            | length) == 0)' >/dev/null <<<"$1"
+}
+
+# 最上层 open 的 PR 已经带上 stack auto-merge 请求。
+stack_armed() {
+  jq -e '
+    [.data.repository.pullRequest.stack.entries.nodes[]
+     | select(.pullRequest.state == "OPEN" and .pullRequest.isDraft == false)] as $open
+    | ($open | length) > 0
+      and (($open | max_by(.position).pullRequest.autoMergeRequest) != null)' \
+    >/dev/null <<<"$1"
 }
 
 # 把 PR 加入队列；成功输出 position / state。已在队列视为成功。
@@ -79,11 +157,6 @@ enqueue_pr() {
   if [ "$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$s")" = "true" ]; then
     echo "merge-queue: PR #$pr 已在队列中"
     return 0
-  fi
-  stack_number=$(jq -r '.data.repository.pullRequest.stack.number // empty' <<<"$s")
-  if [ -n "$stack_number" ]; then
-    echo "merge-queue: PR #$pr 属于 stack #$stack_number，整条入队尚未接入" >&2
-    return 1
   fi
   pr_json=$(gh pr view "$pr" --repo "$repo" --json id,headRefOid,isDraft,state)
   if [ "$(jq -r '.isDraft' <<<"$pr_json")" = "true" ]; then
@@ -96,6 +169,26 @@ enqueue_pr() {
   fi
   pr_id=$(jq -r '.id' <<<"$pr_json")
   head=$(jq -r '.headRefOid' <<<"$pr_json")
+
+  stack_number=$(stack_number_of "$s")
+  if [ -n "$stack_number" ]; then
+    if [ "$jump" = "true" ]; then
+      echo "merge-queue: stack #$stack_number 不支持 --jump" >&2
+      return 1
+    fi
+    # GraphQL 没有 stack 入队能力；merge-async 会把该 PR 及所有 open 的下层一起入队。
+    if ! out=$(gh api --method PUT \
+      -H "X-GitHub-Api-Version: 2026-03-10" \
+      -H "Accept: application/vnd.github+json" \
+      "repos/$repo/pulls/$pr/merge-async" \
+      -f merge_action=merge_queue -f sha="$head" 2>&1); then
+      echo "$out" >&2
+      return 1
+    fi
+    echo "merge-queue: PR #$pr（stack #$stack_number）已提交入队"
+    return 0
+  fi
+
   if ! out=$(gql -f id="$pr_id" -f head="$head" -F jump="$jump" -f query='
     mutation($id:ID!,$head:GitObjectID,$jump:Boolean!){
       enqueuePullRequest(input:{
@@ -141,7 +234,7 @@ case "$cmd" in
                 state
                 estimatedTimeToMerge
                 enqueuedAt
-                pullRequest{ number title }
+                pullRequest{ number title stack{number} stackEntry{position} }
               }
             }
           }
@@ -156,15 +249,18 @@ case "$cmd" in
       echo "merge-queue: $branch 队列为空"
       exit 0
     fi
-    printf '%-4s %-16s %-8s %-8s %s\n' POS STATE ETA_SEC PR TITLE
+    printf '%-4s %-16s %-8s %-8s %-8s %s\n' POS STATE ETA_SEC PR STACK TITLE
     jq -r '.[] |
       [ .position,
         .state,
         (.estimatedTimeToMerge // "-"),
         ("#" + (.pullRequest.number | tostring)),
+        (if .pullRequest.stack
+         then "\(.pullRequest.stack.number)/\(.pullRequest.stackEntry.position)"
+         else "-" end),
         .pullRequest.title ] | @tsv' <<<"$nodes" |
-      while IFS=$'\t' read -r pos state eta pr title; do
-        printf '%-4s %-16s %-8s %-8s %s\n' "$pos" "$state" "$eta" "$pr" "$title"
+      while IFS=$'\t' read -r pos state eta pr stack title; do
+        printf '%-4s %-16s %-8s %-8s %-8s %s\n' "$pos" "$state" "$eta" "$pr" "$stack" "$title"
       done
     ;;
 
@@ -174,6 +270,114 @@ case "$cmd" in
     jump=false
     if [ "${2:-}" = "--jump" ]; then jump=true; fi
     enqueue_pr "$pr" "$jump" || exit 1
+    ;;
+
+  arm)
+    pr="${1:-}"
+    require_number "$pr"
+    s=$(pr_state "$pr")
+    stack_number=$(stack_number_of "$s")
+    queue_enabled=$(jq -r '.data.repository.pullRequest.isMergeQueueEnabled // false' <<<"$s")
+
+    if [ -n "$stack_number" ]; then
+      is_stack=true
+      if ! stack_armable "$s"; then
+        echo "merge-queue: stack #$stack_number 有 draft / hold，不能 arm" >&2
+        exit 1
+      fi
+      if stack_armed "$s"; then
+        echo "merge-queue: stack #$stack_number 已 arm"
+        exit 0
+      fi
+      top=$(stack_top_open "$s")
+      target_pr=$(cut -f1 <<<"$top")
+      target_id=$(cut -f2 <<<"$top")
+    else
+      is_stack=false
+      state=$(jq -r '.data.repository.pullRequest.state' <<<"$s")
+      draft=$(jq -r '.data.repository.pullRequest.isDraft' <<<"$s")
+      if [ "$state" != "OPEN" ] || [ "$draft" = "true" ]; then
+        echo "merge-queue: PR #$pr 不是 open 或仍是 draft" >&2
+        exit 1
+      fi
+      if [ "$(jq -r '.data.repository.pullRequest.autoMergeRequest != null' <<<"$s")" = "true" ]; then
+        echo "merge-queue: PR #$pr 已 arm"
+        exit 0
+      fi
+      target_pr="$pr"
+      target_id=$(jq -r '.data.repository.pullRequest.id' <<<"$s")
+    fi
+
+    if [ "$is_stack" = "true" ]; then
+      if [ "$queue_enabled" = "true" ]; then
+        # 队列自己决定 merge 方法；只保留 includeStack 语义。
+        if ! gql -f id="$target_id" -F includeStack=true -f query='
+          mutation($id:ID!,$includeStack:Boolean!){
+            enablePullRequestAutoMerge(input:{pullRequestId:$id,includeStack:$includeStack}){
+              clientMutationId
+            }
+          }' >/dev/null; then
+          echo "merge-queue: stack #$stack_number arm 失败" >&2
+          exit 1
+        fi
+      else
+        if ! gql -f id="$target_id" -F includeStack=true -f method=REBASE -f query='
+          mutation($id:ID!,$includeStack:Boolean!,$method:PullRequestMergeMethod!){
+            enablePullRequestAutoMerge(input:{
+              pullRequestId:$id,includeStack:$includeStack,mergeMethod:$method
+            }){clientMutationId}
+          }' >/dev/null; then
+          echo "merge-queue: stack #$stack_number arm 失败" >&2
+          exit 1
+        fi
+      fi
+    else
+      if [ "$queue_enabled" = "true" ]; then
+        gh pr merge "$pr" --repo "$repo" --auto
+      else
+        gh pr merge "$pr" --repo "$repo" --auto --rebase
+      fi
+    fi
+    echo "merge-queue: PR #$target_pr 已 arm${stack_number:+（stack #$stack_number）}"
+    ;;
+
+  disarm)
+    pr="${1:-}"
+    require_number "$pr"
+    s=$(pr_state "$pr")
+    stack_number=$(stack_number_of "$s")
+    if [ -n "$stack_number" ]; then
+      is_stack=true
+      top=$(stack_top_open "$s")
+      target_pr=$(cut -f1 <<<"$top")
+      target_id=$(cut -f2 <<<"$top")
+      if ! stack_armed "$s"; then
+        echo "merge-queue: stack #$stack_number 未 arm"
+        exit 0
+      fi
+    else
+      is_stack=false
+      target_pr="$pr"
+      target_id=$(jq -r '.data.repository.pullRequest.id' <<<"$s")
+      if [ "$(jq -r '.data.repository.pullRequest.autoMergeRequest != null' <<<"$s")" != "true" ]; then
+        echo "merge-queue: PR #$pr 未 arm"
+        exit 0
+      fi
+    fi
+    if [ "$is_stack" = "true" ]; then
+      if ! gql -f id="$target_id" -F includeStack=true -f query='
+        mutation($id:ID!,$includeStack:Boolean!){
+          disablePullRequestAutoMerge(input:{pullRequestId:$id,includeStack:$includeStack}){
+            clientMutationId
+          }
+        }' >/dev/null; then
+        echo "merge-queue: stack #$stack_number disarm 失败" >&2
+        exit 1
+      fi
+    else
+      gh pr merge "$pr" --repo "$repo" --disable-auto
+    fi
+    echo "merge-queue: PR #$target_pr 已 disarm${stack_number:+（stack #$stack_number）}"
     ;;
 
   dequeue)
@@ -255,6 +459,7 @@ case "$cmd" in
     queued=0
     skipped=0
     failed=0
+    declare -A seen_stacks=()
     for pr in "${prs[@]}"; do
       s=$(pr_state "$pr")
       state=$(jq -r '.data.repository.pullRequest.state // "UNKNOWN"' <<<"$s")
@@ -273,8 +478,33 @@ case "$cmd" in
         continue
       fi
       if [ -n "$stack" ]; then
-        echo "sweep: #$pr 跳过（属于 stack #$stack，整条入队待接入）"
-        skipped=$((skipped + 1))
+        if [ -n "${seen_stacks[$stack]:-}" ]; then
+          continue
+        fi
+        seen_stacks[$stack]=1
+        if ! stack_ready "$s"; then
+          echo "sweep: stack #$stack 跳过（有 draft / hold / 未绿 / 已在队列的层）"
+          skipped=$((skipped + 1))
+          continue
+        fi
+        if ! stack_armed "$s"; then
+          echo "sweep: stack #$stack 跳过（未 arm stack auto-merge）"
+          skipped=$((skipped + 1))
+          continue
+        fi
+        top=$(stack_top_open "$s")
+        top_pr=$(cut -f1 <<<"$top")
+        if [ "$dry_run" = "true" ]; then
+          echo "sweep: stack #$stack 需要入队 top #$top_pr（--dry-run）"
+          queued=$((queued + 1))
+          continue
+        fi
+        if enqueue_pr "$top_pr"; then
+          queued=$((queued + 1))
+        else
+          echo "sweep: stack #$stack 入队失败（top #$top_pr）" >&2
+          failed=$((failed + 1))
+        fi
         continue
       fi
       if [ -n "$hold" ]; then
