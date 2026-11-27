@@ -1,0 +1,25 @@
+-- 实例搜索的递归深度预算（`Elab.Dict.instDepthBound`）耗尽时必须报
+-- `TC_InstanceSearchExhausted`，不能把「预算用完」静默降级成「缺实例」。
+--
+-- 夹具：一条 17 层的实例 ctx 链（`C (W (W … Int))`）。每层 ctx 求解消耗 1 层深度，
+-- 预算 16 层 ⇒ 最深那一层搜索以耗尽结束；候选因此被跳过，但如果耗尽被当成「不匹配」，
+-- 最终会报 `TC_NoInstanceFound`（错误码见 `.diag.json`）。
+data W : Type -> Type where
+  MkW : {a : Type} -> a -> W a
+
+trait C a where
+  cOf : a -> String
+
+instance C Int where
+  cOf x = "int"
+
+instance C a => C (W a) where
+  cOf x = "w"
+
+deep : W (W (W (W (W (W (W (W (W (W (W (W (W (W (W (W (W Int))))))))))))))))
+deep =
+  MkW
+    (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW (MkW 1))))))))))))))))
+
+bad : String
+bad = cOf deep

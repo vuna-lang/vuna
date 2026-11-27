@@ -46,6 +46,8 @@ searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx instDepthBou
 -- 实例搜索的递归深度上限（ctx 链 / via 委托）。耗尽报 `TC_InstanceSearchExhausted`，
 -- 不再伪装成「缺实例」。候选匹配与 via 实参扫描不消耗深度：前者是有限列表扫描，
 -- 后者按实参个数逐个尝试，本身有结构测度。
+-- 候选内部的 ctx 求解同样区分「解不出」与「预算耗尽」：耗尽会随候选一起报上来，
+-- 只要没有任何候选命中，最后报的仍是 `TC_InstanceSearchExhausted`。
 instDepthBound : Int
 instDepthBound = 16
 
@@ -63,14 +65,15 @@ record InstMatch where
 -- 搜索分两阶段——先只试**具体**实例；一个都没命中时才试 blanket。这样具体实例
 -- 优先（`Interp String` 覆盖 blanket `Show a => Interp a`），且 blanket 的 ctx 求解
 -- 不会污染具体候选的元变量解。
+--
+-- 「没有候选命中」与「有候选因预算耗尽被跳过」是两种结论：只有在确实一个都没命中、
+-- 也没有候选耗尽时才报缺实例；否则报 `TC_InstanceSearchExhausted`。
 searchInstFuel : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Term, Ec)
 searchInstFuel globals ctx fuel ec0 dom sp =
   let
     ec = ecBump ec0 "elab.inst.search"
   in if fuel <= 0 then
-    let
-      sd = showResolvedValue ec dom
-    in tcErr1 sp (InstanceSearchExhausted sd) sd
+    exhaustedInstance ec dom sp
   else
     let
       _ = log! "debug" "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInstList ec)}"
@@ -89,7 +92,9 @@ searchInstFuel globals ctx fuel ec0 dom sp =
                     OkC Nothing =>
                       let
                         blanket = matchInstances globals ctx fuel specific.scanEc dom sp (blanketInstances (searchCandidates ec dom)) []
-                      in finishInstanceSearch dom sp blanket.scanMatches blanket.scanEc
+                      in case blanket.scanMatches of
+                        [] => if specific.scanExhausted || blanket.scanExhausted then exhaustedInstance specific.scanEc dom sp else missingInstance specific.scanEc dom sp
+                        matches => finishInstanceSearch dom sp matches blanket.scanEc
                     ErrC e => ErrC e
                 matches => finishInstanceSearch dom sp matches specific.scanEc
 
@@ -263,6 +268,13 @@ missingInstance ec dom sp =
   else
     tcErr1 sp (NoInstanceFound sd) sd
 
+-- 深度预算耗尽：与「没有候选 / 候选都不匹配」区分开，不落到 `TC_NoInstanceFound`。
+exhaustedInstance : Ec -> Value -> Span -> Check a
+exhaustedInstance ec dom sp =
+  let
+    sd = showResolvedValue ec dom
+  in tcErr1 sp (InstanceSearchExhausted sd) sd
+
 -- 诊断用：把值按当前解渲染成类型文本。`showValue` 不解元变量，会把已解出的类型显示成
 -- `?N`（插值缺实例时最需要的是真实类型名，例如 `Foo`）。
 showResolvedValue : Ec -> Value -> String
@@ -372,37 +384,48 @@ allInstancesMono (i :: rest) = if isMonoInst i then allInstancesMono rest else F
 --
 -- `scanEc` 只保留第一个命中候选推进后的 `Ec`：命中 ≥2 个时最终报歧义，候选结果不外泄；
 -- 一个都不命中时它就是入口 `Ec`，后续 via / blanket 阶段从同一状态继续。
+-- `scanExhausted` 记录是否有候选因深度预算耗尽被跳过——它不能和「候选都不匹配」混同。
 record InstScan where
   scanMatches : List InstMatch
   scanEc : Ec
+  scanExhausted : Bool
 
 matchInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> InstScan
 matchInstances globals ctx fuel ec dom sp insts acc =
-  scanInstances globals ctx fuel ec dom sp insts acc Nothing
+  scanInstances globals ctx fuel ec dom sp insts acc Nothing False
 
-scanInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Maybe Ec -> InstScan
-scanInstances globals ctx fuel ec dom sp [] acc hitEc =
+scanInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Maybe Ec -> Bool -> InstScan
+scanInstances globals ctx fuel ec dom sp [] acc hitEc exhausted =
   InstScan (reverse acc) (
       case hitEc of
         Just e => e
         Nothing => ec
-    )
-scanInstances globals ctx fuel ec dom sp (i :: rest) acc hitEc =
+    ) exhausted
+scanInstances globals ctx fuel ec dom sp (i :: rest) acc hitEc exhausted =
   case tryMatchInst globals ctx fuel ec i dom sp of
-    Just (term, ec1) =>
+    InstMatched term ec1 =>
       scanInstances globals ctx fuel ec dom sp rest (InstMatch i term :: acc) (
           case hitEc of
             Just e => Just e
             Nothing => Just ec1
-        )
-    Nothing => scanInstances globals ctx fuel ec dom sp rest acc hitEc
+        ) exhausted
+    InstMissed => scanInstances globals ctx fuel ec dom sp rest acc hitEc exhausted
+    InstOutOfFuel => scanInstances globals ctx fuel ec dom sp rest acc hitEc True
+
+-- 单个候选的匹配结果：结构性不匹配（跳过本候选）/ 命中 / 深度预算耗尽。
+data InstTry : Type where
+  InstMatched : Term -> Ec -> InstTry
+  InstMissed : InstTry
+  InstOutOfFuel : InstTry
 
 -- 单个候选：alloc tele metas → conv 结果头 → 读 tele 解 → 递归解 ctx → 组装
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
-tryMatchInst : List (String, Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Term, Ec)
+-- 只有「头不统一 / tele 解不出 / ctx 确实没有实例」才是跳过；深度耗尽必须上传，
+-- 否则合法但很深的 ctx 链会被静默降级成缺实例。
+tryMatchInst : List (String, Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> InstTry
 tryMatchInst globals ctx fuel ec inst dom sp =
   if fuel <= 0 then
-    Nothing
+    InstOutOfFuel
   else
     case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
       (metas, ec1) =>
@@ -413,20 +436,21 @@ tryMatchInst globals ctx fuel ec inst dom sp =
           ErrC e =>
             let
               _ = log! "debug" "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
-            in Nothing
+            in InstMissed
           OkC sols2 =>
             let
               ec2 = ecPutSols ec1 (solsList sols2)
             in case solveTeleMetas ec2 metas of
-              Nothing => Nothing
+              Nothing => InstMissed
               Just solved =>
                 let
                   teleArgs = map (\v => (quote (ctxDepth ctx) (forceVal ec2 v), Rig0)) (reverse solved)
                   env2 = map (\v => forceVal ec2 v) solved
                   ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
                 in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
-                  Nothing => Nothing
-                  Just (dictArgs, ec3) => Just (foldAppTerms (TGlobal (dtInstSym inst)) (append teleArgs dictArgs), ec3)
+                  CtxSolved dictArgs ec3 => InstMatched (foldAppTerms (TGlobal (dtInstSym inst)) (append teleArgs dictArgs)) ec3
+                  CtxUnsolvable => InstMissed
+                  CtxOutOfFuel => InstOutOfFuel
 
 export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (String, Term) -> (List Int, Ec)
 allocTeleMetas msp ctx ec [] = ([], ec)
@@ -454,12 +478,24 @@ solveTeleMetas ec (m :: rest) =
         Nothing => Nothing
         Just vs => Just (v :: vs)
 
-solveDictCtxs : List (String, Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Term, Rig) -> Maybe (List (Term, Rig), Ec)
-solveDictCtxs globals ctx fuel ec sp [] acc = Just (reverse acc, ec)
+-- ctx 子目标逐个求解：全部解出 / 某个子目标确实没有实例（本候选跳过）/ 深度预算耗尽。
+-- 最后一种不能当成跳过：它是「还没算完」，不是「没有实例」（`TC_InstanceSearchExhausted`）。
+data CtxSolve : Type where
+  CtxSolved : List (Term, Rig) -> Ec -> CtxSolve
+  CtxUnsolvable : CtxSolve
+  CtxOutOfFuel : CtxSolve
+
+solveDictCtxs : List (String, Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Term, Rig) -> CtxSolve
+solveDictCtxs globals ctx fuel ec sp [] acc = CtxSolved (reverse acc) ec
 solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc =
   case searchInstFuel globals ctx fuel ec cv sp of
-    ErrC e => Nothing
+    ErrC d => if instOutOfFuelDiag d then CtxOutOfFuel else CtxUnsolvable
     OkC (t, ec1) => solveDictCtxs globals ctx fuel ec1 sp rest ((t, RigOmega) :: acc)
+
+-- 实例搜索用诊断码表达「深度预算耗尽」（code 的唯一真源是 `TcErr` 的 `tcCode`）。
+-- 候选 ctx 求解靠它把耗尽与「这条 ctx 没有实例」区分开，不另造一套耗尽标记。
+instOutOfFuelDiag : Diagnostic -> Bool
+instOutOfFuelDiag d = d.diagCode == tcCode (InstanceSearchExhausted "")
 
 -- 行成员约束：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
 -- 这些名字来自受信任的 Base.Effect.Core（见 effects.md §8）；编译器只认这三个头名。
@@ -1342,6 +1378,18 @@ firstUnsolvedMemberGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
 export firstUnsolvedDictGoal : Ec -> Maybe String
 firstUnsolvedDictGoal ec = firstUnsolvedDictGoalGo ec (ecPendingList ec)
 
+-- | 收尾「缺实例」的候选目标判据（类参数已解、非 Interp / 行成员、非刚性）：
+-- 收尾扫描与耗尽判定共用这一份，避免多处各写一条过滤链。
+isLeftoverDictGoal : Ec -> Value -> Bool
+isLeftoverDictGoal ec forced =
+  if valueDictFamily forced == dictTypeName interpTypeName then
+    False
+  else if isMemberDomain ec forced then
+    False
+  else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
+    False
+  else if isRigidDictArg ec forced then False else True
+
 firstUnsolvedDictGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedDictGoalGo ec [] = Nothing
 firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
@@ -1350,16 +1398,37 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
     Nothing =>
       let
         forced = forceVal ec dom
-      in if valueDictFamily forced == dictTypeName interpTypeName then
-        firstUnsolvedDictGoalGo ec rest
-      else if isMemberDomain ec forced then
-        firstUnsolvedDictGoalGo ec rest
-      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
-        firstUnsolvedDictGoalGo ec rest
-      else if isRigidDictArg ec forced then
-        firstUnsolvedDictGoalGo ec rest
-      else
+      in if isLeftoverDictGoal ec forced then
         Just (showResolvedValue ec forced)
+      else
+        firstUnsolvedDictGoalGo ec rest
+
+-- 收尾诊断：`firstUnsolvedDictGoal` 选中的那条延迟目标如果其实是**预算耗尽**而不是没实例，
+-- 给出那条 `TC_InstanceSearchExhausted`。判据是对该目标重跑一次实例搜索——这条路径只在
+-- 失败收尾时走一次，深度预算固定，结论确定；返回 Nothing 时调用方按缺实例报。
+export firstUnsolvedDictGoalExhausted : List (String, Term) -> Ec -> Maybe Diagnostic
+firstUnsolvedDictGoalExhausted globals ec =
+  firstUnsolvedDictGoalExhaustedGo globals ec (ecPendingList ec)
+
+firstUnsolvedDictGoalExhaustedGo : List (String, Term) -> Ec -> List Constraint -> Maybe Diagnostic
+firstUnsolvedDictGoalExhaustedGo globals ec [] = Nothing
+firstUnsolvedDictGoalExhaustedGo globals ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedDictGoalExhaustedGo globals ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if isLeftoverDictGoal ec forced then
+        let
+          gsp =
+            case cspan of
+              Just cs => cs
+              Nothing => Span "" 0 0 0 0 0 0
+        in case searchInstanceIn globals emptyCtx ec forced gsp of
+          ErrC d => if instOutOfFuelDiag d then Just d else Nothing
+          OkC _ => Nothing
+      else
+        firstUnsolvedDictGoalExhaustedGo globals ec rest
 
 -- 第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
@@ -1410,13 +1479,7 @@ firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
     Nothing =>
       let
         forced = forceVal ec dom
-      in if valueDictFamily forced == dictTypeName interpTypeName then
-        firstUnsolvedDictSpanGo ec rest
-      else if isMemberDomain ec forced then
-        firstUnsolvedDictSpanGo ec rest
-      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
-        firstUnsolvedDictSpanGo ec rest
-      else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan
+      in if isLeftoverDictGoal ec forced then cspan else firstUnsolvedDictSpanGo ec rest
 
 -- | 第一条未解字典目标对应的元变量 id（供创建点溯源；与 `firstUnsolvedDictGoal` 同一条）。
 export firstUnsolvedDictGoalMeta : Ec -> Maybe Int
@@ -1431,13 +1494,7 @@ firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest
     Nothing =>
       let
         forced = forceVal ec dom
-      in if valueDictFamily forced == dictTypeName interpTypeName then
-        firstUnsolvedDictGoalMetaGo ec rest
-      else if isMemberDomain ec forced then
-        firstUnsolvedDictGoalMetaGo ec rest
-      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
-        firstUnsolvedDictGoalMetaGo ec rest
-      else if isRigidDictArg ec forced then firstUnsolvedDictGoalMetaGo ec rest else Just m
+      in if isLeftoverDictGoal ec forced then Just m else firstUnsolvedDictGoalMetaGo ec rest
 
 -- ---------------------------------------------------------------
 -- 行弱化（Member 的 There 补证）
