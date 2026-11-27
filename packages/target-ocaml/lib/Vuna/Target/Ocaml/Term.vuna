@@ -370,6 +370,9 @@ let dtp_removeFile path =
 let dtp_fileExists path = Sys.file_exists path
 let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
 let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
+(* 解析符号链接与 `..`：与内核 realpath(3) 同口径；路径不存在 / 无权限时原样返回
+   入参（调用方只关心「同一目录的两种写法落到同一个字符串」）。 *)
+let dtp_realPath p = try Unix.realpath p with _ -> p
 (* POSIX shell 单引号转义（与 Filename.quote 同形：结束单引号 → 反斜杠转义引号 → 重开
    单引号）。不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
 let dtp_shell_quote s =
