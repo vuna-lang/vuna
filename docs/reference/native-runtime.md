@@ -297,8 +297,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   tag 在链外读一次进标量槽，链上每个分支只发 `cmp qword ptr [tag-slot], imm`（臂体
   会改写所有 caller-saved 寄存器，不能把 tag 留在寄存器里）。
 - 续延是**一次性**（one-shot）：resume 两次被 epoch 表拒绝；multi-shot 不做。顺序 effect
-  的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler 仍不支持
-  （gh#37）。
+  的栈深是常量（trampoline），不随 perform 次数增长；延迟 answer 的 handler（answer 是函数）
+  走 `runDetached` + `MkSeed` 快照恢复（[effect-machine.md](effect-machine.md) §9.7）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **多线程原语**：`clone` + futex 已实现（`thread_*` / `mutex*` / `condvar*` / `atomic*`），
   并行区用 **STW + safepoint** 回收（TCB 在 `%fs`、线程表、`saved_rsp` / park 协议、
@@ -315,8 +315,8 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   保守扫根，入口自带栈（105 的 9u7）：深递归不再依赖 `ulimit -s`，40 万层非尾递归由 9u7 锁定。
   整仓 `check .` 的成本与 selfhost / parity / corpus 读数见 [native-selfhost.md](native-selfhost.md)：
   尾调用（[native.md](native.md) §3）只覆盖
-  **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃自带栈；效应侧另有延迟 answer 的
-  handler 缺口（gh#37）。
+  **直接饱和直调**，非尾递归、被闭包包住的递归仍按帧吃自带栈；效应侧延迟 answer 的
+  handler 已由 `runDetached` 覆盖（[effect-machine.md](effect-machine.md) §9.7）。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
   [testing-checks.md](testing-checks.md)「后端自举 conformance」）。
 - **GC 的边界**：栈帧与卡片都按机器字保守判断；两代、非移动、不压缩。因此

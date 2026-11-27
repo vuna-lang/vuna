@@ -109,6 +109,8 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 - 宿主+用户组合在 wasm 默认引擎、native、OCaml 全部通过；
 - `106` 的顺序 perform 用默认栈通过（`-W max-wasm-stack` 不再需要放大）；
 - `efftwice` 仍报 continuation already resumed；
+- 延迟 answer 的库 handler（`handleState`）三端逐字一致：`effect_common/108_eff_answer_fn`、
+  `pure_cross/97_eff_state_answer_fn`（机制见 §9.7）；
 - 三端 `effect-common` 输出一致，浏览器 smoke `114` / `115` 通过。
 
 ## 7. 采用方案 A：控制栈 + 统一 `Control` 返回
@@ -545,3 +547,28 @@ W1 / W2 / W4 / W3.0 / W3.1 已落地；W5 评估后删除（见下）。
   「每次转移都是一次循环迭代」（`apply` 用尾调用），这一点在 native/OCaml 上更容易做到。
 - 已完成的部分可直接复用：closure/CPS lowering（`mCps`、`mEffContLambda`、
   `mStripErase`）、cleanup 退出钩子、answer/frame 生命周期规则。
+
+### 9.7 延迟 answer（answer 是函数）
+
+`handleState` 这类库 handler 的 answer 是函数（`b = s -> Pair a s`）：`ret` / `opH` 各多出
+一个「等待 state」的参数，clause 返回答案函数，真正的 `resume` 发生在 `MkHandle` 返回、
+答案函数被调用点应用时。机器按下面的约定支持它（三端同一份代码）：
+
+- **clause 形状**：lowering（`Ir.Cps.mHandlerFun`）把前两个运行时参数（op、resumption）
+  留在协议层，resumption 之后的参数收进内层 lambda；外层仍是
+  `(op, k, kDone, runScoped)` 四参。答案函数用 `kDone` 包成 `MkKDone`，机器照常弹帧、
+  把答案函数交给 `kOuter`。
+- **恢复快照**：`MkPerform` 的 resume 闭包返回 `MkSeed st (MkResume …)`。
+  `MkSeed` 携带机器状态快照（`msFrames` / epoch / 续延槽），但不带 `msCtx`——答案函数
+  逃逸之后，产生它的那段 resume 已经结束，外层 ctx 栈已经消费。
+- **恢复入口**：答案函数里的 resumption `k v a1 … an` 被 lowering 改写成
+  `runDetached (k v (MkRestCont (\r -> kDone (r a1 … an))))`；`runDetached` 用快照重新
+  跑 `runGo`，段答案先应用到答案参数，再交回机器。普通 Control（无 `MkSeed`）退化成
+  `machineRun`。
+- **边界**：one-shot 由线性 `Cont` 在用量检查阶段拒绝；答案函数是普通值，逃逸后被应用
+  两次会各自从同一个快照重跑（机器层没有跨应用的可变 epoch 槽），这是机器路径与
+  `Effect.Deep` 的唯一语义差异。answer 是「函数且函数体返回 `Eff`」（两层延迟）不在
+  支持面——内层 lambda 按直接风格生成，不重新 CPS。
+
+夹具：`effect_common/108_eff_answer_fn`（`main : Eff [] Int`）与
+`pure_cross/97_eff_state_answer_fn`（`main : Int`），三端共享 golden。

@@ -402,6 +402,8 @@ export data Rest v(..) : Type where
   MkRestTail : Rest v
   MkRestCont : (v -> Control v) -> Rest v
 
+-- | 机器控制值。`MkSeed` 带一份机器状态快照：延迟 answer 的 handler 在 `MkHandle`
+-- 返回之后才恢复续延，恢复点已经没有外层循环，由 `runDetached` 用快照重新驱动。
 export data Control v(..) : Type where
   MkDone : v -> Control v
   MkApply : (v -> Control v) -> v -> Control v
@@ -410,6 +412,7 @@ export data Control v(..) : Type where
   MkSelf : (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkPushCleanup : Cleanup -> (v -> Control v) -> Control v
   MkPopCleanup : (v -> Control v) -> Control v
+  MkSeed : MSt v -> Control v -> Control v
   MkReturn : Frame v -> v -> Control v
   MkKDone : Frame v -> v -> Control v
   MkResume : Frame v -> (v -> Control v) -> Int -> Int -> v -> Rest v -> Control v
@@ -620,12 +623,14 @@ runGo fuel st c =
   else
     case c of
       MkDone v => v
+      MkSeed _ c1 => runGo (fuel - 1) st c1
       _ =>
         case step fuel st c of
           (st1, c1) => runGo (fuel - 1) st1 c1
 
 step : Int -> MSt ObjTy -> Control ObjTy -> (MSt ObjTy, Control ObjTy)
 step fuel st (MkDone v) = (st, MkDone v)
+step fuel st (MkSeed _ c) = (st, c)
 step fuel st (MkApply k v) = (st, k v)
 step fuel st (MkPushCleanup cc k) =
   (MSt
@@ -694,10 +699,11 @@ step fuel st (MkPerform key name op k) =
             _ :: _ => st.msNext
             [] => st.msNext + 1
         epoch = st.msEpoch + 1
-      in (MSt st.msFrames st.msCtx st.msUsed next free epoch st.msCleanups st.msCleanDepth,
+        st1 = MSt st.msFrames st.msCtx st.msUsed next free epoch st.msCleanups st.msCleanDepth
+      in (st1,
         (frameOpH frame)
           op
-          (\v => \rest => MkResume frame k slot epoch v rest)
+          (\v => \rest => MkSeed st1 (MkResume frame k slot epoch v rest))
           (\r => MkKDone frame r)
           (\th => machineScoped (fuel - 1) st frame th))
 step fuel st (MkSelf th k) =
@@ -813,3 +819,15 @@ dropCleanups fuel depth cs d =
 -- | 入口：空状态跑到 Done。
 export machineRun : Control ObjTy -> ObjTy
 machineRun c = runGo 1000000000 emptySt c
+
+-- | 延迟 answer 的恢复入口：clause 返回的 answer 是函数（`MkHandle` 返回之后才应用），
+-- 应用点已经没有外层循环，所以按 `MkSeed` 里的快照重新驱动续延。快照里的 `msCtx` 清空：
+-- answer 函数逃逸之后，产生它的那段 resume 已经结束，外层的 ctx 栈已经消费。
+-- 普通 `Control`（没有 `MkSeed`）退化成 `machineRun`。
+export runDetached : Control ObjTy -> ObjTy
+runDetached (MkSeed st c1) =
+  runGo
+    1000000000
+    (MSt st.msFrames Nothing st.msUsed st.msNext st.msFree st.msEpoch st.msCleanups st.msCleanDepth)
+    c1
+runDetached c = machineRun c
