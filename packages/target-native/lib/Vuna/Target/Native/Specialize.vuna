@@ -70,21 +70,121 @@ freeVarsAltMaybe _ Nothing = []
 freeVarsAltMaybe env (Just alt) = freeVarsAlt env alt
 
 -- ---------------------------------------------------------------
+-- 结构指纹（去重键与自递归改写共用）
+-- ---------------------------------------------------------------
+--
+-- 特化按「实参指纹」判断两个调用点拿到的是不是同一个值：去重键、以及克隆体里
+-- 自递归能否改指克隆，都只靠键相等。因此指纹必须对**所有**参与替换的闭合值可
+-- 区分——键相等 ⇒ 值相同。只按 binder 身份记 lambda 是不够的：同一个 lambda 节点
+-- 在不同克隆里被替换成不同闭合值后（`\i => f (Succ i)` 逐层嵌套），binder 仍在同一
+-- 位置，键会相撞，克隆被复用到别的值上（`Vec.tabulate` 的下标从第二个元素起就错）。
+-- 这里编码整棵 IR 的结构；`wrapKey` 给出长度前缀，拼接后不会产生歧义。
+-- `IrApp` 的类型槽不进键：`rewriteSelf` 用 `Synthetic.applyAllIr` 重建调用时会把它
+-- 归一成 `Nothing`，键必须对这种重建稳定，否则克隆体里的自递归认不出自己、白多建克隆。
+wrapKey : String -> String
+wrapKey s = strFromInt (strLength s) ++ ":" ++ s
+
+-- | 完整结构指纹：同一份 IR 得到同一串，不同结构得到不同串。
+irKey : Ir -> String
+irKey ir = wrapKey (irKeyBody ir)
+
+irKeyBody : Ir -> String
+irKeyBody (IrVar b) = "v" ++ binderKey b
+irKeyBody (IrGlobal n) = "g" ++ wrapKey n
+irKeyBody (IrCtor fam ctor ty args) =
+  "c" ++ wrapKey fam ++ wrapKey ctor ++ tyListKey ty ++ irsKey args
+irKeyBody (IrRecord fam ty fields) = "d" ++ wrapKey fam ++ tyKey ty ++ fieldsKey fields
+irKeyBody (IrProj base fam field ty) = "j" ++ irKey base ++ wrapKey fam ++ wrapKey field ++ tyKey ty
+irKeyBody (IrRecUpd base fam fields ty) =
+  "u" ++ irKey base ++ wrapKey fam ++ fieldsKey fields ++ tyKey ty
+irKeyBody (IrRt s) = "t" ++ wrapKey s
+irKeyBody (IrRtApp s args) = "T" ++ wrapKey s ++ irsKey args
+irKeyBody (IrCast from to inner) = "C" ++ tyKey from ++ tyKey to ++ irKey inner
+irKeyBody (IrInt n) = "i" ++ wrapKey (strFromInt n)
+irKeyBody (IrStr s) = "s" ++ wrapKey s
+irKeyBody (IrBool b) = if b then "B1" else "B0"
+irKeyBody (IrFloatLit s) = "f" ++ wrapKey s
+irKeyBody (IrLet bs scrut body) = "l" ++ bindersKey bs ++ irKey scrut ++ irKey body
+irKeyBody (IrLam bs ty body) = "L" ++ bindersKey bs ++ tyKey ty ++ irKey body
+irKeyBody (IrApp _ f a) = "a" ++ irKey f ++ irKey a
+irKeyBody (IrTail inner) = "e" ++ irKey inner
+irKeyBody (IrIf c t e) = "I" ++ irKey c ++ irKey t ++ irKey e
+irKeyBody (IrCase sty rty scrut alts) = "K" ++ tyKey sty ++ tyKey rty ++ irKey scrut ++ altsKey alts
+irKeyBody (IrNatCase scrut fresh z s c) =
+  "N"
+    ++ irKey scrut ++ wrapKey (strFromInt fresh) ++ altMaybeKey z ++ altMaybeKey s ++ altMaybeKey c
+irKeyBody (IrConcatMany parts) = "y" ++ irsKey parts
+irKeyBody (IrEffThunk fam ctor ty arity prim) =
+  "h" ++ wrapKey fam ++ wrapKey ctor ++ tyKey (Just ty) ++ wrapKey (strFromInt arity) ++ irKey prim
+irKeyBody (IrEffBind fam ctor ty) = "b" ++ wrapKey fam ++ wrapKey ctor ++ tyKey (Just ty)
+
+-- 子键序列：`0` = 空，`1` = 非空；每个元素键自带长度前缀，拼接无歧义。
+irsKey : List Ir -> String
+irsKey [] = "0"
+irsKey (x :: rest) = "1" ++ irKey x ++ irsKey rest
+
+fieldsKey : List (String, Ir) -> String
+fieldsKey [] = "0"
+fieldsKey (p :: rest) = "1" ++ wrapKey (firstOf p) ++ irKey (secondOf p) ++ fieldsKey rest
+
+altsKey : List IrAlt -> String
+altsKey [] = "0"
+altsKey (a :: rest) = "1" ++ altKey a ++ altsKey rest
+
+binderKey : IrBinder -> String
+binderKey b =
+  wrapKey (strFromInt b.irBinderId) ++ (if b.irBinderErased then "e" else "r") ++ tyKey b.irBinderTy
+
+bindersKey : List IrBinder -> String
+bindersKey [] = "0"
+bindersKey (b :: rest) = "1" ++ binderKey b ++ bindersKey rest
+
+altKey : IrAlt -> String
+altKey alt = wrapKey (ctorKeyOf alt.irAltCtor) ++ bindersKey alt.irAltBinders ++ irKey alt.irAltBody
+
+altMaybeKey : Maybe IrAlt -> String
+altMaybeKey Nothing = "0"
+altMaybeKey (Just alt) = "1" ++ altKey alt
+
+ctorKeyOf : Maybe (String, String) -> String
+ctorKeyOf Nothing = "0"
+ctorKeyOf (Just p) = "1" ++ wrapKey (firstOf p) ++ wrapKey (secondOf p)
+
+tyKey : Maybe IrTy -> String
+tyKey Nothing = "0"
+tyKey (Just t) = "1" ++ tyKey1 t
+
+tyListKey : Maybe (List IrTy) -> String
+tyListKey Nothing = "0"
+tyListKey (Just ts) = "1" ++ tysKey ts
+
+tysKey : List IrTy -> String
+tysKey [] = "0"
+tysKey (t :: rest) = "1" ++ tyKey1 t ++ tysKey rest
+
+tyKey1 : IrTy -> String
+tyKey1 (IrTyVar i) = "v" ++ wrapKey (strFromInt i)
+tyKey1 IrTyInt = "i"
+tyKey1 IrTyStr = "s"
+tyKey1 IrTyBool = "b"
+tyKey1 IrTyFloat = "f"
+tyKey1 IrTyOpaque = "o"
+tyKey1 (IrTyArray a) = "a" ++ wrapKey (tyKey1 a)
+tyKey1 (IrTyRef a) = "r" ++ wrapKey (tyKey1 a)
+tyKey1 (IrTyData n args) = "d" ++ wrapKey n ++ tysKey args
+tyKey1 (IrTyFun d c) = "F" ++ wrapKey (tyKey1 d) ++ wrapKey (tyKey1 c)
+
+-- ---------------------------------------------------------------
 -- 已知的闭合函数值
 -- ---------------------------------------------------------------
--- | 一个实参是不是「静态已知的闭合函数值」，是则返回它的指纹（克隆去重用）。
---   指纹只由 binder 身份与名字构成：同一个 lambda 节点（含克隆里被复制的同一份）指纹相同，
---   不同 site 的两个 lambda 指纹不同（各自克隆，互不干扰）。
+-- | 一个实参是不是「静态已知的闭合函数值」，是则返回它的结构指纹（克隆去重用）。
+--   指纹见 `irKey`：同一个值（含克隆里被复制的同一份）指纹相同，结构不同则指纹不同。
 fnKeyOf : List IrDef -> Ir -> Maybe String
 fnKeyOf defs ir =
   case ir of
-    IrGlobal n => if existsDef n defs then Just ("g:" ++ n) else Nothing
-    IrRt s => Just ("r:" ++ s)
-    IrLam bs _ body =>
-      if isEmptyList (freeVarsIn (idsOf bs) body) then
-        Just ("l:" ++ join "," (map strFromInt (idsOf bs)))
-      else
-        Nothing
+    IrGlobal n => if existsDef n defs then Just (irKey ir) else Nothing
+    IrRt s => Just (irKey ir)
+    IrLam bs _ body => if isEmptyList (freeVarsIn (idsOf bs) body) then Just (irKey ir) else Nothing
     -- 已知顶层定义的**部分应用**（`mk k`）：把形参换成它之后，体里对形参的饱和应用
     -- 会经 `flattenApp` 合到同一 head 上，再交给调用点内联。只收闭合的部分应用：
     -- 克隆是独立的顶层函数，把调用方的局部 binder 搬进去会变成未绑定。
@@ -98,7 +198,7 @@ fnKeyOf defs ir =
               let
                 args = secondOf p
               in if not (isEmptyList args) && length args < arity && allSimpleArg args && isEmptyList (freeVarsOf ir) then
-                Just ("p:" ++ n ++ "[" ++ join "," (map argKey args) ++ "]")
+                Just (irKey ir)
               else
                 Nothing
             Nothing => Nothing
@@ -305,18 +405,7 @@ dropRuntimeGo pos (b :: rest) =
 
 callKeyAt : Int -> List Ir -> Maybe String
 callKeyAt _ [] = Nothing
-callKeyAt pos (a :: rest) = if pos <= 0 then Just (argKey a) else callKeyAt (pos - 1) rest
-
--- | 自递归改写用的实参指纹（与实际去重键同口径）。
-argKey : Ir -> String
-argKey (IrGlobal n) = "g:" ++ n
-argKey (IrRt s) = "r:" ++ s
-argKey (IrLam bs _ _) = "l:" ++ join "," (map strFromInt (idsOf bs))
-argKey (IrVar b) = "v:" ++ strFromInt b.irBinderId
-argKey (IrInt n) = "i:" ++ strFromInt n
-argKey (IrBool b) = if b then "b:1" else "b:0"
-argKey (IrApp _ f a) = "a:" ++ argKey f ++ "(" ++ argKey a ++ ")"
-argKey _ = "?"
+callKeyAt pos (a :: rest) = if pos <= 0 then Just (irKey a) else callKeyAt (pos - 1) rest
 
 isEmptyList : List a -> Bool
 isEmptyList [] = True
@@ -404,7 +493,7 @@ specializeCall st name args =
                       sub = secondOf hit
                       bId = firstOf sub
                       arg = secondOf sub
-                      key = name ++ "@" ++ strFromInt pos ++ "@" ++ argKey arg
+                      key = name ++ "@" ++ strFromInt pos ++ "@" ++ irKey arg
                     in case lookupClone key st.spClones of
                       Just cn => Just (cn, pos, st)
                       Nothing =>
@@ -414,7 +503,7 @@ specializeCall st name args =
                           let
                             cn = name ++ "$s" ++ strFromInt st.spNext
                             body1 = substIr bId arg inner
-                            body2 = rewriteSelf (64 + 8 * irSize body1) name cn pos (argKey arg) body1
+                            body2 = rewriteSelf (64 + 8 * irSize body1) name cn pos (irKey arg) body1
                             -- 被特化的形参已经替换进体里：克隆**不再接收**它，
                             -- 调用点也把那个实参丢掉（它是静态函数值，求值无副作用）。
                             cloneBs = dropRuntimeBinderAt pos bs

@@ -1,0 +1,27 @@
+-- Vec.tabulate 的闭包 lambda 走 native 高阶特化：递归里每个元素拿到的是不同的闭合
+-- 闭包（`\i => f (FSucc i)` 逐层嵌套），特化不得把这些值当成同一个而复用克隆；
+-- 键相撞会让下标从第二个元素起全部算成 1。
+import Base.Data.Fin
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
+import Base.Data.List
+
+sumFin : {n : Nat} -> List (Fin n) -> Int -> Int
+sumFin fs acc =
+  case fs of
+    [] => acc
+    f :: rest => sumFin rest (acc + natToInt (finToNat f))
+
+sumNat : List Nat -> Int -> Int
+sumNat ns acc =
+  case ns of
+    [] => acc
+    x :: rest => sumNat rest (acc + natToInt x)
+
+main : Int
+main =
+  let
+    n = natFromInt 10
+    fs = vecToList (Vec.tabulate n (\i => i))
+    ns = vecToList (Vec.tabulate n (\i => finToNat i))
+  in sumFin fs 0 * 100 + sumNat ns 0
