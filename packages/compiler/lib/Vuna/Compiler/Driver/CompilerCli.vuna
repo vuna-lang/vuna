@@ -988,17 +988,24 @@ checkMembersByLevel fuel pending memberNames done code o =
   if length pending == 0 then
     pure (code, o)
   else if fuel <= 0 then
-    checkMembersParallel pending code o
+    memberCycleError o
   else
     let
       ready = filter (\p => depsReady memberNames done p) pending
       rest = filter (\p => not (depsReady memberNames done p)) pending
     in if length ready == 0 then
-      checkMembersParallel pending code o
+      memberCycleError o
     else
       do
         r <- checkMembersParallel ready code o
         checkMembersByLevel (fuel - 1) rest memberNames (append done (map packageName ready)) (firstOf r) (secondOf r)
+
+-- 成员依赖图成环 / 没有可运行层：显式失败，不再一次全起（loader 已拒环，这里是防御）。
+memberCycleError : Member nConsole ConsoleOp r => CliOpts -> Eff r (Int, CliOpts)
+memberCycleError o =
+  do
+    _ <- consoleEprint "error: workspace member dependency cycle: no runnable level\n"
+    pure (2, o)
 
 -- 依赖的成员包是否都已检查完；不在成员列表里的依赖（外部路径）视为已满足。
 depsReady : List String -> List String -> Package -> Bool
