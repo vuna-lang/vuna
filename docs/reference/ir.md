@@ -290,6 +290,13 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 - 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Lowering.Checks`，由
   `Lowering.Program` 调用），因此诊断文本与顺序不变。
 
+## 结构遍历的无 catch-all 约束
+
+`Ir.Model.irChildren` / `irSizeChildren`、`Ir.Validate.scopedChildren`、`Ir.Represent.representIr`
+是泛型遍历的地基：它们显式列出全部 `Ir` 构造子（叶子逐条写 `[]` / `0` / 原样返回），
+不用 `_` 兜底。新增 `Ir` 构造子时这些定义会编译失败，必须一起决定它的子节点、规模、
+作用域与表示改写。各机器 pass 的遍历按同一判据逐步补齐。
+
 ## pass 表与观测
 
 - 名字、层、kind 与顺序声明在 `Vuna.Ir.Passes`（`PassSpec`，纯数据，不把函数放进记录）；

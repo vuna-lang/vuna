@@ -422,7 +422,14 @@ scopedChildren scope (IrNatCase scrut fresh zero succ catch) =
 scopedChildren scope (IrConcatMany parts) = map (\a => (scope, a)) parts
 scopedChildren scope (IrEffThunk family ctor unitTy arity prim) = [(scope, prim)]
 scopedChildren scope (IrTail inner) = [(scope, inner)]
-scopedChildren scope _ = []
+scopedChildren scope (IrVar b) = []
+scopedChildren scope (IrGlobal name) = []
+scopedChildren scope (IrRt sym) = []
+scopedChildren scope (IrInt n) = []
+scopedChildren scope (IrStr s) = []
+scopedChildren scope (IrBool b) = []
+scopedChildren scope (IrFloatLit raw) = []
+scopedChildren scope (IrEffBind family ctor unitTy) = []
 
 maybeAlts : Maybe IrAlt -> List IrAlt
 maybeAlts Nothing = []

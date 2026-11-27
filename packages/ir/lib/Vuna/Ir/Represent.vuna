@@ -69,7 +69,14 @@ representIr shared (IrNatCase scrut fresh zero succ catch) =
 representIr shared (IrConcatMany parts) = IrConcatMany (map (representIr shared) parts)
 representIr shared (IrEffThunk family ctor unitTy arity prim) =
   IrEffThunk family ctor unitTy arity (representIr shared prim)
-representIr shared ir = ir
+representIr shared (IrVar b) = IrVar b
+representIr shared (IrGlobal name) = IrGlobal name
+representIr shared (IrRt sym) = IrRt sym
+representIr shared (IrInt n) = IrInt n
+representIr shared (IrStr s) = IrStr s
+representIr shared (IrBool b) = IrBool b
+representIr shared (IrFloatLit raw) = IrFloatLit raw
+representIr shared (IrEffBind family ctor unitTy) = IrEffBind family ctor unitTy
 
 -- 单构造子去装箱族的 case → `let`：分支 binder 表就是完整 telescope，体的下标不变。
 representCase : IrShared -> Maybe IrTy -> Maybe IrTy -> Ir -> List IrAlt -> Ir

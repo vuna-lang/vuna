@@ -564,7 +564,14 @@ irChildren (IrNatCase scrut fresh zero succ catch) =
 irChildren (IrConcatMany parts) = parts
 irChildren (IrEffThunk family ctor unitTy arity prim) = [prim]
 irChildren (IrTail inner) = [inner]
-irChildren _ = []
+irChildren (IrVar _) = []
+irChildren (IrGlobal _) = []
+irChildren (IrRt _) = []
+irChildren (IrInt _) = []
+irChildren (IrStr _) = []
+irChildren (IrBool _) = []
+irChildren (IrFloatLit _) = []
+irChildren (IrEffBind _ _ _) = []
 
 altBodies : List IrAlt -> List Ir
 altBodies [] = []
@@ -631,7 +638,14 @@ irSizeChildren (IrNatCase scrut fresh zero succ catch) =
   irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
 irSizeChildren (IrConcatMany parts) = irSizeList parts
 irSizeChildren (IrEffThunk family ctor unitTy arity prim) = irSize prim
-irSizeChildren _ = 0
+irSizeChildren (IrVar _) = 0
+irSizeChildren (IrGlobal _) = 0
+irSizeChildren (IrRt _) = 0
+irSizeChildren (IrInt _) = 0
+irSizeChildren (IrStr _) = 0
+irSizeChildren (IrBool _) = 0
+irSizeChildren (IrFloatLit _) = 0
+irSizeChildren (IrEffBind _ _ _) = 0
 
 export irSizeList : List Ir -> Int
 irSizeList [] = 0
