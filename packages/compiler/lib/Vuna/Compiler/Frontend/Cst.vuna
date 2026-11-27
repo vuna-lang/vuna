@@ -484,10 +484,17 @@ export nodeKind : CstNode -> Maybe CstKind
 nodeKind (CstLeaf _) = Nothing
 nodeKind (CstBranch k _ _ _ _ _) = Just k
 
--- | 节点的 children；叶节点为空列表。
+-- | 字节投影的 children：只走主树。`collectLeaves` / 渲染 / `AstView` 用这一份，
+-- 模板洞的子树由 `TTmpl` 叶覆盖，重复下降会让字节还原不成立。
 export nodeChildren : CstNode -> List CstNode
 nodeChildren (CstLeaf _) = []
 nodeChildren (CstBranch _ _ _ _ _ kids) = kids
+
+-- | 节点投影的 children：主树 children 再追加模板洞子树。节点身份 / 载荷 / 表面事实 /
+-- 宏调用 / 索引用这一份；洞内节点（id < 0）因此能被 `nodeIndex` 查到。
+export nodeChildrenAll : CstNode -> List CstNode
+nodeChildrenAll (CstLeaf _) = []
+nodeChildrenAll (CstBranch _ _ _ surface _ kids) = append kids surface.cstHoleTrees
 
 -- | 叶 token；分支给 `Nothing`。
 export nodeToken : CstNode -> Maybe CstToken
@@ -836,10 +843,21 @@ export collectLeaves : CstNode -> List CstToken
 collectLeaves (CstLeaf t) = [t]
 collectLeaves (CstBranch _ _ _ _ _ kids) = concatMap collectLeaves kids
 
--- | 先序的分支节点表（id → 节点）。
+-- | 先序的分支节点表（id → 节点）。走节点投影（含模板洞子树），与 `cstIndexOf` /
+-- `factsGo` 的范围一致。
 nodeTable : CstNode -> List (Int, CstNode)
-nodeTable (CstLeaf _) = []
-nodeTable (n@(CstBranch _ nid _ _ _ kids)) = (nid, n) :: concatMap nodeTable kids
+nodeTable n = nodeTableAt 1000000 n
+
+-- 洞子树挂在 surface 里而不是构造子字段，SCT 看不到结构下降；用显式 fuel（树深度上界
+-- 远小于 10^6，合法输入不可达）。
+nodeTableAt : Int -> CstNode -> List (Int, CstNode)
+nodeTableAt fuel node =
+  if fuel <= 0 then
+    []
+  else
+    case node of
+      CstLeaf _ => []
+      CstBranch _ nid _ surface _ kids => (nid, node) :: append (concatMap (nodeTableAt (fuel - 1)) kids) (concatMap (nodeTableAt (fuel - 1)) surface.cstHoleTrees)
 
 -- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
 -- 而不是再按区间比较。
@@ -954,6 +972,8 @@ renderCstTree (CstBranch _ _ _ _ _ kids) = strConcatMany (map renderCstTree kids
 -- | 树上 kind 满足 `keep` 的条目节点（先序）：给出 `(id, span)`。
 --
 -- 锚点集合就是渲染器的挂载点；注释归属按节点 id 查槽，顺序无关（调用方会按起点排序）。
+-- | 注释锚点投影：只走主树。洞内注释在词法阶段随 trivia 丢弃（`Lexer` 的已知边界），
+-- 洞内节点没有可挂的注释；这不是遗漏，与 `nodeChildren` 同口径。
 export anchorRefsOfTree : (CstKind -> Bool) -> CstNode -> List (Int, Span)
 anchorRefsOfTree keep (CstLeaf _) = []
 anchorRefsOfTree keep (CstBranch kind nid sp _ _ kids) =
