@@ -34,6 +34,12 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
   `handleCore*` / `handleWith*` 的调用换成 `*Id` 变体，并把路由串 `(key, name)` 的
   `effectId` 实参插进去（字面量在编译期折成整数，其余留给运行时）。机器与 OCaml
   运行时的 handler 匹配因此只比整数；源码层入口仍是 String。
+- **OCaml 目标直接风格化（`Ir.Direct`）**：`Eff` 在 OCaml 目标层仍是 thunk，但 do 链不必
+  每段一个：pass 识别 Lowering 展开后的 bind 形状
+  `\e k -> MkEff (\u -> case e of MkEff a => case (k (a u)) of MkEff b => b u)`，把
+  「运行动作」的语义下沉成单个 token 传递（`run (MkEff (\u -> body)) t = body[u:=t]`，
+  并推进 `let`/`case`/`if` 分支）。一条 do 链因此合成一个 thunk；binder 名在 def 末尾按
+  id 唯一化，避免融合后遮蔽。只作用于 OCaml 路径，native / wasm 的 CPS 形态不变。
 - **CPS lowering（native / wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
   `prim_effect*` 换成 `@ir@cps@*`。末尾把 `case e of MkEff f` 统一规范化成
