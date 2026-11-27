@@ -51,9 +51,11 @@ jobs:
       eval: true
       # 必须是「整数 + 单位」：`1.5G` 不被 action 解析，会被当成没设上限（日志
       # `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
-      # pr 的 store 因此一路涨到 8.5G、restore 91s。真实闭包约 1.5G（`pr` 三个 check
-      # 各 1.08G，共享 nixpkgs 部分），3G 留出工具链与一次构建的余量。
-      cache-size: 3G
+      # pr 的 store 因此一路涨到 8.5G、restore 91s。
+      # 上限要盖住整个 store 而不是「真实闭包」：gc 只保根闭包，工具链是构建输入，
+      # 上限一触发就把它删掉（实测登记 GC root 也没兜住，见 _check.yml 的预热步）；
+      # pr 的 store 实测 3.5G，取 6G 与分片同口径，正常情况不触发 gc。
+      cache-size: 6G
       save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
   # main push 的完整 suite 层（fast+integration）：PR 只跑命中的 area 切片
