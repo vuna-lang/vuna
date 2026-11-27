@@ -140,7 +140,11 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
   工具链（`vuna` / seed / 插件）是 check 的**构建输入**、不在输出引用里，上限太小会在 save
   前把它们当垃圾删掉，下一个 job 只能从头重编（实测 ~2 min/片）。
 - 工具链在 check 之前用 `--max-jobs 4 --cores 1` 预热：这些包彼此独立、单包单线程，
-  默认 `--max-jobs 1` 会串行编两分钟。
+  默认 `--max-jobs 1` 会串行编两分钟（串行链 = seed 15s → compiler 30s → toolchain 34s
+  → dev 28s）。
+- `cache-size` 必须是「整数 + 单位」：`1.5G` 这类小数不被 cache action 解析，等价于没设
+  上限（日志 `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
+  store 只涨不落——`pr` 组曾因此涨到 8.5G、restore 91s。
 - gate / e2e 各拆成 4 个 matrix shard（`--shard i/4`，同一个 `nix-suite` cache 前缀）：
   每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。
 - 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
