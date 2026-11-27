@@ -325,14 +325,20 @@ let v_typeNamesOf = (fun (decls : t_Decl B_dData_dList.t_List) -> ((B_dData_dLis
 
 # 601 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_declDerivings = (fun (mc0 : t_Decl) -> (match mc0 with
-  | C_Decl_DRecord (dtb__323, dtb__324, dtb__325, dtb__326, dtb__327, dtb__328, dtb__329, dtb__330) -> dtb__326
-  | C_Decl_DData (dtb__331, dtb__332, dtb__333, dtb__334, dtb__335, dtb__336, dtb__337, dtb__338, dtb__339) -> dtb__335
-  | _ -> B_dData_dList.C_List_Nil
+  | C_Decl_DInstance (dtb__323, dtb__324, dtb__325, dtb__326) -> B_dData_dList.C_List_Nil
+  | C_Decl_DTrait (dtb__327, dtb__328, dtb__329, dtb__330, dtb__331) -> B_dData_dList.C_List_Nil
+  | C_Decl_DFun (dtb__332, dtb__333, dtb__334, dtb__335) -> B_dData_dList.C_List_Nil
+  | C_Decl_DSig (dtb__336, dtb__337, dtb__338, dtb__339) -> B_dData_dList.C_List_Nil
+  | C_Decl_DExtern (dtb__340, dtb__341, dtb__342, dtb__343) -> B_dData_dList.C_List_Nil
+  | C_Decl_DAxiom (dtb__344, dtb__345, dtb__346) -> B_dData_dList.C_List_Nil
+  | C_Decl_DRecord (dtb__347, dtb__348, dtb__349, dtb__350, dtb__351, dtb__352, dtb__353, dtb__354) -> dtb__350
+  | C_Decl_DData (dtb__355, dtb__356, dtb__357, dtb__358, dtb__359, dtb__360, dtb__361, dtb__362, dtb__363) -> dtb__359
+  | _ -> failwith "DT: impossible branch"
 ))
 
 # 16 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_nodeRefId = (fun (p : t_NodeRef) -> (match p with
-  | { f_NodeRef_nodeRefId = dtb__340; f_NodeRef_nodeRefSpan = dtb__341 } -> dtb__340
+  | { f_NodeRef_nodeRefId = dtb__364; f_NodeRef_nodeRefSpan = dtb__365 } -> dtb__364
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -341,7 +347,7 @@ let v_isSynthNodeRef = (fun (r : t_NodeRef) -> ((v_nodeRefId r) >= v_synthNodeId
 
 # 17 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_nodeRefSpan = (fun (p : t_NodeRef) -> (match p with
-  | { f_NodeRef_nodeRefId = dtb__342; f_NodeRef_nodeRefSpan = dtb__343 } -> dtb__343
+  | { f_NodeRef_nodeRefId = dtb__366; f_NodeRef_nodeRefSpan = dtb__367 } -> dtb__367
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -365,13 +371,13 @@ let v_modDeclSpan = (fun (m : t_ModDecl) -> (v_nodeRefSpan (m).f_ModDecl_modDecl
 
 # 311 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_patSpan = (fun (mc0 : t_Pat) -> (match mc0 with
-  | C_Pat_PRecord (dtb__344, dtb__345, dtb__346) -> (v_nodeRefSpan dtb__346)
-  | C_Pat_PStr (dtb__347, dtb__348) -> (v_nodeRefSpan dtb__348)
-  | C_Pat_PInt (dtb__349, dtb__350) -> (v_nodeRefSpan dtb__350)
-  | C_Pat_PCon (dtb__351, dtb__352, dtb__353) -> (v_nodeRefSpan dtb__353)
-  | C_Pat_PWild (dtb__354) -> (v_nodeRefSpan dtb__354)
-  | C_Pat_PAs (dtb__355, dtb__356, dtb__357) -> (v_nodeRefSpan dtb__357)
-  | C_Pat_PVar (dtb__358, dtb__359) -> (v_nodeRefSpan dtb__359)
+  | C_Pat_PRecord (dtb__368, dtb__369, dtb__370) -> (v_nodeRefSpan dtb__370)
+  | C_Pat_PStr (dtb__371, dtb__372) -> (v_nodeRefSpan dtb__372)
+  | C_Pat_PInt (dtb__373, dtb__374) -> (v_nodeRefSpan dtb__374)
+  | C_Pat_PCon (dtb__375, dtb__376, dtb__377) -> (v_nodeRefSpan dtb__377)
+  | C_Pat_PWild (dtb__378) -> (v_nodeRefSpan dtb__378)
+  | C_Pat_PAs (dtb__379, dtb__380, dtb__381) -> (v_nodeRefSpan dtb__381)
+  | C_Pat_PVar (dtb__382, dtb__383) -> (v_nodeRefSpan dtb__383)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -386,9 +392,9 @@ let v_withExprId = (fun (nid : int) (e : t_Expr) -> ((v_withExprRef { f_NodeRef_
 
 # 433 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_doStmtSpan = (fun (mc0 : t_DoStmt) -> (match mc0 with
-  | C_DoStmt_DLet (dtb__360, dtb__361) -> (v_nodeRefSpan dtb__361)
-  | C_DoStmt_DExpr (dtb__362, dtb__363) -> (v_nodeRefSpan dtb__363)
-  | C_DoStmt_DBind (dtb__364, dtb__365, dtb__366) -> (v_nodeRefSpan dtb__366)
+  | C_DoStmt_DLet (dtb__384, dtb__385) -> (v_nodeRefSpan dtb__385)
+  | C_DoStmt_DExpr (dtb__386, dtb__387) -> (v_nodeRefSpan dtb__387)
+  | C_DoStmt_DBind (dtb__388, dtb__389, dtb__390) -> (v_nodeRefSpan dtb__390)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -403,182 +409,182 @@ let v_exportItemSpan = (fun (item : t_ExportItem) -> (v_nodeRefSpan (v_exportIte
 
 # 53 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fieldName = (fun (p : t_Field) -> (match p with
-  | { f_Field_fieldName = dtb__367; f_Field_fieldType = dtb__368; f_Field_fieldRef = dtb__369 } -> dtb__367
+  | { f_Field_fieldName = dtb__391; f_Field_fieldType = dtb__392; f_Field_fieldRef = dtb__393 } -> dtb__391
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 54 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fieldType = (fun (p : t_Field) -> (match p with
-  | { f_Field_fieldName = dtb__370; f_Field_fieldType = dtb__371; f_Field_fieldRef = dtb__372 } -> dtb__371
+  | { f_Field_fieldName = dtb__394; f_Field_fieldType = dtb__395; f_Field_fieldRef = dtb__396 } -> dtb__395
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 55 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fieldRef = (fun (p : t_Field) -> (match p with
-  | { f_Field_fieldName = dtb__373; f_Field_fieldType = dtb__374; f_Field_fieldRef = dtb__375 } -> dtb__375
+  | { f_Field_fieldName = dtb__397; f_Field_fieldType = dtb__398; f_Field_fieldRef = dtb__399 } -> dtb__399
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 63 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_traitMethodName = (fun (p : t_TraitMethod) -> (match p with
-  | { f_TraitMethod_traitMethodName = dtb__376; f_TraitMethod_traitMethodType = dtb__377; f_TraitMethod_traitMethodRef = dtb__378 } -> dtb__376
+  | { f_TraitMethod_traitMethodName = dtb__400; f_TraitMethod_traitMethodType = dtb__401; f_TraitMethod_traitMethodRef = dtb__402 } -> dtb__400
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 64 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_traitMethodType = (fun (p : t_TraitMethod) -> (match p with
-  | { f_TraitMethod_traitMethodName = dtb__379; f_TraitMethod_traitMethodType = dtb__380; f_TraitMethod_traitMethodRef = dtb__381 } -> dtb__380
+  | { f_TraitMethod_traitMethodName = dtb__403; f_TraitMethod_traitMethodType = dtb__404; f_TraitMethod_traitMethodRef = dtb__405 } -> dtb__404
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 65 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_traitMethodRef = (fun (p : t_TraitMethod) -> (match p with
-  | { f_TraitMethod_traitMethodName = dtb__382; f_TraitMethod_traitMethodType = dtb__383; f_TraitMethod_traitMethodRef = dtb__384 } -> dtb__384
+  | { f_TraitMethod_traitMethodName = dtb__406; f_TraitMethod_traitMethodType = dtb__407; f_TraitMethod_traitMethodRef = dtb__408 } -> dtb__408
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 72 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_traitParamName = (fun (p : t_TraitParam) -> (match p with
-  | { f_TraitParam_traitParamName = dtb__385; f_TraitParam_traitParamKind = dtb__386 } -> dtb__385
+  | { f_TraitParam_traitParamName = dtb__409; f_TraitParam_traitParamKind = dtb__410 } -> dtb__409
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 73 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_traitParamKind = (fun (p : t_TraitParam) -> (match p with
-  | { f_TraitParam_traitParamName = dtb__387; f_TraitParam_traitParamKind = dtb__388 } -> dtb__388
+  | { f_TraitParam_traitParamName = dtb__411; f_TraitParam_traitParamKind = dtb__412 } -> dtb__412
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 118 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_lcPats = (fun (p : t_LocalClause) -> (match p with
-  | { f_LocalClause_lcPats = dtb__389; f_LocalClause_lcBody = dtb__390; f_LocalClause_lcRef = dtb__391; f_LocalClause_lcHead = dtb__392 } -> dtb__389
+  | { f_LocalClause_lcPats = dtb__413; f_LocalClause_lcBody = dtb__414; f_LocalClause_lcRef = dtb__415; f_LocalClause_lcHead = dtb__416 } -> dtb__413
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 119 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_lcBody = (fun (p : t_LocalClause) -> (match p with
-  | { f_LocalClause_lcPats = dtb__393; f_LocalClause_lcBody = dtb__394; f_LocalClause_lcRef = dtb__395; f_LocalClause_lcHead = dtb__396 } -> dtb__394
+  | { f_LocalClause_lcPats = dtb__417; f_LocalClause_lcBody = dtb__418; f_LocalClause_lcRef = dtb__419; f_LocalClause_lcHead = dtb__420 } -> dtb__418
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 120 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_lcRef = (fun (p : t_LocalClause) -> (match p with
-  | { f_LocalClause_lcPats = dtb__397; f_LocalClause_lcBody = dtb__398; f_LocalClause_lcRef = dtb__399; f_LocalClause_lcHead = dtb__400 } -> dtb__399
+  | { f_LocalClause_lcPats = dtb__421; f_LocalClause_lcBody = dtb__422; f_LocalClause_lcRef = dtb__423; f_LocalClause_lcHead = dtb__424 } -> dtb__423
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 121 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_lcHead = (fun (p : t_LocalClause) -> (match p with
-  | { f_LocalClause_lcPats = dtb__401; f_LocalClause_lcBody = dtb__402; f_LocalClause_lcRef = dtb__403; f_LocalClause_lcHead = dtb__404 } -> dtb__404
+  | { f_LocalClause_lcPats = dtb__425; f_LocalClause_lcBody = dtb__426; f_LocalClause_lcRef = dtb__427; f_LocalClause_lcHead = dtb__428 } -> dtb__428
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 126 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_altPat = (fun (p : t_Alt) -> (match p with
-  | { f_Alt_altPat = dtb__405; f_Alt_altBody = dtb__406; f_Alt_altRef = dtb__407 } -> dtb__405
+  | { f_Alt_altPat = dtb__429; f_Alt_altBody = dtb__430; f_Alt_altRef = dtb__431 } -> dtb__429
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 127 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_altBody = (fun (p : t_Alt) -> (match p with
-  | { f_Alt_altPat = dtb__408; f_Alt_altBody = dtb__409; f_Alt_altRef = dtb__410 } -> dtb__409
+  | { f_Alt_altPat = dtb__432; f_Alt_altBody = dtb__433; f_Alt_altRef = dtb__434 } -> dtb__433
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 128 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_altRef = (fun (p : t_Alt) -> (match p with
-  | { f_Alt_altPat = dtb__411; f_Alt_altBody = dtb__412; f_Alt_altRef = dtb__413 } -> dtb__413
+  | { f_Alt_altPat = dtb__435; f_Alt_altBody = dtb__436; f_Alt_altRef = dtb__437 } -> dtb__437
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 132 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sigType = (fun (p : t_BindingSig) -> (match p with
-  | { f_BindingSig_sigType = dtb__414; f_BindingSig_sigRef = dtb__415 } -> dtb__414
+  | { f_BindingSig_sigType = dtb__438; f_BindingSig_sigRef = dtb__439 } -> dtb__438
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 133 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sigRef = (fun (p : t_BindingSig) -> (match p with
-  | { f_BindingSig_sigType = dtb__416; f_BindingSig_sigRef = dtb__417 } -> dtb__417
+  | { f_BindingSig_sigType = dtb__440; f_BindingSig_sigRef = dtb__441 } -> dtb__441
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 144 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_bindPat = (fun (p : t_Binding) -> (match p with
-  | { f_Binding_bindPat = dtb__418; f_Binding_bindValue = dtb__419; f_Binding_bindSig = dtb__420; f_Binding_bindRef = dtb__421 } -> dtb__418
+  | { f_Binding_bindPat = dtb__442; f_Binding_bindValue = dtb__443; f_Binding_bindSig = dtb__444; f_Binding_bindRef = dtb__445 } -> dtb__442
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 145 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_bindValue = (fun (p : t_Binding) -> (match p with
-  | { f_Binding_bindPat = dtb__422; f_Binding_bindValue = dtb__423; f_Binding_bindSig = dtb__424; f_Binding_bindRef = dtb__425 } -> dtb__423
+  | { f_Binding_bindPat = dtb__446; f_Binding_bindValue = dtb__447; f_Binding_bindSig = dtb__448; f_Binding_bindRef = dtb__449 } -> dtb__447
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 146 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_bindSig = (fun (p : t_Binding) -> (match p with
-  | { f_Binding_bindPat = dtb__426; f_Binding_bindValue = dtb__427; f_Binding_bindSig = dtb__428; f_Binding_bindRef = dtb__429 } -> dtb__428
+  | { f_Binding_bindPat = dtb__450; f_Binding_bindValue = dtb__451; f_Binding_bindSig = dtb__452; f_Binding_bindRef = dtb__453 } -> dtb__452
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 147 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_bindRef = (fun (p : t_Binding) -> (match p with
-  | { f_Binding_bindPat = dtb__430; f_Binding_bindValue = dtb__431; f_Binding_bindSig = dtb__432; f_Binding_bindRef = dtb__433 } -> dtb__433
+  | { f_Binding_bindPat = dtb__454; f_Binding_bindValue = dtb__455; f_Binding_bindSig = dtb__456; f_Binding_bindRef = dtb__457 } -> dtb__457
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 188 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fixityOp = (fun (p : t_FixityDecl) -> (match p with
-  | { f_FixityDecl_fixityOp = dtb__434; f_FixityDecl_fixityLevel = dtb__435; f_FixityDecl_fixityAssoc = dtb__436; f_FixityDecl_fixityRef = dtb__437 } -> dtb__434
+  | { f_FixityDecl_fixityOp = dtb__458; f_FixityDecl_fixityLevel = dtb__459; f_FixityDecl_fixityAssoc = dtb__460; f_FixityDecl_fixityRef = dtb__461 } -> dtb__458
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 189 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fixityLevel = (fun (p : t_FixityDecl) -> (match p with
-  | { f_FixityDecl_fixityOp = dtb__438; f_FixityDecl_fixityLevel = dtb__439; f_FixityDecl_fixityAssoc = dtb__440; f_FixityDecl_fixityRef = dtb__441 } -> dtb__439
+  | { f_FixityDecl_fixityOp = dtb__462; f_FixityDecl_fixityLevel = dtb__463; f_FixityDecl_fixityAssoc = dtb__464; f_FixityDecl_fixityRef = dtb__465 } -> dtb__463
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 190 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fixityAssoc = (fun (p : t_FixityDecl) -> (match p with
-  | { f_FixityDecl_fixityOp = dtb__442; f_FixityDecl_fixityLevel = dtb__443; f_FixityDecl_fixityAssoc = dtb__444; f_FixityDecl_fixityRef = dtb__445 } -> dtb__444
+  | { f_FixityDecl_fixityOp = dtb__466; f_FixityDecl_fixityLevel = dtb__467; f_FixityDecl_fixityAssoc = dtb__468; f_FixityDecl_fixityRef = dtb__469 } -> dtb__468
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 191 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_fixityRef = (fun (p : t_FixityDecl) -> (match p with
-  | { f_FixityDecl_fixityOp = dtb__446; f_FixityDecl_fixityLevel = dtb__447; f_FixityDecl_fixityAssoc = dtb__448; f_FixityDecl_fixityRef = dtb__449 } -> dtb__449
+  | { f_FixityDecl_fixityOp = dtb__470; f_FixityDecl_fixityLevel = dtb__471; f_FixityDecl_fixityAssoc = dtb__472; f_FixityDecl_fixityRef = dtb__473 } -> dtb__473
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 204 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorName = (fun (p : t_Ctor) -> (match p with
-  | { f_Ctor_ctorName = dtb__450; f_Ctor_ctorType = dtb__451; f_Ctor_ctorArity = dtb__452; f_Ctor_ctorRef = dtb__453 } -> dtb__450
+  | { f_Ctor_ctorName = dtb__474; f_Ctor_ctorType = dtb__475; f_Ctor_ctorArity = dtb__476; f_Ctor_ctorRef = dtb__477 } -> dtb__474
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 526 "Vuna/Compiler/Frontend/Ast.vuna"
 let rec v_lookupCtorArity = (fun (mc0 : string) (mc1 : t_Ctor B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__454, dtb__455) -> (if ((v_ctorName dtb__454) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((dtb__454).f_Ctor_ctorArity)) else ((v_lookupCtorArity mc0) dtb__455))
+  | B_dData_dList.C_List__x58__x58_ (dtb__478, dtb__479) -> (if ((v_ctorName dtb__478) = mc0) then (B_dData_dMaybe.C_Maybe_Just ((dtb__478).f_Ctor_ctorArity)) else ((v_lookupCtorArity mc0) dtb__479))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 531 "Vuna/Compiler/Frontend/Ast.vuna"
 let rec v_declCtorArity = (fun (mc0 : string) (mc1 : t_Decl B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__456, dtb__457) -> (match dtb__456 with
-  | C_Decl_DData (dtb__458, dtb__459, dtb__460, dtb__461, dtb__462, dtb__463, dtb__464, dtb__465, dtb__466) -> (match ((v_lookupCtorArity mc0) dtb__461) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__467) -> (B_dData_dMaybe.C_Maybe_Just (dtb__467))
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_declCtorArity mc0) dtb__457)
+  | B_dData_dList.C_List__x58__x58_ (dtb__480, dtb__481) -> (match dtb__480 with
+  | C_Decl_DData (dtb__482, dtb__483, dtb__484, dtb__485, dtb__486, dtb__487, dtb__488, dtb__489, dtb__490) -> (match ((v_lookupCtorArity mc0) dtb__485) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__491) -> (B_dData_dMaybe.C_Maybe_Just (dtb__491))
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_declCtorArity mc0) dtb__481)
   | _ -> failwith "DT: impossible branch"
 )
-  | C_Decl_DRecord (dtb__468, dtb__469, dtb__470, dtb__471, dtb__472, dtb__473, dtb__474, dtb__475) -> (if (mc0 = dtb__468) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.v_length dtb__470))) else ((v_declCtorArity mc0) dtb__457))
-  | C_Decl_DAxiom (dtb__476, dtb__477, dtb__478) -> ((v_declCtorArity dtb__476) dtb__457)
-  | C_Decl_DExtern (dtb__479, dtb__480, dtb__481, dtb__482) -> ((v_declCtorArity dtb__479) dtb__457)
-  | C_Decl_DSig (dtb__483, dtb__484, dtb__485, dtb__486) -> ((v_declCtorArity dtb__483) dtb__457)
-  | C_Decl_DFun (dtb__487, dtb__488, dtb__489, dtb__490) -> ((v_declCtorArity dtb__487) dtb__457)
-  | C_Decl_DTrait (dtb__491, dtb__492, dtb__493, dtb__494, dtb__495) -> ((v_declCtorArity mc0) dtb__457)
-  | C_Decl_DInstance (dtb__496, dtb__497, dtb__498, dtb__499) -> ((v_declCtorArity mc0) dtb__457)
+  | C_Decl_DRecord (dtb__492, dtb__493, dtb__494, dtb__495, dtb__496, dtb__497, dtb__498, dtb__499) -> (if (mc0 = dtb__492) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.v_length dtb__494))) else ((v_declCtorArity mc0) dtb__481))
+  | C_Decl_DAxiom (dtb__500, dtb__501, dtb__502) -> ((v_declCtorArity dtb__500) dtb__481)
+  | C_Decl_DExtern (dtb__503, dtb__504, dtb__505, dtb__506) -> ((v_declCtorArity dtb__503) dtb__481)
+  | C_Decl_DSig (dtb__507, dtb__508, dtb__509, dtb__510) -> ((v_declCtorArity dtb__507) dtb__481)
+  | C_Decl_DFun (dtb__511, dtb__512, dtb__513, dtb__514) -> ((v_declCtorArity dtb__511) dtb__481)
+  | C_Decl_DTrait (dtb__515, dtb__516, dtb__517, dtb__518, dtb__519) -> ((v_declCtorArity mc0) dtb__481)
+  | C_Decl_DInstance (dtb__520, dtb__521, dtb__522, dtb__523) -> ((v_declCtorArity mc0) dtb__481)
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -587,14 +593,14 @@ let rec v_declCtorArity = (fun (mc0 : string) (mc1 : t_Decl B_dData_dList.t_List
 
 # 548 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_declNames = (fun (mc0 : t_Decl) -> (match mc0 with
-  | C_Decl_DInstance (dtb__500, dtb__501, dtb__502, dtb__503) -> B_dData_dList.C_List_Nil
-  | C_Decl_DTrait (dtb__504, dtb__505, dtb__506, dtb__507, dtb__508) -> ((B_dData_dList.v_map v_traitMethodName) dtb__507)
-  | C_Decl_DRecord (dtb__509, dtb__510, dtb__511, dtb__512, dtb__513, dtb__514, dtb__515, dtb__516) -> (B_dData_dList.C_List__x58__x58_ (dtb__509, B_dData_dList.C_List_Nil))
-  | C_Decl_DData (dtb__517, dtb__518, dtb__519, dtb__520, dtb__521, dtb__522, dtb__523, dtb__524, dtb__525) -> ((B_dData_dList.v_map v_ctorName) dtb__520)
-  | C_Decl_DSig (dtb__526, dtb__527, dtb__528, dtb__529) -> (B_dData_dList.C_List__x58__x58_ (dtb__526, B_dData_dList.C_List_Nil))
-  | C_Decl_DExtern (dtb__530, dtb__531, dtb__532, dtb__533) -> (B_dData_dList.C_List__x58__x58_ (dtb__530, B_dData_dList.C_List_Nil))
-  | C_Decl_DAxiom (dtb__534, dtb__535, dtb__536) -> (B_dData_dList.C_List__x58__x58_ (dtb__534, B_dData_dList.C_List_Nil))
-  | C_Decl_DFun (dtb__537, dtb__538, dtb__539, dtb__540) -> (B_dData_dList.C_List__x58__x58_ (dtb__537, B_dData_dList.C_List_Nil))
+  | C_Decl_DInstance (dtb__524, dtb__525, dtb__526, dtb__527) -> B_dData_dList.C_List_Nil
+  | C_Decl_DTrait (dtb__528, dtb__529, dtb__530, dtb__531, dtb__532) -> ((B_dData_dList.v_map v_traitMethodName) dtb__531)
+  | C_Decl_DRecord (dtb__533, dtb__534, dtb__535, dtb__536, dtb__537, dtb__538, dtb__539, dtb__540) -> (B_dData_dList.C_List__x58__x58_ (dtb__533, B_dData_dList.C_List_Nil))
+  | C_Decl_DData (dtb__541, dtb__542, dtb__543, dtb__544, dtb__545, dtb__546, dtb__547, dtb__548, dtb__549) -> ((B_dData_dList.v_map v_ctorName) dtb__544)
+  | C_Decl_DSig (dtb__550, dtb__551, dtb__552, dtb__553) -> (B_dData_dList.C_List__x58__x58_ (dtb__550, B_dData_dList.C_List_Nil))
+  | C_Decl_DExtern (dtb__554, dtb__555, dtb__556, dtb__557) -> (B_dData_dList.C_List__x58__x58_ (dtb__554, B_dData_dList.C_List_Nil))
+  | C_Decl_DAxiom (dtb__558, dtb__559, dtb__560) -> (B_dData_dList.C_List__x58__x58_ (dtb__558, B_dData_dList.C_List_Nil))
+  | C_Decl_DFun (dtb__561, dtb__562, dtb__563, dtb__564) -> (B_dData_dList.C_List__x58__x58_ (dtb__561, B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -603,27 +609,27 @@ let v_topNames = (fun (decls : t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v
 
 # 564 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_declAllNames = (fun (mc0 : t_Decl) -> (match mc0 with
-  | C_Decl_DInstance (dtb__541, dtb__542, dtb__543, dtb__544) -> B_dData_dList.C_List_Nil
-  | C_Decl_DSig (dtb__545, dtb__546, dtb__547, dtb__548) -> (B_dData_dList.C_List__x58__x58_ (dtb__545, B_dData_dList.C_List_Nil))
-  | C_Decl_DExtern (dtb__549, dtb__550, dtb__551, dtb__552) -> (B_dData_dList.C_List__x58__x58_ (dtb__549, B_dData_dList.C_List_Nil))
-  | C_Decl_DAxiom (dtb__553, dtb__554, dtb__555) -> (B_dData_dList.C_List__x58__x58_ (dtb__553, B_dData_dList.C_List_Nil))
-  | C_Decl_DFun (dtb__556, dtb__557, dtb__558, dtb__559) -> (B_dData_dList.C_List__x58__x58_ (dtb__556, B_dData_dList.C_List_Nil))
-  | C_Decl_DTrait (dtb__560, dtb__561, dtb__562, dtb__563, dtb__564) -> (B_dData_dList.C_List__x58__x58_ (dtb__560, ((B_dData_dList.v_map v_traitMethodName) dtb__563)))
-  | C_Decl_DRecord (dtb__565, dtb__566, dtb__567, dtb__568, dtb__569, dtb__570, dtb__571, dtb__572) -> (B_dData_dList.C_List__x58__x58_ (dtb__565, B_dData_dList.C_List_Nil))
-  | C_Decl_DData (dtb__573, dtb__574, dtb__575, dtb__576, dtb__577, dtb__578, dtb__579, dtb__580, dtb__581) -> (B_dData_dList.C_List__x58__x58_ (dtb__573, ((B_dData_dList.v_map v_ctorName) dtb__576)))
+  | C_Decl_DInstance (dtb__565, dtb__566, dtb__567, dtb__568) -> B_dData_dList.C_List_Nil
+  | C_Decl_DSig (dtb__569, dtb__570, dtb__571, dtb__572) -> (B_dData_dList.C_List__x58__x58_ (dtb__569, B_dData_dList.C_List_Nil))
+  | C_Decl_DExtern (dtb__573, dtb__574, dtb__575, dtb__576) -> (B_dData_dList.C_List__x58__x58_ (dtb__573, B_dData_dList.C_List_Nil))
+  | C_Decl_DAxiom (dtb__577, dtb__578, dtb__579) -> (B_dData_dList.C_List__x58__x58_ (dtb__577, B_dData_dList.C_List_Nil))
+  | C_Decl_DFun (dtb__580, dtb__581, dtb__582, dtb__583) -> (B_dData_dList.C_List__x58__x58_ (dtb__580, B_dData_dList.C_List_Nil))
+  | C_Decl_DTrait (dtb__584, dtb__585, dtb__586, dtb__587, dtb__588) -> (B_dData_dList.C_List__x58__x58_ (dtb__584, ((B_dData_dList.v_map v_traitMethodName) dtb__587)))
+  | C_Decl_DRecord (dtb__589, dtb__590, dtb__591, dtb__592, dtb__593, dtb__594, dtb__595, dtb__596) -> (B_dData_dList.C_List__x58__x58_ (dtb__589, B_dData_dList.C_List_Nil))
+  | C_Decl_DData (dtb__597, dtb__598, dtb__599, dtb__600, dtb__601, dtb__602, dtb__603, dtb__604, dtb__605) -> (B_dData_dList.C_List__x58__x58_ (dtb__597, ((B_dData_dList.v_map v_ctorName) dtb__600)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 575 "Vuna/Compiler/Frontend/Ast.vuna"
 let v__udeclCtors = (fun (mc0 : t_Decl) -> (match mc0 with
-  | C_Decl_DInstance (dtb__582, dtb__583, dtb__584, dtb__585) -> B_dData_dList.C_List_Nil
-  | C_Decl_DSig (dtb__586, dtb__587, dtb__588, dtb__589) -> B_dData_dList.C_List_Nil
-  | C_Decl_DExtern (dtb__590, dtb__591, dtb__592, dtb__593) -> B_dData_dList.C_List_Nil
-  | C_Decl_DAxiom (dtb__594, dtb__595, dtb__596) -> B_dData_dList.C_List_Nil
-  | C_Decl_DFun (dtb__597, dtb__598, dtb__599, dtb__600) -> B_dData_dList.C_List_Nil
-  | C_Decl_DTrait (dtb__601, dtb__602, dtb__603, dtb__604, dtb__605) -> ((B_dData_dList.v_map v_traitMethodName) dtb__604)
-  | C_Decl_DRecord (dtb__606, dtb__607, dtb__608, dtb__609, dtb__610, dtb__611, dtb__612, dtb__613) -> (B_dData_dList.C_List__x58__x58_ (dtb__606, B_dData_dList.C_List_Nil))
-  | C_Decl_DData (dtb__614, dtb__615, dtb__616, dtb__617, dtb__618, dtb__619, dtb__620, dtb__621, dtb__622) -> ((B_dData_dList.v_map v_ctorName) dtb__617)
+  | C_Decl_DInstance (dtb__606, dtb__607, dtb__608, dtb__609) -> B_dData_dList.C_List_Nil
+  | C_Decl_DSig (dtb__610, dtb__611, dtb__612, dtb__613) -> B_dData_dList.C_List_Nil
+  | C_Decl_DExtern (dtb__614, dtb__615, dtb__616, dtb__617) -> B_dData_dList.C_List_Nil
+  | C_Decl_DAxiom (dtb__618, dtb__619, dtb__620) -> B_dData_dList.C_List_Nil
+  | C_Decl_DFun (dtb__621, dtb__622, dtb__623, dtb__624) -> B_dData_dList.C_List_Nil
+  | C_Decl_DTrait (dtb__625, dtb__626, dtb__627, dtb__628, dtb__629) -> ((B_dData_dList.v_map v_traitMethodName) dtb__628)
+  | C_Decl_DRecord (dtb__630, dtb__631, dtb__632, dtb__633, dtb__634, dtb__635, dtb__636, dtb__637) -> (B_dData_dList.C_List__x58__x58_ (dtb__630, B_dData_dList.C_List_Nil))
+  | C_Decl_DData (dtb__638, dtb__639, dtb__640, dtb__641, dtb__642, dtb__643, dtb__644, dtb__645, dtb__646) -> ((B_dData_dList.v_map v_ctorName) dtb__641)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -632,144 +638,144 @@ let v_ctorsOf = (fun (decls : t_Decl B_dData_dList.t_List) -> ((B_dData_dList.v_
 
 # 205 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorType = (fun (p : t_Ctor) -> (match p with
-  | { f_Ctor_ctorName = dtb__623; f_Ctor_ctorType = dtb__624; f_Ctor_ctorArity = dtb__625; f_Ctor_ctorRef = dtb__626 } -> dtb__624
+  | { f_Ctor_ctorName = dtb__647; f_Ctor_ctorType = dtb__648; f_Ctor_ctorArity = dtb__649; f_Ctor_ctorRef = dtb__650 } -> dtb__648
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 206 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorArity = (fun (p : t_Ctor) -> (match p with
-  | { f_Ctor_ctorName = dtb__627; f_Ctor_ctorType = dtb__628; f_Ctor_ctorArity = dtb__629; f_Ctor_ctorRef = dtb__630 } -> dtb__629
+  | { f_Ctor_ctorName = dtb__651; f_Ctor_ctorType = dtb__652; f_Ctor_ctorArity = dtb__653; f_Ctor_ctorRef = dtb__654 } -> dtb__653
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 207 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_ctorRef = (fun (p : t_Ctor) -> (match p with
-  | { f_Ctor_ctorName = dtb__631; f_Ctor_ctorType = dtb__632; f_Ctor_ctorArity = dtb__633; f_Ctor_ctorRef = dtb__634 } -> dtb__634
+  | { f_Ctor_ctorName = dtb__655; f_Ctor_ctorType = dtb__656; f_Ctor_ctorArity = dtb__657; f_Ctor_ctorRef = dtb__658 } -> dtb__658
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 274 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_opacityName = (fun (p : t_OpacitySpec) -> (match p with
-  | { f_OpacitySpec_opacityName = dtb__635; f_OpacitySpec_opacityKind = dtb__636; f_OpacitySpec_opacitySpan = dtb__637 } -> dtb__635
+  | { f_OpacitySpec_opacityName = dtb__659; f_OpacitySpec_opacityKind = dtb__660; f_OpacitySpec_opacitySpan = dtb__661 } -> dtb__659
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 275 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_opacityKind = (fun (p : t_OpacitySpec) -> (match p with
-  | { f_OpacitySpec_opacityName = dtb__638; f_OpacitySpec_opacityKind = dtb__639; f_OpacitySpec_opacitySpan = dtb__640 } -> dtb__639
+  | { f_OpacitySpec_opacityName = dtb__662; f_OpacitySpec_opacityKind = dtb__663; f_OpacitySpec_opacitySpan = dtb__664 } -> dtb__663
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 276 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_opacitySpan = (fun (p : t_OpacitySpec) -> (match p with
-  | { f_OpacitySpec_opacityName = dtb__641; f_OpacitySpec_opacityKind = dtb__642; f_OpacitySpec_opacitySpan = dtb__643 } -> dtb__643
+  | { f_OpacitySpec_opacityName = dtb__665; f_OpacitySpec_opacityKind = dtb__666; f_OpacitySpec_opacitySpan = dtb__667 } -> dtb__667
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 287 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclName = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__644; f_ModDecl_modDeclHasExportList = dtb__645; f_ModDecl_modDeclExportItems = dtb__646; f_ModDecl_modDeclExports = dtb__647; f_ModDecl_modDeclReexports = dtb__648; f_ModDecl_modDeclOpacity = dtb__649; f_ModDecl_modDeclRef = dtb__650 } -> dtb__644
+  | { f_ModDecl_modDeclName = dtb__668; f_ModDecl_modDeclHasExportList = dtb__669; f_ModDecl_modDeclExportItems = dtb__670; f_ModDecl_modDeclExports = dtb__671; f_ModDecl_modDeclReexports = dtb__672; f_ModDecl_modDeclOpacity = dtb__673; f_ModDecl_modDeclRef = dtb__674 } -> dtb__668
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 288 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclHasExportList = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__651; f_ModDecl_modDeclHasExportList = dtb__652; f_ModDecl_modDeclExportItems = dtb__653; f_ModDecl_modDeclExports = dtb__654; f_ModDecl_modDeclReexports = dtb__655; f_ModDecl_modDeclOpacity = dtb__656; f_ModDecl_modDeclRef = dtb__657 } -> dtb__652
+  | { f_ModDecl_modDeclName = dtb__675; f_ModDecl_modDeclHasExportList = dtb__676; f_ModDecl_modDeclExportItems = dtb__677; f_ModDecl_modDeclExports = dtb__678; f_ModDecl_modDeclReexports = dtb__679; f_ModDecl_modDeclOpacity = dtb__680; f_ModDecl_modDeclRef = dtb__681 } -> dtb__676
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 289 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclExportItems = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__658; f_ModDecl_modDeclHasExportList = dtb__659; f_ModDecl_modDeclExportItems = dtb__660; f_ModDecl_modDeclExports = dtb__661; f_ModDecl_modDeclReexports = dtb__662; f_ModDecl_modDeclOpacity = dtb__663; f_ModDecl_modDeclRef = dtb__664 } -> dtb__660
+  | { f_ModDecl_modDeclName = dtb__682; f_ModDecl_modDeclHasExportList = dtb__683; f_ModDecl_modDeclExportItems = dtb__684; f_ModDecl_modDeclExports = dtb__685; f_ModDecl_modDeclReexports = dtb__686; f_ModDecl_modDeclOpacity = dtb__687; f_ModDecl_modDeclRef = dtb__688 } -> dtb__684
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 290 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclExports = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__665; f_ModDecl_modDeclHasExportList = dtb__666; f_ModDecl_modDeclExportItems = dtb__667; f_ModDecl_modDeclExports = dtb__668; f_ModDecl_modDeclReexports = dtb__669; f_ModDecl_modDeclOpacity = dtb__670; f_ModDecl_modDeclRef = dtb__671 } -> dtb__668
+  | { f_ModDecl_modDeclName = dtb__689; f_ModDecl_modDeclHasExportList = dtb__690; f_ModDecl_modDeclExportItems = dtb__691; f_ModDecl_modDeclExports = dtb__692; f_ModDecl_modDeclReexports = dtb__693; f_ModDecl_modDeclOpacity = dtb__694; f_ModDecl_modDeclRef = dtb__695 } -> dtb__692
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 291 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclReexports = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__672; f_ModDecl_modDeclHasExportList = dtb__673; f_ModDecl_modDeclExportItems = dtb__674; f_ModDecl_modDeclExports = dtb__675; f_ModDecl_modDeclReexports = dtb__676; f_ModDecl_modDeclOpacity = dtb__677; f_ModDecl_modDeclRef = dtb__678 } -> dtb__676
+  | { f_ModDecl_modDeclName = dtb__696; f_ModDecl_modDeclHasExportList = dtb__697; f_ModDecl_modDeclExportItems = dtb__698; f_ModDecl_modDeclExports = dtb__699; f_ModDecl_modDeclReexports = dtb__700; f_ModDecl_modDeclOpacity = dtb__701; f_ModDecl_modDeclRef = dtb__702 } -> dtb__700
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 292 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclOpacity = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__679; f_ModDecl_modDeclHasExportList = dtb__680; f_ModDecl_modDeclExportItems = dtb__681; f_ModDecl_modDeclExports = dtb__682; f_ModDecl_modDeclReexports = dtb__683; f_ModDecl_modDeclOpacity = dtb__684; f_ModDecl_modDeclRef = dtb__685 } -> dtb__684
+  | { f_ModDecl_modDeclName = dtb__703; f_ModDecl_modDeclHasExportList = dtb__704; f_ModDecl_modDeclExportItems = dtb__705; f_ModDecl_modDeclExports = dtb__706; f_ModDecl_modDeclReexports = dtb__707; f_ModDecl_modDeclOpacity = dtb__708; f_ModDecl_modDeclRef = dtb__709 } -> dtb__708
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 293 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_modDeclRef = (fun (p : t_ModDecl) -> (match p with
-  | { f_ModDecl_modDeclName = dtb__686; f_ModDecl_modDeclHasExportList = dtb__687; f_ModDecl_modDeclExportItems = dtb__688; f_ModDecl_modDeclExports = dtb__689; f_ModDecl_modDeclReexports = dtb__690; f_ModDecl_modDeclOpacity = dtb__691; f_ModDecl_modDeclRef = dtb__692 } -> dtb__692
+  | { f_ModDecl_modDeclName = dtb__710; f_ModDecl_modDeclHasExportList = dtb__711; f_ModDecl_modDeclExportItems = dtb__712; f_ModDecl_modDeclExports = dtb__713; f_ModDecl_modDeclReexports = dtb__714; f_ModDecl_modDeclOpacity = dtb__715; f_ModDecl_modDeclRef = dtb__716 } -> dtb__716
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 300 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileModDecl = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__693; f_SourceFile_sourceFileImports = dtb__694; f_SourceFile_sourceFileFixities = dtb__695; f_SourceFile_sourceFileDecls = dtb__696; f_SourceFile_sourceFileExports = dtb__697; f_SourceFile_sourceFileReexports = dtb__698; f_SourceFile_sourceFileOpacity = dtb__699 } -> dtb__693
+  | { f_SourceFile_sourceFileModDecl = dtb__717; f_SourceFile_sourceFileImports = dtb__718; f_SourceFile_sourceFileFixities = dtb__719; f_SourceFile_sourceFileDecls = dtb__720; f_SourceFile_sourceFileExports = dtb__721; f_SourceFile_sourceFileReexports = dtb__722; f_SourceFile_sourceFileOpacity = dtb__723 } -> dtb__717
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 301 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileImports = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__700; f_SourceFile_sourceFileImports = dtb__701; f_SourceFile_sourceFileFixities = dtb__702; f_SourceFile_sourceFileDecls = dtb__703; f_SourceFile_sourceFileExports = dtb__704; f_SourceFile_sourceFileReexports = dtb__705; f_SourceFile_sourceFileOpacity = dtb__706 } -> dtb__701
+  | { f_SourceFile_sourceFileModDecl = dtb__724; f_SourceFile_sourceFileImports = dtb__725; f_SourceFile_sourceFileFixities = dtb__726; f_SourceFile_sourceFileDecls = dtb__727; f_SourceFile_sourceFileExports = dtb__728; f_SourceFile_sourceFileReexports = dtb__729; f_SourceFile_sourceFileOpacity = dtb__730 } -> dtb__725
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 302 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileFixities = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__707; f_SourceFile_sourceFileImports = dtb__708; f_SourceFile_sourceFileFixities = dtb__709; f_SourceFile_sourceFileDecls = dtb__710; f_SourceFile_sourceFileExports = dtb__711; f_SourceFile_sourceFileReexports = dtb__712; f_SourceFile_sourceFileOpacity = dtb__713 } -> dtb__709
+  | { f_SourceFile_sourceFileModDecl = dtb__731; f_SourceFile_sourceFileImports = dtb__732; f_SourceFile_sourceFileFixities = dtb__733; f_SourceFile_sourceFileDecls = dtb__734; f_SourceFile_sourceFileExports = dtb__735; f_SourceFile_sourceFileReexports = dtb__736; f_SourceFile_sourceFileOpacity = dtb__737 } -> dtb__733
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 303 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileDecls = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__714; f_SourceFile_sourceFileImports = dtb__715; f_SourceFile_sourceFileFixities = dtb__716; f_SourceFile_sourceFileDecls = dtb__717; f_SourceFile_sourceFileExports = dtb__718; f_SourceFile_sourceFileReexports = dtb__719; f_SourceFile_sourceFileOpacity = dtb__720 } -> dtb__717
+  | { f_SourceFile_sourceFileModDecl = dtb__738; f_SourceFile_sourceFileImports = dtb__739; f_SourceFile_sourceFileFixities = dtb__740; f_SourceFile_sourceFileDecls = dtb__741; f_SourceFile_sourceFileExports = dtb__742; f_SourceFile_sourceFileReexports = dtb__743; f_SourceFile_sourceFileOpacity = dtb__744 } -> dtb__741
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 305 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileExports = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__721; f_SourceFile_sourceFileImports = dtb__722; f_SourceFile_sourceFileFixities = dtb__723; f_SourceFile_sourceFileDecls = dtb__724; f_SourceFile_sourceFileExports = dtb__725; f_SourceFile_sourceFileReexports = dtb__726; f_SourceFile_sourceFileOpacity = dtb__727 } -> dtb__725
+  | { f_SourceFile_sourceFileModDecl = dtb__745; f_SourceFile_sourceFileImports = dtb__746; f_SourceFile_sourceFileFixities = dtb__747; f_SourceFile_sourceFileDecls = dtb__748; f_SourceFile_sourceFileExports = dtb__749; f_SourceFile_sourceFileReexports = dtb__750; f_SourceFile_sourceFileOpacity = dtb__751 } -> dtb__749
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 306 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileReexports = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__728; f_SourceFile_sourceFileImports = dtb__729; f_SourceFile_sourceFileFixities = dtb__730; f_SourceFile_sourceFileDecls = dtb__731; f_SourceFile_sourceFileExports = dtb__732; f_SourceFile_sourceFileReexports = dtb__733; f_SourceFile_sourceFileOpacity = dtb__734 } -> dtb__733
+  | { f_SourceFile_sourceFileModDecl = dtb__752; f_SourceFile_sourceFileImports = dtb__753; f_SourceFile_sourceFileFixities = dtb__754; f_SourceFile_sourceFileDecls = dtb__755; f_SourceFile_sourceFileExports = dtb__756; f_SourceFile_sourceFileReexports = dtb__757; f_SourceFile_sourceFileOpacity = dtb__758 } -> dtb__757
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 307 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_sourceFileOpacity = (fun (p : t_SourceFile) -> (match p with
-  | { f_SourceFile_sourceFileModDecl = dtb__735; f_SourceFile_sourceFileImports = dtb__736; f_SourceFile_sourceFileFixities = dtb__737; f_SourceFile_sourceFileDecls = dtb__738; f_SourceFile_sourceFileExports = dtb__739; f_SourceFile_sourceFileReexports = dtb__740; f_SourceFile_sourceFileOpacity = dtb__741 } -> dtb__741
+  | { f_SourceFile_sourceFileModDecl = dtb__759; f_SourceFile_sourceFileImports = dtb__760; f_SourceFile_sourceFileFixities = dtb__761; f_SourceFile_sourceFileDecls = dtb__762; f_SourceFile_sourceFileExports = dtb__763; f_SourceFile_sourceFileReexports = dtb__764; f_SourceFile_sourceFileOpacity = dtb__765 } -> dtb__765
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 458 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_importName = (fun (p : t_Import) -> (match p with
-  | { f_Import_importName = dtb__742; f_Import_importIsQualified = dtb__743; f_Import_importAlias = dtb__744; f_Import_importRef = dtb__745 } -> dtb__742
+  | { f_Import_importName = dtb__766; f_Import_importIsQualified = dtb__767; f_Import_importAlias = dtb__768; f_Import_importRef = dtb__769 } -> dtb__766
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 459 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_importIsQualified = (fun (p : t_Import) -> (match p with
-  | { f_Import_importName = dtb__746; f_Import_importIsQualified = dtb__747; f_Import_importAlias = dtb__748; f_Import_importRef = dtb__749 } -> dtb__747
+  | { f_Import_importName = dtb__770; f_Import_importIsQualified = dtb__771; f_Import_importAlias = dtb__772; f_Import_importRef = dtb__773 } -> dtb__771
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 460 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_importAlias = (fun (p : t_Import) -> (match p with
-  | { f_Import_importName = dtb__750; f_Import_importIsQualified = dtb__751; f_Import_importAlias = dtb__752; f_Import_importRef = dtb__753 } -> dtb__752
+  | { f_Import_importName = dtb__774; f_Import_importIsQualified = dtb__775; f_Import_importAlias = dtb__776; f_Import_importRef = dtb__777 } -> dtb__776
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 461 "Vuna/Compiler/Frontend/Ast.vuna"
 let v_importRef = (fun (p : t_Import) -> (match p with
-  | { f_Import_importName = dtb__754; f_Import_importIsQualified = dtb__755; f_Import_importAlias = dtb__756; f_Import_importRef = dtb__757 } -> dtb__757
+  | { f_Import_importName = dtb__778; f_Import_importIsQualified = dtb__779; f_Import_importAlias = dtb__780; f_Import_importRef = dtb__781 } -> dtb__781
   | _ -> failwith "DT: impossible branch"
 ))
