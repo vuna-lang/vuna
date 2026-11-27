@@ -770,53 +770,84 @@ substAltAt idx arg alt =
     (caseAltBinders alt)
     (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
 
+-- 字典提升：把 `?m` 换成 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
+-- `depth` 是 `?m` 出现处深度（de Bruijn）：延迟的字典元变量要变成提升后的字典绑定子变量，
+-- 索引必须按出现点深度算；深度 0 的版本会把解里的 `NVar` 拍成越界变量
+-- （字典签名会变成 `{d : Dict_Ord ?67}` 这类错形）。遍历与 `substMetas*` 共用一份。
 export substMetaVar : Int -> String -> Int -> Term -> Term
 substMetaVar m name q t = substMetaVarGo m name q 0 t
 
 export substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
-substMetaVarGo m name q depth (t@(TMeta n)) =
-  if n == m then TVar name (depth - q) (Span "" 0 0 0 0 0 0) else t
-substMetaVarGo m name q depth (TPi n i r d c) =
-  TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
-substMetaVarGo m name q depth (TLam n r slot sp b) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (substMetaVarGo m name q depth t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (substMetaVarGo m name q (depth + 1) t)
-          in Just (mark, bt2, rt2)
-  in TLam n r slot2 sp (substMetaVarGo m name q (depth + 1) b)
-substMetaVarGo m name q depth (TApp f a r) =
-  TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
-substMetaVarGo m name q depth (TCon c args) =
-  TCon c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
-substMetaVarGo m name q depth (TMk c args) =
-  TMk c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
-substMetaVarGo m name q depth (TRecord c args) =
-  TRecord c (map (\p => (substMetaVarGo m name q depth (firstOf p), secondOf p)) args)
-substMetaVarGo m name q depth (TProj base c tele i fi) =
-  TProj (substMetaVarGo m name q depth base) c tele i fi
-substMetaVarGo m name q depth (TCase s alts) =
-  TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
-substMetaVarGo m name q depth (TIf c th el) =
-  TIf
-    (substMetaVarGo m name q depth c)
-    (substMetaVarGo m name q depth th)
-    (substMetaVarGo m name q depth el)
-substMetaVarGo m name q depth t = t
+substMetaVarGo m name q depth t =
+  substMetas (\d => \n => if n == m then Just (TVar name (d - q) spanEmpty) else Nothing) depth t
 
-export substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
-substMetaVarAlt m name q depth (CaseAlt bn bs b) =
-  CaseAlt bn bs (substMetaVarGo m name q (depth + length bs) b)
+-- ---------------------------------------------------------------
+-- 元变量替换的共享骨架
+-- ---------------------------------------------------------------
+-- 「按出现点深度把 `TMeta m` 换成项」的遍历有多个策略（已解元变量代入、接口摘要 zonk、
+-- 字典提升）；它们此前各写一份，覆盖的构造子集合与 `TRecUpd` 的深度口径互不一致。
+-- 这里收敛成唯一实现：`resolve depth meta` 给出替换项（`Nothing` = 保留原 `TMeta`），
+-- 替换出来的项继续按同一深度下钻（解里可能还有已解元变量）。
+--
+-- 深度口径与 `shift` / `substVarAt` / `hasFreeTermVar` 一致：`TPi` 余域、`TLam` 结果类型
+-- 与体、`TCase` 分支体、`TRecUpd` 的体都在对应 binder / `tele` 之下加一；`TProj` 的
+-- `tele` 只是字段名标注，base 留在外层上下文。
+--
+-- 新增 `Term` 构造子时必须同步这里：漏覆盖不会报错，只会让调用方拿到残留 `TMeta`
+-- （接口摘要的安全阀整份拒收、codegen 报 `UnsolvedMetavarRuntime`）。
+-- fuel 耗尽时返回当前子项（残留 `TMeta` 由调用方的安全阀显式拒绝，不静默改写结构）。
+export substMetasFuel : Int -> (Int -> Int -> Maybe Term) -> Int -> Term -> Term
+substMetasFuel fuel resolve depth t =
+  if fuel <= 0 then
+    t
+  else
+    case t of
+      TMeta m =>
+        case resolve depth m of
+          Nothing => t
+          Just q => substMetasFuel (fuel - 1) resolve depth q
+      TPi n i r d c => TPi n i r (substMetasFuel (fuel - 1) resolve depth d) (substMetasFuel (fuel - 1) resolve (depth + 1) c)
+      TLam n r slot sp b => TLam n r (substMetasSlot (fuel - 1) resolve depth slot) sp (substMetasFuel (fuel - 1) resolve (depth + 1) b)
+      TApp f a r => TApp (substMetasFuel (fuel - 1) resolve depth f) (substMetasFuel (fuel - 1) resolve depth a) r
+      TCon c args => TCon c (substMetasArgs (fuel - 1) resolve depth args)
+      TMk c args => TMk c (substMetasArgs (fuel - 1) resolve depth args)
+      TRecord c args => TRecord c (substMetasArgs (fuel - 1) resolve depth args)
+      TProj base c tele i fi => TProj (substMetasFuel (fuel - 1) resolve depth base) c tele i fi
+      TRecUpd base c tele idxs body => TRecUpd (substMetasFuel (fuel - 1) resolve depth base) c tele idxs (substMetasFuel (fuel - 1) resolve (depth + length tele) body)
+      TCase s alts => TCase (substMetasFuel (fuel - 1) resolve depth s) (map (substMetasAlt (fuel - 1) resolve depth) alts)
+      TIf c th el => TIf (substMetasFuel (fuel - 1) resolve depth c) (substMetasFuel (fuel - 1) resolve depth th) (substMetasFuel (fuel - 1) resolve depth el)
+      _ => t
+
+substMetasArgs : Int -> (Int -> Int -> Maybe Term) -> Int -> List (Term, Rig) -> List (Term, Rig)
+substMetasArgs fuel resolve depth [] = []
+substMetasArgs fuel resolve depth ((a, rig) :: rest) =
+  (substMetasFuel fuel resolve depth a, rig) :: substMetasArgs fuel resolve depth rest
+
+substMetasSlot : Int -> (Int -> Int -> Maybe Term) -> Int -> Maybe (LamMark, Maybe Term, Maybe Term) -> Maybe (LamMark, Maybe Term, Maybe Term)
+substMetasSlot fuel resolve depth Nothing = Nothing
+substMetasSlot fuel resolve depth (Just p) =
+  let
+    tys = secondOf p
+  in Just
+    (firstOf p, mapTermMaybe (substMetasFuel fuel resolve depth) (firstOf tys), mapTermMaybe (substMetasFuel fuel resolve (depth + 1)) (secondOf tys))
+
+substMetasAlt : Int -> (Int -> Int -> Maybe Term) -> Int -> CaseAlt -> CaseAlt
+substMetasAlt fuel resolve depth (CaseAlt n bs b) =
+  CaseAlt n bs (substMetasFuel fuel resolve (depth + length bs) b)
+
+-- | 骨架的默认燃料：按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步，覆盖解展开）。
+export substMetasFuelFor : Term -> Int
+substMetasFuelFor t =
+  let
+    need = 128 + 4 * termSize t
+  in if need > substMetasFuelMax then substMetasFuelMax else need
+
+substMetasFuelMax : Int
+substMetasFuelMax = 1000000
+
+-- | 无显式 fuel 的入口。
+export substMetas : (Int -> Int -> Maybe Term) -> Int -> Term -> Term
+substMetas resolve depth t = substMetasFuel (substMetasFuelFor t) resolve depth t
 
 -- 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
 -- `dictDom` 里类参数引用插入后索引 +1（`d` 落在类参数绑定子之内）。

@@ -573,69 +573,18 @@ resultSpine ty = spineOfType ty
 -- （否则会报 `constructor Refl: type mismatch: expected Nat, got a`）。
 -- 解是 level 形态：按**当前 binder 深度** quote 成项即可；解里出现越界 index（负数）说明
 -- 它引用了当前项作用域外的变量，此时不替换（保守，留原元变量）。
--- 这是**唯一**的「已解元变量 → 项」入口（解在求解点已保证作用域，所以正常输入不会
--- 出现越界）。
+-- 策略与遍历都复用 `Core.Eval.substSolvedMetasAtTblFuel`（唯一实现：覆盖全部 Term
+-- 构造子，`TRecUpd.body` 的深度加 `tele`）；这里只保留观察计数与固定 fuel。
 export zonkTerm : Ec -> Int -> Term -> Term
 zonkTerm ec depth t =
   let
     _ = obsCountAt 2 "vuna.counter.meta.zonk" 1
-  in zonkTermFuel zonkFuelMax ec depth t
+  in substSolvedMetasAtTblFuel zonkFuelMax (ecSolTbl ec) depth t
 
 -- | 燃料上限。递归在子项上结构递减，替换已解元变量最多把项展开到整张解表的规模，
 -- 都远小于这个上限；每次调用派生一遍 `termSize` 只会让热路径多一次遍历。
 zonkFuelMax : Int
 zonkFuelMax = 1000000
-
-zonkTermFuel : Int -> Ec -> Int -> Term -> Term
-zonkTermFuel fuel ec depth t =
-  if fuel <= 0 then
-    t
-  else
-    case t of
-      TMeta m =>
-        case metaLookup m (ecSolTbl ec) of
-          Just v =>
-            let
-              q = quote depth v
-            in if hasOutOfScopeVar q then t else zonkTermFuel (fuel - 1) ec depth q
-          Nothing => t
-      TPi n i r d c => TPi n i r (zonkTermFuel (fuel - 1) ec depth d) (zonkTermFuel (fuel - 1) ec (depth + 1) c)
-      TLam n r slot sp b =>
-        let
-          slot2 =
-            case slot of
-              Nothing => Nothing
-              Just (mark, bt, rt) =>
-                let
-                  bt2 =
-                    case bt of
-                      Nothing => Nothing
-                      Just t => Just (zonkTermFuel (fuel - 1) ec depth t)
-                  rt2 =
-                    case rt of
-                      Nothing => Nothing
-                      Just t => Just (zonkTermFuel (fuel - 1) ec (depth + 1) t)
-                in Just (mark, bt2, rt2)
-        in TLam n r slot2 sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
-      TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
-      TCon c args => TCon c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
-      TMk c args => TMk c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
-      TCase s alts => TCase (zonkTermFuel (fuel - 1) ec depth s) (map (\alt => zonkAltFuel (fuel - 1) ec depth alt) alts)
-      TIf c th el => TIf (zonkTermFuel (fuel - 1) ec depth c) (zonkTermFuel (fuel - 1) ec depth th) (zonkTermFuel (fuel - 1) ec depth el)
-      TProj b c tele i n => TProj (zonkTermFuel (fuel - 1) ec depth b) c tele i n
-      TRecUpd b c tele fs body => TRecUpd (zonkTermFuel (fuel - 1) ec depth b) c tele fs (zonkTermFuel (fuel - 1) ec depth body)
-      TRecord c args => TRecord c (map (\p => (zonkTermFuel (fuel - 1) ec depth (firstOf p), secondOf p)) args)
-      _ => t
-
-zonkAltFuel : Int -> Ec -> Int -> CaseAlt -> CaseAlt
--- 燃料耗尽时原样返回该分支：伪造一个空名字的假分支会把「未替换」变成「结构损坏」，
--- 而残留的元变量在 codegen 侧会以 `UnsolvedMetavarRuntime` 显式报错。
-zonkAltFuel fuel ec depth alt0 =
-  if fuel <= 0 then
-    alt0
-  else
-    case alt0 of
-      CaseAlt n bs b => CaseAlt n bs (zonkTermFuel (fuel - 1) ec (depth + length bs) b)
 
 -- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能替换。
 -- 判据与遍历**只有一份**：`Core.Term.hasNegativeVar`（含 `TRecord`/`TProj`/`TRecUpd`

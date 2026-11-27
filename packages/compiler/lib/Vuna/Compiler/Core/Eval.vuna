@@ -1094,113 +1094,47 @@ export applyTermSpine : Term -> List Term -> Term
 applyTermSpine head [] = head
 applyTermSpine head (a :: rest) = applyTermSpine (TApp head a RigOmega) rest
 
--- 把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
--- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
--- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
--- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
+-- ---------------------------------------------------------------
+-- 已解元变量代入
+-- ---------------------------------------------------------------
+-- 三个入口策略不同（闭解 / 给定深度 / 哈希表），遍历统一走 `Core.Term.substMetas*`：
+-- 覆盖集合与 `TRecUpd` 的深度口径只有一份，新增 Term 构造子不会漏。
+--
+-- 解在**求解点**已保证作用域；按出现点深度 quote 后若出现负索引，说明它引用了当前项
+-- 作用域外的 binder（跨定义上下文），此时**不内联**、保留 `TMeta`，由调用方的安全阀拒绝
+-- 这份摘要（宁可回退全量，不静默错位）。
+quoteSolvedAt : Int -> Value -> Maybe Term
+quoteSolvedAt depth v =
+  let
+    q = quote depth v
+  in if hasNegativeVar q then Nothing else Just q
+
+-- | 「已解且闭」的解内联（`quote 0` 后无自由变量、无负索引）：调用方只持有 list 解表时使用。
 export substSolvedMetas : List (Int, Value) -> Term -> Term
-substSolvedMetas sols (t@(TMeta m)) =
+substSolvedMetas sols t = substMetas (closedSolved sols) 0 t
+
+closedSolved : List (Int, Value) -> Int -> Int -> Maybe Term
+closedSolved sols _ m =
   case metaLookupList m sols of
+    Nothing => Nothing
     Just v =>
       let
-        soln = quote 0 v
-      in if hasFreeTermVar 0 soln then t else soln
-    Nothing => t
-substSolvedMetas sols (TPi n i r d c) =
-  TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
-substSolvedMetas sols (TLam n r slot sp b) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (substSolvedMetas sols t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (substSolvedMetas sols t)
-          in Just (mark, bt2, rt2)
-  in TLam n r slot2 sp (substSolvedMetas sols b)
-substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
-substSolvedMetas sols (TCon c args) =
-  TCon c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
-substSolvedMetas sols (TMk c args) =
-  TMk c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
-substSolvedMetas sols (TRecord c args) =
-  TRecord c (map (\p => (substSolvedMetas sols (firstOf p), secondOf p)) args)
-substSolvedMetas sols (TProj base c tele i fi) = TProj (substSolvedMetas sols base) c tele i fi
-substSolvedMetas sols (TRecUpd base c tele idxs body) =
-  TRecUpd (substSolvedMetas sols base) c tele idxs (substSolvedMetas sols body)
-substSolvedMetas sols (TCase s alts) =
-  TCase (substSolvedMetas sols s) (map (substSolvedAlt sols) alts)
-substSolvedMetas sols (TIf c th el) =
-  TIf (substSolvedMetas sols c) (substSolvedMetas sols th) (substSolvedMetas sols el)
-substSolvedMetas sols t = t
+        q = quote 0 v
+      in if hasNegativeVar q || hasFreeTermVar 0 q then Nothing else Just q
 
-export substSolvedAlt : List (Int, Value) -> CaseAlt -> CaseAlt
-substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
-
--- 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
--- `depth` 是 `?m` 出现处深度（de Bruijn）；用于把延迟的字典元变量变成提升后的字典绑定子变量。
--- 和 `substSolvedMetas` 相同，但解按**给定深度** quote。字典提升要在定义体的
--- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
--- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量
--- （字典签名会变成 `{d : Dict_Ord ?67}` 这类错形）。
+-- | 按**给定深度** quote 解：在定义体的 binder 上下文里内联时用（与表版同一策略）。
 export substSolvedMetasAt : Int -> List (Int, Value) -> Term -> Term
 substSolvedMetasAt d [] t = t
-substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
+substSolvedMetasAt d sols t = substMetas (atSolved sols) d t
 
 export substSolvedMetasAtGo : Int -> List (Int, Value) -> Term -> Term
-substSolvedMetasAtGo depth sols (t@(TMeta m)) =
-  case metaLookupList m sols of
-    Just v => quote depth v
-    Nothing => t
-substSolvedMetasAtGo depth sols (TPi n i r d c) =
-  TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
-substSolvedMetasAtGo depth sols (TLam n r slot sp b) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (substSolvedMetasAtGo depth sols t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (substSolvedMetasAtGo depth sols t)
-          in Just (mark, bt2, rt2)
-  in TLam n r slot2 sp (substSolvedMetasAtGo depth sols b)
-substSolvedMetasAtGo depth sols (TApp f a r) =
-  TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
-substSolvedMetasAtGo depth sols (TCon c args) =
-  TCon c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
-substSolvedMetasAtGo depth sols (TMk c args) =
-  TMk c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
-substSolvedMetasAtGo depth sols (TRecord c args) =
-  TRecord c (map (\p => (substSolvedMetasAtGo depth sols (firstOf p), secondOf p)) args)
-substSolvedMetasAtGo depth sols (TProj base c tele i fi) =
-  TProj (substSolvedMetasAtGo depth sols base) c tele i fi
-substSolvedMetasAtGo depth sols (TRecUpd base c tele idxs body) =
-  TRecUpd (substSolvedMetasAtGo depth sols base) c tele idxs (substSolvedMetasAtGo depth sols body)
-substSolvedMetasAtGo depth sols (TCase s alts) =
-  TCase (substSolvedMetasAtGo depth sols s) (map (substSolvedAltAt depth sols) alts)
-substSolvedMetasAtGo depth sols (TIf c th el) =
-  TIf
-    (substSolvedMetasAtGo depth sols c)
-    (substSolvedMetasAtGo depth sols th)
-    (substSolvedMetasAtGo depth sols el)
-substSolvedMetasAtGo depth sols t = t
+substSolvedMetasAtGo depth sols t = substMetas (atSolved sols) depth t
 
-export substSolvedAltAt : Int -> List (Int, Value) -> CaseAlt -> CaseAlt
-substSolvedAltAt depth sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetasAtGo depth sols b)
+atSolved : List (Int, Value) -> Int -> Int -> Maybe Term
+atSolved sols depth m =
+  case metaLookupList m sols of
+    Nothing => Nothing
+    Just v => quoteSolvedAt depth v
 
 isNilList : List a -> Bool
 isNilList [] = True
@@ -1251,61 +1185,16 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel a3 a1 a2 a3 a4 a5 a6
 -- `depth` 是 `?m` 出现点的 binder 深度：解是 level 形态的 Value，必须按出现点深度 quote，
 -- 否则 binder 下的解会得到错位的 de Bruijn 索引（按深度 0 quote 整项会产生
 -- `TVar "b" (-1)` 这类越界索引；`lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
--- 解 quote 后若含负索引，说明它引用了出现点作用域外的 binder（跨定义上下文），
--- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。
--- 替换出来的项可能仍含已解元变量：同深度递归（限 fuel 防环）。
+-- 策略（`quoteSolvedAt`）与遍历（`Core.Term.substMetas*`）都不在这里重复实现。
 export substSolvedMetasAtTbl : HashMap Int Value -> Int -> Term -> Term
-substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel (substFuelFor t) sols depth t
+substSolvedMetasAtTbl sols depth t = substMetas (tblSolved sols) depth t
 
--- | 燃料按项规模派生（`termSize` 必 ≥ 嵌套深度；每节点 4 步）。固定上限会让更深的项
--- 静默停在原项上——摘要里残留 `TMeta` 会被安全阀整份拒绝，等于每次 `check` 都退回全量。
-substFuelFor : Term -> Int
-substFuelFor t =
-  let
-    need = 128 + 4 * termSize t
-  in if need > substFuelMax then substFuelMax else need
+-- | 固定 fuel 的入口：不想为每次调用派生 `termSize` 的热路径（`Elab.Meta.zonkTerm`）用它。
+export substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term
+substSolvedMetasAtTblFuel fuel sols depth t = substMetasFuel fuel (tblSolved sols) depth t
 
-substFuelMax : Int
-substFuelMax = 1000000
-
-substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term
-substSolvedMetasAtTblFuel fuel sols depth t =
-  if fuel <= 0 then
-    t
-  else
-    case t of
-      TMeta m =>
-        case HashMap.lookup m sols of
-          Nothing => t
-          Just v =>
-            let
-              q = quote depth v
-            in if hasNegativeVar q then t else substSolvedMetasAtTblFuel (fuel - 1) sols depth q
-      TPi n i r d c => TPi n i r (substSolvedMetasAtTblFuel (fuel - 1) sols depth d) (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) c)
-      TLam n r slot sp b =>
-        let
-          slot2 =
-            case slot of
-              Nothing => Nothing
-              Just (mark, bt, rt) =>
-                let
-                  bt2 =
-                    case bt of
-                      Nothing => Nothing
-                      Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols depth t)
-                  rt2 =
-                    case rt of
-                      Nothing => Nothing
-                      Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) t)
-                in Just (mark, bt2, rt2)
-        in TLam n r slot2 sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
-      TApp f a r => TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f) (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r
-      TCon c args => TCon c (map (\p => (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p), secondOf p)) args)
-      TCase sc alts => TCase (substSolvedMetasAtTblFuel (fuel - 1) sols depth sc) (map (substSolvedAltAtTbl (fuel - 1) sols depth) alts)
-      TIf c th el => TIf (substSolvedMetasAtTblFuel (fuel - 1) sols depth c) (substSolvedMetasAtTblFuel (fuel - 1) sols depth th) (substSolvedMetasAtTblFuel (fuel - 1) sols depth el)
-      _ => t
-
--- 分支体在 `depth + #分支绑定子` 的上下文里。
-substSolvedAltAtTbl : Int -> HashMap Int Value -> Int -> CaseAlt -> CaseAlt
-substSolvedAltAtTbl fuel sols depth (CaseAlt n bs b) =
-  CaseAlt n bs (substSolvedMetasAtTblFuel fuel sols (depth + length bs) b)
+tblSolved : HashMap Int Value -> Int -> Int -> Maybe Term
+tblSolved sols depth m =
+  case HashMap.lookup m sols of
+    Nothing => Nothing
+    Just v => quoteSolvedAt depth v
