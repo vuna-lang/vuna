@@ -86,7 +86,7 @@
 - **`main` 只读，所有改动走 PR**：issue 可选（PR-only 改动加 `no-issue` 标签；需要追踪的
   复杂工作再按技能 `vuna-issue` 建/领）；`git fetch origin` → 从 `origin/main` 切
   `<type>/<slug>` 分支；开 PR 前用
-  `git rebase -i origin/main` 整理提交；`main` 只接受 **rebase merge**，默认全绿后 auto-merge。
+  `git rebase -i origin/main` 整理提交；`main` 只接受 **rebase merge**，默认全绿后进合并队列。
   禁止直推 `main` / `master`，禁止对 `main` force push
   （[workflow.md](.agents/rules/workflow.md)、技能 `vuna-pr`）。
 - **改动只在副 worktree 进行**：所有源码 / 文档改动都在独立 worktree
@@ -143,8 +143,9 @@ git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devSh
 git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）
 gh issue list --label status:todo          # 可开工 issue；流程见技能 vuna-issue
 gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
-gh pr checks <n> --watch                  # 等 pr / run 与 gates / run
-gh pr merge <n> --rebase                  # 仅 break-glass；默认 auto-merge
+gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
+nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA
+gh pr merge <n> --rebase                  # 仅 break-glass；默认 auto-merge 入队
 git pull --ff-only                        # 主仓同步
 nix/tools/github-branch-protection.sh     # 应用 main 的 ruleset（幂等；见技能 vuna-pr）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api

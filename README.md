@@ -208,7 +208,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/performance-hotspots.md](docs/reference/performance-hotspots.md) | 性能热点：查找表（`HashMap` 与 `Ec` 索引）、冷 `check` / `build` 各阶段仍存在的开销与已否决的优化 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系：`vuna dev suite`、corpus 分类、包上下文夹具 |
 | [docs/reference/testing-checks.md](docs/reference/testing-checks.md) | 测试门禁与基准：`nix flake check` 的 checks 清单、后端自举 conformance、Nix 命令与本地开发、手动性能基准 |
-| [docs/reference/github-workflow.md](docs/reference/github-workflow.md) | issue / PR 协作：状态机、标签、backlog 精炼、type + area 门禁计划、自动合并与故障处理 |
+| [docs/reference/github-workflow.md](docs/reference/github-workflow.md) | issue / PR 协作：状态机、标签、backlog 精炼、type + area 门禁计划、合并队列与故障处理 |
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
 | [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制与门禁 |
 | [docs/reference/prior-art-elaboration.md](docs/reference/prior-art-elaboration.md) | 外部先例（Idris 2 / Yaffle）的流水线与精化器对照：可推迟的合一、case tree、擦除与分层契约、vuna 的差距与候选调整 |

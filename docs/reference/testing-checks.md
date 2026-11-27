@@ -75,10 +75,10 @@ job，只在本地 `nix run .#ci -- backends|native`（见 [github-workflow.md](
 `minCases` 下限，过滤后 case 数骤降直接失败。`codegen-wasm` / `codegen-native` 暂不进
 GitHub CI（维持只在本地 `backends` 组跑），它们的 area 标签只服务 `--area` 局部筛选。
 
-**自动合并与 main 基线**：GitHub 不为 `GITHUB_TOKEN` 执行的推送创建工作流运行，
-auto-merge 的合并归 `github-actions[bot]`，所以 `gate` 不会在自动合并后触发。main 的完整
-基线（gate + e2e）由定时 `suite` 组承担；要让自动合并也触发 push `gate`，给仓库配置
-`AUTOMERGE_TOKEN`（`automerge.yml` 已优先使用它）。
+**合并队列与 main 基线**：auto-merge 只负责入队；队列在最新 main + 队前 PR 的组合 head 上
+重跑 `pr / run` 与完整 `gates / run`（gate-shard-0..3 + units + area），绿后 rebase 落
+main。main push 仍跑完整 gate 作为合并后兜底，定时 `suite` 继续覆盖 e2e。
+`AUTOMERGE_TOKEN` 仍用于人工 / break-glass 推送触发 push 门禁。
 
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。

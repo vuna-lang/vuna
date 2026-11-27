@@ -5,7 +5,7 @@
 
 更细的 agent 规则在 [`.agents/rules/`](.agents/rules/)，PR 操作手册在
 [`.agents/skills/vuna-pr/SKILL.md`](.agents/skills/vuna-pr/SKILL.md)，issue / 标签 /
-门禁 / 自动合并的完整说明在 [docs/reference/github-workflow.md](docs/reference/github-workflow.md)。
+门禁 / 合并队列的完整说明在 [docs/reference/github-workflow.md](docs/reference/github-workflow.md)。
 
 ## 1. 准备
 
@@ -67,14 +67,14 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
 
 ## 5. PR 门禁
 
-必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` / `area`
-自动选择检查；计划里的完整 gate / e2e 会按 shard 并行成 `suite` matrix job，`gates / run`
-收齐结论）。`pr-triage` 会自动维护 type / pkg / area 标签，不需要手工加
-`deep` / `suite`：
+必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（PR 上按 `type` + `pkg` /
+`area` 选择切片；`merge_group` 上跑完整 `gate-shard-0..3 + units` + area）。`pr-triage`
+会自动维护 type / pkg / area 标签，不需要手工加 `deep` / `suite`：
 
 ```console
 nix run .#ci -- plan type:bug pkg:compiler   # 预览本 PR 会跑哪些检查
-gh pr checks <n> --watch
+gh pr checks <n>                             # PR 自己的检查
+nix/tools/merge-queue.sh status              # 队列位置 / 状态 / ETA
 ```
 
 需要强制整组时再加 `deep` / `suite` / `browser`。`backends` / `native` 暂不在 GitHub CI
@@ -85,17 +85,19 @@ gh pr checks <n> --watch
 ## 6. 合并
 
 `main` 只允许 **rebase merge**（merge commit 与 squash 关闭）。非 draft、同仓库分支、无
-`blocked` / `needs-info` / `wontfix` 的 PR 会自动打开 auto-merge；`pr / run` 与
-`gates / run` 全绿且分支与 `main` 同步后自动合并：
+`blocked` / `needs-info` / `wontfix` 的 PR 会自动打开 auto-merge；required checks 全绿后
+进入合并队列，队列在最新 `main` + 队前 PR 的组合 head 上重跑完整 `gates / run`，绿后自动
+落 `main`：
 
 ```console
-gh pr checks <n> --watch
+nix/tools/merge-queue.sh status
 gh pr view <n> --json autoMergeRequest,labels,isDraft
 ```
 
-需要 hold 时加 `blocked` / `needs-info` 或转 draft。分支落后时重新
-`git rebase -i origin/main`，然后 `git push --force-with-lease`；不要对 `main` force push。
-不要手动 merge 绕过 required checks。合并后：
+需要 hold 时加 `blocked` / `needs-info` 或转 draft；automerge 会把已在队列里的 PR 移出。
+**`BEHIND` 不是失败，不要为了追 `main` rebase**；只有冲突时才
+`git rebase origin/main && git push --force-with-lease`。不要对 `main` force push，也不要
+手动 merge 绕过 required checks。合并后：
 
 ```console
 git -C <MAIN_ROOT> pull --ff-only
@@ -107,7 +109,8 @@ git -C <MAIN_ROOT> pull --ff-only
 - rebase 到最新 `origin/main` 时如果 `seed/` 冲突：abort，先 rebase 非 seed 提交，再重新
   `nix build .#vuna --out-link result && sh nix/seed/rotate.sh ./result/bin/vuna`。
   **不要手选 `seed/` 冲突两侧。**
-- 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 在它合并后重新 rebase。
+- 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 不需要跟着 rebase，队列会在
+  最新 `main` 上重新验证；只有 `seed/` 冲突时才按上面的流程处理。
 
 ## 8. 分支保护与 break-glass
 
@@ -118,5 +121,7 @@ nix/tools/github-branch-protection.sh --dry-run   # 先看将写入的规则
 nix/tools/github-branch-protection.sh --consolidate
 ```
 
-ruleset 没有 bypass。CI 自身坏了导致无法合并时，临时停用 ruleset / 移除 required check，
-修复后立即恢复并重跑脚本；在 PR 描述里记录临时变更与恢复时间。不要把 `--admin` 合并当作常规手段。
+脚本默认启用合并队列（REBASE / HEADGREEN / min 2 / max 6 / wait 5）并关闭 strict
+up-to-date；`--no-merge-queue` 回滚到 strict + 无队列。ruleset 没有 bypass。CI 自身坏了
+导致无法合并时，临时停用 ruleset / 移除 required check，修复后立即恢复并重跑脚本；在 PR
+描述里记录临时变更与恢复时间。不要把 `--admin` 合并当作常规手段。
