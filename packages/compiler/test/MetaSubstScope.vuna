@@ -1,0 +1,152 @@
+-- 已解元变量代入的三条入口（`substSolvedMetas` / `substSolvedMetasAt*` / 表版）必须覆盖
+-- 同一组 Term 构造子；`TRecUpd` 的体按自己的语义处在 `tele` 绑定子之下，深度必须
+-- `+ length tele`（与 `shift` / `substVarAt` / `hasFreeTermVar` 同口径）。
+-- 漏覆盖或漏深度都会在接口摘要里留下 `TMeta`，让安全阀整份拒收（每次 check 退回全量）。
+import Base
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("meta subst walker failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "tbl-mk" tblMkOk,
+    Pair "tbl-record" tblRecordOk,
+    Pair "tbl-proj" tblProjOk,
+    Pair "tbl-recupd-base" tblRecUpdBaseOk,
+    Pair "tbl-recupd-body" tblRecUpdBodyOk,
+    Pair "tbl-recupd-tele-depth" tblRecUpdTeleDepthOk,
+    Pair "at-mk" atMkOk,
+    Pair "at-recupd-tele-depth" atRecUpdTeleDepthOk,
+    Pair "closed-record" closedRecordOk,
+    Pair "closed-at-agree" closedAtAgree,
+    Pair "out-of-scope-kept" outOfScopeKept,
+    Pair "promote-recupd" promoteRecUpdOk
+  ]
+
+-- 闭解：元变量 0 解成 `TInt 7`（`quote` 后无自由变量、无负索引，三条入口都应内联）。
+closedTbl : HashMap Int Value
+closedTbl = HashMap.fromList [(0, VInt 7)]
+
+closedList : List (Int, Value)
+closedList = [(0, VInt 7)]
+
+-- 引用 tele 绑定子的解：`b` 是 `[a, b]` 里更内层的 binder（level 1）。
+deepTbl : HashMap Int Value
+deepTbl = HashMap.fromList [(0, VNeutral (NVar "b" 1 []))]
+
+deepList : List (Int, Value)
+deepList = [(0, VNeutral (NVar "b" 1 []))]
+
+-- 作用域外的解（level 5 在深度 0/2 之外）：保留 `TMeta`，不写负索引。
+farTbl : HashMap Int Value
+farTbl = HashMap.fromList [(0, VNeutral (NVar "z" 5 []))]
+
+farList : List (Int, Value)
+farList = [(0, VNeutral (NVar "z" 5 []))]
+
+arg1 : Term -> List (Term, Rig)
+arg1 t = [(t, RigOmega)]
+
+tblMkOk : Bool
+tblMkOk =
+  case substSolvedMetasAtTbl closedTbl 0 (TMk "R" (arg1 (TMeta 0))) of
+    TMk _ [(TInt 7, _)] => True
+    _ => False
+
+tblRecordOk : Bool
+tblRecordOk =
+  case substSolvedMetasAtTbl closedTbl 0 (TRecord "R" (arg1 (TMeta 0))) of
+    TRecord _ [(TInt 7, _)] => True
+    _ => False
+
+tblProjOk : Bool
+tblProjOk =
+  case substSolvedMetasAtTbl closedTbl 0 (TProj (TMeta 0) "R" [] 0 1) of
+    TProj (TInt 7) _ _ _ _ => True
+    _ => False
+
+tblRecUpdBaseOk : Bool
+tblRecUpdBaseOk =
+  case substSolvedMetasAtTbl closedTbl 0 (TRecUpd (TMeta 0) "R" [] [0] (TInt 1)) of
+    TRecUpd (TInt 7) _ _ _ _ => True
+    _ => False
+
+tblRecUpdBodyOk : Bool
+tblRecUpdBodyOk =
+  case substSolvedMetasAtTbl closedTbl 0 (TRecUpd (TInt 1) "R" [] [0] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TInt 7) => True
+    _ => False
+
+-- body 在 `tele` 之下：深度 2 时 level 1 的 `b` 是 index 0；按深度 0 quote 会落到负索引。
+tblRecUpdTeleDepthOk : Bool
+tblRecUpdTeleDepthOk =
+  case substSolvedMetasAtTbl deepTbl 0 (TRecUpd (TInt 1) "R" [("a", Rig1), ("b", Rig1)] [] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TVar "b" 0 _) => True
+    _ => False
+
+atMkOk : Bool
+atMkOk =
+  case substSolvedMetasAt 0 closedList (TMk "R" (arg1 (TMeta 0))) of
+    TMk _ [(TInt 7, _)] => True
+    _ => False
+
+atRecUpdTeleDepthOk : Bool
+atRecUpdTeleDepthOk =
+  case substSolvedMetasAtGo 0 deepList (TRecUpd (TInt 1) "R" [("a", Rig1), ("b", Rig1)] [] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TVar "b" 0 _) => True
+    _ => False
+
+closedRecordOk : Bool
+closedRecordOk =
+  case substSolvedMetas closedList (TRecord "R" (arg1 (TMeta 0))) of
+    TRecord _ [(TInt 7, _)] => True
+    _ => False
+
+-- 闭解下三份 walker 必须给出同一结果（覆盖集合一致的直接断言）。
+closedAtAgree : Bool
+closedAtAgree =
+  let
+    shape =
+      TRecUpd
+        (TMk "R" (arg1 (TMeta 0)))
+        "R"
+        []
+        [0]
+        (TProj (TRecord "R" (arg1 (TMeta 0))) "R" [] 0 1)
+    viaList = showTerm (substSolvedMetas closedList shape)
+    viaAt = showTerm (substSolvedMetasAt 0 closedList shape)
+    viaTbl = showTerm (substSolvedMetasAtTbl closedTbl 0 shape)
+  in viaList == viaAt && viaList == viaTbl
+
+-- 作用域外的解不写负索引：三份都保留 `TMeta`。
+outOfScopeKept : Bool
+outOfScopeKept =
+  let
+    t = TRecUpd (TInt 1) "R" [("a", Rig1)] [] (TMeta 0)
+  in keepMeta (substSolvedMetasAtTbl farTbl 0 t)
+    && keepMeta (substSolvedMetasAtGo 0 farList t) && keepMeta (substSolvedMetas farList t)
+
+keepMeta : Term -> Bool
+keepMeta (TRecUpd _ _ _ _ (TMeta 0)) = True
+keepMeta _ = False
+
+-- 字典提升（`substMetaVar`）也走同一骨架：`TRecUpd` 的体同样要替换。
+promoteRecUpdOk : Bool
+promoteRecUpdOk =
+  case substMetaVar 0 "d" 0 (TRecUpd (TInt 1) "R" [] [] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TVar "d" 0 _) => True
+    _ => False

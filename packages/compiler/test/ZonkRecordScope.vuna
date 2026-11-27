@@ -29,6 +29,7 @@ results =
     Pair "TProj" projOk,
     Pair "TRecUpd-base" recUpdBaseOk,
     Pair "TRecUpd-body" recUpdBodyOk,
+    Pair "TRecUpd-tele-depth" recUpdTeleDepthOk,
     Pair "TRecord" recordOk
   ]
 
@@ -52,6 +53,16 @@ recUpdBodyOk : Bool
 recUpdBodyOk =
   case zonkTerm ec 0 (TRecUpd (TInt 1) "R" [] [0] (TMeta 0)) of
     TRecUpd _ _ _ _ (TInt 7) => True
+    _ => False
+
+-- `TRecUpd.body` 在 `tele` 绑定子之下：`b` 是 `[a, b]` 里更内层的 binder（level 1），
+-- 按深度 2 quote 是 index 0；按深度 0 quote 会落到负索引而被保守跳过。
+recUpdTeleDepthOk : Bool
+recUpdTeleDepthOk =
+  let
+    deepEc = ecPutSols ecEmpty [(0, VNeutral (NVar "b" 1 []))]
+  in case zonkTerm deepEc 0 (TRecUpd (TInt 1) "R" [("a", Rig1), ("b", Rig1)] [] (TMeta 0)) of
+    TRecUpd _ _ _ _ (TVar "b" 0 _) => True
     _ => False
 
 recordOk : Bool
