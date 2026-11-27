@@ -41,6 +41,22 @@ jobs:
             echo "merge-queue-sweep: 触发运行没有关联 PR，跳过"
             exit 0
           fi
+          # 最后一个 required check 刚完成时 mergeStateStatus 可能仍是 UNKNOWN；等它落定
+          # 再 sweep，否则会被当成“未绿”跳过，之后又没有新事件（#220/#221/#222 的实际问题）。
+          for _ in 1 2 3 4 5 6 7 8 9; do
+            unknown=0
+            for pr in $prs; do
+              ms=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" \
+                --json mergeStateStatus --jq .mergeStateStatus)
+              if [ "$ms" = "UNKNOWN" ]; then
+                unknown=1
+              fi
+            done
+            if [ "$unknown" -eq 0 ]; then
+              break
+            fi
+            sleep 10
+          done
           # shellcheck disable=SC2086
           nix/tools/merge-queue.sh sweep $prs
       - name: sweep all open pull requests
