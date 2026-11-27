@@ -61,7 +61,7 @@ Backlog。Agent 处理时：
    gh issue list --state all --search "<关键词> in:title,body" --limit 20
    ```
 2. 在 issue 里讨论，补全背景、目标 / 非目标、方案、验收标准。
-3. 补齐元信息：`gh issue edit <n> --type Bug`（或 Feature / Task / Refactor / Perf /
+3. 补齐元信息：`gh issue edit <n> --type Bug`（或 Feature / Chore / Refactor / Perf /
    Docs / Test / Epic）、`pkg:*` / `area:*` 标签、`nix/tools/issue.sh priority <n> P1`，
    按需加 milestone。
 4. 建立关系：`gh issue edit <n> --parent <epic>`、`--add-blocked-by <m>`、
@@ -87,9 +87,10 @@ Agent 在开发、评审或门禁失败时发现问题：
 
 ### type（PR 门禁路由）
 
-Issue 的类型是 org 级 issue type：`Bug`、`Feature`、`Task`、`Refactor`、`Perf`、`Docs`、
+Issue 的类型是 org 级 issue type：`Bug`、`Feature`、`Chore`、`Refactor`、`Perf`、`Docs`、
 `Test`、`Epic`，不是标签。`type:*` 标签只出现在 PR 上，由 `pr-triage` 从标题前缀和关联
-issue 的 issue type 派生，`gates` 用它选检查。`Task` 对应 `type:chore`。
+issue 的 issue type 派生，`gates` 用它选检查；`type:*` 与 issue type 一一对应
+（`Chore` 对应 `type:chore`）。
 
 ### priority（原生字段）
 

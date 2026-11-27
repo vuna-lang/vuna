@@ -61,7 +61,7 @@ type_from_issue_type() {
   case "$1" in
     Bug) echo type:bug ;;
     Feature) echo type:feature ;;
-    Task) echo type:chore ;;
+    Chore) echo type:chore ;;
     Refactor) echo type:refactor ;;
     Perf) echo type:perf ;;
     Docs) echo type:docs ;;

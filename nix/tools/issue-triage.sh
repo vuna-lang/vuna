@@ -45,7 +45,7 @@ type_for_title() {
   case "$1" in
     "[bug]"*) echo "Bug" ;;
     "[feat]"* | "[feature]"*) echo "Feature" ;;
-    "[task]"*) echo "Task" ;;
+    "[chore]"*) echo "Chore" ;;
     "[epic]"*) echo "Epic" ;;
     *) return 1 ;;
   esac
