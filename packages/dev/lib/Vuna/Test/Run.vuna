@@ -629,12 +629,17 @@ syncBuildDir staging dir =
 probeCheckIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> String -> Eff r (Check (List Diagnostic))
 probeCheckIn env source = checkFileSessioned env.envSession env.envBase source
 
+-- | 内部：同 `probeCheckIn`，附带「是否命中会话」标记（会话 check 用例用）。
+probeCheckInTracked : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> String -> Eff r (Bool, Check (List Diagnostic))
+probeCheckInTracked env source = checkFileSessionedTracked env.envSession env.envBase source
+
 -- | 内部：进程内 interp 一个源文件，路径选择同 `probeCheckIn`。
 probeInterpIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> String -> Eff r (Check String)
 probeInterpIn env source = interpFileSessioned env.envSession env.envBase source
 
--- 负例的 check 必须走**全量**路径：`warnUnusedDefsIn` 只在全量尾部跑，未使用/遮蔽类
--- warning 只在它那里产生，增量会话不产这些。
+-- 负例的 check 走**全量**路径：错误诊断与 `.deny` 语义在全量收尾处产生，进程内全量
+-- `checkFile` 是唯一口径。会话路径（`probeCheckIn`）只服务 golden 的正例 check 与会话
+-- check 用例（后者断言会话自己的告警面）。
 -- | 内部：进程内的全量 check（负例用）。仍然零子进程。
 probeCheckInFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> String -> Eff r (Check (List Diagnostic))
 probeCheckInFull env source = checkFile source
@@ -1225,8 +1230,45 @@ checkCaseAsserts env expectedErr expectPass start end r expectedR =
       [timeoutAssertBy ms expectedErr]
       (append (diagKeyAsserts env expectedErr expectedR r) (checkExitAsserts r))
 
--- | 内部：`.diag.json` 键序列断言（`check-error` 与 `CError` 共用）；期望文件读不到时给
--- 一条失败的 `expect file`。
+-- | 执行一个会话 check 用例（`kind = "check-session"`）：诊断由进程内会话
+-- （`checkFileSessionedTracked`）产出，与 `.diag.json` 同一套结构化断言。会话不可用时
+-- 用例失败：全量回退会给出同样诊断，静默回退等于没有覆盖会话面。
+--
+-- 期望里没有 error 级条目（只有 warning）时要求 check 成功；有 error 时要求 `ErrC`。
+sessionCheckCase : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => Env -> Case -> String -> String -> Eff r CaseResult
+sessionCheckCase env c source diagPath =
+  do
+    start <- clockNow
+    expectedR <- expectKeysOf env diagPath
+    tracked <- probeCheckInTracked env source
+    end <- clockNow
+    let
+      hit = firstOf tracked
+      r = secondOf tracked
+      expectPass = not (expectHasErrorOf expectedR)
+      exitOk = if expectPass then checkPassed r else not (checkPassed r)
+      exitDetail =
+        if expectPass then
+          "expected the session check to succeed (warnings only)"
+        else
+          "expected an error from the session check"
+      assertions =
+        append
+          [timeoutAssertBy ((end - start) / 1000) diagPath, Assertion "session hit" hit "incremental session unavailable: falling back to the full path would not cover the session diagnostic surface"]
+          (append (diagKeyAsserts env diagPath expectedR r) [Assertion "check exit" exitOk exitDetail])
+    base <- finishCase c.caseId start assertions
+    if env.envBlessDiag then
+      case diagsOfCheck r of
+        [] => pure base
+        ds =>
+          do
+            _ <- fsWriteFile diagPath "${blessDiagText env diagPath ds}\n"
+            pure (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${diagPath}"])
+    else
+      pure base
+
+-- | 内部：`.diag.json` 键序列断言（`check-error` / `check-session` 与 `CError` 共用）；
+-- 期望文件读不到时给一条失败的 `expect file`。
 diagKeyAsserts : Env -> String -> Check (List String) -> Check (List Diagnostic) -> List Assertion
 diagKeyAsserts env diagPath (ErrC e) actualR =
   [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
@@ -1992,6 +2034,7 @@ runCaseGo env c =
     CError source diagPath wantInterp wantCheck wantCompile =>
       errorCase env c source diagPath wantInterp wantCheck wantCompile
     CCheck source expectPass expectedErr => checkCase env c source expectPass expectedErr
+    CSessionCheck source diagPath => sessionCheckCase env c source diagPath
     CLint source expected => lintCase env c source expected
     CFix source expected => fixCase env c source expected
     CRuntime source expected exitCode => runtimeCase env c source expected exitCode
@@ -2844,6 +2887,7 @@ casePaths env c =
         [stripRoot env source]
       else
         [stripRoot env source, stripRoot env expectedErr]
+    CSessionCheck source diagPath => [stripRoot env source, stripRoot env diagPath]
     CLint source expected => [stripRoot env source, stripRoot env expected]
     CFix source expected => [stripRoot env source, stripRoot env expected]
     CRuntime source expected _ => [stripRoot env source, stripRoot env expected]
@@ -2911,6 +2955,7 @@ casePathsAbs c =
     CGolden source expected _ _ _ _ _ => [source, expected]
     CError source diagPath _ _ _ => [source, diagPath]
     CCheck source _ expectedErr => if expectedErr == "" then [source] else [source, expectedErr]
+    CSessionCheck source diagPath => [source, diagPath]
     CLint source expected => [source, expected]
     CFix source expected => [source, expected]
     CRuntime source expected _ => [source, expected]

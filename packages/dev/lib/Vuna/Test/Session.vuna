@@ -133,7 +133,11 @@ sessionCheckSample sess baseDir source =
               do
                 text <- fsReadFile source
                 s <- MutRef.read sess
-                result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
+                -- 与全量单文件路径（`InProc.checkFile` → `dtCheck` / `dtCheckModuleFile`）
+                -- 同一分派：无 `module` 头 = 入口语义（尾部跑未使用定义扫描）；
+                -- 带头的库模块导出面未知，不能报未使用定义。
+                moduleFile <- pure (dtSourceHasModuleHeader source text)
+                result <- if moduleFile then dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False else dtCheckEntrySourceIncremental ctx source text ifaces [] (sesAuxOf s)
                 applyCheckResult sess s baseDir ifaces result
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用

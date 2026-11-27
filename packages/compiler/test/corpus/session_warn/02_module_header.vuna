@@ -1,0 +1,6 @@
+-- 带 module 头的文件按库模块语义检查：导出面未知，会话与全量 `dtCheckModuleFile`
+-- 一样不报未使用定义（不引入保守误拒）。
+module SessionWarn.ModuleExports where
+
+helper : Int
+helper = 1

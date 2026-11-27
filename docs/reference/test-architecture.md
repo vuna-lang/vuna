@@ -39,7 +39,8 @@ suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/s
 
 1. **一次 run 一个 store root**：默认 `~/.vuna/test-store`（测试专用，不与开发缓存共用；`nix run .#vuna-run-tests` 导出，
    `nix run .#vuna-run-tests`、CI check 各自导出；`VUNA_STORE` 可覆盖）。父进程解析一次，
-   所有 worker/case 继承同一路径。
+   所有 worker/case 继承同一路径。模块接口落在 `<pkg>/.vuna/iface`；runner 入口同时导出
+   `VUNA_PKG_STATE`（默认 `$VUNA_STORE/state`），让 warmup 子进程与父进程的进程内会话读同一份目录。
 2. **父进程只预热一次**：`vuna check packages/base`（需要时 `check .`）；worker 不各自 warmup。
 3. **默认共享，隔离显式**：steps 文件头写 `# store-isolated` 的 case 用 `${caseTmp}/store`；
    其余共享。断言缓存布局、GC、冷命中、只读语义的用例必须隔离。
@@ -68,7 +69,8 @@ runner 直接调用编译器/工具链的导出函数并断言返回值（细节
 
 - **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，`packages/dev/lib/Vuna/Test/Session.vuna`，依赖接口 + `AuxCache`）优先，
   不可用时同进程退回全量精化。没有「回退子进程」这一步——那会把断言退回字符串匹配。
-  增量会话不覆盖的只有 `warnUnusedDefsIn`，所以负例一律走全量。
+  会话与全量的诊断面一致：入口语义（无 `module` 头）在会话尾部也跑未使用定义扫描，
+  库模块用全量 `dtCheckModuleFile` 的同一口径；负例仍走全量。
 - **复用键只有输入摘要**（不含 env 分量），所以同一输入在不同环境共用同一份精化结果。
 - **隔离只保留在 steps 岛**：`# store-isolated` 的私有 store 只用于断言缓存布局/GC/
   冷命中的 steps 用例；fixture 负例不需要私有 store 绕缓存。
