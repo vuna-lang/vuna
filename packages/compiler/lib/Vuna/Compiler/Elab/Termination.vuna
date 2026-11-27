@@ -7,21 +7,14 @@ import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
 import Vuna.Compiler.Frontend.AstQuery
 
-patNames : Pat -> List String
-patNames (PVar n sp) = [n]
-patNames (PAs n inner sp) = n :: patNames inner
-patNames (PCon c ps sp) = concatMap patNames ps
-patNames (PRecord rn fields sp) = concatMap (\q => patNames (secondOf q)) fields
-patNames (PWild sp) = []
-patNames _ = []
-
 patsNames : List Pat -> List String
-patsNames ps = concatMap patNames ps
+patsNames ps = concatMap patBinders ps
 
 altPatOf : Alt -> Pat
 altPatOf a = a.altPat
@@ -34,7 +27,7 @@ altsToPairs [] = []
 altsToPairs (a :: rest) = (a.altPat, a.altBody) :: altsToPairs rest
 
 stmtBinderNames : DoStmt -> List String
-stmtBinderNames (DBind pat e sp) = patNames pat
+stmtBinderNames (DBind pat e sp) = patBinders pat
 stmtBinderNames (DExpr e sp) = []
 stmtBinderNames (DLet binds sp) = concatMap bindingPatNames binds
 
@@ -69,7 +62,7 @@ exprRefsBF fuel bound e =
       EApp fn args sp => append (exprRefsBF (fuel - 1) bound fn) (concatMap (exprRefsBF (fuel - 1) bound) args)
       EPi n implicit _ dom cod sp => append (exprRefsBF (fuel - 1) bound dom) (exprRefsBF (fuel - 1) (n :: bound) cod)
       ELet binds b rec_ sp => append (exprRefsBindsF (fuel - 1) bound binds) (exprRefsBF (fuel - 1) (append (concatMap bindingBinderNames binds) bound) b)
-      ECase scrut alts sp => append (exprRefsBF (fuel - 1) bound scrut) (concatMap (\alt => exprRefsBF (fuel - 1) (append (patNames (altPatOf alt)) bound) (altBodyOf alt)) alts)
+      ECase scrut alts sp => append (exprRefsBF (fuel - 1) bound scrut) (concatMap (\alt => exprRefsBF (fuel - 1) (append (patBinders (altPatOf alt)) bound) (altBodyOf alt)) alts)
       EIf c t el sp => append (exprRefsBF (fuel - 1) bound c) (append (exprRefsBF (fuel - 1) bound t) (exprRefsBF (fuel - 1) bound el))
       EField base f sp => exprRefsBF (fuel - 1) bound base
       ERecord rn fields sp => concatMap (\q => exprRefsBF (fuel - 1) bound (secondOf q)) fields
@@ -111,10 +104,10 @@ exprRefsClausesF fuel bound (c :: rest) =
       (exprRefsClausesF (fuel - 1) bound rest)
 
 bindingPatNames : Binding -> List String
-bindingPatNames b = patNames b.bindPat
+bindingPatNames b = patBinders b.bindPat
 
 bindingBinderNames : Binding -> List String
-bindingBinderNames b = patNames b.bindPat
+bindingBinderNames b = patBinders b.bindPat
 
 refsOfDef : List (List Pat, Expr) -> List String
 refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (secondOf c)) clauses)
@@ -270,7 +263,10 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       ERecUpdate base fields sp => strWalkFields (fuel - 1) comp ctors projs p sizes caller facts region fields (strWalk (fuel - 1) comp ctors projs p sizes caller facts region base acc)
       EDo stmts sp => strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region stmts acc
       EVar n sp => if memName (n) comp then markInvalid acc else acc
-      _ => acc
+      EInt _ _ => acc
+      EStr _ _ => acc
+      EFloat _ _ => acc
+      EInterp _ _ => acc
 
 -- 关系证不出来时记一条诊断边：位置 p 的实参为什么拿不到尺寸关系。
 hintEdge : String -> String -> Int -> List Expr -> List String -> List (String, Int, Int, List Int) -> Span -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
@@ -442,21 +438,6 @@ strWalkClauses fuel comp ctors projs p sizes caller facts region (c :: rest) acc
       region
       rest
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c.lcBody acc)
-
--- 绑定引入的尺寸：普通右值按「值 ↔ 模式」推；局部函数组按每个子句体推（子句模式不参与）。
-extendBindingSizes : List (String, List Int) -> List (String, Int, Int, List Int) -> Binding -> List (String, Int, Int, List Int)
-extendBindingSizes projs sizes b =
-  case b.bindValue of
-    BVal e => extendSizesStrict projs sizes e b.bindPat
-    BClauses cs => extendClauseSizes projs sizes cs
-
-extendClauseSizes : List (String, List Int) -> List (String, Int, Int, List Int) -> List LocalClause -> List (String, Int, Int, List Int)
-extendClauseSizes projs sizes [] = sizes
-extendClauseSizes projs sizes (c :: rest) =
-  extendClauseSizes
-    projs
-    (extendSizesStrict projs sizes c.lcBody (PWild (detachedNodeRef spanEmpty)))
-    rest
 
 strWalkFields : Int -> List String -> List String -> List (String, List Int) -> Int -> List (String, Int, Int, List Int) -> String -> HashMap String (List Int) -> List String -> List (String, Expr) -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
 strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =

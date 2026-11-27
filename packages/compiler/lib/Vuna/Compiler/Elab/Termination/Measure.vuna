@@ -467,7 +467,7 @@ extendBindingSizes projs sizes b =
     BVal e => extendSizesStrict projs sizes e b.bindPat
     BClauses cs => extendLocalClauses projs sizes cs
 
-extendLocalClauses : List (String, List Int) -> List (String, Int, Int, List Int) -> List LocalClause -> List (String, Int, Int, List Int)
+export extendLocalClauses : List (String, List Int) -> List (String, Int, Int, List Int) -> List LocalClause -> List (String, Int, Int, List Int)
 extendLocalClauses projs sizes [] = sizes
 extendLocalClauses projs sizes (c :: rest) =
   extendLocalClauses
@@ -863,7 +863,10 @@ posWalkF fuel namesTbl caller sizes facts region e st =
       ERecUpdate base fields sp => posWalkFieldsF (fuel - 1) namesTbl caller sizes facts region fields (posWalkF (fuel - 1) namesTbl caller sizes facts region base st)
       EDo stmts sp => posWalkStmtsF (fuel - 1) namesTbl caller sizes facts region stmts st
       EVar n sp => st
-      _ => st
+      EInt _ _ => st
+      EStr _ _ => st
+      EFloat _ _ => st
+      EInterp _ _ => st
 
 export posWalkCallee : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
 posWalkCallee namesTbl caller sizes facts region g i args st =
