@@ -20,11 +20,14 @@ record Site where
   siteRegion : List String
   -- 编译期看不见实参位置的调用（callee 以值传递 / 遍历预算耗尽）：只落全弱边。
   siteBlind : Bool
+  -- 调用点位置：放弃时按它给用户面诊断定位（遍历预算兜底的合成站点没有位置）。
+  siteSpan : Span
 
 -- 遍历预算耗尽或 callee 以值传递时，用「全弱边」占位站点覆盖该 caller 到组内每个
 -- 成员：漏掉的调用边仍留在图上，且不可能贡献严格下降（sound 方向）。
 blindSitesOf : List String -> String -> List (String, Int, Int, List Int) -> List String -> List Site
-blindSitesOf comp caller sizes region = map (\g => Site caller g [] sizes region True) comp
+blindSitesOf comp caller sizes region =
+  map (\g => Site caller g [] sizes region True spanEmpty) comp
 
 record ScEdge where
   edgeFrom : Int
@@ -153,7 +156,7 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       ERecord rn fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields acc
       ERecUpdate base fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc)
       EDo stmts sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region stmts acc
-      EVar n sp => if memName (n) comp then Site caller (n) [] sizes region True :: acc else acc
+      EVar n sp => if memName (n) comp then Site caller (n) [] sizes region True (nodeRefSpan sp) :: acc else acc
       EInt _ _ => acc
       EStr _ _ => acc
       EFloat _ _ => acc
@@ -165,7 +168,7 @@ siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
     append (blindSitesOf comp caller sizes region) acc
   else
     case groupHead comp fn of
-      Just callee => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (Site caller callee args sizes region False :: acc)
+      Just callee => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (Site caller callee args sizes region False (exprSpan fn) :: acc)
       Nothing =>
         case fn of
           EVar nm nsp =>
@@ -204,7 +207,7 @@ siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs
       elems = extendElemSizes sizes lst "$elem"
       fullArgs = append pargs [EVar ("$elem") (detachedNodeRef cbsp)]
       acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
-    in Site caller g fullArgs elems region False :: acc2
+    in Site caller g fullArgs elems region False cbsp :: acc2
 
 -- ---------------------------------------------------------------
 -- 别名解析：`let g = f in g x`（f 是同组函数）按直接调用参与尺寸分析。
@@ -808,24 +811,51 @@ isBlindSite s = s.siteBlind
 blindPairText : Site -> String
 blindPairText s = "${s.siteCaller}->${s.siteCallee}"
 
-sctBlindNote : List Site -> String
-sctBlindNote sites =
+blindDetailOf : List Site -> String
+blindDetailOf sites =
   case dedup (map blindPairText (filter isBlindSite sites)) of
     [] => ""
     ns =>
-      " [SCT 未识别调用：${joinComma ns}（callee 以值传递或遍历预算耗尽，只按弱边计入）]"
+      "SCT 未识别调用：${joinComma ns}（callee 以值传递或遍历预算耗尽，只按弱边计入）"
 
--- | SCT 放弃（图数 / 轮数上限）用独立错误码：这不是「证明不终止」。
--- 保留上游诊断的位置 / call 字段，只换 code 与模板。
-budgetDiagnostic : List String -> Diagnostic -> Diagnostic
-budgetDiagnostic comp msg =
+-- 第一个带真实文件的盲调用点：放弃诊断优先落在具体书写位置。
+firstBlindSpan : List Site -> Maybe Span
+firstBlindSpan [] = Nothing
+firstBlindSpan (s :: rest) =
+  if isBlindSite s then
+    if spanFile s.siteSpan == "" then firstBlindSpan rest else Just s.siteSpan
+  else
+    firstBlindSpan rest
+
+sctBlindNote : List Site -> String
+sctBlindNote sites =
+  case blindDetailOf sites of
+    "" => ""
+    d => " [${d}]"
+
+-- | 「放弃」→ 用户面 `TC_TerminationBudgetExhausted`：保留上游诊断的位置 / call 字段，
+--   只换 code 与模板，再追加具体原因。绝不能把「没算完」当成「证明不终止」。
+export gaveUpDiagnostic : String -> String -> Diagnostic -> Diagnostic
+gaveUpDiagnostic subject detail msg =
   let
-    subject = join "," comp
-    detail =
-      "size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）"
     base = tcMsg (TerminationBudgetExhausted subject) [subject]
     kept = { base | diagLabels = msg.diagLabels, diagFields = msg.diagFields }
   in appendMessage " [${detail}]" kept
+
+-- | 上游是普通证明失败时才把「放弃」改写成预算耗尽；已经是预算耗尽 / 其它错误就保持原样。
+export markGaveUp : List String -> GiveUp -> Diagnostic -> Diagnostic
+markGaveUp comp g msg =
+  if isGaveUp g then
+    if msg.diagCode == "TC_CannotProveTermination" then
+      gaveUpDiagnostic (joinComma comp) (gaveUpDetail g) msg
+    else
+      msg
+  else
+    msg
+
+sctGaveUpDetail : String
+sctGaveUpDetail =
+  "size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）"
 
 export sctCheck : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 sctCheck comp defTbl ctors projs facts msg =
@@ -840,7 +870,9 @@ sctCheckGo : List String -> HashMap String (List (List Pat, Expr)) -> List Strin
 sctCheckGo comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
+    blind = blindDetailOf sites
     note = sctBlindNote sites
+    subject = joinComma comp
     _ = obsCounter "vuna.counter.term.scc_size" (length comp)
     _ = obsCounter "vuna.counter.term.sites" (length sites)
   in case initialTable defTbl sites ctors projs facts of
@@ -853,9 +885,19 @@ sctCheckGo comp defTbl ctors projs facts msg =
             let
               _ = obsCounter "vuna.counter.term.closure_rounds" (sctClosureFuel - remaining)
               _ = obsCounter "vuna.counter.term.graphs_final" (countGraphs table1)
-            in if closed then if sctCheckTable table1 then OkC 0 else ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)) else ErrC (appendMessage note (budgetDiagnostic comp msg))
+            in if closed then
+              if sctCheckTable table1 then
+                OkC 0
+              else if blind == "" then
+                ErrC (appendMessage note (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg))
+              else
+                case firstBlindSpan sites of
+                  Nothing => ErrC (gaveUpDiagnostic subject blind msg)
+                  Just sp => ErrC (withFallbackSpan sp (gaveUpDiagnostic subject blind msg))
+            else
+              ErrC (appendMessage note (gaveUpDiagnostic subject sctGaveUpDetail msg))
       else
-        ErrC (appendMessage note (budgetDiagnostic comp msg))
+        ErrC (appendMessage note (gaveUpDiagnostic subject sctGaveUpDetail msg))
 
 -- ===============================================================
 -- 12. fuel 线程判据：组内函数的某个形参是 Int fuel（通常第 0 个，也可能在别的
@@ -1066,18 +1108,20 @@ onlyUnguarded unguarded ((((c, g), m), sp) :: rest) =
     onlyUnguarded unguarded rest
 
 -- 不含守卫的子图是否有环：有环 ⇒ 存在一条永不触底的路径，判据不成立。
-unguardedCycle : List String -> List (((String, String), Int), Span) -> Bool
+unguardedCycle : List String -> List (((String, String), Int), Span) -> (Bool, GiveUp)
 unguardedCycle unguarded edges =
   hasWeakCycle unguarded (allWeakEdges (onlyUnguarded unguarded edges))
 
 -- | 守卫条件：全组都守卫，或任何环都穿过守卫节点（不含守卫的子图无环）。
 -- 后者覆盖「守卫只写在少数几个入口函数上」的写法，仍然 sound：无限下降必然反复
 -- 经过守卫节点，而守卫节点在 `fuel <= 0` 时直接返回。
-fuelAcceptable : List String -> HashMap String (List (List Pat, Expr)) -> List (((String, String), Int), Span) -> Bool
+fuelAcceptable : List String -> HashMap String (List (List Pat, Expr)) -> List (((String, String), Int), Span) -> (Bool, GiveUp)
 fuelAcceptable comp defTbl edges =
   case unguardedOf comp defTbl of
-    [] => True
-    unguarded => if unguardedCycle unguarded edges then False else True
+    [] => (True, NoGiveUp)
+    unguarded =>
+      case unguardedCycle unguarded edges of
+        (cyc, g) => (if cyc then False else True, g)
 
 export tryFuelThread : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Diagnostic -> Check Int
 tryFuelThread comp defTbl ctors projs facts msg =
@@ -1085,10 +1129,17 @@ tryFuelThread comp defTbl ctors projs facts msg =
     sites = siteCollect comp ctors projs defTbl facts
     edges = fuelEdgesOf comp defTbl sites
     strictCount = length (filterModes (map edgeModeOf edges))
-  in if strictCount > 0 && fuelAcceptable comp defTbl edges && not (hasWeakCycle comp edges) then
-    OkC 0
-  else
+    subject = joinComma comp
+  in if strictCount <= 0 then
     ErrC msg
+  else
+    case fuelAcceptable comp defTbl edges of
+      (acceptable, guAccept) =>
+        case hasWeakCycle comp edges of
+          (cyc, guCycle) =>
+            let
+              gu = mergeGiveUp guAccept guCycle
+            in if isGaveUp gu then ErrC (gaveUpDiagnostic subject (gaveUpDetail gu) msg) else if acceptable && not cyc then OkC 0 else ErrC msg
 
 -- | 取边上的参数关系编号。
 edgeModeOf : (((String, String), Int), Span) -> Int

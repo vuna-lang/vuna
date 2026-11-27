@@ -70,7 +70,3 @@ RN_SelectorConflict
 RN_SelectorNameTaken
 RN_SelectorNotRecord
 RN_SelectorShared
-
-# 分析预算耗尽：夹具要构造超限输入（SCT >512 张图），
-# 暂按缺口记录；TC_CannotProveTermination 的既有夹具覆盖同一代码路径。
-TC_TerminationBudgetExhausted

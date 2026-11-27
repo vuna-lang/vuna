@@ -66,6 +66,3 @@ RN_SelectorConflict	记录字段选择器冲突：同一字段被多个 record c
 RN_SelectorNameTaken	记录字段选择器名与已有全局名冲突；尚无结构化夹具
 RN_SelectorNotRecord	对非 record / 线性 record 使用 `R.f` 选择器；尚无结构化夹具
 RN_SelectorShared	多个 record 共享字段名且都未 claim；尚无结构化夹具
-
-# 分析预算耗尽（本批新增）：夹具要构造超限输入。
-TC_TerminationBudgetExhausted	SCT 图数 / 轮数上限耗尽；夹具需 >512 张图（尚未补）

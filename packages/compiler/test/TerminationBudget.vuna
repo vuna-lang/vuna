@@ -1,0 +1,56 @@
+-- 终止性分析的「放弃」必须带 `GiveUp` 结论：预算耗尽不能让调用方当成
+-- 「证明不终止」。用户面诊断码的对照由 corpus/term_err/14_blind_value（放弃）与
+-- 01_self（真正的证明失败）锁定。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Elab.Termination
+import Vuna.Compiler.Elab.Termination.Measure
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("termination budget failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "weak-reach-fuel-gives-up" weakReachFuelGivesUp,
+    Pair "weak-cycle-definite" weakCycleDefinite,
+    Pair "pos-facts-fuel-gives-up" posFactsFuelGivesUp
+  ]
+
+-- 步数耗尽：保守设为「可达」但同时给出 GaveUp，调用方才能报预算耗尽。
+weakReachFuelGivesUp : Bool
+weakReachFuelGivesUp =
+  case weakReachFuel 0 ["a"] [] "a" ["b"] [] of
+    (reachable, g) => reachable && isGaveUp g
+
+-- 正常预算下找到的环是确定结论，不带 GaveUp。
+weakCycleDefinite : Bool
+weakCycleDefinite =
+  let
+    edges = [((("a", "a"), 0), spanEmpty)]
+  in case hasWeakCycle ["a"] edges of
+    (cyc, g) => cyc && not (isGaveUp g)
+
+-- 正性不动点耗尽：部分 facts 不能当完整结果返回。
+posFactsFuelGivesUp : Bool
+posFactsFuelGivesUp =
+  case computePosFactsWork [] defTbl rgT 0 [] [] of
+    (facts, g) => length facts == 0 && isGaveUp g
+
+defTbl : HashMap String (List (List Pat, Expr))
+defTbl = HashMap.fromList []
+
+rgT : HashMap String (List String)
+rgT = HashMap.fromList []

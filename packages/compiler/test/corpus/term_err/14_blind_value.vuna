@@ -1,5 +1,6 @@
 -- callee 经函数参数转发、但回调实参不是纯形参（`k (k x)`）：看不到实参位置，
--- 只能按盲调用（全弱边）计入并拒绝。
+-- 只能按盲调用（全弱边）计入。这是分析「放弃」而不是证明不终止，用户面报
+-- `TC_TerminationBudgetExhausted`（对照组见 01_self 的普通证明失败）。
 applyTwice : (Int -> Int) -> Int -> Int
 applyTwice k x = k (k x)
 
