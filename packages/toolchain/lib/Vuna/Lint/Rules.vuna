@@ -25,6 +25,7 @@ module Vuna.Lint.Rules where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
@@ -2629,151 +2630,49 @@ dedupeCtorGo acc [] = reverse acc
 dedupeCtorGo acc (x :: rest) =
   if memName x acc then dedupeCtorGo acc rest else dedupeCtorGo (x :: acc) rest
 
-caseCatchAllFindings : List (String, List String) -> Expr -> List Finding
-caseCatchAllFindings fams e =
-  case e of
-    -- vuna-lint: disable-next-line dispatch-lift
-    ECase scrut alts _ =>
-      let
-        altsFindings =
-          case catchAllAltOf alts of
-            Nothing => []
-            Just alt =>
-              case familyGapOf fams (explicitCtorsOf alts) of
-                Nothing => []
-                Just gap =>
-                  let
-                    fam = firstOf gap
-                    missing = secondOf gap
-                  in [
-                    mkFinding
-                      (patSpan alt.altPat)
-                      ClosedAdtCatchAll
-                      (lintMsg ClosedAdtCatchAll "`${fam}`: ${join ", " missing}")
-                      Nothing
-                  ]
-      in append
-        altsFindings
-        (append (catchAllExprFindings fams scrut) (catchAllAltBodies fams alts))
-    _ => []
+addCaseFinding : List (String, List String) -> List Finding -> Expr -> List Finding
+addCaseFinding fams acc (ECase _ alts _) =
+  case catchAllAltOf alts of
+    Nothing => acc
+    Just alt =>
+      case familyGapOf fams (explicitCtorsOf alts) of
+        Nothing => acc
+        Just gap =>
+          let
+            fam = firstOf gap
+            missing = secondOf gap
+          in mkFinding
+            (patSpan alt.altPat)
+            ClosedAdtCatchAll
+            (lintMsg ClosedAdtCatchAll "`${fam}`: ${join ", " missing}")
+            Nothing :: acc
+addCaseFinding fams acc (EVar _ _) = acc
+addCaseFinding fams acc (EInt _ _) = acc
+addCaseFinding fams acc (EStr _ _) = acc
+addCaseFinding fams acc (EFloat _ _) = acc
+addCaseFinding fams acc (ELam _ _ _) = acc
+addCaseFinding fams acc (EApp _ _ _) = acc
+addCaseFinding fams acc (EPi _ _ _ _ _ _) = acc
+addCaseFinding fams acc (ELet _ _ _ _) = acc
+addCaseFinding fams acc (EIf _ _ _ _) = acc
+addCaseFinding fams acc (EField _ _ _) = acc
+addCaseFinding fams acc (ERecord _ _ _) = acc
+addCaseFinding fams acc (ERecUpdate _ _ _) = acc
+addCaseFinding fams acc (EDo _ _) = acc
+addCaseFinding fams acc (EInterp _ _) = acc
 
-catchAllAltBodies : List (String, List String) -> List Alt -> List Finding
-catchAllAltBodies fams [] = []
-catchAllAltBodies fams (alt :: rest) =
-  append (catchAllExprFindings fams alt.altBody) (catchAllAltBodies fams rest)
-
-catchAllBindings : List (String, List String) -> List Binding -> List Finding
-catchAllBindings fams [] = []
-catchAllBindings fams (bind :: rest) =
-  append (catchAllBinding fams bind.bindValue) (catchAllBindings fams rest)
-
-catchAllBinding : List (String, List String) -> BindingValue -> List Finding
-catchAllBinding fams value =
-  case value of
-    -- vuna-lint: disable-next-line dispatch-lift
-    BVal e => catchAllExprFindings fams e
-    BClauses clauses => catchAllClauses fams clauses
-
-catchAllClauses : List (String, List String) -> List LocalClause -> List Finding
-catchAllClauses fams [] = []
-catchAllClauses fams (clause :: rest) =
-  append (catchAllExprFindings fams clause.lcBody) (catchAllClauses fams rest)
-
-catchAllStmts : List (String, List String) -> List DoStmt -> List Finding
-catchAllStmts fams [] = []
-catchAllStmts fams (stmt :: rest) = append (catchAllStmt fams stmt) (catchAllStmts fams rest)
-
-catchAllStmt : List (String, List String) -> DoStmt -> List Finding
-catchAllStmt fams stmt =
-  case stmt of
-    -- vuna-lint: disable-next-line dispatch-lift
-    DBind _ e _ => catchAllExprFindings fams e
-    DExpr e _ => catchAllExprFindings fams e
-    DLet binds _ => catchAllBindings fams binds
-
-catchAllFields : List (String, List String) -> List (String, Expr) -> List Finding
-catchAllFields fams [] = []
-catchAllFields fams ((_, e) :: rest) =
-  append (catchAllExprFindings fams e) (catchAllFields fams rest)
-
-catchAllInterp : List (String, List String) -> List InterpPart -> List Finding
-catchAllInterp fams [] = []
-catchAllInterp fams (part :: rest) =
-  case part of
-    IPText _ => catchAllInterp fams rest
-    IPHole e => append (catchAllExprFindings fams e) (catchAllInterp fams rest)
-
--- 内部：表达式遍历（显式列出全部构造子，不静默丢子树）。
+-- 表达式 / 声明结构下降走 `AstWalk`；这里只保留「case 的兜底分支是否漏构造子」的判据。
 catchAllExprFindings : List (String, List String) -> Expr -> List Finding
-catchAllExprFindings fams e =
-  case e of
-    -- vuna-lint: disable-next-line dispatch-lift
-    EVar name sp => []
-    EInt n sp => []
-    EStr s sp => []
-    EFloat raw sp => []
-    ELam ps body sp => catchAllExprFindings fams body
-    EApp fn args sp => append (catchAllExprFindings fams fn) (catchAllExprList fams args)
-    EPi name implicit qty dom cod sp =>
-      append (catchAllExprFindings fams dom) (catchAllExprFindings fams cod)
-    ELet binds body recFlag sp =>
-      append (catchAllBindings fams binds) (catchAllExprFindings fams body)
-    ECase scrut alts sp => caseCatchAllFindings fams e
-    EIf cond yes no sp =>
-      append
-        (catchAllExprFindings fams cond)
-        (append (catchAllExprFindings fams yes) (catchAllExprFindings fams no))
-    EField base f sp => catchAllExprFindings fams base
-    ERecord rname fields sp => catchAllFields fams fields
-    ERecUpdate base fields sp =>
-      append (catchAllExprFindings fams base) (catchAllFields fams fields)
-    EDo stmts sp => catchAllStmts fams stmts
-    EInterp parts sp => catchAllInterp fams parts
-
-catchAllExprList : List (String, List String) -> List Expr -> List Finding
-catchAllExprList fams [] = []
-catchAllExprList fams (e :: rest) =
-  append (catchAllExprFindings fams e) (catchAllExprList fams rest)
-
-catchAllDeclFindings : List (String, List String) -> Decl -> List Finding
-catchAllDeclFindings fams d =
-  case d of
-    -- vuna-lint: disable-next-line dispatch-lift
-    DData name params kind ctors derivings viaField repr lin sp =>
-      append (catchAllExprFindings fams kind) (catchAllCtorTypes fams ctors)
-    DAxiom name ty sp => catchAllExprFindings fams ty
-    DExtern cname target ty sp => catchAllExprFindings fams ty
-    DSig name ctx ty sp => append (catchAllExprList fams ctx) (catchAllExprFindings fams ty)
-    DFun name pats body sp => catchAllExprFindings fams body
-    DRecord name params fields derivings viaField repr lin sp => catchAllFieldTypes fams fields
-    DTrait name params supers methods sp =>
-      append (catchAllExprList fams supers) (catchAllMethodTypes fams methods)
-    DInstance ctx head methods sp =>
-      append
-        (catchAllExprList fams ctx)
-        (append (catchAllExprFindings fams head) (catchAllDecls fams methods))
-
-catchAllCtorTypes : List (String, List String) -> List Ctor -> List Finding
-catchAllCtorTypes fams [] = []
-catchAllCtorTypes fams (ctor :: rest) =
-  append (catchAllExprFindings fams ctor.ctorType) (catchAllCtorTypes fams rest)
-
-catchAllFieldTypes : List (String, List String) -> List Field -> List Finding
-catchAllFieldTypes fams [] = []
-catchAllFieldTypes fams (field :: rest) =
-  append (catchAllExprFindings fams field.fieldType) (catchAllFieldTypes fams rest)
-
-catchAllMethodTypes : List (String, List String) -> List TraitMethod -> List Finding
-catchAllMethodTypes fams [] = []
-catchAllMethodTypes fams (method :: rest) =
-  append (catchAllExprFindings fams method.traitMethodType) (catchAllMethodTypes fams rest)
-
-catchAllDecls : List (String, List String) -> List Decl -> List Finding
-catchAllDecls fams [] = []
-catchAllDecls fams (d :: rest) = append (catchAllDeclFindings fams d) (catchAllDecls fams rest)
+catchAllExprFindings fams e = foldExpr (addCaseFinding fams) [] e
 
 closedAdtCatchAllFindings : List Decl -> List Finding
-closedAdtCatchAllFindings decls = catchAllDecls (dataFamiliesOf decls) decls
+closedAdtCatchAllFindings decls =
+  let
+    fams = dataFamiliesOf decls
+  in concatMap (\d => foldDecl (addCaseFinding fams) ignorePatFindings [] d) decls
+
+ignorePatFindings : List Finding -> Pat -> List Finding
+ignorePatFindings acc _ = acc
 
 -- | 内部：逐条声明收集 finding。
 scanDecls : LintSrc -> List Decl -> List Decl -> List Finding
