@@ -598,11 +598,13 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   - 生成的函数体在 annotation 之前跑 `Native.Select.peephole`：写槽后立刻读回、
     `jmp` 到下一条标签、scratch 立即数只被下一条二元 / 比较消费时合并；窥孔不改槽编号
     与帧大小（GC 逐帧保守扫根，不依赖逐 call 的栈图）。手写运行时 / 桥接体不参与窥孔。
-- **零参顶层定义**是 CAF：`_start` 按 SCC 序（被依赖者在前）求值一次，结果写进连续的
-  `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。槽区间 `[rt_caf_begin, rt_caf_end)` 由 GC
-  当根扫描（GC 非移动，值一次写入后稳定）。零参定义仍必须是纯值：程序启动即求值，
-  带副作用的值要走 `Eff` 动作。body 是 `IrRt` / `IrGlobal` 的零参别名在调用点直接解析
-  到目标（不进 `rt_apply`）；CAF 槽仍按启动序求值一次，作用只剩「函数值」引用。
+- **零参顶层定义**是 CAF：`_start` 按依赖拓扑序求值一次，结果写进连续的
+  `.bss` 缓存槽 `rt_caf_<name>`；引用只读槽。依赖是「体里可达的其它 CAF」的闭包，
+  包含特化克隆（克隆追加在定义表末尾，源码 / SCC 顺序不能当初始化序）。槽区间
+  `[rt_caf_begin, rt_caf_end)` 由 GC 当根扫描（GC 非移动，值一次写入后稳定）。
+  零参定义仍必须是纯值：程序启动即求值，带副作用的值要走 `Eff` 动作。body 是
+  `IrRt` / `IrGlobal` 的零参别名在调用点直接解析到目标（不进 `rt_apply`）；
+  CAF 槽仍按启动序求值一次，作用只剩「函数值」引用。
 - 入口 `main` 必须是零参值；`main : Eff r a` 支持：入口先按 `irEntryHandlersOf` 预装宿主
   handler（`runConsoleHost` / `runExitHost` / …），再用 `runMain` 执行，最后按 `a` 展示。
   入口 show 只接受 `@ir@showInt` /
