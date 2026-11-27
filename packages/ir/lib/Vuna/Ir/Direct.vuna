@@ -518,12 +518,85 @@ etaTwin n ar0 u =
     action = applyAll (IrGlobal n) argVars
   in IrLam (append xs [u]) Nothing (IrApp Nothing (IrCast Nothing Nothing action) (IrVar u))
 
--- | 原定义（bind 融合后、名字唯一化）。
+-- | 体内是否还有 Eff thunk 节点。只有这类定义会被融合/双发射改写；其余定义
+--   原样保留 binder 名（`safeIr` 的唯一化只在改写后的作用域里才必要）。
+anyHasEff : Int -> List Ir -> Bool
+anyHasEff fuel xs =
+  if fuel <= 0 then
+    False
+  else
+    case xs of
+      [] => False
+      x :: rest => if hasEffNode (fuel - 1) x then True else anyHasEff (fuel - 1) rest
+
+hasEffNodeField : Int -> (String, Ir) -> Bool
+hasEffNodeField fuel p = hasEffNode (fuel - 1) (secondOf p)
+
+anyHasEffField : Int -> List (String, Ir) -> Bool
+anyHasEffField fuel fs =
+  if fuel <= 0 then
+    False
+  else
+    case fs of
+      [] => False
+      p :: rest => if hasEffNodeField (fuel - 1) p then True else anyHasEffField (fuel - 1) rest
+
+hasEffNodeAlt : Int -> IrAlt -> Bool
+hasEffNodeAlt fuel a = hasEffNode (fuel - 1) a.irAltBody
+
+anyHasEffAlt : Int -> List IrAlt -> Bool
+anyHasEffAlt fuel alts =
+  if fuel <= 0 then
+    False
+  else
+    case alts of
+      [] => False
+      a :: rest => if hasEffNodeAlt (fuel - 1) a then True else anyHasEffAlt (fuel - 1) rest
+
+hasEffNodeAltM : Int -> Maybe IrAlt -> Bool
+hasEffNodeAltM fuel m =
+  if fuel <= 0 then
+    False
+  else
+    case m of
+      Nothing => False
+      Just a => hasEffNodeAlt (fuel - 1) a
+
+hasEffNode : Int -> Ir -> Bool
+hasEffNode fuel ir =
+  if fuel <= 0 then
+    False
+  else
+    case ir of
+      IrCtor fam ctor _ xs => if isEffThunk fam ctor then True else anyHasEff (fuel - 1) xs
+      IrEffThunk _ _ _ _ _ => True
+      IrEffBind _ _ _ => True
+      IrLam _ _ b => hasEffNode (fuel - 1) b
+      IrLet _ rhs body => hasEffNode (fuel - 1) rhs || hasEffNode (fuel - 1) body
+      IrApp _ f a => hasEffNode (fuel - 1) f || hasEffNode (fuel - 1) a
+      IrRtApp _ xs => anyHasEff (fuel - 1) xs
+      IrCase _ _ sc alts => hasEffNode (fuel - 1) sc || anyHasEffAlt (fuel - 1) alts
+      IrNatCase sc _ z su ca => hasEffNode (fuel - 1) sc || hasEffNodeAltM (fuel - 1) z || hasEffNodeAltM (fuel - 1) su || hasEffNodeAltM (fuel - 1) ca
+      IrRecord _ _ fs => anyHasEffField (fuel - 1) fs
+      IrProj base _ _ _ => hasEffNode (fuel - 1) base
+      IrRecUpd base _ fs _ => hasEffNode (fuel - 1) base || anyHasEffField (fuel - 1) fs
+      IrCast _ _ x => hasEffNode (fuel - 1) x
+      IrTail x => hasEffNode (fuel - 1) x
+      IrIf c t e => hasEffNode (fuel - 1) c || hasEffNode (fuel - 1) t || hasEffNode (fuel - 1) e
+      IrConcatMany xs => anyHasEff (fuel - 1) xs
+      _ => False
+
+-- | 原定义（bind 融合后；只有含 Eff thunk 的体才做名字唯一化）。
 directOriginal : (String -> Maybe Int) -> IrDef -> IrDef
 directOriginal eff (IrDef n ar deps sigTy body r g sp) =
   let
     body1 = directIr eff (128 + 8 * irSize body) body
-  in IrDef n ar deps sigTy (safeIr (256 + 8 * irSize body1) body1) r g sp
+    body2 =
+      if hasEffNode (128 + 8 * irSize body) body then
+        safeIr (256 + 8 * irSize body1) body1
+      else
+        body1
+  in IrDef n ar deps sigTy body2 r g sp
 directOriginal eff d = d
 
 -- | `__direct` 双发射（Eff 返回、ar > 0）；没有就返回空表。
