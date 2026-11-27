@@ -1015,6 +1015,12 @@ rtGetCwd c = rtFunc "$rt_getCwd" [] [WvAnyRef] [] (mkString c.rtcRootOff c.rtcRo
 rtExecPath : WatFunc
 rtExecPath = rtFunc "$rt_execPath" [] [WvAnyRef] [] emptyStrInstrs
 
+-- | `realPath`：wasm 没有符号链接（也没有可观测的文件系统身份），恒等返回入参。
+--   宿主侧的相对路径已经按虚拟 preopen 根 `/` 归一，所以「同一目录的两种写法」这条
+--   不变量在这个后端由路径字符串本身保证，降级写在 `docs/reference/wasm.md` 的能力表里。
+rtRealPath : WatFunc
+rtRealPath = rtFunc "$rt_realPath" [("$p", WvAnyRef)] [WvAnyRef] [] [ILocalGet "$p"]
+
 rtTimeUs : WatFunc
 rtTimeUs =
   let
@@ -2183,6 +2189,7 @@ rtFunctions c =
     rtGetEnv,
     rtGetCwd c,
     rtExecPath,
+    rtRealPath,
     rtTimeUs,
     rtPrintln,
     rtCellNew,
@@ -2445,6 +2452,8 @@ rtImplOf "@vuna@prim_eff_hostStatus" = RtFunc 0 "$rt_hostStatus"
 rtImplOf "@vuna@host@getenv" = RtFunc 1 "$rt_getEnv"
 rtImplOf "@vuna@host@getcwd" = RtFunc 0 "$rt_getCwd"
 rtImplOf "@vuna@host@execPath" = RtFunc 0 "$rt_execPath"
+-- wasm 没有符号链接：恒等（能力表里是明确的降级，见 `docs/reference/wasm.md`）。
+rtImplOf "@vuna@host@realPath" = RtFunc 1 "$rt_realPath"
 rtImplOf "@vuna@host@getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@host@isTty" = RtValue (boolValue False)
 rtImplOf "@vuna@prim_eff_getArgs_process_host" = RtFunc 0 "$rt_getArgs"
@@ -2455,6 +2464,7 @@ rtImplOf "@vuna@prim_eff_getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@prim_eff_getenv" = RtFunc 1 "$rt_getEnv"
 rtImplOf "@vuna@prim_eff_getcwd" = RtFunc 0 "$rt_getCwd"
 rtImplOf "@vuna@prim_eff_execPath" = RtFunc 0 "$rt_execPath"
+rtImplOf "@vuna@prim_eff_realPath" = RtFunc 1 "$rt_realPath"
 rtImplOf "@vuna@prim_eff_sleep" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@host@readLine" = RtFunc 0 "$rt_hostTrap0"
 rtImplOf "@vuna@host@readBytes" = RtFunc 1 "$rt_hostTrap1"

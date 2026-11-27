@@ -188,6 +188,10 @@ errnoEexist = 17
 export errnoEnotdir : Int
 errnoEnotdir = 20
 
+-- | `readlink` 作用在非符号链接上返回它：这是「不是链接」的判据，不是失败。
+export errnoEinval : Int
+errnoEinval = 22
+
 export errnoEisdir : Int
 errnoEisdir = 21
 

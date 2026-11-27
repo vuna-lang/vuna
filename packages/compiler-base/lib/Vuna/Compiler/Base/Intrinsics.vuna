@@ -1183,6 +1183,7 @@ effIntrinsics =
     Intrinsic "@vuna@host@getenv" (IFun IStr (IEffHost IStr)) OpNone False,
     Intrinsic "@vuna@host@getcwd" (IEffHost IStr) OpNone False,
     Intrinsic "@vuna@host@execPath" (IEffHost IStr) OpNone False,
+    Intrinsic "@vuna@host@realPath" (IFun IStr (IEffHost IStr)) OpNone False,
     Intrinsic "@vuna@prim_eff_getArgs_process_host" (IEffHost (IList IStr)) OpNone False,
     Intrinsic "@vuna@prim_eff_exit_process_host" (IFun IInt (IEffHost IInt)) OpNone False,
     Intrinsic "@vuna@host@exitOp" (IFun IInt (IEffHost IInt)) OpNone False,
@@ -1211,7 +1212,8 @@ effIntrinsics =
     Intrinsic "@vuna@prim_eff_wait" (IFun IInt (IEffHost IInt)) OpNone False,
     Intrinsic "@vuna@prim_eff_getenv" (IFun IStr (IEffHost IStr)) OpNone False,
     Intrinsic "@vuna@prim_eff_getcwd" (IEffHost IStr) OpNone False,
-    Intrinsic "@vuna@prim_eff_execPath" (IEffHost IStr) OpNone False
+    Intrinsic "@vuna@prim_eff_execPath" (IEffHost IStr) OpNone False,
+    Intrinsic "@vuna@prim_eff_realPath" (IFun IStr (IEffHost IStr)) OpNone False
   ]
 
 -- | 多线程原语（`Base.Thread` 的宿主层）：线程句柄、互斥、条件变量、原子单元。
@@ -1362,7 +1364,7 @@ effIntrinsicNames =
 export hostIntrinsicNames : List String
 hostIntrinsicNames =
   append
-    ["effTimeUs", "effTimeUs_host", "@vuna@prim_eff_sleep", "@vuna@prim_eff_spawn", "@vuna@prim_eff_wait", "@vuna@prim_eff_runIn", "@vuna@prim_eff_execPath", "@vuna@host@sleep", "@vuna@host@fileMtime", "@vuna@host@fileSize", "@vuna@host@execPath", "@vuna@host@tryRunIn", "@vuna@host@tryReadFileRange", "@vuna@host@tryReadFile", "@vuna@host@tryWriteFile", "@vuna@host@tryWriteFileAtomic", "@vuna@host@tryReadDir", "@vuna@host@tryIsDirectory", "@vuna@host@tryMakeDir", "@vuna@host@tryRemoveFile", "@vuna@host@tryRemoveTree", "@vuna@host@tryRename", "@vuna@host@trySymlink", "@vuna@host@tryMakeDirExclusive", "@vuna@host@isTty", "@vuna@host@tryNetListen", "@vuna@host@tryNetPort", "@vuna@host@tryNetAccept", "@vuna@host@tryNetRecv", "@vuna@host@tryNetSend", "@vuna@host@tryNetClose", "@vuna@host@tryNetConnect", "@vuna@host@tryNetAcceptWithin", "@vuna@host@tryNetRecvWithin", "@vuna@host@tryNetSendWithin"]
+    ["effTimeUs", "effTimeUs_host", "@vuna@prim_eff_sleep", "@vuna@prim_eff_spawn", "@vuna@prim_eff_wait", "@vuna@prim_eff_runIn", "@vuna@prim_eff_execPath", "@vuna@prim_eff_realPath", "@vuna@host@sleep", "@vuna@host@fileMtime", "@vuna@host@fileSize", "@vuna@host@execPath", "@vuna@host@realPath", "@vuna@host@tryRunIn", "@vuna@host@tryReadFileRange", "@vuna@host@tryReadFile", "@vuna@host@tryWriteFile", "@vuna@host@tryWriteFileAtomic", "@vuna@host@tryReadDir", "@vuna@host@tryIsDirectory", "@vuna@host@tryMakeDir", "@vuna@host@tryRemoveFile", "@vuna@host@tryRemoveTree", "@vuna@host@tryRename", "@vuna@host@trySymlink", "@vuna@host@tryMakeDirExclusive", "@vuna@host@isTty", "@vuna@host@tryNetListen", "@vuna@host@tryNetPort", "@vuna@host@tryNetAccept", "@vuna@host@tryNetRecv", "@vuna@host@tryNetSend", "@vuna@host@tryNetClose", "@vuna@host@tryNetConnect", "@vuna@host@tryNetAcceptWithin", "@vuna@host@tryNetRecvWithin", "@vuna@host@tryNetSendWithin"]
     threadIntrinsicNames
 
 -- | 名字 → 内建声明的查询表（由 `allIntrinsics` 一次性建好，供 `findIntrinsic` 用）。
