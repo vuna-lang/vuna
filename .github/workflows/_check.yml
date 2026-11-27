@@ -101,6 +101,17 @@ jobs:
           read -r -a labels <<< "$GATE_LABELS"
           nix run .#ci -- plan "${extra[@]}" "${labels[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # suite 分片要用的工具链先并行建：默认 `--max-jobs 1` 会把 vuna-seed / 编译器 /
+      # 各插件串行编两分钟。这些包彼此独立、单包单线程，4 并发摊开建；缓存命中时只是
+      # 一次求值 + 确认已存在。
+      - name: 预热工具链
+        if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-')
+        run: |
+          nix build --max-jobs 4 --cores 1 --no-link \
+            .#vuna .#vuna-seed .#vuna-compiler .#vuna-cli .#vuna-toolchain \
+            .#vuna-dev .#vuna-web-cli .#vuna-plugin-web \
+            .#vuna-target-native .#vuna-target-wasm
+
       - name: ${{ inputs.group }}
         env:
           CI_JOBS: ${{ inputs.jobs }}
