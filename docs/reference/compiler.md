@@ -87,6 +87,10 @@ section / 链）。`Flatten` 的引用收集也覆盖 `TraitParam.traitParamKind
 应用）保留了显式 fuel：通用 `mapExprPat` / `mapPat` 让 SCT 看不到构造子下降，上界只防
 实现 bug，耗尽报 `IC_FuelExhausted`。
 
+`Elab.Sig` 的 `exprMaxAppArity` / `exprLowerVars` / `argParamKinds` 与 `Elab.Trait.exprFreeLower`
+也走 `AstWalk.foldExpr`：只保留每个节点的名字/应用数钩子，不再各自手写 15 个构造子与
+绑定/分支/do 辅助。
+
 ### Core（类型论、求值、相等、Core 编码）
 
 | 模块 | 职责 | 关键入口 |
