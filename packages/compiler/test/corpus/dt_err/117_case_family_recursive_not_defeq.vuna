@@ -1,0 +1,24 @@
+-- 负例：卡住 case 的两个分支族递归展开后仍必须判不等。
+-- `walk t` / `stroll t` 是结构递归函数在同一中性 scrutinee 上的卡住 case：第一个分支体
+-- 推进后生成新的卡住应用（`walk k` / `stroll k`），差别在第二个分支（`Int` vs `String`）。
+-- 比较不能因为第一支反复展开耗尽 conv fuel（`IC_FuelExhausted`），而要判 `TC_TypeMismatch`。
+import Prelude
+
+data Tree : Type where
+  Node : Tree -> Tree
+  Leaf : Tree
+
+walk : Tree -> Type
+walk t =
+  case t of
+    Node k => walk k
+    Leaf => Int
+
+stroll : Tree -> Type
+stroll t =
+  case t of
+    Node k => stroll k
+    Leaf => String
+
+bad : (t : Tree) -> walk t -> stroll t
+bad t x = x

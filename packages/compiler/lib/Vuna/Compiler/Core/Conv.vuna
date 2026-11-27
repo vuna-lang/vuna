@@ -422,7 +422,7 @@ convBothFuel fuel defs sols depth a b =
           _ => mismatchAt depth a b
       VCase scrut alts =>
         case b of
-          VCase scrut2 alts2 => Vuna.Compiler.Base.Common.bind (convFuel (fuel - 1) defs sols depth scrut scrut2) (\sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth alts alts2)
+          VCase scrut2 alts2 => convCasePairFuel fuel [] defs sols depth scrut alts scrut2 alts2
           _ => mismatchAt depth a b
       VIf c th el =>
         case b of
@@ -488,25 +488,35 @@ convValueListsFuel fuel defs sols depth _ _ =
   if fuel <= 0 then icFuel "conv" else tcErr0NoLoc TypeMismatchCtorArity
 
 -- 卡住的 case 相等：scrutinee 相等 + 每个构造子名的分支绑定数相同且分支体相等。
-convCaseAltsFuel : Int -> HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
-convCaseAltsFuel fuel defs sols depth [] [] = if fuel <= 0 then icFuel "conv" else OkC sols
-convCaseAltsFuel fuel defs sols depth (a :: rest) (b :: rest2) =
+-- `pairs` 是祖先路径上正在比较的卡住值对（只有分支体比较往里加，见 `convBranchFuel`）。
+convCaseAltsFuel : Int -> List StuckPair -> HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
+convCaseAltsFuel fuel pairs defs sols depth [] [] = if fuel <= 0 then icFuel "conv" else OkC sols
+convCaseAltsFuel fuel pairs defs sols depth (a :: rest) (b :: rest2) =
   if fuel <= 0 then
     icFuel "conv"
   else if a.vCaseAltName == b.vCaseAltName then
     if length a.vCaseAltBinders == length b.vCaseAltBinders then
-      case convOneAltFuel (fuel - 1) defs sols depth a b of
+      case convOneAltFuel (fuel - 1) pairs defs sols depth a b of
         ErrC e => ErrC e
-        OkC sols2 => convCaseAltsFuel (fuel - 1) defs sols2 depth rest rest2
+        OkC sols2 => convCaseAltsFuel (fuel - 1) pairs defs sols2 depth rest rest2
     else
       tcErr1NoLoc (TypeMismatchCaseVars a.vCaseAltName) a.vCaseAltName
   else
     tcErr2NoLoc (TypeMismatchCaseBranch a.vCaseAltName b.vCaseAltName) a.vCaseAltName b.vCaseAltName
-convCaseAltsFuel fuel defs sols depth _ _ =
+convCaseAltsFuel fuel pairs defs sols depth _ _ =
   if fuel <= 0 then icFuel "conv" else tcErr0NoLoc TypeMismatchCaseCount
 
-convOneAltFuel : Int -> HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
-convOneAltFuel fuel defs sols depth a b =
+convCasePairFuel : Int -> List StuckPair -> HashMap String Term -> Sols -> Int -> Value -> List VCaseAlt -> Value -> List VCaseAlt -> Check Sols
+convCasePairFuel fuel pairs defs sols depth scrut alts scrut2 alts2 =
+  if fuel <= 0 then
+    icFuel "conv"
+  else
+    Vuna.Compiler.Base.Common.bind
+      (convFuel (fuel - 1) defs sols depth scrut scrut2)
+      (\sols2 => convCaseAltsFuel (fuel - 1) pairs defs sols2 depth alts alts2)
+
+convOneAltFuel : Int -> List StuckPair -> HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
+convOneAltFuel fuel pairs defs sols depth a b =
   if fuel <= 0 then
     icFuel "conv"
   else
@@ -514,7 +524,98 @@ convOneAltFuel fuel defs sols depth a b =
       bs = a.vCaseAltBinders
       n = length bs
       args = argValsAt bs depth 0
-    in convFuel (fuel - 1) defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args) (applyClosureBinder b.vCaseAltClosure args)
+    in convBranchFuel (fuel - 1) pairs defs sols (depth + n) (applyClosureBinder a.vCaseAltClosure args) (applyClosureBinder b.vCaseAltClosure args)
+
+-- ---------------------------------------------------------------
+-- 卡住 case 的分支体比较：同一比较对按余归纳判等
+-- ---------------------------------------------------------------
+-- 两个不同的递归族在同一中性 scrutinee 上比较（`f t` / `g t`）时，分支体会推进出新的
+-- 卡住应用（`f k` / `g k`）：逐层展开只是把同一对比较重复一遍，fuel 烧光后报
+-- `IC_FuelExhausted`，而差别可能落在同级另一支（`Int` vs `String`）上、本来就能判不等。
+-- 这里把路径上正在比较的卡住值对记下来；同一对再次出现时按余归纳判等（再展开不带来新的
+-- 结构），同级其余分支照常比较，真正的差别仍然判不等。
+--
+-- 「同一对」只看能精确比较的卡住形态：头部标识 + 实参。`NVar` 按 `level - depth` 归一，
+-- 每层新 binder 因此不影响身份；binder 名不参与（两侧定义的 binder 名可以不同）。
+-- 解表规模一并记录：中途新增解会改写展开结果，那时不认命中，仍走原来的展开路径
+-- （保守失败，不静默判等）。
+record StuckPair where
+  pairDepth : Int
+  pairSols : Nat
+  pairLeft : Value
+  pairRight : Value
+
+sameStuckAt : Int -> Value -> Int -> Value -> Bool
+sameStuckAt depth (VNeutral (NGlobal g1 sp1)) depth2 b =
+  case b of
+    VNeutral (NGlobal g2 sp2) => g1 == g2 && sameStuckSpineAt depth sp1 depth2 sp2
+    _ => False
+sameStuckAt depth (VNeutral (NVar _ lvl1 sp1)) depth2 b =
+  case b of
+    VNeutral (NVar _ lvl2 sp2) =>
+      lvl1 - depth == lvl2 - depth2 && sameStuckSpineAt depth sp1 depth2 sp2
+    _ => False
+sameStuckAt depth (VApp f1 x1) depth2 b =
+  case b of
+    VApp f2 x2 => sameStuckAt depth f1 depth2 f2 && sameStuckAt depth x1 depth2 x2
+    _ => False
+sameStuckAt depth (VCon c1 args1) depth2 b =
+  case b of
+    VCon c2 args2 => c1 == c2 && sameStuckSpineAt depth args1 depth2 args2
+    _ => False
+sameStuckAt depth _ depth2 _ = False
+
+sameStuckSpineAt : Int -> List Value -> Int -> List Value -> Bool
+sameStuckSpineAt depth [] depth2 [] = True
+sameStuckSpineAt depth (a :: rest) depth2 (b :: rest2) =
+  sameStuckAt depth a depth2 b && sameStuckSpineAt depth rest depth2 rest2
+sameStuckSpineAt depth _ depth2 _ = False
+
+stuckPairFind : List StuckPair -> Int -> Value -> Value -> Maybe StuckPair
+stuckPairFind [] depth a b = Nothing
+stuckPairFind (p :: rest) depth a b =
+  if sameStuckAt p.pairDepth p.pairLeft depth a && sameStuckAt p.pairDepth p.pairRight depth b then
+    Just p
+  else
+    stuckPairFind rest depth a b
+
+stuckPairSeen : List StuckPair -> Sols -> Int -> Value -> Value -> Bool
+stuckPairSeen pairs sols depth a b =
+  case stuckPairFind pairs depth a b of
+    Just p => p.pairSols == HashMap.size sols.solsTbl
+    Nothing => False
+
+stuckPairCons : Int -> Sols -> Value -> Value -> List StuckPair -> List StuckPair
+stuckPairCons depth sols a b pairs = StuckPair depth (HashMap.size sols.solsTbl) a b :: pairs
+
+-- | 分支体比较入口：入口顺序与 `convFuel` 相同（快速判等 → force → 元变量求解 →
+-- `convBothFuel`），只多一条「同一比较对」的余归纳命中；两侧都折成卡住 case 时带上当前对
+-- 继续下钻，其余形态交给 `convBothFuel`。
+convBranchFuel : Int -> List StuckPair -> HashMap String Term -> Sols -> Int -> Value -> Value -> Check Sols
+convBranchFuel fuel pairs defs sols depth a b =
+  if fuel <= 0 then
+    icFuel "conv"
+  else if fastSame a b then
+    OkC sols
+  else if fastSameSols sols a b then
+    OkC sols
+  else if stuckPairSeen pairs sols depth a b then
+    OkC sols
+  else
+    let
+      a2 = force defs sols defaultFuel a
+      b2 = force defs sols defaultFuel b
+    in case a2 of
+      VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp b2
+      VCase scrut alts =>
+        case b2 of
+          VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
+          VCase scrut2 alts2 => convCasePairFuel (fuel - 1) (stuckPairCons depth sols a b pairs) defs sols depth scrut alts scrut2 alts2
+          _ => mismatchAt depth a2 b2
+      _ =>
+        case b2 of
+          VMeta m sp => solveMetaFuel (fuel - 1) defs sols depth m sp a2
+          _ => convBothFuel (fuel - 1) defs sols depth a2 b2
 
 export mismatchAt : Int -> Value -> Value -> Check a
 mismatchAt depth a b =
@@ -834,10 +935,10 @@ export convBoth : HashMap String Term -> Sols -> Int -> Value -> Value -> Check 
 convBoth a1 a2 a3 a4 a5 = convBothFuel (convFuelFor a4 a5) a1 a2 a3 a4 a5
 
 export convCaseAlts : HashMap String Term -> Sols -> Int -> List VCaseAlt -> List VCaseAlt -> Check Sols
-convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel convFuelBase a1 a2 a3 a4 a5
+convCaseAlts a1 a2 a3 a4 a5 = convCaseAltsFuel convFuelBase [] a1 a2 a3 a4 a5
 
 export convOneAlt : HashMap String Term -> Sols -> Int -> VCaseAlt -> VCaseAlt -> Check Sols
-convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel convFuelBase a1 a2 a3 a4 a5
+convOneAlt a1 a2 a3 a4 a5 = convOneAltFuel convFuelBase [] a1 a2 a3 a4 a5
 
 export convValueLists : HashMap String Term -> Sols -> Int -> List Value -> List Value -> Check Sols
 convValueLists a1 a2 a3 a4 a5 = convValueListsFuel convFuelBase a1 a2 a3 a4 a5
