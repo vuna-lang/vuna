@@ -1,0 +1,90 @@
+-- 实例搜索的候选快照语义（`Elab.Dict.matchInstances`）：每个候选都从**同一份入口 `Ec`**
+-- 出发，前一个候选（命中与否）都不改变后一个候选看到的解表。
+--
+-- 锁两件事：
+--   1. 一个候选匹配失败不挡住后面的候选（`C Bad` / `C Other` 都匹配不上 `Box Bad`，
+--      `C (Box a)` 仍然解出）；
+--   2. 候选之间不共享解 ⇒ 未解目标上多个候选都能匹配时必须报歧义，不能由候选顺序
+--      决定谁胜出（共享解表时第一个候选就把目标元变量解掉，后面的候选全部失配）。
+--
+-- 只做纯断言（精化样例源码 → 直接调 `searchInstanceIn`），不编译不运行样例。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Dict
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.Meta
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
+
+-- 样例：三个具体实例 + 一个参数化实例。
+sample : String
+sample =
+  "data Bad : Type where\n"
+    ++ "  MkBad : Bad\n"
+    ++ "data Other : Type where\n"
+    ++ "  MkOther : Other\n"
+    ++ "data Box a : Type where\n"
+    ++ "  MkBox : a -> Box a\n"
+    ++ "trait C a where\n"
+    ++ "  cOf : a -> String\n"
+    ++ "instance C Bad where\n"
+    ++ "  cOf x = \"bad\"\n"
+    ++ "instance C Other where\n"
+    ++ "  cOf x = \"other\"\n" ++ "instance C (Box a) where\n" ++ "  cOf x = \"box\"\n"
+
+-- 样例精化后的起始状态（实例表 + 类表 + globals）。
+sampleState : Maybe (Ec, List (String, Term))
+sampleState =
+  case parseSource "<inst-snapshot>" sample of
+    ErrC _ => Nothing
+    OkC sf =>
+      case elabProgramFull sf.sourceFileDecls of
+        ErrC _ => Nothing
+        OkC prog => Just (ecOfProgram prog)
+
+noSpan : Span
+noSpan = Span "" 0 0 0 0 0 0
+
+-- 字典目标 `Dict_C arg`。
+dictGoal : Value -> Value
+dictGoal arg = VNeutral (NGlobal (dictTypeName "C") [arg])
+
+globalValue : String -> Value
+globalValue g = VNeutral (NGlobal g [])
+
+boxOf : Value -> Value
+boxOf arg = VNeutral (NGlobal "Box" [arg])
+
+-- 1) 前两个候选失配，第三个候选仍然能解出。
+failedCandidateDoesNotBlock : (Ec, List (String, Term)) -> Bool
+failedCandidateDoesNotBlock st =
+  let
+    ec = firstOf st
+    globals = secondOf st
+  in case searchInstanceIn globals emptyCtx ec (dictGoal (boxOf (globalValue "Bad"))) noSpan of
+    OkC _ => True
+    ErrC _ => False
+
+-- 2) 未解目标上 `C Bad` / `C Other` / `C (Box a)` 都能匹配 ⇒ 歧义（而不是按顺序取第一个）。
+independentCandidatesAreAmbiguous : (Ec, List (String, Term)) -> Bool
+independentCandidatesAreAmbiguous st =
+  let
+    ec = firstOf st
+    globals = secondOf st
+  in case newMeta emptyCtx ec of
+    (mTerm, ec1) =>
+      case searchInstanceIn globals emptyCtx ec1 (eval [] mTerm) noSpan of
+        OkC _ => False
+        ErrC d => d.diagCode == tcCode (AmbiguousInstance "" "")
+
+main : Int
+main =
+  case sampleState of
+    Nothing => 0
+    Just st =>
+      (if failedCandidateDoesNotBlock st then 1 else 0)
+        + (if independentCandidatesAreAmbiguous st then 1 else 0)
