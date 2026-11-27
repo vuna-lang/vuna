@@ -124,6 +124,11 @@ warning 的**通道**没有进程内全局收集器：Elab 期 `warnAt*`
 首条错误的 `Diagnostic.diagChildren` 上（批量错误通道），CLI 逐个输出——两者都不依赖
 跨调用保留的可变状态。
 
+恢复点只落在**括号深度 0 且与块首同列**的 token（多行括号表达式里与块首同列的 token
+不算声明起点，见 `Parser.recoverDecl`）；恢复后的第一条声明只更新子句块状态、不判
+`PS_ClauseNotAdjacent` 一类子句规则（解析失败已经吞掉了它与谁相邻）。收尾处仍有剩余
+token 时，已收集的诊断与新诊断一起交回，不会被单条首错覆盖。
+
 ## 5. 渲染视图
 
 实现：`packages/compiler/lib/Vuna/Compiler/Base/Diag/Format.vuna`。
