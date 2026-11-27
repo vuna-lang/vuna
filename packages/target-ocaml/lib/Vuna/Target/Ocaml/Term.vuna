@@ -2437,6 +2437,25 @@ genAppNode st f a =
 ocamlLitText : String -> String
 ocamlLitText s = if strAt s 0 == 45 then "(" ++ s ++ ")" else s
 
+genCaseDefault : GenSt -> Ir -> List IrAlt -> Check (OTerm, GenSt)
+genCaseDefault st scrut alts =
+  Vuna.Compiler.Base.Common.bind (genIr st scrut) (
+      \p =>
+        case p of
+          (scrutTerm, st1) =>
+            Vuna.Compiler.Base.Common.bind (genArms st1 alts) (
+                \q =>
+                  case q of
+                    (arms, st2) => OkC (OMatch scrutTerm arms (hasCatchAll alts), st2)
+              )
+    )
+
+isEffThunkAlt : IrAlt -> Bool
+isEffThunkAlt alt =
+  case irAltCtorOf alt of
+    Just (fam, ctor) => fam == irEffTypeName && ctor == irEffMkCtor
+    Nothing => False
+
 genIrNode : GenSt -> Ir -> Check (OTerm, GenSt)
 genIrNode st (IrVar b) = OkC (OName (irBinderText b), st)
 genIrNode st (IrGlobal name) =
@@ -2444,14 +2463,24 @@ genIrNode st (IrGlobal name) =
     p = genValueRef st name
   in OkC (OName (firstOf p), secondOf p)
 genIrNode st (IrCtor family ctor _ args) =
-  Vuna.Compiler.Base.Common.bind (genIrArgs st args) (
-      \p =>
-        case p of
-          (terms, st1) =>
-            let
-              r = genCtorRef st1 family ctor
-            in OkC (OCtorApp (firstOf r) terms, secondOf r)
-    )
+  if family == irEffTypeName && ctor == irEffMkCtor then
+    case args of
+      [x] =>
+        Vuna.Compiler.Base.Common.bind (genIr st x) (
+            \p =>
+              case p of
+                (xTerm, st1) => OkC (ORaw ("Obj.repr (" ++ renderTerm xTerm ++ ")"), st1)
+          )
+      _ => icInternal "Eff thunk must have exactly one argument"
+  else
+    Vuna.Compiler.Base.Common.bind (genIrArgs st args) (
+        \p =>
+          case p of
+            (terms, st1) =>
+              let
+                r = genCtorRef st1 family ctor
+              in OkC (OCtorApp (firstOf r) terms, secondOf r)
+      )
 genIrNode st (IrRecord family _ fields) =
   Vuna.Compiler.Base.Common.bind (genAssignedFields st family fields) (
       \p =>
@@ -2569,16 +2598,28 @@ genIrNode st (IrIf c th el) =
               )
     )
 genIrNode st (IrCase _ _ scrut alts) =
-  Vuna.Compiler.Base.Common.bind (genIr st scrut) (
-      \p =>
-        case p of
-          (scrutTerm, st1) =>
-            Vuna.Compiler.Base.Common.bind (genArms st1 alts) (
-                \q =>
-                  case q of
-                    (arms, st2) => OkC (OMatch scrutTerm arms (hasCatchAll alts), st2)
+  case alts of
+    alt :: _ =>
+      if isEffThunkAlt alt then
+        case irAltBindersOf alt of
+          [b] =>
+            Vuna.Compiler.Base.Common.bind (genIr st scrut) (
+                \p =>
+                  case p of
+                    (scrutTerm, st1) =>
+                      case nonErasedBinderText b of
+                        "" => icInternal "Eff case binder must be kept"
+                        bName =>
+                          Vuna.Compiler.Base.Common.bind (genIr st1 (irAltBodyOf alt)) (
+                              \q =>
+                                case q of
+                                  (bodyTerm, st2) => OkC (OLet (OPVar bName) (ORaw ("Obj.obj (" ++ renderTerm scrutTerm ++ ")")) bodyTerm, st2)
+                            )
               )
-    )
+          _ => icInternal "Eff case arm must have exactly one binder"
+      else
+        genCaseDefault st scrut alts
+    [] => genCaseDefault st scrut alts
 genIrNode st (IrNatCase scrut fresh zero succ catch) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
@@ -2630,9 +2671,9 @@ effThunkText ctor unitTy rt arity =
   let
     argText = joinWith " " (takeNames arity ioParamNames)
   in if arity == 0 then
-    "(${ctor} (fun (_ : ${unitTy}) -> ${rt}))"
+    "(Obj.repr (fun (_ : ${unitTy}) -> ${rt}))"
   else
-    "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
+    "(fun ${argText} -> Obj.repr (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
 -- 原语最多 2 个运行时参数（`fsWriteFile` / `processRunIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。

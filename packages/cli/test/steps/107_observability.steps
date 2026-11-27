@@ -124,7 +124,10 @@ out-contains: samples:cpu
 # sampleStart/Stop）。`check` 的真实工作在 `vuna-compiler` 子进程里，`--out` 必须把
 # 整棵进程树的 trace 合并成一份（不是最后 flush 的进程覆盖）；顺带验证 reservoir
 # 把抽样前总数写进 `vuna.counter.sample.mem`。
-run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" dev obs run --level 1 --sample mem --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
+# 探针用现生成的 8000 定义包（无依赖）：抽样量与编译器自身分配无关，稳定高于
+# reservoir 的 8192 槽（替换分支）；`check base` 一类的体量会随分配优化掉到槽数以下。
+run: sh -c 'rm -rf "$TMPDIR/obs-gen"; mkdir -p "$TMPDIR/obs-gen/lib" "$TMPDIR/obs-gen/app"; printf "%s\n" "[package]" "name = \"obs-gen\"" "" "[export]" "modules = [\"M\"]" > "$TMPDIR/obs-gen/vuna.toml"; { printf "%s\n" "module M where" ""; i=0; while [ $i -lt 8000 ]; do printf "export f%s : Int\nf%s = %s\n" "$i" "$i" "$i"; i=$((i+1)); done; } > "$TMPDIR/obs-gen/lib/M.vuna"; printf "%s\n" "import M" "" "main : Int" "main = f0" > "$TMPDIR/obs-gen/app/Main.vuna"'
+run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" VUNA_PKG_STATE="$TMPDIR/tool-state" "$VUNA" dev obs run --level 1 --sample mem --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$TMPDIR/obs-gen" >/dev/null'
 exit: 0
 run: sh -c '"$VUNA" dev obs validate "$TMPDIR/tool-trace.jsonl"'
 exit: 0
@@ -138,7 +141,7 @@ out-contains: pids
 run: sh -c 'n=$(grep -c "vuna[.]sample[.]mem" "$TMPDIR/tool-trace.jsonl"); test "$n" -gt 100 && echo "mem $n"'
 exit: 0
 out-contains: mem
-# reservoir 的替换分支：抽样前总数 > 保留的 8192 槽（`check base` 的分配量足够大）。
+# reservoir 的替换分支：抽样前总数 > 保留的 8192 槽。
 run: sh -c 'v=$(grep "vuna[.]counter[.]sample[.]mem" "$TMPDIR/tool-trace.jsonl" | grep -o "\"value\":[0-9]*" | cut -d: -f2 | sort -n | tail -1); test "$v" -gt 8192 && echo "sampled $v"'
 exit: 0
 out-contains: sampled

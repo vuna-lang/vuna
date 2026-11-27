@@ -243,7 +243,15 @@ toOTy (IrTyFun d c) = OTFun (toOTy d) (toOTy c)
 toOTy (IrTyData fam args) = OTData fam (map toOTy args)
 
 toODecl : IrTyDecl -> ODecl
-toODecl (IrVariantDecl name n ctors) = ODVariant n (typeName name) (map (toOCtor name) ctors)
+-- `Eff` 在 OCaml 后端用不透明表示：单个构造子 `MkEff` 只有 thunk 字段，运行时值就是
+-- 该闭包本身（`Obj.repr` 恒等），类型写成 `Obj.t`。不写成函数类型别名是有意的：
+-- 零参顶层定义会因值限制出现弱类型变量。别的后端（native/wasm）仍按装箱 data 处理，
+-- 各自的 CPS/机器代码不需要区分。
+toODecl (IrVariantDecl name n ctors) =
+  if name == irEffTypeName then
+    ODAlias n (typeName name) OTOpaque
+  else
+    ODVariant n (typeName name) (map (toOCtor name) ctors)
 toODecl (IrRecordDecl name n fields tys) =
   ODRecord n (typeName name) (recordFieldsOf name fields tys)
 toODecl (IrUnboxedDecl name n ty) = ODAlias n (typeName name) (toOTy ty)
