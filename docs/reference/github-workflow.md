@@ -7,49 +7,67 @@
 
 ## 状态机
 
-Issue 的打开/关闭是唯一的状态边界：**closed = Done**；打开期间用 `status:*` 标签表示进度。
+Issue 的进度是 GitHub 原生 status；`status:*` 标签已退役。关闭状态由关闭原因决定：
 
-```text
-open issue
-  status:backlog
-      │ 加 milestone / assignee
-      ▼
-  status:todo
-      │ 开分支 / draft PR
-      ▼
-  status:in-progress
-      │ PR ready_for_review
-      ▼
-  status:in-review
-      │ PR merged（Closes #N）
-      ▼
-   issue closed = Done
+| status | 类别 | 含义 |
+| --- | --- | --- |
+| Backlog | backlog | 未排期 |
+| Todo | planned | 已排期，尚未开工 |
+| In progress | started | 开发中 |
+| In review | started | PR 已就绪，等待门禁或评审 |
+| Done | completed | 已完成（closed） |
+| Not planned | not_planned | 不计划处理（closed） |
+| Duplicate | duplicate | 重复（closed，指向 canonical issue） |
+
+GitHub 自带推进，不需要标签：
+
+| 事件 | 结果 |
+| --- | --- |
+| 新建 issue | Backlog |
+| assign 人 | Backlog → Todo |
+| 关联 draft PR（`Closes #N`） | In progress |
+| PR 转 ready，或关联 ready PR | In review |
+| 最后一个 ready PR 转回 draft / 关闭未合并 | In review → In progress |
+| `Closes` 合并 | Done（自动关闭） |
+
+仓库脚本补齐 GitHub 不覆盖的部分：
+
+- `Refs #N` 的 PR 不会被 GitHub 原生 link：`pr-triage` 按 draft / ready 把 issue 推到
+  In progress / In review；PR 关闭但未合并时回到 Todo，并留一条评论。
+- 子任务进入 In progress / In review 时，父 issue（通常是 epic）从 Backlog / Todo 推到
+  In progress（只前进，不回退）。
+- epic 新建即 Todo；关闭时随关闭原因变 Done / Not planned。
+
+`gh` 还没有 status 的 flag 和 JSON 字段，读写用 `nix/tools/issue.sh`：
+
+```console
+nix/tools/issue.sh status <n> in-progress
+nix/tools/issue.sh show <n>
+gh issue list --search 'status:todo'        # 按状态筛选
 ```
 
-- 新 issue 默认 `status:backlog`。
-- 加 assignee 或 milestone 时，`backlog` 自动进入 `todo`；已经是 `in-progress` /
-  `in-review` 的状态不会被下调。
-- PR 关闭但未合并时，关联 issue 回到 `status:todo`，并留一条自动评论。
-- issue 关闭时自动移除所有 `status:*`；PR 用 `Closes #N` 合入时由 GitHub 原生关闭。
-- 同一 issue 只保留一个 `status:*`；手动加第二个会被 workflow 收敛。
-- 当前没有 `status:in-preview`：合并即进入 `in-review` 的终点，验证完成后关闭 issue。
+`milestone` 只做分组，不再表示「已排期」；排期看 assignee 或 Todo。
 
 ## backlog 的两类入口
 
 ### 人类一句话 idea
 
-用 `想法 / 方向` 模板创建：标题 + 一句话即可，自动带 `status:backlog` 和
-`needs-refinement`。Agent 处理时：
+用 `想法 / 方向` 模板创建：标题 + 一句话即可，自动带 `needs-refinement`，状态是默认的
+Backlog。Agent 处理时：
 
 1. 先查重：
    ```console
    gh issue list --state all --search "<关键词> in:title,body" --limit 20
    ```
 2. 在 issue 里讨论，补全背景、目标 / 非目标、方案、验收标准。
-3. 打 `type:*`、`pkg:*`、`area:*`，按需加 priority / milestone。
-4. 建立 parent epic、sub-issue、`blocked by`、related，写来源链接。
-5. 移除 `needs-refinement`；未排期保持 `status:backlog`，已排期改 `status:todo`。
-6. 确认重复：关闭为 `duplicate`，链接 canonical issue，不新建。
+3. 补齐元信息：`gh issue edit <n> --type Bug`（或 Feature / Task / Refactor / Perf /
+   Docs / Test / Epic）、`pkg:*` / `area:*` 标签、`nix/tools/issue.sh priority <n> P1`，
+   按需加 milestone。
+4. 建立关系：`gh issue edit <n> --parent <epic>`、`--add-blocked-by <m>`、
+   `nix/tools/issue.sh relate <n> <m>`；来源链接写在正文。
+5. 移除 `needs-refinement`；未排期保持 Backlog，已排期 assign 或
+   `nix/tools/issue.sh status <n> todo`。
+6. 确认重复：`gh issue close <n> --reason duplicate --duplicate-of <m>`。
 
 `needs-refinement` 表示“内容或元信息还没准备好”，不是优先级；等待用户回答时也可以同时加
 `needs-info`。
@@ -60,16 +78,34 @@ Agent 在开发、评审或门禁失败时发现问题：
 
 1. 创建前搜索 open + closed issue；已有相同问题就评论补充，不重复建。
 2. 正文写清来源（PR / issue / commit / `file:line`）、影响面、建议方案、验收标准。
-3. 直接打 `type:*`、`pkg:*`、`area:*`，默认 `status:backlog`；属于方向时挂到 epic 的
-   sub-issue。
+3. 设原生类型（`gh issue edit <n> --type ...`）与 `pkg:*` / `area:*` 标签，默认 Backlog；
+   属于方向时挂到 epic 的 sub-issue（`--parent`）。
 4. 与当前改动相关时在新 issue 里链接来源 PR / issue。
 
 ## 标签
 
-### type（恰一个）
+### type（PR 门禁路由）
 
-`type:bug`、`type:feature`、`type:refactor`、`type:perf`、`type:docs`、`type:test`、
-`type:chore`、`type:epic`。
+Issue 的类型是 org 级 issue type：`Bug`、`Feature`、`Task`、`Refactor`、`Perf`、`Docs`、
+`Test`、`Epic`，不是标签。`type:*` 标签只出现在 PR 上，由 `pr-triage` 从标题前缀和关联
+issue 的 issue type 派生，`gates` 用它选检查。`Task` 对应 `type:chore`。
+
+### priority（原生字段）
+
+`Priority` 是 org 级 issue field，选项是 `Urgent` / `High` / `Medium` / `Low`，对应
+`P0` / `P1` / `P2` / `P3`：
+
+```console
+nix/tools/issue.sh priority <n> P1              # 写入 High
+gh api "repos/vuna-lang/vuna/issues?issue_field_values=priority:High" --jq '.[].number'
+```
+
+### 关系（原生）
+
+- sub-issue：`gh issue edit <child> --parent <epic>`；批量用 `--add-sub-issue`
+- blocked by：`gh issue edit <n> --add-blocked-by <m>`
+- relates to：`nix/tools/issue.sh relate <n> <m>`
+- duplicate：`gh issue close <n> --reason duplicate --duplicate-of <m>`
 
 ### pkg（工作区包归属）
 
@@ -95,7 +131,7 @@ area 切片（只跑该影响面的夹具，完整覆盖由 nightly 的 `suite` 
 
 - `needs-refinement`：等待 agent 查重、补全内容与元信息。
 - `needs-info`：等待用户补充信息。
-- `blocked`：被依赖或外部条件阻塞。
+- `blocked`：PR 的 hold 标记（automerge 会让出队列）；issue 侧阻塞用原生 blocked by。
 - `main-red`：main 门禁失败事故单与修复 PR（由 `main-red.yml` 维护）。
 - `breaking`：破坏性改动。
 - `no-issue`：PR 不关联 issue（PR-only 改动的默认做法）。
@@ -110,12 +146,13 @@ area 切片（只跑该影响面的夹具，完整覆盖由 nightly 的 `suite` 
 - `debt:A` / `debt:B` / `debt:C` / `debt:D`：原分类（补丁 / 能力缺口 / 近似 / 结构妥协）；
 - `debt:silent`：后果是静默错误；
 - `debt:trigger`：触发条件型；
-- `priority:P0` … `priority:P3`：优先级，不替代 `status:*`。
+- `debt:future`：长期能力缺口，当前不排期。
 
 文档和注释引用 issue 统一写 `gh#N`；issue 正文的 `Legacy-Debt: Dxx` 只用于迁移追溯。
 
 标签定义在 [`.github/labels.yml`](../../.github/labels.yml)，由
-`nix/tools/github-labels.sh` 同步；旧标签用 `--migrate` 迁移。
+`nix/tools/github-labels.sh` 同步；旧标签用 `--migrate` 迁移。issue status、issue type 与
+Priority 字段不在标签表里。
 
 ## PR 与 issue 联动
 
@@ -124,10 +161,11 @@ issue 可选：PR-only 改动加 `no-issue` 标签即可；需要关联时在描
 
 `pr-triage` 在 PR 打开/更新时自动：
 
-- 从标题的 Conventional Commits 前缀同步 `type:*`（标题缺失时用关联 issue 的 type）；
+- 从标题的 Conventional Commits 前缀同步 `type:*`（标题缺失时用关联 issue 的 issue type）；
 - 从改动路径派生 `pkg:*` / `area:*`，并从关联 issue 补齐缺失的 `pkg` / `area`；
 - 从关联 issue 继承 milestone；
-- 按 PR 的 draft / ready 状态推进关联 issue 的 `status:*`。
+- 按 PR 的 draft / ready 状态推进关联 issue 的原生 status（`Refs #N` 与 `Closes #N` 都覆盖）；
+  PR 关闭但未合并时回到 Todo。
 
 PR 标题与分支名仍按 `<type>/<slug>`、`<type>(scope): 中文描述` 的约定；
 `pr-triage` 只负责把约定同步成标签。
@@ -233,9 +271,9 @@ CONTRIBUTING.md。
 `main-red` issue：失败创建/追加失败 job 与相关 PR，恢复绿自动关闭。
 
 - 修复前先 `gh issue list --label main-red --state open`；
-- issue 已有 assignee 或 `status:in-progress` 时让出，不要开第二个修复 PR；
+- issue 已有 assignee 或状态 `In progress` 时让出，不要开第二个修复 PR；
 - 没有认领时评论 claim，再
-  `gh issue edit <n> --add-assignee @me --add-label status:in-progress`；
+  `gh issue edit <n> --add-assignee @me` 与 `nix/tools/issue.sh status <n> in-progress`；
 - 修复 PR 写 `Closes #<n>` 并加 `main-red` 标签；
 - [main-red-guard.yml](../../.github/workflows/main-red-guard.yml) 会把第二个引用同一
   issue 的 PR 加 `blocked` 并移出队列；换人时先在 issue 上 unassign；
@@ -244,11 +282,14 @@ CONTRIBUTING.md。
 ## 常用查询
 
 ```console
-gh issue list --label status:todo
-gh issue list --label status:backlog --label needs-refinement
+gh issue list --search 'status:todo'
+gh issue list --search 'status:backlog' --label needs-refinement
+gh issue list --type Epic
 gh issue list --label main-red --state open
 gh issue list --milestone "native 自举"
 gh issue list --label pkg:compiler --state all --search "elab in:title,body"
+gh api "repos/vuna-lang/vuna/issues?issue_field_values=priority:High" --jq '.[].number'
+nix/tools/issue.sh show <n>
 gh pr view <n> --json autoMergeRequest,labels,isDraft
 gh pr checks <n>
 nix/tools/merge-queue.sh status
@@ -267,9 +308,12 @@ nix/tools/merge-queue.sh status
 - `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
 - auto-merge 没打开：确认 PR 非 draft、同仓库、没有 hold 标签；队列启用后不再需要
   `strict up-to-date`。
-- `main-red` issue 重复：确认 `main-red.yml` 已合入 main；guard 依赖同一个 issue 的 assignee。
+- `main-red` issue 重复：确认 `main-red.yml` 已合入 main；guard 依赖同一个 issue 的
+  assignee 与状态。
 - `pr-triage` / `automerge` / `main-red-guard` 没跑：它们用 `pull_request_target`，workflow
   从默认分支读取；修改必须先合入 main 才会对该 PR 生效。
+- `issue.sh status` 写不进去：确认 issue 未关闭（关闭的 issue 不能设 open 类状态）；
+  status 是 public preview，仓库未开通时 REST 会忽略该字段。
 - 标签迁移失败：先跑 `nix/tools/github-labels.sh --sync`，再跑 `--migrate`；脚本只加新标签、
   删旧标签，不直接重命名。
 - 没有 `pkg:*` / `area:*`：`nix/tools/pr-labels.sh` 对路径做映射；新增目录时同步补映射与

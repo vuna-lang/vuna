@@ -11,10 +11,11 @@
 
 issue 可选：PR-only 的改动直接切分支，PR 加 `no-issue` 标签；需要追踪的复杂工作再按
 [`.agents/skills/vuna-issue/SKILL.md`](.agents/skills/vuna-issue/SKILL.md) 查重后创建/精炼，
-领取时标 `status:in-progress` 并 assign 给自己。
+领取时 assign 给自己并把状态设为 In progress（`nix/tools/issue.sh status <n> in-progress`）。
 
 ```console
-gh issue edit <n> --add-assignee @me --add-label status:in-progress  # 有关联 issue 时
+gh issue edit <n> --add-assignee @me                                  # 有关联 issue 时
+nix/tools/issue.sh status <n> in-progress
 git fetch origin
 git switch -c <type>/<slug> origin/main
 git config core.hooksPath .githooks   # devShell / direnv 会自动设置

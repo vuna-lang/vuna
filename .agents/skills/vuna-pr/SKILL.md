@@ -17,7 +17,7 @@ git status --short                     # 应为干净；脏就先提交或放 _s
 ```
 
 主工作区路径用 `git worktree list` 找 `[main]` 那一行。issue 可选：PR-only 改动加
-`no-issue` 标签；需要追踪的复杂工作再按技能 `vuna-issue` 建/领并标 `status:in-progress`。
+`no-issue` 标签；需要追踪的复杂工作再按技能 `vuna-issue` 建/领并把状态设为 In progress。
 
 如果 `main` 是红的（`gh issue list --label main-red --state open`），先按
 [workflow.md §6](../../rules/workflow.md) 认领；已被别人认领就让出，不要另开修复 PR。
