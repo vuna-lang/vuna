@@ -1,0 +1,29 @@
+-- pass 事件名由 `Vuna.Ir.Passes.allPassNames` 生成：表内名字必须被 `validate` 接受，
+-- 表外 `vuna.pass.*` 不再被前缀放行。
+import Base
+import Vuna.Obs.Types
+import Vuna.Ir.Passes
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("obs pass vocab failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "pass-events-known" (allKnown (map passEventName allPassNames)),
+    Pair "unknown-pass-rejected" (not (isKnownVunaEventName "vuna.pass.not-a-real-pass"))
+  ]
+
+allKnown : List String -> Bool
+allKnown [] = True
+allKnown (n :: rest) = isKnownVunaEventName n && allKnown rest
