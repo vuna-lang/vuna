@@ -13,6 +13,7 @@ import Vuna.Compiler.Base.Diagnostics.Pkg
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Loader.Modules
@@ -802,18 +803,6 @@ resolveRecordPatternField fuel modules label prefix ns imports (fname, pat) =
             (pat2, bound) => OkC ((fname, pat2), bound)
       )
 
-resolveAlt : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Alt -> Check Alt
-resolveAlt fuel modules label prefix ns imports scope alt =
-  if fuel <= 0 then
-    icFuel "resolver"
-  else
-    Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports alt.altPat) (
-        \p =>
-          case p of
-            (pat2, bound) => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append bound scope) alt.altBody) (\body2 => OkC (Alt pat2 body2 alt.altRef))
-      )
-
--- | 绑定签名行的名字解析（类型表达式）。
 resolveBindingSig : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Maybe BindingSig -> Check (Maybe BindingSig)
 resolveBindingSig fuel modules label prefix ns imports scope Nothing = OkC Nothing
 resolveBindingSig fuel modules label prefix ns imports scope (Just s) =
@@ -1042,36 +1031,29 @@ resolveExprRaw fuel modules label prefix ns imports scope expr =
       EFloat raw sp => OkC (EFloat raw sp)
       -- 模板字面量在 rename 之后降级为纯表达式（文本块 → `EStr`，洞 → `interp e`），
       -- 于是 Elab / codegen 永远看不到 `EInterp`；fmt / lint / index / doc 只做 parse，仍看原形。
-      EInterp parts sp => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope parts) (\ps => OkC (lowerTemplate sp ps))
-      ELam params body sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (Vuna.Compiler.Base.Common.traverse (checkBinder label) (map firstOf params))) (\_ => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append (map firstOf params) scope) body) (\b => OkC (ELam params b sp)))
-      EApp fn args sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope fn) (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => resolveExpr (fuel - 1) modules label prefix ns imports scope a) args) (\args2 => OkC (EApp fn2 args2 sp)))
+      EInterp parts sp => Vuna.Compiler.Base.Common.bind (mapInterpExpr (resolveExpr (fuel - 1) modules label prefix ns imports scope) parts) (\ps => OkC (lowerTemplate sp ps))
+      -- λ 的参数只做 binder 形状检查；体在扩展后的作用域里解析（`mapScopedExpr`）。
+      ELam params body sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (Vuna.Compiler.Base.Common.traverse (checkBinder label) (map firstOf params))) (\_ => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (ELam params body sp))
+      EApp fn args sp => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (EApp fn args sp)
       -- `EPi` 只做**结构递归解析**，不在这里判定「是否允许」：依赖类型是 DT 的核心语法，
       -- 放行判定的责任交给下游检查器（`Elab` 精化）。
-      EPi name implicit qty dom cod sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope dom) (\dom2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append [name] scope) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
+      EPi name implicit qty dom cod sp => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (EPi name implicit qty dom cod sp)
       ELet binds body rec_ sp =>
         Vuna.Compiler.Base.Common.bind (resolveLet (fuel - 1) modules label prefix ns imports scope rec_ binds body) (
             \r =>
               case r of
                 (binds2, body2) => OkC (ELet binds2 body2 rec_ sp)
           )
-      ECase scrut alts sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope scrut) (\scrut2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveAlt (fuel - 1) modules label prefix ns imports scope dtv) alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
-      EIf c t e sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope c) (\c2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope t) (\t2 => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => OkC (EIf c2 t2 e2 sp))))
-      EField base fname sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base) (\b => OkC (EField b fname sp))
-      ERecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecord name2 fs sp)))
-      ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base) (\b => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecUpdate b fs sp)))
+      -- `case` 分支的模式也要解析（构造子名），并把 pattern binder 加进分支体作用域。
+      ECase scrut alts sp => mapScopedExprPat (resolveExpr (fuel - 1) modules label prefix ns imports) (resolvePattern resolveFuelBound modules label prefix ns imports) scope (ECase scrut alts sp)
+      EIf c t e sp => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (EIf c t e sp)
+      EField base fname sp => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (EField base fname sp)
+      -- record 构造名要解析成 canonical ctor；字段表达式按同一作用域下降。
+      ERecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (mapFieldExprs (resolveExpr (fuel - 1) modules label prefix ns imports scope) fields) (\fs => OkC (ERecord name2 fs sp)))
+      ERecUpdate base fields sp => mapScopedExpr (resolveExpr (fuel - 1) modules label prefix ns imports) scope (ERecUpdate base fields sp)
       EDo stmts sp => resolveDo (fuel - 1) modules label prefix ns imports scope stmts (nodeRefSpan sp)
 
 -- 模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
-resolveInterpParts : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List InterpPart -> Check (List InterpPart)
-resolveInterpParts fuel modules label prefix ns imports scope parts =
-  if fuel <= 0 then
-    icFuel "resolver"
-  else
-    case parts of
-      [] => OkC []
-      (IPText s) :: rest => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => OkC ((::) (IPText s) ps))
-      (IPHole e) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e) (\e2 => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => OkC ((::) (IPHole e2) ps)))
-
 -- do 块在这里降级成 bind 的普通应用，类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
 --
@@ -1163,15 +1145,6 @@ resolveDoLet fuel modules label prefix ns imports scope binds =
                       )
                 )
           )
-
-resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> (String, Expr) -> Check (String, Expr)
-resolveFieldValue fuel modules label prefix ns imports scope (fname, value) =
-  if fuel <= 0 then
-    icFuel "resolver"
-  else
-    Vuna.Compiler.Base.Common.bind
-      (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
-      (\v => OkC (fname, v))
 
 -- | 声明处构造子的 canonical 名（`Module.Data.Ctor`）。
 resolveCtorDecl : String -> String -> String -> String -> Check String
