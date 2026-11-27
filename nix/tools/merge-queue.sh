@@ -63,6 +63,7 @@ pr_state() {
           isInMergeQueue
           mergeStateStatus
           labels(first:50) { nodes { name } }
+          stack { number }
           autoMergeRequest { mergeMethod }
           mergeQueueEntry { position state estimatedTimeToMerge }
         }
@@ -78,6 +79,11 @@ enqueue_pr() {
   if [ "$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$s")" = "true" ]; then
     echo "merge-queue: PR #$pr 已在队列中"
     return 0
+  fi
+  stack_number=$(jq -r '.data.repository.pullRequest.stack.number // empty' <<<"$s")
+  if [ -n "$stack_number" ]; then
+    echo "merge-queue: PR #$pr 属于 stack #$stack_number，整条入队尚未接入" >&2
+    return 1
   fi
   pr_json=$(gh pr view "$pr" --repo "$repo" --json id,headRefOid,isDraft,state)
   if [ "$(jq -r '.isDraft' <<<"$pr_json")" = "true" ]; then
@@ -256,12 +262,18 @@ case "$cmd" in
       in_queue=$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$s")
       armed=$(jq -r '.data.repository.pullRequest.autoMergeRequest != null' <<<"$s")
       ms=$(jq -r '.data.repository.pullRequest.mergeStateStatus // "UNKNOWN"' <<<"$s")
+      stack=$(jq -r '.data.repository.pullRequest.stack.number // empty' <<<"$s")
       hold=$(jq -r '[.data.repository.pullRequest.labels.nodes[].name]
         | map(select(. == "blocked" or . == "needs-info" or . == "wontfix"))
         | first // empty' <<<"$s")
 
       if [ "$state" != "OPEN" ] || [ "$draft" = "true" ]; then
         echo "sweep: #$pr 跳过（state=$state draft=$draft）"
+        skipped=$((skipped + 1))
+        continue
+      fi
+      if [ -n "$stack" ]; then
+        echo "sweep: #$pr 跳过（属于 stack #$stack，整条入队待接入）"
         skipped=$((skipped + 1))
         continue
       fi
