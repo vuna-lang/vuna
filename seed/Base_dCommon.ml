@@ -20,6 +20,9 @@ let v_bind = (fun dtb_u_u56 dtb_u_u57 -> (match dtb_u_u56 with
 # 36 "Vuna/Compiler/Base/Common.vuna"
 let v_runEffCheck = (fun dtb_u_u61 -> (dtb_u_u61).f_EffCheck_effCheckRun)
 
+# 36 "Vuna/Compiler/Base/Common.vuna"
+let v_runEffCheck_u_udirect = (fun m _u_ueffTok -> ((Obj.magic (m).f_EffCheck_effCheckRun) _u_ueffTok))
+
 # 51 "Vuna/Compiler/Base/Common.vuna"
 let v_step = (fun dtb_u_u65 dtb_u_u66 -> (match dtb_u_u65 with
   | Base_dDiag.C_Check_ErrC (dtb_u_u67) -> (Base_dDiag.C_Check_ErrC (dtb_u_u67))
@@ -48,5 +51,11 @@ let rec v_traverse = (fun dtb_u_u73 dtb_u_u74 -> (match dtb_u_u74 with
 # 32 "Vuna/Compiler/Base/Common.vuna"
 let v_effCheckRun = (fun dtb_u_u82 -> (match dtb_u_u82 with
   | { f_EffCheck_effCheckRun = dtb_u_u83 } -> dtb_u_u83
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 32 "Vuna/Compiler/Base/Common.vuna"
+let v_effCheckRun_u_udirect = (fun p _u_ueffTok -> (match p with
+  | { f_EffCheck_effCheckRun = dtb_u_u83 } -> ((Obj.magic dtb_u_u83) _u_ueffTok)
   | _ -> failwith "DT: impossible branch"
 ))

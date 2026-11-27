@@ -263,30 +263,51 @@ let v_underscoreCtorName = (fun (dtb_u_u156 : string) -> (match (B_dData_dList.d
 # 481 "Vuna/Compiler/Frontend/Parser/Support.vuna"
 let v_ctorPatternStart = (fun (dtb_u_u161 : string) -> (if (v_upperFirst dtb_u_u161) then true else (v_underscoreCtorName dtb_u_u161)))
 
-# 518 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_startsPatternAtom = (fun (dtb_u_u162 : t_PState) -> (let dtb_u_u163 = (v_peekTok dtb_u_u162) in (match dtb_u_u163 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u164; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u165 } -> (match dtb_u_u164 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u166) -> (if (dtb_u_u166 = "(") then true else (if (dtb_u_u166 = "[") then true else false))
-  | Frontend_dLexer.C_Tok_TTmpl (dtb_u_u167, dtb_u_u168, dtb_u_u169) -> true
-  | Frontend_dLexer.C_Tok_TStr (dtb_u_u170) -> true
-  | Frontend_dLexer.C_Tok_TInt (dtb_u_u171) -> true
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u172) -> true
+# 487 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_recordUpdateAhead = (fun (dtb_u_u162 : t_PState) -> (let dtb_u_u163 = ((v_peekTokAt dtb_u_u162) 1) in (match dtb_u_u163 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u164) -> (match dtb_u_u164 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u165; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u166 } -> (match dtb_u_u165 with
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u167) -> (let dtb_u_u168 = ((v_peekTokAt dtb_u_u162) 2) in (match dtb_u_u168 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u169) -> (match dtb_u_u169 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u170; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u171 } -> (match dtb_u_u170 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u172) -> (if (dtb_u_u172 = "|") then true else false)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
+)
+  | _ -> false
+))
+  | _ -> false
+)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> false
 )))
 
 # 531 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_isSyntaxSym = (fun (dtb_u_u173 : string) -> (if (dtb_u_u173 = "=") then true else (if (dtb_u_u173 = ":") then true else (if (dtb_u_u173 = ",") then true else (if (dtb_u_u173 = ";") then true else (if (dtb_u_u173 = "|") then true else (if (dtb_u_u173 = "=>") then true else (if (dtb_u_u173 = "<-") then true else (if (dtb_u_u173 = "\\") then true else (if (dtb_u_u173 = ".") then true else (if (dtb_u_u173 = "..") then true else (if (dtb_u_u173 = "@") then true else (if (dtb_u_u173 = "(") then true else (if (dtb_u_u173 = ")") then true else (if (dtb_u_u173 = "[") then true else (if (dtb_u_u173 = "]") then true else (if (dtb_u_u173 = "{") then true else (if (dtb_u_u173 = "}") then true else false))))))))))))))))))
+let v_startsPatternAtom = (fun (dtb_u_u173 : t_PState) -> (let dtb_u_u174 = (v_peekTok dtb_u_u173) in (match dtb_u_u174 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u175; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u176 } -> (match dtb_u_u175 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u177) -> (if (dtb_u_u177 = "(") then true else (if (dtb_u_u177 = "[") then true else false))
+  | Frontend_dLexer.C_Tok_TTmpl (dtb_u_u178, dtb_u_u179, dtb_u_u180) -> true
+  | Frontend_dLexer.C_Tok_TStr (dtb_u_u181) -> true
+  | Frontend_dLexer.C_Tok_TInt (dtb_u_u182) -> true
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u183) -> true
+  | _ -> false
+)
+  | _ -> failwith "DT: impossible branch"
+)))
 
-# 558 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_isReservedValueName = (fun (dtb_u_u174 : string) -> (if (if (v_isSyntaxSym dtb_u_u174) then true else (dtb_u_u174 = "->")) then true else (dtb_u_u174 = "`")))
+# 544 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_isSyntaxSym = (fun (dtb_u_u184 : string) -> (if (dtb_u_u184 = "=") then true else (if (dtb_u_u184 = ":") then true else (if (dtb_u_u184 = ",") then true else (if (dtb_u_u184 = ";") then true else (if (dtb_u_u184 = "|") then true else (if (dtb_u_u184 = "=>") then true else (if (dtb_u_u184 = "<-") then true else (if (dtb_u_u184 = "\\") then true else (if (dtb_u_u184 = ".") then true else (if (dtb_u_u184 = "..") then true else (if (dtb_u_u184 = "@") then true else (if (dtb_u_u184 = "(") then true else (if (dtb_u_u184 = ")") then true else (if (dtb_u_u184 = "[") then true else (if (dtb_u_u184 = "]") then true else (if (dtb_u_u184 = "{") then true else (if (dtb_u_u184 = "}") then true else false))))))))))))))))))
 
-# 563 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_closeParenNext = (fun (dtb_u_u175 : t_PState) -> (let dtb_u_u176 = ((v_peekTokAt dtb_u_u175) 1) in (match dtb_u_u176 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u177) -> (match dtb_u_u177 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u178; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u179 } -> (match dtb_u_u178 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u180) -> (if (dtb_u_u180 = ")") then true else false)
+# 571 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_isReservedValueName = (fun (dtb_u_u185 : string) -> (if (if (v_isSyntaxSym dtb_u_u185) then true else (dtb_u_u185 = "->")) then true else (dtb_u_u185 = "`")))
+
+# 576 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_closeParenNext = (fun (dtb_u_u186 : t_PState) -> (let dtb_u_u187 = ((v_peekTokAt dtb_u_u186) 1) in (match dtb_u_u187 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u188) -> (match dtb_u_u188 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u189; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u190 } -> (match dtb_u_u189 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u191) -> (if (dtb_u_u191 = ")") then true else false)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -294,12 +315,12 @@ let v_closeParenNext = (fun (dtb_u_u175 : t_PState) -> (let dtb_u_u176 = ((v_pee
   | _ -> false
 )))
 
-# 586 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_minusLiteralAt = (fun (dtb_u_u181 : Base_dSource.t_Pos) (dtb_u_u182 : t_PState) -> (let dtb_u_u183 = ((v_peekTokAt dtb_u_u182) 2) in (match dtb_u_u183 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u184) -> (match dtb_u_u184 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u185; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u186 } -> (match dtb_u_u185 with
-  | Frontend_dLexer.C_Tok_TFloat (dtb_u_u187) -> (if ((Base_dSource.v_posLine dtb_u_u186) = (Base_dSource.v_posLine dtb_u_u181)) then ((Base_dSource.v_posCol dtb_u_u186) = ((Base_dSource.v_posCol dtb_u_u181) + 1)) else false)
-  | Frontend_dLexer.C_Tok_TInt (dtb_u_u188) -> (if ((Base_dSource.v_posLine dtb_u_u186) = (Base_dSource.v_posLine dtb_u_u181)) then ((Base_dSource.v_posCol dtb_u_u186) = ((Base_dSource.v_posCol dtb_u_u181) + 1)) else false)
+# 599 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_minusLiteralAt = (fun (dtb_u_u192 : Base_dSource.t_Pos) (dtb_u_u193 : t_PState) -> (let dtb_u_u194 = ((v_peekTokAt dtb_u_u193) 2) in (match dtb_u_u194 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u195) -> (match dtb_u_u195 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u196; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u197 } -> (match dtb_u_u196 with
+  | Frontend_dLexer.C_Tok_TFloat (dtb_u_u198) -> (if ((Base_dSource.v_posLine dtb_u_u197) = (Base_dSource.v_posLine dtb_u_u192)) then ((Base_dSource.v_posCol dtb_u_u197) = ((Base_dSource.v_posCol dtb_u_u192) + 1)) else false)
+  | Frontend_dLexer.C_Tok_TInt (dtb_u_u199) -> (if ((Base_dSource.v_posLine dtb_u_u197) = (Base_dSource.v_posLine dtb_u_u192)) then ((Base_dSource.v_posCol dtb_u_u197) = ((Base_dSource.v_posCol dtb_u_u192) + 1)) else false)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -307,13 +328,13 @@ let v_minusLiteralAt = (fun (dtb_u_u181 : Base_dSource.t_Pos) (dtb_u_u182 : t_PS
   | _ -> false
 )))
 
-# 593 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let rec v_countArrows = (fun (dtb_u_u189 : Frontend_dAst.t_Expr) -> (match dtb_u_u189 with
-  | Frontend_dAst.C_Expr_EApp (dtb_u_u190, dtb_u_u191, dtb_u_u192) -> (match dtb_u_u190 with
-  | Frontend_dAst.C_Expr_EVar (dtb_u_u193, dtb_u_u194) -> (if (dtb_u_u193 = "->") then (match dtb_u_u191 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u195, dtb_u_u196) -> (match dtb_u_u196 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u197, dtb_u_u198) -> (match dtb_u_u198 with
-  | B_dData_dList.C_List_Nil -> (1 + (v_countArrows dtb_u_u197))
+# 606 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let rec v_countArrows = (fun (dtb_u_u200 : Frontend_dAst.t_Expr) -> (match dtb_u_u200 with
+  | Frontend_dAst.C_Expr_EApp (dtb_u_u201, dtb_u_u202, dtb_u_u203) -> (match dtb_u_u201 with
+  | Frontend_dAst.C_Expr_EVar (dtb_u_u204, dtb_u_u205) -> (if (dtb_u_u204 = "->") then (match dtb_u_u202 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u206, dtb_u_u207) -> (match dtb_u_u207 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u208, dtb_u_u209) -> (match dtb_u_u209 with
+  | B_dData_dList.C_List_Nil -> (1 + (v_countArrows dtb_u_u208))
   | _ -> 0
 )
   | _ -> 0
@@ -325,38 +346,38 @@ let rec v_countArrows = (fun (dtb_u_u189 : Frontend_dAst.t_Expr) -> (match dtb_u
   | _ -> 0
 ))
 
-# 597 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_terminatesExpression = (fun (dtb_u_u199 : Frontend_dLexer.t_PTok) -> (match dtb_u_u199 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u200; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u201 } -> (match dtb_u_u200 with
-  | Frontend_dLexer.C_Tok_TKw (dtb_u_u202) -> (if (dtb_u_u202 = "else") then true else (if (dtb_u_u202 = "in") then true else (if (dtb_u_u202 = "then") then true else false)))
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u203) -> (if (dtb_u_u203 = ")") then true else (if (dtb_u_u203 = "]") then true else (if (dtb_u_u203 = ",") then true else false)))
+# 610 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_terminatesExpression = (fun (dtb_u_u210 : Frontend_dLexer.t_PTok) -> (match dtb_u_u210 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u211; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u212 } -> (match dtb_u_u211 with
+  | Frontend_dLexer.C_Tok_TKw (dtb_u_u213) -> (if (dtb_u_u213 = "else") then true else (if (dtb_u_u213 = "in") then true else (if (dtb_u_u213 = "then") then true else false)))
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u214) -> (if (dtb_u_u214 = ")") then true else (if (dtb_u_u214 = "]") then true else (if (dtb_u_u214 = ",") then true else false)))
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 606 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_badCaseIndent = (fun (dtb_u_u204 : t_PState) (dtb_u_u205 : int) -> (if (v_isEof dtb_u_u204) then false else (match (v_peekPos dtb_u_u204) with
-  | { Base_dSource.f_Pos_posLine = dtb_u_u206; Base_dSource.f_Pos_posCol = dtb_u_u207; Base_dSource.f_Pos_posOffset = dtb_u_u208; Base_dSource.f_Pos_posEndOffset = dtb_u_u209 } -> (if (dtb_u_u207 > dtb_u_u205) then (if (v_terminatesExpression (v_peekTok dtb_u_u204)) then false else true) else false)
+# 619 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_badCaseIndent = (fun (dtb_u_u215 : t_PState) (dtb_u_u216 : int) -> (if (v_isEof dtb_u_u215) then false else (match (v_peekPos dtb_u_u215) with
+  | { Base_dSource.f_Pos_posLine = dtb_u_u217; Base_dSource.f_Pos_posCol = dtb_u_u218; Base_dSource.f_Pos_posOffset = dtb_u_u219; Base_dSource.f_Pos_posEndOffset = dtb_u_u220 } -> (if (dtb_u_u218 > dtb_u_u216) then (if (v_terminatesExpression (v_peekTok dtb_u_u215)) then false else true) else false)
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 38 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_fileOf = (fun (dtb_u_u210 : t_PState) -> (match dtb_u_u210 with
-  | { f_PState_fileOf = dtb_u_u211; f_PState_sourceOf = dtb_u_u212; f_PState_toksOf = dtb_u_u213; f_PState_lastPos = dtb_u_u214; f_PState_toksLeft = dtb_u_u215; f_PState_pmodeOf = dtb_u_u216; f_PState_tokIndex = dtb_u_u217; f_PState_pendEvents = dtb_u_u218; f_PState_nextNodeId = dtb_u_u219; f_PState_openNodeId = dtb_u_u220; f_PState_subStream = dtb_u_u221; f_PState_backtickShapes = dtb_u_u222; f_PState_sectionShapes = dtb_u_u223; f_PState_interpMultis = dtb_u_u224; f_PState_templateHoles = dtb_u_u225; f_PState_eventMode = dtb_u_u226 } -> dtb_u_u211
+let v_fileOf = (fun (dtb_u_u221 : t_PState) -> (match dtb_u_u221 with
+  | { f_PState_fileOf = dtb_u_u222; f_PState_sourceOf = dtb_u_u223; f_PState_toksOf = dtb_u_u224; f_PState_lastPos = dtb_u_u225; f_PState_toksLeft = dtb_u_u226; f_PState_pmodeOf = dtb_u_u227; f_PState_tokIndex = dtb_u_u228; f_PState_pendEvents = dtb_u_u229; f_PState_nextNodeId = dtb_u_u230; f_PState_openNodeId = dtb_u_u231; f_PState_subStream = dtb_u_u232; f_PState_backtickShapes = dtb_u_u233; f_PState_sectionShapes = dtb_u_u234; f_PState_interpMultis = dtb_u_u235; f_PState_templateHoles = dtb_u_u236; f_PState_eventMode = dtb_u_u237 } -> dtb_u_u222
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 218 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokenSpan = (fun (dtb_u_u227 : t_PState) -> (let dtb_u_u228 = (v_peekPos dtb_u_u227) in (let dtb_u_u229 = ((Base_dSource.v_posEndOffset dtb_u_u228) - (Base_dSource.v_posOffset dtb_u_u228)) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u227); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u228); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u228); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u228); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb_u_u228) + dtb_u_u229); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u228); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u228) })))
+let v_tokenSpan = (fun (dtb_u_u238 : t_PState) -> (let dtb_u_u239 = (v_peekPos dtb_u_u238) in (let dtb_u_u240 = ((Base_dSource.v_posEndOffset dtb_u_u239) - (Base_dSource.v_posOffset dtb_u_u239)) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u238); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u239); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u239); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u239); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb_u_u239) + dtb_u_u240); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u239); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u239) })))
 
-# 504 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_holeAtomAt = (fun (dtb_u_u230 : t_PState) -> (let dtb_u_u231 = (v_peekTok dtb_u_u230) in (match dtb_u_u231 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u232; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u233 } -> (match dtb_u_u232 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u234) -> (if (dtb_u_u234 = "?") then (let dtb_u_u235 = ((v_peekTokAt dtb_u_u230) 1) in (match dtb_u_u235 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u236) -> (match dtb_u_u236 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u237; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u238 } -> (match dtb_u_u237 with
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u239) -> (if (if ((Base_dSource.v_posLine dtb_u_u238) = (Base_dSource.v_posLine dtb_u_u233)) then ((Base_dSource.v_posCol dtb_u_u238) = ((Base_dSource.v_posCol dtb_u_u233) + 1)) else false) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ("?" ^ dtb_u_u239); B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u230); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u233); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u233); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u238); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb_u_u238) + (String.length dtb_u_u239)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u233); Base_dSource.f_Span_spanEndOffset = ((Base_dSource.v_posOffset dtb_u_u238) + (String.length dtb_u_u239)) } })) else B_dData_dMaybe.C_Maybe_Nothing)
+# 517 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_holeAtomAt = (fun (dtb_u_u241 : t_PState) -> (let dtb_u_u242 = (v_peekTok dtb_u_u241) in (match dtb_u_u242 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u243; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u244 } -> (match dtb_u_u243 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u245) -> (if (dtb_u_u245 = "?") then (let dtb_u_u246 = ((v_peekTokAt dtb_u_u241) 1) in (match dtb_u_u246 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u247) -> (match dtb_u_u247 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u248; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u249 } -> (match dtb_u_u248 with
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u250) -> (if (if ((Base_dSource.v_posLine dtb_u_u249) = (Base_dSource.v_posLine dtb_u_u244)) then ((Base_dSource.v_posCol dtb_u_u249) = ((Base_dSource.v_posCol dtb_u_u244) + 1)) else false) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = ("?" ^ dtb_u_u250); B_dData_dPair.f_Pair_second = { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u241); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u244); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u244); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u249); Base_dSource.f_Span_spanEndCol = ((Base_dSource.v_posCol dtb_u_u249) + (String.length dtb_u_u250)); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u244); Base_dSource.f_Span_spanEndOffset = ((Base_dSource.v_posOffset dtb_u_u249) + (String.length dtb_u_u250)) } })) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
@@ -368,34 +389,34 @@ let v_holeAtomAt = (fun (dtb_u_u230 : t_PState) -> (let dtb_u_u231 = (v_peekTok 
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 484 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_startsAtom = (fun (dtb_u_u240 : t_PState) -> (let dtb_u_u241 = (v_peekTok dtb_u_u240) in (match dtb_u_u241 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u242; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u243 } -> (match dtb_u_u242 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u244) -> (if (dtb_u_u244 = "(") then true else (if (dtb_u_u244 = "[") then true else (if (dtb_u_u244 = "?") then (match (v_holeAtomAt dtb_u_u240) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u245) -> true
+# 496 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_startsAtom = (fun (dtb_u_u251 : t_PState) -> (let dtb_u_u252 = (v_peekTok dtb_u_u251) in (match dtb_u_u252 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u253; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u254 } -> (match dtb_u_u253 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u255) -> (if (dtb_u_u255 = "(") then true else (if (dtb_u_u255 = "[") then true else (if (dtb_u_u255 = "{") then (v_recordUpdateAhead dtb_u_u251) else (if (dtb_u_u255 = "?") then (match (v_holeAtomAt dtb_u_u251) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u256) -> true
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
-) else false)))
-  | Frontend_dLexer.C_Tok_TKw (dtb_u_u246) -> (if (dtb_u_u246 = "Type") then true else false)
-  | Frontend_dLexer.C_Tok_TTmpl (dtb_u_u247, dtb_u_u248, dtb_u_u249) -> true
-  | Frontend_dLexer.C_Tok_TStr (dtb_u_u250) -> true
-  | Frontend_dLexer.C_Tok_TFloat (dtb_u_u251) -> true
-  | Frontend_dLexer.C_Tok_TInt (dtb_u_u252) -> true
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u253) -> true
+) else false))))
+  | Frontend_dLexer.C_Tok_TKw (dtb_u_u257) -> (if (dtb_u_u257 = "Type") then true else false)
+  | Frontend_dLexer.C_Tok_TTmpl (dtb_u_u258, dtb_u_u259, dtb_u_u260) -> true
+  | Frontend_dLexer.C_Tok_TStr (dtb_u_u261) -> true
+  | Frontend_dLexer.C_Tok_TFloat (dtb_u_u262) -> true
+  | Frontend_dLexer.C_Tok_TInt (dtb_u_u263) -> true
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u264) -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 572 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sectionOpAt = (fun (dtb_u_u254 : t_PState) -> (let dtb_u_u255 = ((v_peekTokAt dtb_u_u254) 1) in (match dtb_u_u255 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u256) -> (match dtb_u_u256 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u257; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u258 } -> (match dtb_u_u257 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u259) -> (if (v_isReservedValueName dtb_u_u259) then B_dData_dMaybe.C_Maybe_Nothing else (if (dtb_u_u259 = "?") then (match (v_holeAtomAt (v_advance dtb_u_u254)) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u260) -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dMaybe.C_Maybe_Just (dtb_u_u259))
+# 585 "Vuna/Compiler/Frontend/Parser/Support.vuna"
+let v_sectionOpAt = (fun (dtb_u_u265 : t_PState) -> (let dtb_u_u266 = ((v_peekTokAt dtb_u_u265) 1) in (match dtb_u_u266 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u267) -> (match dtb_u_u267 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u268; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u269 } -> (match dtb_u_u268 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u270) -> (if (v_isReservedValueName dtb_u_u270) then B_dData_dMaybe.C_Maybe_Nothing else (if (dtb_u_u270 = "?") then (match (v_holeAtomAt (v_advance dtb_u_u265)) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u271) -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (B_dData_dMaybe.C_Maybe_Just (dtb_u_u270))
   | _ -> failwith "DT: impossible branch"
-) else (if (if (dtb_u_u259 = "-") then ((v_minusLiteralAt dtb_u_u258) dtb_u_u254) else false) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (dtb_u_u259)))))
+) else (if (if (dtb_u_u270 = "-") then ((v_minusLiteralAt dtb_u_u269) dtb_u_u265) else false) then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (dtb_u_u270)))))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> failwith "DT: impossible branch"
@@ -404,152 +425,152 @@ let v_sectionOpAt = (fun (dtb_u_u254 : t_PState) -> (let dtb_u_u255 = ((v_peekTo
 )))
 
 # 40 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sourceOf = (fun (dtb_u_u261 : t_PState) -> (match dtb_u_u261 with
-  | { f_PState_fileOf = dtb_u_u262; f_PState_sourceOf = dtb_u_u263; f_PState_toksOf = dtb_u_u264; f_PState_lastPos = dtb_u_u265; f_PState_toksLeft = dtb_u_u266; f_PState_pmodeOf = dtb_u_u267; f_PState_tokIndex = dtb_u_u268; f_PState_pendEvents = dtb_u_u269; f_PState_nextNodeId = dtb_u_u270; f_PState_openNodeId = dtb_u_u271; f_PState_subStream = dtb_u_u272; f_PState_backtickShapes = dtb_u_u273; f_PState_sectionShapes = dtb_u_u274; f_PState_interpMultis = dtb_u_u275; f_PState_templateHoles = dtb_u_u276; f_PState_eventMode = dtb_u_u277 } -> dtb_u_u263
+let v_sourceOf = (fun (dtb_u_u272 : t_PState) -> (match dtb_u_u272 with
+  | { f_PState_fileOf = dtb_u_u273; f_PState_sourceOf = dtb_u_u274; f_PState_toksOf = dtb_u_u275; f_PState_lastPos = dtb_u_u276; f_PState_toksLeft = dtb_u_u277; f_PState_pmodeOf = dtb_u_u278; f_PState_tokIndex = dtb_u_u279; f_PState_pendEvents = dtb_u_u280; f_PState_nextNodeId = dtb_u_u281; f_PState_openNodeId = dtb_u_u282; f_PState_subStream = dtb_u_u283; f_PState_backtickShapes = dtb_u_u284; f_PState_sectionShapes = dtb_u_u285; f_PState_interpMultis = dtb_u_u286; f_PState_templateHoles = dtb_u_u287; f_PState_eventMode = dtb_u_u288 } -> dtb_u_u274
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 41 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_toksOf = (fun (dtb_u_u278 : t_PState) -> (match dtb_u_u278 with
-  | { f_PState_fileOf = dtb_u_u279; f_PState_sourceOf = dtb_u_u280; f_PState_toksOf = dtb_u_u281; f_PState_lastPos = dtb_u_u282; f_PState_toksLeft = dtb_u_u283; f_PState_pmodeOf = dtb_u_u284; f_PState_tokIndex = dtb_u_u285; f_PState_pendEvents = dtb_u_u286; f_PState_nextNodeId = dtb_u_u287; f_PState_openNodeId = dtb_u_u288; f_PState_subStream = dtb_u_u289; f_PState_backtickShapes = dtb_u_u290; f_PState_sectionShapes = dtb_u_u291; f_PState_interpMultis = dtb_u_u292; f_PState_templateHoles = dtb_u_u293; f_PState_eventMode = dtb_u_u294 } -> dtb_u_u281
+let v_toksOf = (fun (dtb_u_u289 : t_PState) -> (match dtb_u_u289 with
+  | { f_PState_fileOf = dtb_u_u290; f_PState_sourceOf = dtb_u_u291; f_PState_toksOf = dtb_u_u292; f_PState_lastPos = dtb_u_u293; f_PState_toksLeft = dtb_u_u294; f_PState_pmodeOf = dtb_u_u295; f_PState_tokIndex = dtb_u_u296; f_PState_pendEvents = dtb_u_u297; f_PState_nextNodeId = dtb_u_u298; f_PState_openNodeId = dtb_u_u299; f_PState_subStream = dtb_u_u300; f_PState_backtickShapes = dtb_u_u301; f_PState_sectionShapes = dtb_u_u302; f_PState_interpMultis = dtb_u_u303; f_PState_templateHoles = dtb_u_u304; f_PState_eventMode = dtb_u_u305 } -> dtb_u_u292
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 42 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_lastPos = (fun (dtb_u_u295 : t_PState) -> (match dtb_u_u295 with
-  | { f_PState_fileOf = dtb_u_u296; f_PState_sourceOf = dtb_u_u297; f_PState_toksOf = dtb_u_u298; f_PState_lastPos = dtb_u_u299; f_PState_toksLeft = dtb_u_u300; f_PState_pmodeOf = dtb_u_u301; f_PState_tokIndex = dtb_u_u302; f_PState_pendEvents = dtb_u_u303; f_PState_nextNodeId = dtb_u_u304; f_PState_openNodeId = dtb_u_u305; f_PState_subStream = dtb_u_u306; f_PState_backtickShapes = dtb_u_u307; f_PState_sectionShapes = dtb_u_u308; f_PState_interpMultis = dtb_u_u309; f_PState_templateHoles = dtb_u_u310; f_PState_eventMode = dtb_u_u311 } -> dtb_u_u299
+let v_lastPos = (fun (dtb_u_u306 : t_PState) -> (match dtb_u_u306 with
+  | { f_PState_fileOf = dtb_u_u307; f_PState_sourceOf = dtb_u_u308; f_PState_toksOf = dtb_u_u309; f_PState_lastPos = dtb_u_u310; f_PState_toksLeft = dtb_u_u311; f_PState_pmodeOf = dtb_u_u312; f_PState_tokIndex = dtb_u_u313; f_PState_pendEvents = dtb_u_u314; f_PState_nextNodeId = dtb_u_u315; f_PState_openNodeId = dtb_u_u316; f_PState_subStream = dtb_u_u317; f_PState_backtickShapes = dtb_u_u318; f_PState_sectionShapes = dtb_u_u319; f_PState_interpMultis = dtb_u_u320; f_PState_templateHoles = dtb_u_u321; f_PState_eventMode = dtb_u_u322 } -> dtb_u_u310
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 189 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_spanOf = (fun (dtb_u_u312 : t_PState) (dtb_u_u313 : t_PState) -> (let dtb_u_u314 = (v_lastPos dtb_u_u313) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u312); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine (v_peekPos dtb_u_u312)); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol (v_peekPos dtb_u_u312)); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u314); Base_dSource.f_Span_spanEndCol = (v_lastEndCol dtb_u_u314); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset (v_peekPos dtb_u_u312)); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u314) }))
+let v_spanOf = (fun (dtb_u_u323 : t_PState) (dtb_u_u324 : t_PState) -> (let dtb_u_u325 = (v_lastPos dtb_u_u324) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u323); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine (v_peekPos dtb_u_u323)); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol (v_peekPos dtb_u_u323)); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u325); Base_dSource.f_Span_spanEndCol = (v_lastEndCol dtb_u_u325); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset (v_peekPos dtb_u_u323)); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u325) }))
 
 # 203 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_spanFromStart = (fun (dtb_u_u315 : string) (dtb_u_u316 : Base_dSource.t_Pos) (dtb_u_u317 : t_PState) -> (let dtb_u_u318 = (v_lastPos dtb_u_u317) in { Base_dSource.f_Span_spanFile = dtb_u_u315; Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u316); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u316); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u318); Base_dSource.f_Span_spanEndCol = (v_lastEndCol dtb_u_u318); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u316); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u318) }))
+let v_spanFromStart = (fun (dtb_u_u326 : string) (dtb_u_u327 : Base_dSource.t_Pos) (dtb_u_u328 : t_PState) -> (let dtb_u_u329 = (v_lastPos dtb_u_u328) in { Base_dSource.f_Span_spanFile = dtb_u_u326; Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u327); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u327); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u329); Base_dSource.f_Span_spanEndCol = (v_lastEndCol dtb_u_u329); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u327); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posEndOffset dtb_u_u329) }))
 
 # 243 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokSpan = (fun (dtb_u_u319 : t_PState) -> (let dtb_u_u320 = (v_peekTok dtb_u_u319) in (match dtb_u_u320 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u321; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u322 } -> (match dtb_u_u321 with
-  | Frontend_dLexer.C_Tok_TEof -> (let dtb_u_u323 = (v_lastPos dtb_u_u319) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u319); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u323); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u323); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u323); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb_u_u323); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u323); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb_u_u323) })
-  | _ -> { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u319); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u322); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u322); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u322); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb_u_u322); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u322); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb_u_u322) }
+let v_tokSpan = (fun (dtb_u_u330 : t_PState) -> (let dtb_u_u331 = (v_peekTok dtb_u_u330) in (match dtb_u_u331 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u332; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u333 } -> (match dtb_u_u332 with
+  | Frontend_dLexer.C_Tok_TEof -> (let dtb_u_u334 = (v_lastPos dtb_u_u330) in { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u330); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u334); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u334); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u334); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb_u_u334); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u334); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb_u_u334) })
+  | _ -> { Base_dSource.f_Span_spanFile = (v_fileOf dtb_u_u330); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u333); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u333); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u333); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb_u_u333); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u333); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb_u_u333) }
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 379 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_canContinue = (fun (dtb_u_u324 : t_PState) (dtb_u_u325 : int) -> (match (v_peekPos dtb_u_u324) with
-  | { Base_dSource.f_Pos_posLine = dtb_u_u326; Base_dSource.f_Pos_posCol = dtb_u_u327; Base_dSource.f_Pos_posOffset = dtb_u_u328; Base_dSource.f_Pos_posEndOffset = dtb_u_u329 } -> (match (v_lastPos dtb_u_u324) with
-  | { Base_dSource.f_Pos_posLine = dtb_u_u330; Base_dSource.f_Pos_posCol = dtb_u_u331; Base_dSource.f_Pos_posOffset = dtb_u_u332; Base_dSource.f_Pos_posEndOffset = dtb_u_u333 } -> (if (dtb_u_u326 = dtb_u_u330) then true else (dtb_u_u327 > dtb_u_u325))
+let v_canContinue = (fun (dtb_u_u335 : t_PState) (dtb_u_u336 : int) -> (match (v_peekPos dtb_u_u335) with
+  | { Base_dSource.f_Pos_posLine = dtb_u_u337; Base_dSource.f_Pos_posCol = dtb_u_u338; Base_dSource.f_Pos_posOffset = dtb_u_u339; Base_dSource.f_Pos_posEndOffset = dtb_u_u340 } -> (match (v_lastPos dtb_u_u335) with
+  | { Base_dSource.f_Pos_posLine = dtb_u_u341; Base_dSource.f_Pos_posCol = dtb_u_u342; Base_dSource.f_Pos_posOffset = dtb_u_u343; Base_dSource.f_Pos_posEndOffset = dtb_u_u344 } -> (if (dtb_u_u337 = dtb_u_u341) then true else (dtb_u_u338 > dtb_u_u336))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 425 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectSym = (fun (dtb_u_u334 : t_PState) (dtb_u_u335 : string) -> (let dtb_u_u336 = (v_peekTok dtb_u_u334) in (match dtb_u_u336 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u337; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u338 } -> (match dtb_u_u337 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u339) -> (if (dtb_u_u339 = dtb_u_u335) then (Base_dDiag.C_Check_OkC ((v_advance dtb_u_u334))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u334)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u335))) dtb_u_u335))
-  | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u334)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u335))) dtb_u_u335)
+let v_expectSym = (fun (dtb_u_u345 : t_PState) (dtb_u_u346 : string) -> (let dtb_u_u347 = (v_peekTok dtb_u_u345) in (match dtb_u_u347 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u348; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u349 } -> (match dtb_u_u348 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u350) -> (if (dtb_u_u350 = dtb_u_u346) then (Base_dDiag.C_Check_OkC ((v_advance dtb_u_u345))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u345)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u346))) dtb_u_u346))
+  | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u345)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u346))) dtb_u_u346)
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 432 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectKw = (fun (dtb_u_u340 : t_PState) (dtb_u_u341 : string) -> (let dtb_u_u342 = (v_peekTok dtb_u_u340) in (match dtb_u_u342 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u343; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u344 } -> (match dtb_u_u343 with
-  | Frontend_dLexer.C_Tok_TKw (dtb_u_u345) -> (if (dtb_u_u345 = dtb_u_u341) then (Base_dDiag.C_Check_OkC ((v_advance dtb_u_u340))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u340)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u341))) dtb_u_u341))
-  | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u340)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u341))) dtb_u_u341)
+let v_expectKw = (fun (dtb_u_u351 : t_PState) (dtb_u_u352 : string) -> (let dtb_u_u353 = (v_peekTok dtb_u_u351) in (match dtb_u_u353 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u354; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u355 } -> (match dtb_u_u354 with
+  | Frontend_dLexer.C_Tok_TKw (dtb_u_u356) -> (if (dtb_u_u356 = dtb_u_u352) then (Base_dDiag.C_Check_OkC ((v_advance dtb_u_u351))) else (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u351)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u352))) dtb_u_u352))
+  | _ -> (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u351)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken (dtb_u_u352))) dtb_u_u352)
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 438 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectIdent = (fun (dtb_u_u346 : t_PState) -> (let dtb_u_u347 = (v_peekTok dtb_u_u346) in (match dtb_u_u347 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u348; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u349 } -> (match dtb_u_u348 with
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u350) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u350; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u346) }))
-  | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan dtb_u_u346)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
+let v_expectIdent = (fun (dtb_u_u357 : t_PState) -> (let dtb_u_u358 = (v_peekTok dtb_u_u357) in (match dtb_u_u358 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u359; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u360 } -> (match dtb_u_u359 with
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u361) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u361; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u357) }))
+  | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan dtb_u_u357)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 446 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_expectValueName = (fun (dtb_u_u351 : t_PState) -> (let dtb_u_u352 = (v_peekTok dtb_u_u351) in (match dtb_u_u352 with
-  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u353; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u354 } -> (match dtb_u_u353 with
-  | Frontend_dLexer.C_Tok_TSym (dtb_u_u355) -> (if (v_isReservedValueName dtb_u_u355) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u351)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u355; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u351) })))
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u356) -> (if (v_isReservedValueName dtb_u_u356) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u351)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u356; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u351) })))
-  | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan dtb_u_u351)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
+let v_expectValueName = (fun (dtb_u_u362 : t_PState) -> (let dtb_u_u363 = (v_peekTok dtb_u_u362) in (match dtb_u_u363 with
+  | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u364; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u365 } -> (match dtb_u_u364 with
+  | Frontend_dLexer.C_Tok_TSym (dtb_u_u366) -> (if (v_isReservedValueName dtb_u_u366) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u362)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u366; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u362) })))
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u367) -> (if (v_isReservedValueName dtb_u_u367) then (((Base_dDiagnostics_dFrontend.v_psErr1At (v_tokSpan dtb_u_u362)) (Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedToken ("value name"))) "value name") else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u367; B_dData_dPair.f_Pair_second = (v_advance dtb_u_u362) })))
+  | _ -> ((Base_dDiagnostics_dFrontend.v_psErr0At (v_tokSpan dtb_u_u362)) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedIdentifier)
 )
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 43 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_toksLeft = (fun (dtb_u_u357 : t_PState) -> (match dtb_u_u357 with
-  | { f_PState_fileOf = dtb_u_u358; f_PState_sourceOf = dtb_u_u359; f_PState_toksOf = dtb_u_u360; f_PState_lastPos = dtb_u_u361; f_PState_toksLeft = dtb_u_u362; f_PState_pmodeOf = dtb_u_u363; f_PState_tokIndex = dtb_u_u364; f_PState_pendEvents = dtb_u_u365; f_PState_nextNodeId = dtb_u_u366; f_PState_openNodeId = dtb_u_u367; f_PState_subStream = dtb_u_u368; f_PState_backtickShapes = dtb_u_u369; f_PState_sectionShapes = dtb_u_u370; f_PState_interpMultis = dtb_u_u371; f_PState_templateHoles = dtb_u_u372; f_PState_eventMode = dtb_u_u373 } -> dtb_u_u362
+let v_toksLeft = (fun (dtb_u_u368 : t_PState) -> (match dtb_u_u368 with
+  | { f_PState_fileOf = dtb_u_u369; f_PState_sourceOf = dtb_u_u370; f_PState_toksOf = dtb_u_u371; f_PState_lastPos = dtb_u_u372; f_PState_toksLeft = dtb_u_u373; f_PState_pmodeOf = dtb_u_u374; f_PState_tokIndex = dtb_u_u375; f_PState_pendEvents = dtb_u_u376; f_PState_nextNodeId = dtb_u_u377; f_PState_openNodeId = dtb_u_u378; f_PState_subStream = dtb_u_u379; f_PState_backtickShapes = dtb_u_u380; f_PState_sectionShapes = dtb_u_u381; f_PState_interpMultis = dtb_u_u382; f_PState_templateHoles = dtb_u_u383; f_PState_eventMode = dtb_u_u384 } -> dtb_u_u373
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 44 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_pmodeOf = (fun (dtb_u_u374 : t_PState) -> (match dtb_u_u374 with
-  | { f_PState_fileOf = dtb_u_u375; f_PState_sourceOf = dtb_u_u376; f_PState_toksOf = dtb_u_u377; f_PState_lastPos = dtb_u_u378; f_PState_toksLeft = dtb_u_u379; f_PState_pmodeOf = dtb_u_u380; f_PState_tokIndex = dtb_u_u381; f_PState_pendEvents = dtb_u_u382; f_PState_nextNodeId = dtb_u_u383; f_PState_openNodeId = dtb_u_u384; f_PState_subStream = dtb_u_u385; f_PState_backtickShapes = dtb_u_u386; f_PState_sectionShapes = dtb_u_u387; f_PState_interpMultis = dtb_u_u388; f_PState_templateHoles = dtb_u_u389; f_PState_eventMode = dtb_u_u390 } -> dtb_u_u380
+let v_pmodeOf = (fun (dtb_u_u385 : t_PState) -> (match dtb_u_u385 with
+  | { f_PState_fileOf = dtb_u_u386; f_PState_sourceOf = dtb_u_u387; f_PState_toksOf = dtb_u_u388; f_PState_lastPos = dtb_u_u389; f_PState_toksLeft = dtb_u_u390; f_PState_pmodeOf = dtb_u_u391; f_PState_tokIndex = dtb_u_u392; f_PState_pendEvents = dtb_u_u393; f_PState_nextNodeId = dtb_u_u394; f_PState_openNodeId = dtb_u_u395; f_PState_subStream = dtb_u_u396; f_PState_backtickShapes = dtb_u_u397; f_PState_sectionShapes = dtb_u_u398; f_PState_interpMultis = dtb_u_u399; f_PState_templateHoles = dtb_u_u400; f_PState_eventMode = dtb_u_u401 } -> dtb_u_u391
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 45 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_tokIndex = (fun (dtb_u_u391 : t_PState) -> (match dtb_u_u391 with
-  | { f_PState_fileOf = dtb_u_u392; f_PState_sourceOf = dtb_u_u393; f_PState_toksOf = dtb_u_u394; f_PState_lastPos = dtb_u_u395; f_PState_toksLeft = dtb_u_u396; f_PState_pmodeOf = dtb_u_u397; f_PState_tokIndex = dtb_u_u398; f_PState_pendEvents = dtb_u_u399; f_PState_nextNodeId = dtb_u_u400; f_PState_openNodeId = dtb_u_u401; f_PState_subStream = dtb_u_u402; f_PState_backtickShapes = dtb_u_u403; f_PState_sectionShapes = dtb_u_u404; f_PState_interpMultis = dtb_u_u405; f_PState_templateHoles = dtb_u_u406; f_PState_eventMode = dtb_u_u407 } -> dtb_u_u398
+let v_tokIndex = (fun (dtb_u_u402 : t_PState) -> (match dtb_u_u402 with
+  | { f_PState_fileOf = dtb_u_u403; f_PState_sourceOf = dtb_u_u404; f_PState_toksOf = dtb_u_u405; f_PState_lastPos = dtb_u_u406; f_PState_toksLeft = dtb_u_u407; f_PState_pmodeOf = dtb_u_u408; f_PState_tokIndex = dtb_u_u409; f_PState_pendEvents = dtb_u_u410; f_PState_nextNodeId = dtb_u_u411; f_PState_openNodeId = dtb_u_u412; f_PState_subStream = dtb_u_u413; f_PState_backtickShapes = dtb_u_u414; f_PState_sectionShapes = dtb_u_u415; f_PState_interpMultis = dtb_u_u416; f_PState_templateHoles = dtb_u_u417; f_PState_eventMode = dtb_u_u418 } -> dtb_u_u409
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 46 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_pendEvents = (fun (dtb_u_u408 : t_PState) -> (match dtb_u_u408 with
-  | { f_PState_fileOf = dtb_u_u409; f_PState_sourceOf = dtb_u_u410; f_PState_toksOf = dtb_u_u411; f_PState_lastPos = dtb_u_u412; f_PState_toksLeft = dtb_u_u413; f_PState_pmodeOf = dtb_u_u414; f_PState_tokIndex = dtb_u_u415; f_PState_pendEvents = dtb_u_u416; f_PState_nextNodeId = dtb_u_u417; f_PState_openNodeId = dtb_u_u418; f_PState_subStream = dtb_u_u419; f_PState_backtickShapes = dtb_u_u420; f_PState_sectionShapes = dtb_u_u421; f_PState_interpMultis = dtb_u_u422; f_PState_templateHoles = dtb_u_u423; f_PState_eventMode = dtb_u_u424 } -> dtb_u_u416
+let v_pendEvents = (fun (dtb_u_u419 : t_PState) -> (match dtb_u_u419 with
+  | { f_PState_fileOf = dtb_u_u420; f_PState_sourceOf = dtb_u_u421; f_PState_toksOf = dtb_u_u422; f_PState_lastPos = dtb_u_u423; f_PState_toksLeft = dtb_u_u424; f_PState_pmodeOf = dtb_u_u425; f_PState_tokIndex = dtb_u_u426; f_PState_pendEvents = dtb_u_u427; f_PState_nextNodeId = dtb_u_u428; f_PState_openNodeId = dtb_u_u429; f_PState_subStream = dtb_u_u430; f_PState_backtickShapes = dtb_u_u431; f_PState_sectionShapes = dtb_u_u432; f_PState_interpMultis = dtb_u_u433; f_PState_templateHoles = dtb_u_u434; f_PState_eventMode = dtb_u_u435 } -> dtb_u_u427
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 49 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_nextNodeId = (fun (dtb_u_u425 : t_PState) -> (match dtb_u_u425 with
-  | { f_PState_fileOf = dtb_u_u426; f_PState_sourceOf = dtb_u_u427; f_PState_toksOf = dtb_u_u428; f_PState_lastPos = dtb_u_u429; f_PState_toksLeft = dtb_u_u430; f_PState_pmodeOf = dtb_u_u431; f_PState_tokIndex = dtb_u_u432; f_PState_pendEvents = dtb_u_u433; f_PState_nextNodeId = dtb_u_u434; f_PState_openNodeId = dtb_u_u435; f_PState_subStream = dtb_u_u436; f_PState_backtickShapes = dtb_u_u437; f_PState_sectionShapes = dtb_u_u438; f_PState_interpMultis = dtb_u_u439; f_PState_templateHoles = dtb_u_u440; f_PState_eventMode = dtb_u_u441 } -> dtb_u_u434
+let v_nextNodeId = (fun (dtb_u_u436 : t_PState) -> (match dtb_u_u436 with
+  | { f_PState_fileOf = dtb_u_u437; f_PState_sourceOf = dtb_u_u438; f_PState_toksOf = dtb_u_u439; f_PState_lastPos = dtb_u_u440; f_PState_toksLeft = dtb_u_u441; f_PState_pmodeOf = dtb_u_u442; f_PState_tokIndex = dtb_u_u443; f_PState_pendEvents = dtb_u_u444; f_PState_nextNodeId = dtb_u_u445; f_PState_openNodeId = dtb_u_u446; f_PState_subStream = dtb_u_u447; f_PState_backtickShapes = dtb_u_u448; f_PState_sectionShapes = dtb_u_u449; f_PState_interpMultis = dtb_u_u450; f_PState_templateHoles = dtb_u_u451; f_PState_eventMode = dtb_u_u452 } -> dtb_u_u445
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 52 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_openNodeId = (fun (dtb_u_u442 : t_PState) -> (match dtb_u_u442 with
-  | { f_PState_fileOf = dtb_u_u443; f_PState_sourceOf = dtb_u_u444; f_PState_toksOf = dtb_u_u445; f_PState_lastPos = dtb_u_u446; f_PState_toksLeft = dtb_u_u447; f_PState_pmodeOf = dtb_u_u448; f_PState_tokIndex = dtb_u_u449; f_PState_pendEvents = dtb_u_u450; f_PState_nextNodeId = dtb_u_u451; f_PState_openNodeId = dtb_u_u452; f_PState_subStream = dtb_u_u453; f_PState_backtickShapes = dtb_u_u454; f_PState_sectionShapes = dtb_u_u455; f_PState_interpMultis = dtb_u_u456; f_PState_templateHoles = dtb_u_u457; f_PState_eventMode = dtb_u_u458 } -> dtb_u_u452
+let v_openNodeId = (fun (dtb_u_u453 : t_PState) -> (match dtb_u_u453 with
+  | { f_PState_fileOf = dtb_u_u454; f_PState_sourceOf = dtb_u_u455; f_PState_toksOf = dtb_u_u456; f_PState_lastPos = dtb_u_u457; f_PState_toksLeft = dtb_u_u458; f_PState_pmodeOf = dtb_u_u459; f_PState_tokIndex = dtb_u_u460; f_PState_pendEvents = dtb_u_u461; f_PState_nextNodeId = dtb_u_u462; f_PState_openNodeId = dtb_u_u463; f_PState_subStream = dtb_u_u464; f_PState_backtickShapes = dtb_u_u465; f_PState_sectionShapes = dtb_u_u466; f_PState_interpMultis = dtb_u_u467; f_PState_templateHoles = dtb_u_u468; f_PState_eventMode = dtb_u_u469 } -> dtb_u_u463
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 57 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_subStream = (fun (dtb_u_u459 : t_PState) -> (match dtb_u_u459 with
-  | { f_PState_fileOf = dtb_u_u460; f_PState_sourceOf = dtb_u_u461; f_PState_toksOf = dtb_u_u462; f_PState_lastPos = dtb_u_u463; f_PState_toksLeft = dtb_u_u464; f_PState_pmodeOf = dtb_u_u465; f_PState_tokIndex = dtb_u_u466; f_PState_pendEvents = dtb_u_u467; f_PState_nextNodeId = dtb_u_u468; f_PState_openNodeId = dtb_u_u469; f_PState_subStream = dtb_u_u470; f_PState_backtickShapes = dtb_u_u471; f_PState_sectionShapes = dtb_u_u472; f_PState_interpMultis = dtb_u_u473; f_PState_templateHoles = dtb_u_u474; f_PState_eventMode = dtb_u_u475 } -> dtb_u_u470
+let v_subStream = (fun (dtb_u_u470 : t_PState) -> (match dtb_u_u470 with
+  | { f_PState_fileOf = dtb_u_u471; f_PState_sourceOf = dtb_u_u472; f_PState_toksOf = dtb_u_u473; f_PState_lastPos = dtb_u_u474; f_PState_toksLeft = dtb_u_u475; f_PState_pmodeOf = dtb_u_u476; f_PState_tokIndex = dtb_u_u477; f_PState_pendEvents = dtb_u_u478; f_PState_nextNodeId = dtb_u_u479; f_PState_openNodeId = dtb_u_u480; f_PState_subStream = dtb_u_u481; f_PState_backtickShapes = dtb_u_u482; f_PState_sectionShapes = dtb_u_u483; f_PState_interpMultis = dtb_u_u484; f_PState_templateHoles = dtb_u_u485; f_PState_eventMode = dtb_u_u486 } -> dtb_u_u481
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 60 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_backtickShapes = (fun (dtb_u_u476 : t_PState) -> (match dtb_u_u476 with
-  | { f_PState_fileOf = dtb_u_u477; f_PState_sourceOf = dtb_u_u478; f_PState_toksOf = dtb_u_u479; f_PState_lastPos = dtb_u_u480; f_PState_toksLeft = dtb_u_u481; f_PState_pmodeOf = dtb_u_u482; f_PState_tokIndex = dtb_u_u483; f_PState_pendEvents = dtb_u_u484; f_PState_nextNodeId = dtb_u_u485; f_PState_openNodeId = dtb_u_u486; f_PState_subStream = dtb_u_u487; f_PState_backtickShapes = dtb_u_u488; f_PState_sectionShapes = dtb_u_u489; f_PState_interpMultis = dtb_u_u490; f_PState_templateHoles = dtb_u_u491; f_PState_eventMode = dtb_u_u492 } -> dtb_u_u488
+let v_backtickShapes = (fun (dtb_u_u487 : t_PState) -> (match dtb_u_u487 with
+  | { f_PState_fileOf = dtb_u_u488; f_PState_sourceOf = dtb_u_u489; f_PState_toksOf = dtb_u_u490; f_PState_lastPos = dtb_u_u491; f_PState_toksLeft = dtb_u_u492; f_PState_pmodeOf = dtb_u_u493; f_PState_tokIndex = dtb_u_u494; f_PState_pendEvents = dtb_u_u495; f_PState_nextNodeId = dtb_u_u496; f_PState_openNodeId = dtb_u_u497; f_PState_subStream = dtb_u_u498; f_PState_backtickShapes = dtb_u_u499; f_PState_sectionShapes = dtb_u_u500; f_PState_interpMultis = dtb_u_u501; f_PState_templateHoles = dtb_u_u502; f_PState_eventMode = dtb_u_u503 } -> dtb_u_u499
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 62 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_sectionShapes = (fun (dtb_u_u493 : t_PState) -> (match dtb_u_u493 with
-  | { f_PState_fileOf = dtb_u_u494; f_PState_sourceOf = dtb_u_u495; f_PState_toksOf = dtb_u_u496; f_PState_lastPos = dtb_u_u497; f_PState_toksLeft = dtb_u_u498; f_PState_pmodeOf = dtb_u_u499; f_PState_tokIndex = dtb_u_u500; f_PState_pendEvents = dtb_u_u501; f_PState_nextNodeId = dtb_u_u502; f_PState_openNodeId = dtb_u_u503; f_PState_subStream = dtb_u_u504; f_PState_backtickShapes = dtb_u_u505; f_PState_sectionShapes = dtb_u_u506; f_PState_interpMultis = dtb_u_u507; f_PState_templateHoles = dtb_u_u508; f_PState_eventMode = dtb_u_u509 } -> dtb_u_u506
+let v_sectionShapes = (fun (dtb_u_u504 : t_PState) -> (match dtb_u_u504 with
+  | { f_PState_fileOf = dtb_u_u505; f_PState_sourceOf = dtb_u_u506; f_PState_toksOf = dtb_u_u507; f_PState_lastPos = dtb_u_u508; f_PState_toksLeft = dtb_u_u509; f_PState_pmodeOf = dtb_u_u510; f_PState_tokIndex = dtb_u_u511; f_PState_pendEvents = dtb_u_u512; f_PState_nextNodeId = dtb_u_u513; f_PState_openNodeId = dtb_u_u514; f_PState_subStream = dtb_u_u515; f_PState_backtickShapes = dtb_u_u516; f_PState_sectionShapes = dtb_u_u517; f_PState_interpMultis = dtb_u_u518; f_PState_templateHoles = dtb_u_u519; f_PState_eventMode = dtb_u_u520 } -> dtb_u_u517
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 64 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_interpMultis = (fun (dtb_u_u510 : t_PState) -> (match dtb_u_u510 with
-  | { f_PState_fileOf = dtb_u_u511; f_PState_sourceOf = dtb_u_u512; f_PState_toksOf = dtb_u_u513; f_PState_lastPos = dtb_u_u514; f_PState_toksLeft = dtb_u_u515; f_PState_pmodeOf = dtb_u_u516; f_PState_tokIndex = dtb_u_u517; f_PState_pendEvents = dtb_u_u518; f_PState_nextNodeId = dtb_u_u519; f_PState_openNodeId = dtb_u_u520; f_PState_subStream = dtb_u_u521; f_PState_backtickShapes = dtb_u_u522; f_PState_sectionShapes = dtb_u_u523; f_PState_interpMultis = dtb_u_u524; f_PState_templateHoles = dtb_u_u525; f_PState_eventMode = dtb_u_u526 } -> dtb_u_u524
+let v_interpMultis = (fun (dtb_u_u521 : t_PState) -> (match dtb_u_u521 with
+  | { f_PState_fileOf = dtb_u_u522; f_PState_sourceOf = dtb_u_u523; f_PState_toksOf = dtb_u_u524; f_PState_lastPos = dtb_u_u525; f_PState_toksLeft = dtb_u_u526; f_PState_pmodeOf = dtb_u_u527; f_PState_tokIndex = dtb_u_u528; f_PState_pendEvents = dtb_u_u529; f_PState_nextNodeId = dtb_u_u530; f_PState_openNodeId = dtb_u_u531; f_PState_subStream = dtb_u_u532; f_PState_backtickShapes = dtb_u_u533; f_PState_sectionShapes = dtb_u_u534; f_PState_interpMultis = dtb_u_u535; f_PState_templateHoles = dtb_u_u536; f_PState_eventMode = dtb_u_u537 } -> dtb_u_u535
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 69 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_templateHoles = (fun (dtb_u_u527 : t_PState) -> (match dtb_u_u527 with
-  | { f_PState_fileOf = dtb_u_u528; f_PState_sourceOf = dtb_u_u529; f_PState_toksOf = dtb_u_u530; f_PState_lastPos = dtb_u_u531; f_PState_toksLeft = dtb_u_u532; f_PState_pmodeOf = dtb_u_u533; f_PState_tokIndex = dtb_u_u534; f_PState_pendEvents = dtb_u_u535; f_PState_nextNodeId = dtb_u_u536; f_PState_openNodeId = dtb_u_u537; f_PState_subStream = dtb_u_u538; f_PState_backtickShapes = dtb_u_u539; f_PState_sectionShapes = dtb_u_u540; f_PState_interpMultis = dtb_u_u541; f_PState_templateHoles = dtb_u_u542; f_PState_eventMode = dtb_u_u543 } -> dtb_u_u542
+let v_templateHoles = (fun (dtb_u_u538 : t_PState) -> (match dtb_u_u538 with
+  | { f_PState_fileOf = dtb_u_u539; f_PState_sourceOf = dtb_u_u540; f_PState_toksOf = dtb_u_u541; f_PState_lastPos = dtb_u_u542; f_PState_toksLeft = dtb_u_u543; f_PState_pmodeOf = dtb_u_u544; f_PState_tokIndex = dtb_u_u545; f_PState_pendEvents = dtb_u_u546; f_PState_nextNodeId = dtb_u_u547; f_PState_openNodeId = dtb_u_u548; f_PState_subStream = dtb_u_u549; f_PState_backtickShapes = dtb_u_u550; f_PState_sectionShapes = dtb_u_u551; f_PState_interpMultis = dtb_u_u552; f_PState_templateHoles = dtb_u_u553; f_PState_eventMode = dtb_u_u554 } -> dtb_u_u553
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 71 "Vuna/Compiler/Frontend/Parser/Support.vuna"
-let v_eventMode = (fun (dtb_u_u544 : t_PState) -> (match dtb_u_u544 with
-  | { f_PState_fileOf = dtb_u_u545; f_PState_sourceOf = dtb_u_u546; f_PState_toksOf = dtb_u_u547; f_PState_lastPos = dtb_u_u548; f_PState_toksLeft = dtb_u_u549; f_PState_pmodeOf = dtb_u_u550; f_PState_tokIndex = dtb_u_u551; f_PState_pendEvents = dtb_u_u552; f_PState_nextNodeId = dtb_u_u553; f_PState_openNodeId = dtb_u_u554; f_PState_subStream = dtb_u_u555; f_PState_backtickShapes = dtb_u_u556; f_PState_sectionShapes = dtb_u_u557; f_PState_interpMultis = dtb_u_u558; f_PState_templateHoles = dtb_u_u559; f_PState_eventMode = dtb_u_u560 } -> dtb_u_u560
+let v_eventMode = (fun (dtb_u_u555 : t_PState) -> (match dtb_u_u555 with
+  | { f_PState_fileOf = dtb_u_u556; f_PState_sourceOf = dtb_u_u557; f_PState_toksOf = dtb_u_u558; f_PState_lastPos = dtb_u_u559; f_PState_toksLeft = dtb_u_u560; f_PState_pmodeOf = dtb_u_u561; f_PState_tokIndex = dtb_u_u562; f_PState_pendEvents = dtb_u_u563; f_PState_nextNodeId = dtb_u_u564; f_PState_openNodeId = dtb_u_u565; f_PState_subStream = dtb_u_u566; f_PState_backtickShapes = dtb_u_u567; f_PState_sectionShapes = dtb_u_u568; f_PState_interpMultis = dtb_u_u569; f_PState_templateHoles = dtb_u_u570; f_PState_eventMode = dtb_u_u571 } -> dtb_u_u571
   | _ -> failwith "DT: impossible branch"
 ))

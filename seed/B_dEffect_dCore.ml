@@ -30,8 +30,14 @@ let v_defaultInstance = "default"
 # 110 "Base/Effect/Core.vuna"
 let v_effPrim = (fun dtb_u_u38 -> (Obj.repr ((fun (dtb_u_u39 : t_EffUnit) -> (dtb_u_u38 0)))))
 
+# 110 "Base/Effect/Core.vuna"
+let v_effPrim_u_udirect = (fun f _u_ueffTok -> (f 0))
+
 # 114 "Base/Effect/Core.vuna"
 let v_weaken = (fun dtb_u_u43 -> (let dtb_u_u44 = Obj.obj (dtb_u_u43) in (Obj.repr (dtb_u_u44))))
+
+# 114 "Base/Effect/Core.vuna"
+let v_weaken_u_udirect = (fun comp _u_ueffTok -> (let dtb_u_u44 = Obj.obj (comp) in ((Obj.magic (Obj.repr (dtb_u_u44))) _u_ueffTok)))
 
 # 120 "Base/Effect/Core.vuna"
 let v_runThunk = (fun dtb_u_u47 -> (let dtb_u_u48 = Obj.obj (dtb_u_u47) in dtb_u_u48))
@@ -60,29 +66,56 @@ let v_runMain = (fun dtb_u_u70 -> ((v_runThunk dtb_u_u70) C_EffUnit_MkEffUnit))
 # 163 "Base/Effect/Core.vuna"
 let v_joinEff = (fun dtb_u_u74 -> (Obj.repr ((fun (dtb_u_u75 : t_EffUnit) -> (let dtb_u_u76 = Obj.obj (dtb_u_u74) in (let dtb_u_u77 = Obj.obj ((dtb_u_u76 dtb_u_u75)) in (dtb_u_u77 dtb_u_u75)))))))
 
+# 163 "Base/Effect/Core.vuna"
+let v_joinEff_u_udirect = (fun m _u_ueffTok -> (let dtb_u_u76 = Obj.obj (m) in (let dtb_u_u77 = Obj.obj ((dtb_u_u76 _u_ueffTok)) in (dtb_u_u77 _u_ueffTok))))
+
 # 176 "Base/Effect/Core.vuna"
 let v_joinEffNilOuter = (fun dtb_u_u80 -> (Obj.repr ((fun (dtb_u_u81 : t_EffUnit) -> (let dtb_u_u82 = Obj.obj (dtb_u_u80) in (let dtb_u_u83 = Obj.obj ((dtb_u_u82 dtb_u_u81)) in (dtb_u_u83 dtb_u_u81)))))))
+
+# 176 "Base/Effect/Core.vuna"
+let v_joinEffNilOuter_u_udirect = (fun m _u_ueffTok -> (let dtb_u_u82 = Obj.obj (m) in (let dtb_u_u83 = Obj.obj ((dtb_u_u82 _u_ueffTok)) in (dtb_u_u83 _u_ueffTok))))
 
 # 189 "Base/Effect/Core.vuna"
 let v_joinEffNilInner = (fun dtb_u_u86 -> (Obj.repr ((fun (dtb_u_u87 : t_EffUnit) -> (let dtb_u_u88 = Obj.obj (dtb_u_u86) in (let dtb_u_u89 = Obj.obj ((dtb_u_u88 dtb_u_u87)) in (dtb_u_u89 dtb_u_u87)))))))
 
+# 189 "Base/Effect/Core.vuna"
+let v_joinEffNilInner_u_udirect = (fun m _u_ueffTok -> (let dtb_u_u88 = Obj.obj (m) in (let dtb_u_u89 = Obj.obj ((dtb_u_u88 _u_ueffTok)) in (dtb_u_u89 _u_ueffTok))))
+
 # 201 "Base/Effect/Core.vuna"
 let v_dropEffHead = (fun dtb_u_u93 -> (let dtb_u_u94 = Obj.obj (dtb_u_u93) in (Obj.repr (dtb_u_u94))))
+
+# 201 "Base/Effect/Core.vuna"
+let v_dropEffHead_u_udirect = (fun comp _u_ueffTok -> (let dtb_u_u94 = Obj.obj (comp) in ((Obj.magic (Obj.repr (dtb_u_u94))) _u_ueffTok)))
 
 # 208 "Base/Effect/Core.vuna"
 let v_weakenRow = (fun (dtb_u_u96 : t_Row) dtb_u_u98 -> (Obj.repr ((fun (dtb_u_u99 : t_EffUnit) -> (let dtb_u_u100 = Obj.obj (dtb_u_u98) in (dtb_u_u100 dtb_u_u99))))))
 
+# 208 "Base/Effect/Core.vuna"
+let v_weakenRow_u_udirect = (fun (t : t_Row) e _u_ueffTok -> (let dtb_u_u100 = Obj.obj (e) in (dtb_u_u100 _u_ueffTok)))
+
 # 217 "Base/Effect/Core.vuna"
 let v_raise = (fun dtb_u_u103 -> (let dtb_u_u104 = Obj.obj (dtb_u_u103) in (Obj.repr (dtb_u_u104))))
+
+# 217 "Base/Effect/Core.vuna"
+let v_raise_u_udirect = (fun mc0 _u_ueffTok -> (let dtb_u_u104 = Obj.obj (mc0) in ((Obj.magic (Obj.repr (dtb_u_u104))) _u_ueffTok)))
 
 # 222 "Base/Effect/Core.vuna"
 let v_raiseTo = (fun (dtb_u_u105 : t_Row) dtb_u_u107 -> (Obj.repr ((fun (dtb_u_u108 : t_EffUnit) -> (let dtb_u_u109 = Obj.obj (dtb_u_u107) in (dtb_u_u109 dtb_u_u108))))))
 
+# 222 "Base/Effect/Core.vuna"
+let v_raiseTo_u_udirect = (fun (r : t_Row) e _u_ueffTok -> (let dtb_u_u109 = Obj.obj (e) in (dtb_u_u109 _u_ueffTok)))
+
 # 235 "Base/Effect/Core.vuna"
 let v_sendCoreId = (fun (dtb_u_u114 : string) (dtb_u_u115 : string) (dtb_u_u116 : int) (dtb_u_u117 : int) dtb_u_u118 -> (Obj.repr ((fun (dtb_u_u119 : t_EffUnit) -> ((((((fun key name kid nid v -> Obj.obj (Effect.perform (Perform (kid, nid, key, name, Obj.repr v)))) dtb_u_u114) dtb_u_u115) dtb_u_u116) dtb_u_u117) dtb_u_u118)))))
 
+# 235 "Base/Effect/Core.vuna"
+let v_sendCoreId_u_udirect = (fun (key : string) (name : string) (keyId : int) (nameId : int) o _u_ueffTok -> ((((((fun key name kid nid v -> Obj.obj (Effect.perform (Perform (kid, nid, key, name, Obj.repr v)))) key) name) keyId) nameId) o))
+
 # 231 "Base/Effect/Core.vuna"
 let v_sendCore = (fun (dtb_u_u124 : string) (dtb_u_u125 : string) dtb_u_u126 -> (((((v_sendCoreId dtb_u_u124) dtb_u_u125) (dtp_effectId dtb_u_u124)) (dtp_effectId dtb_u_u125)) dtb_u_u126))
+
+# 231 "Base/Effect/Core.vuna"
+let v_sendCore_u_udirect = (fun (key : string) (name : string) o _u_ueffTok -> ((Obj.magic (((((v_sendCoreId key) name) (dtp_effectId key)) (dtp_effectId name)) o)) _u_ueffTok))
 
 # 245 "Base/Effect/Core.vuna"
 let v_sigFn = C_EffSig_MkEffSig
@@ -90,20 +123,38 @@ let v_sigFn = C_EffSig_MkEffSig
 # 263 "Base/Effect/Core.vuna"
 let v_performCoreId = (fun (dtb_u_u128 : string) (dtb_u_u129 : string) (dtb_u_u130 : int) (dtb_u_u131 : int) dtb_u_u136 -> (((((v_sendCoreId dtb_u_u129) dtb_u_u128) dtb_u_u131) dtb_u_u130) (Obj.magic dtb_u_u136)))
 
+# 263 "Base/Effect/Core.vuna"
+let v_performCoreId_u_udirect = (fun (n : string) (key : string) (nId : int) (keyId : int) o _u_ueffTok -> ((Obj.magic (((((v_sendCoreId key) n) keyId) nId) (Obj.magic o))) _u_ueffTok))
+
 # 259 "Base/Effect/Core.vuna"
 let v_performCore = (fun (dtb_u_u137 : string) (dtb_u_u138 : string) dtb_u_u143 -> (((((v_performCoreId dtb_u_u137) dtb_u_u138) (dtp_effectId dtb_u_u137)) (dtp_effectId dtb_u_u138)) (Obj.magic dtb_u_u143)))
+
+# 259 "Base/Effect/Core.vuna"
+let v_performCore_u_udirect = (fun (n : string) (key : string) o _u_ueffTok -> ((Obj.magic (((((v_performCoreId n) key) (dtp_effectId n)) (dtp_effectId key)) (Obj.magic o))) _u_ueffTok))
 
 # 272 "Base/Effect/Core.vuna"
 let v_handleCoreId = (fun (dtb_u_u150 : string) (dtb_u_u151 : string) (dtb_u_u152 : int) (dtb_u_u153 : int) dtb_u_u154 dtb_u_u155 dtb_u_u156 -> (Obj.repr ((fun (dtb_u_u157 : t_EffUnit) -> (let dtb_u_u158 = Obj.obj (dtb_u_u156) in ((((((((dtp_effect_handle_id dtb_u_u150) dtb_u_u151) dtb_u_u152) dtb_u_u153) dtb_u_u154) dtb_u_u155) dtb_u_u158) dtb_u_u157))))))
 
+# 272 "Base/Effect/Core.vuna"
+let v_handleCoreId_u_udirect = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp _u_ueffTok -> (let dtb_u_u158 = Obj.obj (comp) in ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb_u_u158) _u_ueffTok)))
+
 # 267 "Base/Effect/Core.vuna"
 let v_handleCore = (fun (dtb_u_u165 : string) (dtb_u_u166 : string) dtb_u_u167 dtb_u_u168 dtb_u_u169 -> (((((((v_handleCoreId dtb_u_u165) dtb_u_u166) (dtp_effectId dtb_u_u165)) (dtp_effectId dtb_u_u166)) dtb_u_u167) dtb_u_u168) dtb_u_u169))
+
+# 267 "Base/Effect/Core.vuna"
+let v_handleCore_u_udirect = (fun (key : string) (name : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((v_handleCoreId key) name) (dtp_effectId key)) (dtp_effectId name)) ret) opH) comp)) _u_ueffTok))
 
 # 286 "Base/Effect/Core.vuna"
 let v_handleCoreAtId = (fun (dtb_u_u176 : string) (dtb_u_u177 : string) (dtb_u_u178 : int) (dtb_u_u179 : int) dtb_u_u180 dtb_u_u181 dtb_u_u182 -> (Obj.repr ((fun (dtb_u_u183 : t_EffUnit) -> (let dtb_u_u184 = Obj.obj (dtb_u_u182) in ((((((((dtp_effect_handle_id dtb_u_u176) dtb_u_u177) dtb_u_u178) dtb_u_u179) dtb_u_u180) dtb_u_u181) dtb_u_u184) dtb_u_u183))))))
 
+# 286 "Base/Effect/Core.vuna"
+let v_handleCoreAtId_u_udirect = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp _u_ueffTok -> (let dtb_u_u184 = Obj.obj (comp) in ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb_u_u184) _u_ueffTok)))
+
 # 281 "Base/Effect/Core.vuna"
 let v_handleCoreAt = (fun (dtb_u_u191 : string) (dtb_u_u192 : string) dtb_u_u193 dtb_u_u194 dtb_u_u195 -> (((((((v_handleCoreAtId dtb_u_u191) dtb_u_u192) (dtp_effectId dtb_u_u191)) (dtp_effectId dtb_u_u192)) dtb_u_u193) dtb_u_u194) dtb_u_u195))
+
+# 281 "Base/Effect/Core.vuna"
+let v_handleCoreAt_u_udirect = (fun (key : string) (name : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((v_handleCoreAtId key) name) (dtp_effectId key)) (dtp_effectId name)) ret) opH) comp)) _u_ueffTok))
 
 # 305 "Base/Effect/Core.vuna"
 let v_toObj = (fun dtb_u_u197 -> (Obj.repr dtb_u_u197))
@@ -123,20 +174,38 @@ let v_contAdapter = (fun dtb_u_u208 dtb_u_u210 dtb_u_u211 -> ((dtb_u_u208 dtb_u_
 # 333 "Base/Effect/Core.vuna"
 let v_handleCoreLinId = (fun (dtb_u_u218 : string) (dtb_u_u219 : string) (dtb_u_u220 : int) (dtb_u_u221 : int) dtb_u_u222 dtb_u_u223 dtb_u_u224 -> (((((((v_handleCoreId dtb_u_u218) dtb_u_u219) dtb_u_u220) dtb_u_u221) dtb_u_u222) (v_contAdapter dtb_u_u223)) dtb_u_u224))
 
+# 333 "Base/Effect/Core.vuna"
+let v_handleCoreLinId_u_udirect = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp _u_ueffTok -> ((Obj.magic (((((((v_handleCoreId key) name) keyId) nameId) ret) (v_contAdapter opH)) comp)) _u_ueffTok))
+
 # 328 "Base/Effect/Core.vuna"
 let v_handleCoreLin = (fun (dtb_u_u231 : string) (dtb_u_u232 : string) dtb_u_u233 dtb_u_u234 dtb_u_u235 -> (((((((v_handleCoreLinId dtb_u_u231) dtb_u_u232) (dtp_effectId dtb_u_u231)) (dtp_effectId dtb_u_u232)) dtb_u_u233) dtb_u_u234) dtb_u_u235))
+
+# 328 "Base/Effect/Core.vuna"
+let v_handleCoreLin_u_udirect = (fun (key : string) (name : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((v_handleCoreLinId key) name) (dtp_effectId key)) (dtp_effectId name)) ret) opH) comp)) _u_ueffTok))
 
 # 347 "Base/Effect/Core.vuna"
 let v_handleWithId = (fun (dtb_u_u238 : string) (dtb_u_u239 : string) (dtb_u_u240 : int) (dtb_u_u241 : int) dtb_u_u246 dtb_u_u248 dtb_u_u249 -> (((((((v_handleCoreId dtb_u_u239) dtb_u_u238) dtb_u_u241) dtb_u_u240) dtb_u_u248) (Obj.magic dtb_u_u249)) dtb_u_u246))
 
+# 347 "Base/Effect/Core.vuna"
+let v_handleWithId_u_udirect = (fun (n : string) (key : string) (nId : int) (keyId : int) comp ret opH _u_ueffTok -> ((Obj.magic (((((((v_handleCoreId key) n) keyId) nId) ret) (Obj.magic opH)) comp)) _u_ueffTok))
+
 # 343 "Base/Effect/Core.vuna"
 let v_handleWith = (fun (dtb_u_u252 : string) (dtb_u_u253 : string) dtb_u_u258 dtb_u_u260 dtb_u_u261 -> (((((((v_handleWithId dtb_u_u252) dtb_u_u253) (dtp_effectId dtb_u_u252)) (dtp_effectId dtb_u_u253)) dtb_u_u258) dtb_u_u260) (Obj.magic dtb_u_u261)))
+
+# 343 "Base/Effect/Core.vuna"
+let v_handleWith_u_udirect = (fun (n : string) (key : string) comp ret opH _u_ueffTok -> ((Obj.magic (((((((v_handleWithId n) key) (dtp_effectId n)) (dtp_effectId key)) comp) ret) (Obj.magic opH))) _u_ueffTok))
 
 # 358 "Base/Effect/Core.vuna"
 let v_handleWithAtId = (fun (dtb_u_u264 : string) (dtb_u_u265 : string) (dtb_u_u266 : int) (dtb_u_u267 : int) dtb_u_u272 dtb_u_u273 dtb_u_u274 -> (((((((v_handleCoreAtId dtb_u_u265) dtb_u_u264) dtb_u_u267) dtb_u_u266) dtb_u_u273) (Obj.magic dtb_u_u274)) dtb_u_u272))
 
+# 358 "Base/Effect/Core.vuna"
+let v_handleWithAtId_u_udirect = (fun (n : string) (key : string) (nId : int) (keyId : int) comp ret opH _u_ueffTok -> ((Obj.magic (((((((v_handleCoreAtId key) n) keyId) nId) ret) (Obj.magic opH)) comp)) _u_ueffTok))
+
 # 353 "Base/Effect/Core.vuna"
 let v_handleWithAt = (fun (dtb_u_u277 : string) (dtb_u_u278 : string) dtb_u_u283 dtb_u_u284 dtb_u_u285 -> (((((((v_handleWithAtId dtb_u_u277) dtb_u_u278) (dtp_effectId dtb_u_u277)) (dtp_effectId dtb_u_u278)) dtb_u_u283) dtb_u_u284) (Obj.magic dtb_u_u285)))
+
+# 353 "Base/Effect/Core.vuna"
+let v_handleWithAt_u_udirect = (fun (n : string) (key : string) comp ret opH _u_ueffTok -> ((Obj.magic (((((((v_handleWithAtId n) key) (dtp_effectId n)) (dtp_effectId key)) comp) ret) (Obj.magic opH))) _u_ueffTok))
 
 # 367 "Base/Effect/Core.vuna"
 let v_mkCont = (fun dtb_u_u288 -> (C_Cont_MkCont (dtb_u_u288)))
@@ -144,14 +213,23 @@ let v_mkCont = (fun dtb_u_u288 -> (C_Cont_MkCont (dtb_u_u288)))
 # 373 "Base/Effect/Core.vuna"
 let v_pushCleanup = (fun (dtb_u_u290 : (int) -> int) -> (v_effPrim (fun (dtb_u_u291 : int) -> (dtp_cleanup_push dtb_u_u290))))
 
+# 373 "Base/Effect/Core.vuna"
+let v_pushCleanup_u_udirect = (fun (th : (int) -> int) _u_ueffTok -> ((Obj.magic (v_effPrim (fun (dtb_u_u291 : int) -> (dtp_cleanup_push th)))) _u_ueffTok))
+
 # 376 "Base/Effect/Core.vuna"
 let v_popCleanup = (v_effPrim (fun (dtb_u_u293 : int) -> (dtp_cleanup_pop 0)))
 
 # 379 "Base/Effect/Core.vuna"
-let v_bracket = (fun dtb_u_u297 dtb_u_u298 dtb_u_u299 -> (Obj.repr ((fun (dtb_u_u304 : t_EffUnit) -> (let dtb_u_u305 = Obj.obj (dtb_u_u297) in (let dtb_u_u307 = (dtb_u_u305 dtb_u_u304) in (let dtb_u_u313 = Obj.obj ((v_pushCleanup (fun (dtb_u_u315 : int) -> (v_runEff (dtb_u_u298 dtb_u_u307))))) in (let dtb_u_u316 = (dtb_u_u313 dtb_u_u304) in (let dtb_u_u322 = Obj.obj ((dtb_u_u299 dtb_u_u307)) in (let dtb_u_u324 = (dtb_u_u322 dtb_u_u304) in (let dtb_u_u330 = Obj.obj (v_popCleanup) in (let dtb_u_u332 = (dtb_u_u330 dtb_u_u304) in (let dtb_u_u338 = Obj.obj ((dtb_u_u298 dtb_u_u307)) in (let dtb_u_u340 = (dtb_u_u338 dtb_u_u304) in (let dtb_u_u342 = dtb_u_u324 in dtb_u_u342)))))))))))))))
+let v_bracket = (fun dtb_u_u297 dtb_u_u298 dtb_u_u299 -> (Obj.repr ((fun (dtb_u_u304 : t_EffUnit) -> (let dtb_u_u305 = Obj.obj (dtb_u_u297) in (let dtb_u_u307 = (dtb_u_u305 dtb_u_u304) in (let dtb_u_u316 = ((v_pushCleanup_u_udirect (fun (dtb_u_u315 : int) -> (v_runEff (dtb_u_u298 dtb_u_u307)))) dtb_u_u304) in (let dtb_u_u322 = Obj.obj ((dtb_u_u299 dtb_u_u307)) in (let dtb_u_u324 = (dtb_u_u322 dtb_u_u304) in (let dtb_u_u330 = Obj.obj (v_popCleanup) in (let dtb_u_u332 = (dtb_u_u330 dtb_u_u304) in (let dtb_u_u338 = Obj.obj ((dtb_u_u298 dtb_u_u307)) in (let dtb_u_u340 = (dtb_u_u338 dtb_u_u304) in (let dtb_u_u342 = dtb_u_u324 in dtb_u_u342))))))))))))))
+
+# 379 "Base/Effect/Core.vuna"
+let v_bracket_u_udirect = (fun acquire release use _u_ueffTok -> (let dtb_u_u305 = Obj.obj (acquire) in (let dtb_u_u307 = (dtb_u_u305 _u_ueffTok) in (let dtb_u_u316 = ((v_pushCleanup_u_udirect (fun (dtb_u_u315 : int) -> (v_runEff (release dtb_u_u307)))) _u_ueffTok) in (let dtb_u_u322 = Obj.obj ((use dtb_u_u307)) in (let dtb_u_u324 = (dtb_u_u322 _u_ueffTok) in (let dtb_u_u330 = Obj.obj (v_popCleanup) in (let dtb_u_u332 = (dtb_u_u330 _u_ueffTok) in (let dtb_u_u338 = Obj.obj ((release dtb_u_u307)) in (let dtb_u_u340 = (dtb_u_u338 _u_ueffTok) in (let dtb_u_u342 = dtb_u_u324 in dtb_u_u342)))))))))))
 
 # 390 "Base/Effect/Core.vuna"
 let v_finally = (fun dtb_u_u346 (dtb_u_u347 : int t_Eff) -> (((v_bracket (let dtb_u_u349 = 0 in (Obj.repr ((fun (dtb_u_u350 : t_EffUnit) -> dtb_u_u349))))) (fun (dtb_u_u351 : int) -> dtb_u_u347)) (fun (dtb_u_u352 : int) -> dtb_u_u346)))
+
+# 390 "Base/Effect/Core.vuna"
+let v_finally_u_udirect = (fun comp (cleanup : int t_Eff) _u_ueffTok -> ((Obj.magic (((v_bracket (let dtb_u_u349 = 0 in (Obj.repr ((fun (dtb_u_u350 : t_EffUnit) -> dtb_u_u349))))) (fun (dtb_u_u351 : int) -> cleanup)) (fun (dtb_u_u352 : int) -> comp))) _u_ueffTok))
 
 # 433 "Base/Effect/Core.vuna"
 let v_usedSmallLimit = 8
