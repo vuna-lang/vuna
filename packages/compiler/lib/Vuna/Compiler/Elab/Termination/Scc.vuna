@@ -7,6 +7,7 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Obs
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Frontend.AstQuery
@@ -153,7 +154,10 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       ERecUpdate base fields sp => siteCollectFields (fuel - 1) comp ctors projs caller facts sizes region fields (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region base acc)
       EDo stmts sp => siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region stmts acc
       EVar n sp => if memName (n) comp then Site caller (n) [] sizes region True :: acc else acc
-      _ => acc
+      EInt _ _ => acc
+      EStr _ _ => acc
+      EFloat _ _ => acc
+      EInterp _ _ => acc
 
 siteWalkEApp : Int -> List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> List Site -> List Site
 siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
@@ -255,11 +259,11 @@ inlBindsF fuel comp als (b :: rest) =
           in (firstOf restP, secondOf restP)
         Nothing =>
           let
-            restP = inlBindsF (fuel - 1) comp (dropAliases (patNamesOf b2.bindPat) als) rest
+            restP = inlBindsF (fuel - 1) comp (dropAliases (patBinders b2.bindPat) als) rest
           in (b2 :: firstOf restP, secondOf restP)
     BClauses cs =>
       let
-        restP = inlBindsF (fuel - 1) comp (dropAliases (patNamesOf b2.bindPat) als) rest
+        restP = inlBindsF (fuel - 1) comp (dropAliases (patBinders b2.bindPat) als) rest
       in (b2 :: firstOf restP, secondOf restP)
 
 inlBindingF : Int -> List String -> List (String, String) -> Binding -> Binding
@@ -278,13 +282,13 @@ inlBindingF fuel comp als b =
 inlAltsF : Int -> List String -> List (String, String) -> List Alt -> List Alt
 inlAltsF fuel comp als [] = []
 inlAltsF fuel comp als (a :: rest) =
-  { a | altBody = inlGoF (fuel - 1) comp (dropAliases (patNamesOf a.altPat) als) a.altBody }
+  { a | altBody = inlGoF (fuel - 1) comp (dropAliases (patBinders a.altPat) als) a.altBody }
     :: inlAltsF (fuel - 1) comp als rest
 
 inlClausesF : Int -> List String -> List (String, String) -> List LocalClause -> List LocalClause
 inlClausesF fuel comp als [] = []
 inlClausesF fuel comp als (c :: rest) =
-  { c | lcBody = inlGoF (fuel - 1) comp (dropAliases (patNamesOfPats c.lcPats) als) c.lcBody }
+  { c | lcBody = inlGoF (fuel - 1) comp (dropAliases (concatMap patBinders c.lcPats) als) c.lcBody }
     :: inlClausesF (fuel - 1) comp als rest
 
 inlStmtsF : Int -> List String -> List (String, String) -> List DoStmt -> List DoStmt
@@ -293,7 +297,7 @@ inlStmtsF fuel comp als (s :: rest) =
   case s of
     DBind pat e sp =>
       DBind pat (inlGoF (fuel - 1) comp als e) sp
-        :: inlStmtsF (fuel - 1) comp (dropAliases (patNamesOf pat) als) rest
+        :: inlStmtsF (fuel - 1) comp (dropAliases (patBinders pat) als) rest
     DExpr e sp => DExpr (inlGoF (fuel - 1) comp als e) sp :: inlStmtsF (fuel - 1) comp als rest
     DLet binds sp =>
       let
@@ -568,24 +572,8 @@ dedupBases : List Int -> List Int
 dedupBases [] = []
 dedupBases (x :: rest) = if hasBase x rest then dedupBases rest else x :: dedupBases rest
 
-patNamesOf : Pat -> List String
-patNamesOf (PVar n sp) = [n]
-patNamesOf (PAs n inner sp) = n :: patNamesOf inner
-patNamesOf (PCon c ps sp) = patNamesOfPats ps
-patNamesOf (PRecord rn fields sp) = patNamesOfFields fields
-patNamesOf _ = []
-
-patNamesOfPats : List Pat -> List String
-patNamesOfPats [] = []
-patNamesOfPats (p :: rest) = append (patNamesOf p) (patNamesOfPats rest)
-
-patNamesOfFields : List (String, Pat) -> List String
-patNamesOfFields [] = []
-patNamesOfFields ((fn, fp) :: rest) = append (patNamesOf fp) (patNamesOfFields rest)
-
-patNamesOfBinds : List Binding -> List String
-patNamesOfBinds [] = []
-patNamesOfBinds (b :: rest) = append (patNamesOf b.bindPat) (patNamesOfBinds rest)
+bindingPatBinders : Binding -> List String
+bindingPatBinders b = patBinders b.bindPat
 
 argBasesGo : List (String, Int, Int, List Int) -> List String -> Expr -> List Int
 argBasesGo sizes locals e = argBasesGoF (exprBudget 32 e) sizes locals e
@@ -603,7 +591,7 @@ argBasesGoF fuel sizes locals e =
       ELam ns body sp => argBasesGoF (fuel - 1) sizes (append (map firstOf ns) locals) body
       EApp fn args sp => append (argBasesGoF (fuel - 1) sizes locals fn) (argBasesArgsF (fuel - 1) sizes locals args)
       EPi n implicit qty dom cod sp => append (argBasesGoF (fuel - 1) sizes locals dom) (argBasesGoF (fuel - 1) sizes locals cod)
-      ELet binds body rec_ sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesGoF (fuel - 1) sizes (append (patNamesOfBinds binds) locals) body)
+      ELet binds body rec_ sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesGoF (fuel - 1) sizes (append (concatMap bindingPatBinders binds) locals) body)
       ECase scrut alts sp => append (argBasesGoF (fuel - 1) sizes locals scrut) (argBasesAltsF (fuel - 1) sizes locals alts)
       EIf c t el sp => append (argBasesGoF (fuel - 1) sizes locals c) (append (argBasesGoF (fuel - 1) sizes locals t) (argBasesGoF (fuel - 1) sizes locals el))
       EField base f sp => argBasesGoF (fuel - 1) sizes locals base
@@ -660,7 +648,7 @@ argBasesAltsF fuel sizes locals (a :: rest) =
     []
   else
     append
-      (argBasesGoF (fuel - 1) sizes (append (patNamesOf a.altPat) locals) a.altBody)
+      (argBasesGoF (fuel - 1) sizes (append (patBinders a.altPat) locals) a.altBody)
       (argBasesAltsF (fuel - 1) sizes locals rest)
 
 argBasesClausesF : Int -> List (String, Int, Int, List Int) -> List String -> List LocalClause -> List Int
@@ -670,7 +658,7 @@ argBasesClausesF fuel sizes locals (c :: rest) =
     []
   else
     append
-      (argBasesGoF (fuel - 1) sizes (append (patNamesOfPats c.lcPats) locals) c.lcBody)
+      (argBasesGoF (fuel - 1) sizes (append (concatMap patBinders c.lcPats) locals) c.lcBody)
       (argBasesClausesF (fuel - 1) sizes locals rest)
 
 argBasesStmtsF : Int -> List (String, Int, Int, List Int) -> List String -> List DoStmt -> List Int
@@ -680,9 +668,9 @@ argBasesStmtsF fuel sizes locals (s :: rest) =
     []
   else
     case s of
-      DBind pat e sp => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesStmtsF (fuel - 1) sizes (append (patNamesOf pat) locals) rest)
+      DBind pat e sp => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesStmtsF (fuel - 1) sizes (append (patBinders pat) locals) rest)
       DExpr e sp => append (argBasesGoF (fuel - 1) sizes locals e) (argBasesStmtsF (fuel - 1) sizes locals rest)
-      DLet binds sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesStmtsF (fuel - 1) sizes (append (patNamesOfBinds binds) locals) rest)
+      DLet binds sp => append (argBasesBindsF (fuel - 1) sizes locals binds) (argBasesStmtsF (fuel - 1) sizes (append (concatMap bindingPatBinders binds) locals) rest)
 
 argBasesPartsF : Int -> List (String, Int, Int, List Int) -> List String -> List InterpPart -> List Int
 argBasesPartsF fuel sizes locals [] = []
