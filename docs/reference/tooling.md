@@ -522,6 +522,8 @@ nix/tools/merge-queue.sh sweep [--dry-run]      # 扫已 arm 且 CLEAN 的 PR �
 - `gh stack` 是官方扩展：`gh extension install github/gh-stack`（要求 gh ≥2.0、git ≥2.36），
   升级用 `gh extension upgrade stack`。它只负责本地分支链与远端 stack
   （`init` / `add` / `push` / `link` / `rebase` / `sync` / `unstack`），不改合并队列。
+- REST `merge-async` 的 `merge_action` 取 `default` / `direct_merge` / `merge_queue`；队列分支
+  必须用 `merge_queue`，`direct_merge` 会绕过队列。
 - 这两个工具的远端写只由 orchestrator 执行；phase agent 不跑（技能 `vuna-phase`）。
 
 ## 10. 尚未实现（工具链自身缺口）
