@@ -68,5 +68,4 @@ RN_SelectorNotRecord	对非 record / 线性 record 使用 `R.f` 选择器；尚�
 RN_SelectorShared	多个 record 共享字段名且都未 claim；尚无结构化夹具
 
 # 分析预算耗尽（本批新增）：夹具要构造超限输入。
-TC_InstanceSearchExhausted	实例搜索深度 16 耗尽；夹具需 17 层 ctx 链（尚未补）
 TC_TerminationBudgetExhausted	SCT 图数 / 轮数上限耗尽；夹具需 >512 张图（尚未补）

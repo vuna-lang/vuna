@@ -122,7 +122,9 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Data.Int` 以加载
   Int 实例）；trait 与实例语义见 [records-traits.md](records-traits.md)。
 - **延迟字典目标的诊断**：类参数已解出但实例搜索失败的延迟目标在收尾时报
-  `TC_NoInstanceFound`（带字典目标）；类参数仍含未解元变量、或类参数是刚性类型变量时
+  `TC_NoInstanceFound`（带字典目标）；同类目标的实例搜索若因递归深度预算（`instDepthBound`）
+  耗尽而失败，则报 `TC_InstanceSearchExhausted`——「预算用完」不被降级成「缺实例」，
+  候选的 ctx 求解也不会在耗尽时静默跳过。类参数仍含未解元变量、或类参数是刚性类型变量时
 - **延迟字典目标的 ctx 化重解**：`resolveRowGoalsCtx` 在定义体收尾的 ctx 里先解行成员目标，再对类参数已解、不触发刚性快路径的字典目标做实例搜索（`tryMatchInst` 按 ctx 深度 quote）；行元变量解出后 `Monad (Eff r)` 等参数化实例的字典因此能静态求出，不会被 `liftFreeDictGoals` 提升成单态字典参数。类参数里**嵌套**的未解 meta 也按未解处理（结构判定），避免提前搜索。
   保持 `unsolved metavariable`。立即搜索失败同样报 `TC_NoInstanceFound`。
 - **type-as-value**：不引入 type codes。Type 级等式走**擦除的 `Eq` 证据 + `cast`

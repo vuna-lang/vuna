@@ -1280,24 +1280,28 @@ finishCore termAux decls core =
             -- 延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
             -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
             Just m =>
-              case firstUnsolvedDictGoal ec4 of
-                Just sd =>
-                  let
-                    cands = dictCandidatesOf ec4 sd
-                    createdOf =
-                      case firstUnsolvedDictGoalMeta ec4 of
-                        Just gm => withMetaCreated ec4 gm
-                        Nothing => withMetaCreated ec4 m
-                  in case firstUnsolvedDictGoalSpan ec4 of
-                    Just sp =>
-                      onErrDiag
-                        (\d => createdOf (withField (FieldCandidates cands) d))
-                        (tcErr1 sp (NoInstanceFound sd) sd)
-                    Nothing =>
-                      onErrDiag
-                        (\d => createdOf (withField (FieldCandidates cands) d))
-                        (tcErr1NoLoc (NoInstanceFound sd) sd)
-                Nothing => ErrC (unsolvedMessage ec4 m)
+              case firstUnsolvedDictGoalExhausted globals ec4 of
+                -- 预算耗尽不是「缺实例」：优先报 `TC_InstanceSearchExhausted`（带延迟点位置）。
+                Just d => ErrC (withMetaCreated ec4 m d)
+                Nothing =>
+                  case firstUnsolvedDictGoal ec4 of
+                    Just sd =>
+                      let
+                        cands = dictCandidatesOf ec4 sd
+                        createdOf =
+                          case firstUnsolvedDictGoalMeta ec4 of
+                            Just gm => withMetaCreated ec4 gm
+                            Nothing => withMetaCreated ec4 m
+                      in case firstUnsolvedDictGoalSpan ec4 of
+                        Just sp =>
+                          onErrDiag
+                            (\d => createdOf (withField (FieldCandidates cands) d))
+                            (tcErr1 sp (NoInstanceFound sd) sd)
+                        Nothing =>
+                          onErrDiag
+                            (\d => createdOf (withField (FieldCandidates cands) d))
+                            (tcErr1NoLoc (NoInstanceFound sd) sd)
+                    Nothing => ErrC (unsolvedMessage ec4 m)
             Nothing =>
               Vuna.Compiler.Base.Common.bind
                 (obsCheck "vuna.elab.extra" (\_ => extraDefsOf globals ec4 projSpans (append instDefs defs)))

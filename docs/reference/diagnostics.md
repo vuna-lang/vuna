@@ -221,7 +221,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | warnings（未使用/冗余/不可达/跨目标能力） | `UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import/`module X` 重导出统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接且绕过 check 缓存/干净模块复用以保证不漏报。`UN_TargetEffectUnavailable` 在 `build`/`compile` 的入口行检查里发出（目标不实现该内建效应，执行到叶子会 trap；见 [wasm.md](wasm.md) §8） |
 | 建议引擎 + Fix | `Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`packages/cli/test/corpus/lsp/quickfix.sh` 集成测试 |
 | 类型不匹配 expected/found | fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达 |
-| 实例搜索 trace | `TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」 |
+| 实例搜索 trace | `TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」；递归深度预算（实例 ctx 链）耗尽改报 `TC_InstanceSearchExhausted`，不落到缺实例 |
 | 终止性 call matrix | `TC_CannotProveTermination` 附 `fields.call` 边：callee、被测形参位置（`arg`）、关系（`relation`：严格子项 / 守卫减法 / 缺非负证明 / 升序计数器 / 无尺寸来源 / 关系落在别的形参 / 无关系）、调用点 span；human 行尾显示文件:行号。SCT 失败在 message 后缀给出幂等图，闭包放弃时后缀改为「闭包未收敛 + 上限」；存在盲调用（callee 以值传递 / 遍历预算耗尽）时再追加「未识别调用」名单 |
 | 覆盖性缺失构造子标签 | 缺失构造子进 `fields.candidates`，每个候选带构造子声明 `span`；JSON/SARIF/LSP（含 diag fields 的 candidates.span）可跳转 |
 | QTT 使用点 | Core `TVar` 携带源 span；线性/擦除错误附 `fields.quantity`：name/declared/observed，并逐使用点附 `fields.span name=use`；内部合成变量无源位置时不附 |
@@ -229,7 +229,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | explanation/example/`explain` | `explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造 |
 | 效果行 | `TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行 |
 | 入口行实例名 | `TC_EntryInstanceNotDefault`：`main` 行里的内建宿主效应用了非 `default` 的显式实例（如 `ConsoleOp@mock`）即编译期拒绝——entry 只预装默认实例的 handler |
-| 结构化夹具 + 每码覆盖门禁 | 349 个 `.diag.json`；覆盖门禁 206/264，58 个缺口 allowlist 且逐码在 `nix/checks/data/diag-unreachable.txt` 审计 |
+| 结构化夹具 + 每码覆盖门禁 | 383 个 `.diag.json`；覆盖门禁 218/280，62 个缺口 allowlist 且逐码在 `nix/checks/data/diag-unreachable.txt` 审计 |
 | 位置门禁 | `nix/checks/lib/diag-located.sh`：无 span 必须带 `absent` 理由并逐码登记；当前 320/324 有位置，剩余 3 package-graph + 1 internal；parser/resolver/loader/elab 用户面码均有位置 |
 | 无源码位置显式化 | `NoSourceReason`（synthetic/tool-usage/package-graph/internal）/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/checks/data/diag-located.allow`，门禁要求「无 span 必须带理由」 |
 | SourceRef | `--json --with-sources` 顶层 `sources`：file/digest/package/module/relPath；默认 JSON 契约不变 |
