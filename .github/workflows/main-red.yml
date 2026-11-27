@@ -1,7 +1,7 @@
 name: main-red
 
 # main 门禁失败时维护唯一的 `main-red` 事故单：失败就创建/追加，恢复绿就关闭。
-# 多个会话按 issue 的 assignee / status:in-progress 认领，避免同时开修复 PR。
+# 多个会话按 issue 的 assignee / In progress 认领，避免同时开修复 PR。
 on:
   workflow_run:
     workflows: [ci]
@@ -83,9 +83,10 @@ jobs:
 
           ## 认领
 
-          1. 先看本 issue 是否已有 assignee 或 status:in-progress；有就让出，不要开第二个修复 PR。
+          1. 先看本 issue 是否已有 assignee 或状态 In progress；有就让出，不要开第二个修复 PR。
           2. 认领：评论 claim，然后
-             gh issue edit <n> --add-assignee @me --add-label status:in-progress。
+             gh issue edit <n> --add-assignee @me
+             nix/tools/issue.sh status <n> in-progress
           3. 修复 PR 写 Closes #<本 issue> 并加 main-red 标签；main 还没绿时不要给无关 PR arm auto-merge。
           4. 只有 main 的 ci 重新为绿（本 workflow 会自动关闭 issue）或修复 PR 合入后才算完成。
           EOF
@@ -95,10 +96,23 @@ jobs:
             --limit 1 --json number --jq '.[0].number // empty')
 
           if [ -z "$issue" ]; then
-            gh issue create --repo "$REPO" --title "$title" --body "$body" \
-              --label main-red --label type:bug --label area:ci \
-              --label priority:P0 --label status:todo
-            echo "main-red: 已创建事故单"
+            url=$(gh issue create --repo "$REPO" --title "$title" --body "$body" \
+              --label main-red --label area:ci)
+            issue=${url##*/}
+            priority_field=$(gh api "orgs/${REPO%%/*}/issue-fields" \
+              --jq '.[] | select(.name == "Priority") | .id')
+            if [ -z "$priority_field" ]; then
+              priority_field=$(gh api "users/${REPO%%/*}/issue-fields" \
+                --jq '.[] | select(.name == "Priority") | .id')
+            fi
+            payload=$(jq -n --argjson field "$priority_field" '{
+              status: "Todo",
+              type: "Bug",
+              issue_field_values: [{field_id: $field, value: "Urgent"}]
+            }')
+            printf '%s' "$payload" |
+              gh api -X PATCH "repos/$REPO/issues/$issue" --input - >/dev/null
+            echo "main-red: 已创建事故单 #$issue"
           else
             gh issue comment "$issue" --repo "$REPO" --body "$body"
             echo "main-red: 已追加到 #$issue"

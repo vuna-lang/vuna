@@ -36,18 +36,23 @@ jobs:
           [ -n "$issues" ] || exit 0
 
           for n in $issues; do
-            if ! meta=$(gh issue view "$n" --repo "$REPO" --json state,labels,assignees 2>/dev/null); then
+            if ! meta=$(gh api "repos/$REPO/issues/$n" --jq '{
+              state,
+              labels: [.labels[].name],
+              assignees: [.assignees[].login],
+              status: (.status.name // "")
+            }' 2>/dev/null); then
               continue
             fi
             [ "$(jq -r '.state' <<<"$meta")" = "OPEN" ] || continue
-            is_main_red=$(jq -r '[.labels[].name] | index("main-red") != null' <<<"$meta")
+            is_main_red=$(jq -r '[.labels] | index("main-red") != null' <<<"$meta")
             [ "$is_main_red" = "true" ] || continue
 
-            assignees=$(jq -r '.assignees[].login' <<<"$meta")
-            in_progress=$(jq -r '[.labels[].name] | index("status:in-progress") != null' <<<"$meta")
+            assignees=$(jq -r '.assignees[]' <<<"$meta")
+            in_progress=$(jq -r '.status == "In progress"' <<<"$meta")
             if [ -z "$assignees" ] && [ "$in_progress" != "true" ]; then
-              gh issue edit "$n" --repo "$REPO" \
-                --add-assignee "$AUTHOR" --add-label status:in-progress
+              gh issue edit "$n" --repo "$REPO" --add-assignee "$AUTHOR"
+              gh api -X PATCH "repos/$REPO/issues/$n" -f status="In progress" >/dev/null
               gh issue comment "$n" --repo "$REPO" \
                 --body "PR #$PR 认领（@$AUTHOR）。"
               echo "main-red-guard: PR #$PR 认领 issue #$n"
@@ -62,7 +67,7 @@ jobs:
             if [ -n "$owner" ]; then
               claimed_by="已由 @$owner 认领"
             else
-              claimed_by="已标记 status:in-progress（未 assign）；先确认认领人"
+              claimed_by="已标记 In progress（未 assign）；先确认认领人"
             fi
             already=$(gh pr view "$PR" --repo "$REPO" --json comments \
               --jq '.comments[].body' | grep -Fc '<!-- main-red-guard -->' || true)

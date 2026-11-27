@@ -80,8 +80,13 @@ jobs:
             grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?|references?)[[:space:]]+#[0-9]+' |
             grep -Eo '[0-9]+' | head -n 1 || true)
           issue_labels=""
+          issue_type=""
           if [ -n "$issue_number" ]; then
-            issue_labels=$(gh api "repos/$REPO/issues/$issue_number" --jq '.labels[].name' 2>/dev/null || true)
+            issue_meta=$(gh api "repos/$REPO/issues/$issue_number" \
+              --jq '{type: .type.name, labels: [.labels[].name]}' 2>/dev/null || true)
+            [ -n "$issue_meta" ] || issue_meta='{}'
+            issue_type=$(jq -r '.type // empty' <<<"$issue_meta")
+            issue_labels=$(jq -r '.labels[]? | select(test("^(pkg|area):"))' <<<"$issue_meta")
           fi
 
           type_label=""
@@ -97,10 +102,19 @@ jobs:
             type_label=$(printf '%s\n' "$current_labels" | grep -E '^type:' | head -n 1 || true)
           fi
           if [ -z "$type_label" ]; then
-            type_label=$(printf '%s\n' "$issue_labels" | grep -E '^type:' | head -n 1 || true)
+            case "$issue_type" in
+              Bug) type_label="type:bug" ;;
+              Feature) type_label="type:feature" ;;
+              Task) type_label="type:chore" ;;
+              Refactor) type_label="type:refactor" ;;
+              Perf) type_label="type:perf" ;;
+              Docs) type_label="type:docs" ;;
+              Test) type_label="type:test" ;;
+              Epic) type_label="type:epic" ;;
+            esac
           fi
           if [ -z "$type_label" ]; then
-            echo "::error::PR 缺少 type:* 标签；请在标题写 Conventional Commits 前缀，或在关联 issue 上补 type。"
+            echo "::error::PR 缺少 type:* 标签；请在标题写 Conventional Commits 前缀，或给关联 issue 设 issue type。"
             exit 1
           fi
 
