@@ -1,0 +1,39 @@
+-- CO-05：未解 meta / level 逃逸的安全谓词必须下钻闭包体与 `VCase` 分支闭包。
+-- 这些形状只在值层出现（源码类型不写 `VCase` / `VProj`），所以用函数级夹具直接探针。
+import Prelude
+import Vuna.Compiler.Core.Term
+
+-- 闭包体里的未解 meta：env 干净，只有 body 是 `?1`。
+cloBody : Bool
+cloBody = hasUnsolvedMetaClo solsEmpty (Closure [] (TMeta 1))
+
+-- 卡住 case 的分支闭包体里的未解 meta：scrutinee 干净。
+caseAltBody : Bool
+caseAltBody =
+  hasUnsolvedMetaValue
+    solsEmpty
+    (VCase (VNeutral (NVar "n" 0 [])) [VCaseAlt "Zero" [] (Closure [] (TMeta 2))])
+
+-- 投影底座是 λ，其闭包体含未解 meta（tele 只有名字 / multiplicity，不携带值）。
+projBaseBody : Bool
+projBaseBody =
+  hasUnsolvedMetaValue solsEmpty (VProj (VLam "x" Rig1 (Closure [] (TMeta 3))) "MkSized" [] 0 0)
+
+-- levelEscapes 同样要进分支闭包的环境（env 里的局部变量 level 越过创建深度）。
+caseAltLevel : Bool
+caseAltLevel =
+  levelEscapes
+    2
+    0
+    (VCase (VNeutral (NVar "n" 0 [])) [VCaseAlt "Zero" [] (Closure [VNeutral (NVar "x" 3 [])] (TMeta 4))])
+
+-- 已解 meta 不算未解（回归哨兵：不应因为下钻 body 就整片报 True）。
+solvedOk : Bool
+solvedOk = not (hasUnsolvedMetaClo (solsFromList [(5, VCon "Zero" [])]) (Closure [] (TMeta 5)))
+
+main : Int
+main =
+  (if cloBody then 1 else 0)
+    + (if caseAltBody then 2 else 0)
+    + (if projBaseBody then 4 else 0)
+    + (if caseAltLevel then 8 else 0) + (if solvedOk then 16 else 0)
