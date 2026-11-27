@@ -71,8 +71,6 @@ bug=type:bug
 编译器前端=area:compiler-frontend,pkg:compiler
 编译器后端=area:codegen-ocaml,pkg:target-ocaml
 工具链=pkg:toolchain
-重复=duplicate
-无效=invalid
 EOF
 }
 

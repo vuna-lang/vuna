@@ -1,7 +1,7 @@
 name: 想法 / 方向
 description: 先写一句话，之后由 agent 查重、讨论并补全元信息
 title: "[idea] "
-labels: ["status:backlog", "needs-refinement"]
+labels: ["needs-refinement"]
 body:
   - type: markdown
     attributes:

@@ -1,7 +1,6 @@
 name: Feature
 description: 提议一个新功能或行为扩展
 title: "[feat] "
-labels: ["type:feature", "status:backlog"]
 body:
   - type: textarea
     id: motivation

@@ -2,7 +2,8 @@
 #
 # 同步：`nix/tools/github-labels.sh --sync`（幂等）。
 # 迁移旧标签：`nix/tools/github-labels.sh --migrate`（先加新标签，再删旧标签）。
-# 颜色按前缀分组：type 红/橙、status 黄、pkg 青、area 绿、控制标签灰/紫。
+# 原生 issue status / type / priority 不在这里：status 与 priority 走 REST，
+# type 是 org 级 issue type；type:* 标签只用于 PR 门禁路由。
 #
 # 每个条目只使用 name / color / description 三个字段；脚本按这个固定形状解析。
 
@@ -31,18 +32,6 @@
   color: "5319e7"
   description: "方向或多任务集合"
 
-- name: "status:backlog"
-  color: "fbca04"
-  description: "未排期"
-- name: "status:todo"
-  color: "f9d0c4"
-  description: "已排期，尚未开工"
-- name: "status:in-progress"
-  color: "1d76db"
-  description: "开发中"
-- name: "status:in-review"
-  color: "0e8a16"
-  description: "PR 已就绪，等待门禁或评审"
 
 - name: "pkg:compiler"
   color: "006b75"
@@ -168,20 +157,11 @@
   color: "ededed"
   description: "无需关联 issue 的例外 PR"
 
-- name: "duplicate"
-  color: "cfd3d7"
-  description: "与已有 issue 或 PR 重复"
-- name: "invalid"
-  color: "e4e669"
-  description: "描述不成立或不在范围内"
-- name: "wontfix"
-  color: "ffffff"
-  description: "不计划处理"
 - name: "question"
   color: "d876e3"
   description: "需要进一步讨论"
 # --- 债务迁移标签（由 docs/reference/debt.md 迁到 issues） ---
-- name: "type:future"
+- name: "debt:future"
   color: "a2eeef"
   description: "长期能力缺口，当前不排期"
 - name: "debt"
@@ -208,15 +188,3 @@
 - name: "debt:decision"
   color: "cfd3d7"
   description: "已决取舍，不是待办"
-- name: "priority:P0"
-  color: "b60205"
-  description: "正确性 / 静默错误，先修"
-- name: "priority:P1"
-  color: "d93f0b"
-  description: "用户可见 bug，有绕法"
-- name: "priority:P2"
-  color: "fbca04"
-  description: "性能 / 重构 / 有边界 feature"
-- name: "priority:P3"
-  color: "ededed"
-  description: "长期能力 / 设计边界 / 卫生"
