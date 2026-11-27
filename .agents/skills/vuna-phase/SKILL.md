@@ -33,7 +33,7 @@ description: 把大任务拆成 phase、用 GitHub stacked PR + 合并队列推�
 | --- | --- | --- |
 | 规划 | orchestrator | ledger 里有 phase、branch、base、文件边界、验收命令 |
 | 开发 | phase agent（占 dev 槽） | 改动在指定 worktree 内，验证命令跑过并记录 |
-| 代码冻结 | orchestrator | 提交整理完、push、PR 打开、base 正确、已 arm（入队由 checks 变绿后自动/sweep 完成） |
+| 代码冻结 | orchestrator | 提交整理完、push、PR 打开、base 正确；入队由 checks 变绿后 sweep 完成（不依赖 arm） |
 | 队列 | GitHub | stack 作为一个 merge group 进入队列 |
 | 合并 | GitHub | bottom → top 原子落 `main` |
 | 级联 rebase | orchestrator | `gh stack sync` 后各层重新线性、PR base 正确 |
@@ -75,13 +75,14 @@ gh pr create --base feat/123-phase-1  --head feat/123-phase-2 --title ... --body
 # 5) 把 PR 链成 stack（顺序 bottom → top；只追加，不移除）
 gh stack link <pr1> <pr2>
 
-# 6) 只 arm top；checks 绿后由 sweep 整条入队（也可手动 enqueue top）
-nix/tools/merge-queue.sh arm <top>
-# nix/tools/merge-queue.sh enqueue <top>   # 仅当所有 open 层已 CLEAN
+# 6) stack 不依赖 auto-merge；checks 绿后 sweep 自动整条入队
+# nix/tools/merge-queue.sh enqueue <top>   # 手动：所有 open 层已 CLEAN
 ```
 
 - `Closes #N` 只放 bottom 的 PR；上层用 `Refs #N`，PR-only 的上层加 `no-issue`。一个 issue
   只被关闭一次，否则上层合并时 issue 已经 Done。
+- stack **不 arm**：GitHub 可能在只想 rebase 的仓库上按默认 squash 拒绝 `includeStack`；
+  整条入队由 sweep 走 REST `merge-async`。
 - 入队走 stack 语义：GraphQL `enqueuePullRequest` 没有 stack 参数，整条 stack 用 REST
   `PUT /repos/{owner}/{repo}/pulls/{n}/merge-async`、`merge_action: merge_queue`。脚本封装这条路径，
   不要手工逐层 `enqueue`。
@@ -156,9 +157,9 @@ phase <N>：<一句话目标>
 | 情况 | 处理 |
 | --- | --- |
 | 级联冲突 | `gh stack rebase` → 按语义解决 → `git add` → `--continue`；要整体还原用 `--abort`。保留双方改动。 |
-| 下层要改（已冻结后） | 先从 top `dequeue` 整条 stack；改下层 → `gh stack rebase` 级联上层 → 重新整理 / push / arm；绿后由 sweep 入队。上层不能带着旧基线继续。 |
+| 下层要改（已冻结后） | 先从 top `dequeue` 整条 stack；改下层 → `gh stack rebase` 级联上层 → 重新整理 / push；绿后由 sweep 入队。上层不能带着旧基线继续。 |
 | 某层要撤掉 | `gh stack modify` 的 drop / fold，或关掉该层 PR 后 `gh stack unstack` 重建；**保留 worktree** 直到改动找回。 |
-| 队列把某层移出 | 上层会被一起移出。修根因后从 **top** 重新 arm；绿后由 sweep 入队，不要逐层重试。 |
+| 队列把某层移出 | 上层会被一起移出。修根因后由 sweep 重新入队，不要逐层重试。 |
 | stack 超过 3 层 | 停止加层；从 `main` 另起一条 stack 或独立 PR，把后续 phase 移过去。 |
 | seed 冲突 / 上层碰了 `seed/` | 撤回上层的 seed 改动；rotation 只在最低层做，全局同时只允许一次。 |
 | 整个 phase 放弃 | 从 top 往下关 PR；`gh stack unstack --local` 只清本地追踪；worktree 保留到确认无未保存改动，再 teardown。 |

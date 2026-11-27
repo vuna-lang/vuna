@@ -128,13 +128,13 @@ git -C <MAIN_ROOT> pull --ff-only
 - **只在 phase N+1 对 phase N 有硬代码依赖时 stack**；无依赖的 phase 各自从 `origin/main`
   切分支、开独立 PR 并行。
 - **一个 phase 一个 worktree**；branch 的 base 是上一 phase 分支，bottom 的 base 是 `main`。
-- **冻结**：提交整理完、push、PR 打开、base 正确、已 arm（入队由 checks 变绿后自动/sweep
-  完成）。下一 phase 在冻结后开工，不等 merged；冻结后该层不再接受代码改动。
+- **冻结**：提交整理完、push、PR 打开、base 正确；入队由 checks 变绿后 sweep 完成
+  （不依赖 arm）。下一 phase 在冻结后开工，不等 merged；冻结后该层不再接受代码改动。
 - **远端写只有 orchestrator 做**：push / PR / label / `gh stack` / `merge-queue.sh` /
   teardown；phase agent 只改代码、跑验证、commit。
 - **stack 操作**：`gh stack init --base main <b1> <b2>`（已有追踪时 `gh stack add <bN>`）→
   `gh stack push` → 每层 `gh pr create --base <parent>` → `gh stack link <pr...>`。只
-  `arm` + `enqueue` top，不逐层入队；合并后 `gh stack sync` 级联，不手写 `rebase --onto`。
+  enqueue top（sweep 自动），不逐层入队；合并后 `gh stack sync` 级联，不手写 `rebase --onto`。
 - `Closes #N` 只放 bottom，上层用 `Refs #N` 或 `no-issue`。
 - **seed**：rotation 只放最低层并独立成 `chore(seed): ...`；上层 PR 不碰 `seed/`，全局同时
   只允许一次 rotation。

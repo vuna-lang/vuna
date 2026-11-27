@@ -135,14 +135,14 @@ gh stack push
 gh pr create --base main             --head feat/123-phase-1 ...
 gh pr create --base feat/123-phase-1 --head feat/123-phase-2 ...
 gh stack link <pr1> <pr2>
-nix/tools/merge-queue.sh arm <top>
-nix/tools/merge-queue.sh enqueue <top>
+# stack 不 arm；checks 绿后 sweep 自动整条入队
 ```
 
-- 下一 phase 在上一 phase **冻结**（提交整理完、push、PR 打开、base 正确、已 arm；入队由
-  checks 变绿后自动/sweep 完成）后开工，不等合并。
+- 下一 phase 在上一 phase **冻结**（提交整理完、push、PR 打开、base 正确）后开工，不等
+  合并；入队由 checks 变绿后 sweep 完成，不依赖 arm。
 - `Closes #N` 只放 bottom；上层用 `Refs #N` 或 `no-issue`。
-- 只 arm / enqueue **top**；某层被 hold 或移出队列，上方所有层一起挡住，修好后从 top 重来。
+- 只 enqueue **top**（sweep 自动）；某层被 hold 或移出队列，上方所有层一起挡住，修好后
+  由 sweep 重新入队。
 - 合并后用 `gh stack sync` 级联；冲突用 `gh stack rebase` 解决，不要手写
   `git rebase --onto`。整条 stack 完成后再 `gh stack sync --prune` / `gh stack unstack`
   并清理 worktree。

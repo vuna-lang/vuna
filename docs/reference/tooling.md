@@ -500,24 +500,25 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 ```console
 nix/tools/merge-queue.sh status [branch]        # 队列位置 / 状态 / ETA；stack 按层显示
-nix/tools/merge-queue.sh arm <pr>               # 打开 auto-merge（GraphQL includeStack）
-nix/tools/merge-queue.sh disarm <pr>            # 关闭 auto-merge（includeStack）
+nix/tools/merge-queue.sh arm <pr>               # 普通 PR 打开 auto-merge；stack 用 sweep
+nix/tools/merge-queue.sh disarm <pr>            # 关闭 auto-merge（stack 带 includeStack）
 nix/tools/merge-queue.sh enqueue <pr> [--jump]  # 入队；stack 走 REST merge-async
 nix/tools/merge-queue.sh dequeue <pr>           # 移出队列（stack 的上层一起移出）
 nix/tools/merge-queue.sh wait <pr> [timeout]    # 阻塞等待合并 / 被移除，默认 1800 秒
-nix/tools/merge-queue.sh sweep [--dry-run]      # 扫已 arm 且 CLEAN 的 PR 补 enqueue
+nix/tools/merge-queue.sh sweep [--dry-run]      # 扫 CLEAN 的 PR 补 enqueue（stack 不要求已 arm）
 ```
 
 | 命令 | stack 语义 |
 | --- | --- |
 | `status` | 队列 entry 按 stack 聚合，同一 stack 的层标出 bottom → top 与位置 |
-| `arm` / `disarm` | GraphQL `enablePullRequestAutoMerge` / `disablePullRequestAutoMerge` 带 `includeStack: true`；覆盖该 PR 与它下方的层，所以只对 top 操作 |
+| `arm` / `disarm` | `includeStack: true` 从 top 覆盖整条；GitHub 可能在 rebase-only 仓库上按默认 squash 拒绝 stack arm，所以 stack 入队以 `sweep` / `enqueue` 为准 |
 | `enqueue` | 普通 PR 走 GraphQL `enqueuePullRequest`；stack 走 REST `PUT .../pulls/{n}/merge-async`、`merge_action: merge_queue`，只对 top |
 | `dequeue` | 移出一层会连带移出上方所有层；撤回整条 stack 从 bottom 操作 |
 | `wait` | 等到 top 合并或某层被移除；被 eject 时非 0 退出 |
-| `sweep` | 按 stack 聚合补 enqueue；同一 stack 只入队 top，不逐层补 |
+| `sweep` | 按 stack 聚合补 enqueue；只要所有 open 层 CLEAN / 无 hold，同一 stack 只入队 top 一次，不要求已 arm |
 
-- 正常流程只需要 auto-merge 的 arm；`enqueue` / `sweep` 是补 GitHub 回归
+- 普通 PR 靠 auto-merge 的 arm；stack 不依赖 arm（`includeStack` 可能被 GitHub 拒绝），
+  由 `sweep` 在 checks 绿后整条入队。`enqueue` / `sweep` 同时补 GitHub 回归
   （community#209348）的兜底，`dequeue` / `wait` 用于人工干预。
 - `gh stack` 是官方扩展：`gh extension install github/gh-stack`（要求 gh ≥2.0、git ≥2.36），
   升级用 `gh extension upgrade stack`。它只负责本地分支链与远端 stack

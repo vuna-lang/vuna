@@ -139,16 +139,17 @@ gh stack push
 gh pr create --base main            --head feat/1-phase-1 --title ... --body-file ...
 gh pr create --base feat/1-phase-1  --head feat/1-phase-2 --title ... --body-file ...
 gh stack link <pr1> <pr2>
-nix/tools/merge-queue.sh arm <top>
-# nix/tools/merge-queue.sh enqueue <top>   # 仅当所有 open 层已 CLEAN
+# stack 不 arm；checks 绿后 sweep 自动整条入队
+# nix/tools/merge-queue.sh enqueue <top>   # 手动：所有 open 层已 CLEAN
 ```
 
 - `Closes #N` 只放 bottom 的 PR；上层用 `Refs #N`，PR-only 的层加 `no-issue`。
-- 只对 **top** arm；checks 绿后整条入队（sweep 自动；手动 `enqueue` 仅在全部 open 层
-  `CLEAN` 时）。stack 作为一个 merge group 入队；`gh pr merge` 与 GraphQL
-  `enqueuePullRequest` 都不认 stack，整条入队走 REST `merge-async`。
-- 某一层被 hold 或移出队列，它上方所有层一起被挡住 / 移除；修根因后从 top 重新 arm，
-  绿后由 sweep 入队，不要逐层重试。
+- stack **不依赖 arm**：GitHub 可能在只想 rebase 的仓库上按默认 squash 拒绝 `includeStack`；
+  checks 绿后由 sweep 整条入队（手动 `enqueue <top>` 仅在全部 open 层 `CLEAN` 时）。
+  stack 作为一个 merge group 入队；`gh pr merge` 与 GraphQL `enqueuePullRequest` 都不认
+  stack，整条入队走 REST `merge-async`。
+- 某一层被 hold 或移出队列，它上方所有层一起被挡住 / 移除；修根因后由 sweep 重新入队，
+  不要逐层重试。
 - 合并后用 `gh stack sync` 级联（fetch + rebase + push + 同步 PR）；冲突用
   `gh stack rebase` 解决，不要手写 `git rebase --onto`。整条 stack 合并完再
   `gh stack sync --prune` 或 `gh stack unstack`，然后 teardown。

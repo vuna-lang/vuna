@@ -145,7 +145,7 @@ gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
 gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
 nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA
 gh stack view --short                     # stack 层 / PR / 顺序（sync / arm 见技能 vuna-phase）
-nix/tools/merge-queue.sh arm <top>        # stack 只对 top arm；绿后由 sweep 整条入队
+nix/tools/merge-queue.sh sweep            # stack 绿后整条入队；普通 PR 由 automerge arm
 gh pr merge <n> --rebase                  # 仅 break-glass；不适用于 stack
 git pull --ff-only                        # 主仓同步
 nix/tools/github-branch-protection.sh     # 应用 main 的 ruleset（幂等；见技能 vuna-pr）
