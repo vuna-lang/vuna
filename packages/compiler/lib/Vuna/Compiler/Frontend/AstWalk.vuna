@@ -1,0 +1,522 @@
+-- | AST 的单一形状表与遍历代数：子节点、重写、折叠、作用域。
+--
+-- 这张表是**唯一**枚举 `Expr` / `Pat` / `Decl` 构造子的地方：新增构造子时这里编译
+-- 失败，而不是让各 pass 的 `_` 兜底静默跳过。所有重建都原样保留 `NodeRef`（Fixity
+-- 按 id/span 查表面事实，宏展开的 source map 也按 id 反查）。
+--
+-- 分层：
+--   * `exprChildren` / `patChildren` / `declExprs` / `declPats`：只读子节点表；
+--   * `foldExpr` / `foldPat` / `foldDecl`：只读折叠（工作队列，不递归 AST）；
+--   * `mapExpr` / `mapExprPat` / `mapPat` / `mapDeclWith` / `mapDeclsWith`：重写；
+--   * `scopedExprChildren` / `patBinders`：带 binder 作用域的下降（给 Resolve）。
+--
+-- 子节点顺序固定为源码顺序（函数在实参前，左到右）；`Binding` 固定为
+-- pat → value → sig。顺序会影响诊断先后与 binder 可见性，pass 不要按方便重排。
+module Vuna.Compiler.Frontend.AstWalk where
+
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+
+-- ---------------------------------------------------------------
+-- 只读子节点
+-- ---------------------------------------------------------------
+export exprChildren : Expr -> List Expr
+exprChildren (EVar _ _) = []
+exprChildren (EInt _ _) = []
+exprChildren (EStr _ _) = []
+exprChildren (EFloat _ _) = []
+exprChildren (ELam _ body _) = [body]
+exprChildren (EApp fn args _) = fn :: args
+exprChildren (EPi _ _ _ dom cod _) = [dom, cod]
+exprChildren (ELet binds body _ _) = append (bindingExprs binds) [body]
+exprChildren (ECase scrut alts _) = scrut :: map altBody alts
+exprChildren (EIf c t el _) = [c, t, el]
+exprChildren (EField base _ _) = [base]
+exprChildren (ERecord _ fields _) = map secondOf fields
+exprChildren (ERecUpdate base fields _) = base :: map secondOf fields
+exprChildren (EDo stmts _) = doStmtExprs stmts
+exprChildren (EInterp parts _) = interpExprs parts
+
+bindingExprs : List Binding -> List Expr
+bindingExprs [] = []
+bindingExprs (b :: rest) =
+  append (bindingValueExprs b.bindValue) (append (bindingSigExprs b.bindSig) (bindingExprs rest))
+
+bindingValueExprs : BindingValue -> List Expr
+bindingValueExprs (BVal e) = [e]
+bindingValueExprs (BClauses clauses) = clauseExprs clauses
+
+bindingSigExprs : Maybe BindingSig -> List Expr
+bindingSigExprs Nothing = []
+bindingSigExprs (Just s) = [s.sigType]
+
+clauseExprs : List LocalClause -> List Expr
+clauseExprs [] = []
+clauseExprs (c :: rest) = c.lcBody :: clauseExprs rest
+
+doStmtExprs : List DoStmt -> List Expr
+doStmtExprs [] = []
+doStmtExprs (s :: rest) =
+  case s of
+    DBind _ e _ => e :: doStmtExprs rest
+    DExpr e _ => e :: doStmtExprs rest
+    DLet binds _ => append (bindingExprs binds) (doStmtExprs rest)
+
+interpExprs : List InterpPart -> List Expr
+interpExprs [] = []
+interpExprs (p :: rest) =
+  case p of
+    IPText _ => interpExprs rest
+    IPHole e => e :: interpExprs rest
+
+ctorTypes : List Ctor -> List Expr
+ctorTypes [] = []
+ctorTypes (c :: rest) = c.ctorType :: ctorTypes rest
+
+fieldTypes : List Field -> List Expr
+fieldTypes [] = []
+fieldTypes (f :: rest) = f.fieldType :: fieldTypes rest
+
+traitMethodTypes : List TraitMethod -> List Expr
+traitMethodTypes [] = []
+traitMethodTypes (m :: rest) = m.traitMethodType :: traitMethodTypes rest
+
+paramKindExprs : List TraitParam -> List Expr
+paramKindExprs [] = []
+paramKindExprs (p :: rest) =
+  case p.traitParamKind of
+    Nothing => paramKindExprs rest
+    Just e => e :: paramKindExprs rest
+
+export patChildren : Pat -> List Pat
+patChildren (PVar _ _) = []
+patChildren (PAs _ inner _) = [inner]
+patChildren (PWild _) = []
+patChildren (PCon _ pats _) = pats
+patChildren (PInt _ _) = []
+patChildren (PStr _ _) = []
+patChildren (PRecord _ fields _) = map secondOf fields
+
+-- | 表达式节点直接携带的模式子节点（`let` 绑定 / `case` 分支 / do 绑定）。
+-- 模式本身不含表达式，所以 `foldDecl` 把它们交给 `foldPat` 后不需要再回到表达式。
+export exprPats : Expr -> List Pat
+exprPats (EVar _ _) = []
+exprPats (EInt _ _) = []
+exprPats (EStr _ _) = []
+exprPats (EFloat _ _) = []
+exprPats (ELam _ _ _) = []
+exprPats (EApp _ _ _) = []
+exprPats (EPi _ _ _ _ _ _) = []
+exprPats (ELet binds _ _ _) = bindingPats binds
+exprPats (ECase _ alts _) = map altPatOf alts
+exprPats (EIf _ _ _ _) = []
+exprPats (EField _ _ _) = []
+exprPats (ERecord _ _ _) = []
+exprPats (ERecUpdate _ _ _) = []
+exprPats (EDo stmts _) = doStmtPats stmts
+exprPats (EInterp _ _) = []
+
+bindingPats : List Binding -> List Pat
+bindingPats [] = []
+bindingPats (b :: rest) = append (b.bindPat :: bindingValuePats b.bindValue) (bindingPats rest)
+
+bindingValuePats : BindingValue -> List Pat
+bindingValuePats (BVal _) = []
+bindingValuePats (BClauses clauses) = clausePats clauses
+
+clausePats : List LocalClause -> List Pat
+clausePats [] = []
+clausePats (c :: rest) = append c.lcPats (clausePats rest)
+
+doStmtPats : List DoStmt -> List Pat
+doStmtPats [] = []
+doStmtPats (s :: rest) =
+  case s of
+    DBind pat _ _ => pat :: doStmtPats rest
+    DExpr _ _ => doStmtPats rest
+    DLet binds _ => append (bindingPats binds) (doStmtPats rest)
+
+altPatOf : Alt -> Pat
+altPatOf a = a.altPat
+
+export declExprs : Decl -> List Expr
+declExprs (DData _ _ kind ctors _ _ _ _ _) = kind :: ctorTypes ctors
+declExprs (DAxiom _ ty _) = [ty]
+declExprs (DExtern _ _ ty _) = [ty]
+declExprs (DSig _ ctx ty _) = append ctx [ty]
+declExprs (DFun _ _ body _) = [body]
+declExprs (DRecord _ _ fields _ _ _ _ _) = fieldTypes fields
+declExprs (DTrait _ params supers methods _) =
+  append (append (paramKindExprs params) supers) (traitMethodTypes methods)
+declExprs (DInstance ctxE head methods _) =
+  append (append ctxE [head]) (concatMap declExprs methods)
+
+export declPats : Decl -> List Pat
+declPats (DFun _ pats _ _) = pats
+declPats (DInstance _ _ methods _) = concatMap declPats methods
+declPats (DData _ _ _ _ _ _ _ _ _) = []
+declPats (DAxiom _ _ _) = []
+declPats (DExtern _ _ _ _) = []
+declPats (DSig _ _ _ _) = []
+declPats (DRecord _ _ _ _ _ _ _ _) = []
+declPats (DTrait _ _ _ _ _) = []
+
+-- ---------------------------------------------------------------
+-- 只读折叠（工作队列，不做非结构递归）
+-- ---------------------------------------------------------------
+-- 折叠用固定上界：每个节点至少消耗 1，合法语法树远低于它；上界只防 traversal 自身有病。
+walkFuel : Int
+walkFuel = 1000000
+
+export foldExpr : (a -> Expr -> a) -> a -> Expr -> a
+foldExpr f acc e = foldExprWork walkFuel f acc [e]
+
+foldExprWork : Int -> (a -> Expr -> a) -> a -> List Expr -> a
+foldExprWork fuel f acc work =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      e :: rest => foldExprWork (fuel - 1) f (f acc e) (append (exprChildren e) rest)
+
+export foldPat : (a -> Pat -> a) -> a -> Pat -> a
+foldPat f acc p = foldPatWork walkFuel f acc [p]
+
+foldPatWork : Int -> (a -> Pat -> a) -> a -> List Pat -> a
+foldPatWork fuel f acc work =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      p :: rest => foldPatWork (fuel - 1) f (f acc p) (append (patChildren p) rest)
+
+export foldDecl : (a -> Expr -> a) -> (a -> Pat -> a) -> a -> Decl -> a
+foldDecl f g acc d =
+  let
+    accPats = foldPatWork walkFuel g acc (declPats d)
+  in foldExprPatWork walkFuel f g accPats (declExprs d)
+
+-- 表达式折叠 + 其直接模式子节点：`let` / `case` / do 里的模式也要收集（引用名、节点数）。
+foldExprPatWork : Int -> (a -> Expr -> a) -> (a -> Pat -> a) -> a -> List Expr -> a
+foldExprPatWork fuel f g acc work =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      e :: rest =>
+        let
+          acc1 = f acc e
+          acc2 = foldPatWork fuel g acc1 (exprPats e)
+        in foldExprPatWork (fuel - 1) f g acc2 (append (exprChildren e) rest)
+
+-- ---------------------------------------------------------------
+-- 重写（子节点由 `f` / `g` 处理；重建保留所有 NodeRef）
+-- ---------------------------------------------------------------
+export mapExpr : (Expr -> Check Expr) -> Expr -> Check Expr
+mapExpr f (e@(EVar _ _)) = OkC e
+mapExpr f (e@(EInt _ _)) = OkC e
+mapExpr f (e@(EStr _ _)) = OkC e
+mapExpr f (e@(EFloat _ _)) = OkC e
+mapExpr f (ELam ps body sp) =
+  Vuna.Compiler.Base.Common.bind (f body) (\body2 => OkC (ELam ps body2 sp))
+mapExpr f (EApp fn args sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f fn)
+    (\fn2 => Vuna.Compiler.Base.Common.bind (mapExprList f args) (\args2 => OkC (EApp fn2 args2 sp)))
+mapExpr f (EPi name implicit qty dom cod sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f dom)
+    (\dom2 => Vuna.Compiler.Base.Common.bind (f cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
+mapExpr f (ELet binds body rec_ sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapBindingExpr f binds)
+    (\binds2 => Vuna.Compiler.Base.Common.bind (f body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
+mapExpr f (ECase scrut alts sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scrut)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (mapAltExpr f alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+mapExpr f (EIf c t el sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f c)
+    (\c2 => Vuna.Compiler.Base.Common.bind (f t) (\t2 => Vuna.Compiler.Base.Common.bind (f el) (\el2 => OkC (EIf c2 t2 el2 sp))))
+mapExpr f (EField base fname sp) =
+  Vuna.Compiler.Base.Common.bind (f base) (\base2 => OkC (EField base2 fname sp))
+mapExpr f (ERecord name fields sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapFieldExprs f fields)
+    (\fields2 => OkC (ERecord name fields2 sp))
+mapExpr f (ERecUpdate base fields sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f base)
+    (\base2 => Vuna.Compiler.Base.Common.bind (mapFieldExprs f fields) (\fields2 => OkC (ERecUpdate base2 fields2 sp)))
+mapExpr f (EDo stmts sp) =
+  Vuna.Compiler.Base.Common.bind (mapDoStmtExpr f stmts) (\stmts2 => OkC (EDo stmts2 sp))
+mapExpr f (EInterp parts sp) =
+  Vuna.Compiler.Base.Common.bind (mapInterpExpr f parts) (\parts2 => OkC (EInterp parts2 sp))
+
+export mapExprList : (Expr -> Check Expr) -> List Expr -> Check (List Expr)
+mapExprList _ [] = OkC []
+mapExprList f (e :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f e)
+    (\e2 => Vuna.Compiler.Base.Common.bind (mapExprList f rest) (\rest2 => OkC (e2 :: rest2)))
+
+mapBindingExpr : (Expr -> Check Expr) -> List Binding -> Check (List Binding)
+mapBindingExpr _ [] = OkC []
+mapBindingExpr f (b :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (mapBindingOneExpr f b)
+    (\b2 => Vuna.Compiler.Base.Common.bind (mapBindingExpr f rest) (\rest2 => OkC (b2 :: rest2)))
+
+mapBindingOneExpr : (Expr -> Check Expr) -> Binding -> Check Binding
+mapBindingOneExpr f b =
+  Vuna.Compiler.Base.Common.bind
+    (mapBindingValueExpr f b.bindValue)
+    (\v2 => Vuna.Compiler.Base.Common.bind (mapBindingSigExpr f b.bindSig) (\s2 => OkC (Binding b.bindPat v2 s2 b.bindRef)))
+
+mapBindingValueExpr : (Expr -> Check Expr) -> BindingValue -> Check BindingValue
+mapBindingValueExpr f (BVal e) = Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (BVal e2))
+mapBindingValueExpr f (BClauses cls) =
+  Vuna.Compiler.Base.Common.bind (mapClauseExpr f cls) (\cls2 => OkC (BClauses cls2))
+
+mapBindingSigExpr : (Expr -> Check Expr) -> Maybe BindingSig -> Check (Maybe BindingSig)
+mapBindingSigExpr _ Nothing = OkC Nothing
+mapBindingSigExpr f (Just s) =
+  Vuna.Compiler.Base.Common.bind (f s.sigType) (\ty2 => OkC (Just (BindingSig ty2 s.sigRef)))
+
+mapClauseExpr : (Expr -> Check Expr) -> List LocalClause -> Check (List LocalClause)
+mapClauseExpr _ [] = OkC []
+mapClauseExpr f (c :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f c.lcBody)
+    (\body2 => Vuna.Compiler.Base.Common.bind (mapClauseExpr f rest) (\rest2 => OkC (LocalClause c.lcPats body2 c.lcRef c.lcHead :: rest2)))
+
+mapAltExpr : (Expr -> Check Expr) -> List Alt -> Check (List Alt)
+mapAltExpr _ [] = OkC []
+mapAltExpr f (a :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f a.altBody)
+    (\body2 => Vuna.Compiler.Base.Common.bind (mapAltExpr f rest) (\rest2 => OkC (Alt a.altPat body2 a.altRef :: rest2)))
+
+mapFieldExprs : (Expr -> Check Expr) -> List (String, Expr) -> Check (List (String, Expr))
+mapFieldExprs _ [] = OkC []
+mapFieldExprs f (field :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f (secondOf field))
+    (\v2 => Vuna.Compiler.Base.Common.bind (mapFieldExprs f rest) (\rest2 => OkC ((firstOf field, v2) :: rest2)))
+
+mapDoStmtExpr : (Expr -> Check Expr) -> List DoStmt -> Check (List DoStmt)
+mapDoStmtExpr _ [] = OkC []
+mapDoStmtExpr f (s :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (mapOneDoStmtExpr f s)
+    (\s2 => Vuna.Compiler.Base.Common.bind (mapDoStmtExpr f rest) (\rest2 => OkC (s2 :: rest2)))
+
+mapOneDoStmtExpr : (Expr -> Check Expr) -> DoStmt -> Check DoStmt
+mapOneDoStmtExpr f (DBind pat e sp) =
+  Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (DBind pat e2 sp))
+mapOneDoStmtExpr f (DExpr e sp) = Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (DExpr e2 sp))
+mapOneDoStmtExpr f (DLet binds sp) =
+  Vuna.Compiler.Base.Common.bind (mapBindingExpr f binds) (\binds2 => OkC (DLet binds2 sp))
+
+mapInterpExpr : (Expr -> Check Expr) -> List InterpPart -> Check (List InterpPart)
+mapInterpExpr _ [] = OkC []
+mapInterpExpr f (p :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (mapOneInterpExpr f p)
+    (\p2 => Vuna.Compiler.Base.Common.bind (mapInterpExpr f rest) (\rest2 => OkC (p2 :: rest2)))
+
+mapOneInterpExpr : (Expr -> Check Expr) -> InterpPart -> Check InterpPart
+mapOneInterpExpr f (IPText s) = OkC (IPText s)
+mapOneInterpExpr f (IPHole e) = Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (IPHole e2))
+
+-- | 模式对表达式不透明（Expand 用）：只重写 Expr，Pat 原样保留。
+export mapExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> Expr -> Check Expr
+mapExprPat f g (ELet binds body rec_ sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapBindingExprPat f g binds)
+    (\binds2 => Vuna.Compiler.Base.Common.bind (f body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
+mapExprPat f g (ECase scrut alts sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scrut)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (mapAltExprPat f g alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+mapExprPat f g (EDo stmts sp) =
+  Vuna.Compiler.Base.Common.bind (mapDoStmtExprPat f g stmts) (\stmts2 => OkC (EDo stmts2 sp))
+mapExprPat f g e = mapExpr f e
+
+mapBindingExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> List Binding -> Check (List Binding)
+mapBindingExprPat _ _ [] = OkC []
+mapBindingExprPat f g (b :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (mapBindingOneExprPat f g b)
+    (\b2 => Vuna.Compiler.Base.Common.bind (mapBindingExprPat f g rest) (\rest2 => OkC (b2 :: rest2)))
+
+mapBindingOneExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> Binding -> Check Binding
+mapBindingOneExprPat f g b =
+  Vuna.Compiler.Base.Common.bind
+    (g b.bindPat)
+    (\pat2 => Vuna.Compiler.Base.Common.bind (mapBindingValueExpr f b.bindValue) (\v2 => Vuna.Compiler.Base.Common.bind (mapBindingSigExpr f b.bindSig) (\s2 => OkC (Binding pat2 v2 s2 b.bindRef))))
+
+mapAltExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> List Alt -> Check (List Alt)
+mapAltExprPat _ _ [] = OkC []
+mapAltExprPat f g (a :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (g a.altPat)
+    (\pat2 => Vuna.Compiler.Base.Common.bind (f a.altBody) (\body2 => Vuna.Compiler.Base.Common.bind (mapAltExprPat f g rest) (\rest2 => OkC (Alt pat2 body2 a.altRef :: rest2))))
+
+mapDoStmtExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> List DoStmt -> Check (List DoStmt)
+mapDoStmtExprPat _ _ [] = OkC []
+mapDoStmtExprPat f g (s :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (mapOneDoStmtExprPat f g s)
+    (\s2 => Vuna.Compiler.Base.Common.bind (mapDoStmtExprPat f g rest) (\rest2 => OkC (s2 :: rest2)))
+
+mapOneDoStmtExprPat : (Expr -> Check Expr) -> (Pat -> Check Pat) -> DoStmt -> Check DoStmt
+mapOneDoStmtExprPat f g (DBind pat e sp) =
+  Vuna.Compiler.Base.Common.bind
+    (g pat)
+    (\pat2 => Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (DBind pat2 e2 sp)))
+mapOneDoStmtExprPat f g (DExpr e sp) =
+  Vuna.Compiler.Base.Common.bind (f e) (\e2 => OkC (DExpr e2 sp))
+mapOneDoStmtExprPat f g (DLet binds sp) =
+  Vuna.Compiler.Base.Common.bind (mapBindingExprPat f g binds) (\binds2 => OkC (DLet binds2 sp))
+
+export mapPat : (Pat -> Check Pat) -> Pat -> Check Pat
+mapPat f (p@(PVar _ _)) = OkC p
+mapPat f (p@(PWild _)) = OkC p
+mapPat f (p@(PInt _ _)) = OkC p
+mapPat f (p@(PStr _ _)) = OkC p
+mapPat f (PAs name inner sp) =
+  Vuna.Compiler.Base.Common.bind (f inner) (\inner2 => OkC (PAs name inner2 sp))
+mapPat f (PCon name pats sp) =
+  Vuna.Compiler.Base.Common.bind (mapPatList f pats) (\pats2 => OkC (PCon name pats2 sp))
+mapPat f (PRecord name fields sp) =
+  Vuna.Compiler.Base.Common.bind (mapPatFields f fields) (\fields2 => OkC (PRecord name fields2 sp))
+
+mapPatList : (Pat -> Check Pat) -> List Pat -> Check (List Pat)
+mapPatList _ [] = OkC []
+mapPatList f (p :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f p)
+    (\p2 => Vuna.Compiler.Base.Common.bind (mapPatList f rest) (\rest2 => OkC (p2 :: rest2)))
+
+mapPatFields : (Pat -> Check Pat) -> List (String, Pat) -> Check (List (String, Pat))
+mapPatFields _ [] = OkC []
+mapPatFields f (field :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f (secondOf field))
+    (\p2 => Vuna.Compiler.Base.Common.bind (mapPatFields f rest) (\rest2 => OkC ((firstOf field, p2) :: rest2)))
+
+-- | 声明的重建：Expr / Pat / trait 参数 kind 各一个回调；instance 体用 `declF`
+-- 继续下降（各 pass 的形状限制留在自己的 `declF` 里）。
+export mapDeclWith : (Expr -> Check Expr) -> (Pat -> Check Pat) -> (Decl -> Check Decl) -> (TraitParam -> Check TraitParam) -> Decl -> Check Decl
+mapDeclWith ef pf df tf (DData name params kind ctors derivings viaField repr lin sp) =
+  Vuna.Compiler.Base.Common.bind
+    (ef kind)
+    (\kind2 => Vuna.Compiler.Base.Common.bind (mapCtors ef ctors) (\ctors2 => OkC (DData name params kind2 ctors2 derivings viaField repr lin sp)))
+mapDeclWith ef pf df tf (DAxiom name ty sp) =
+  Vuna.Compiler.Base.Common.bind (ef ty) (\ty2 => OkC (DAxiom name ty2 sp))
+mapDeclWith ef pf df tf (DExtern name cName ty sp) =
+  Vuna.Compiler.Base.Common.bind (ef ty) (\ty2 => OkC (DExtern name cName ty2 sp))
+mapDeclWith ef pf df tf (DSig name ctx ty sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapExprList ef ctx)
+    (\ctx2 => Vuna.Compiler.Base.Common.bind (ef ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
+mapDeclWith ef pf df tf (DFun name pats body sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapPatList pf pats)
+    (\pats2 => Vuna.Compiler.Base.Common.bind (ef body) (\body2 => OkC (DFun name pats2 body2 sp)))
+mapDeclWith ef pf df tf (DRecord name params fields derivings viaField repr lin sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapFields ef fields)
+    (\fields2 => OkC (DRecord name params fields2 derivings viaField repr lin sp))
+mapDeclWith ef pf df tf (DTrait name params supers methods sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapTraitParams tf params)
+    (\params2 => Vuna.Compiler.Base.Common.bind (mapExprList ef supers) (\supers2 => Vuna.Compiler.Base.Common.bind (mapTraitMethods ef methods) (\methods2 => OkC (DTrait name params2 supers2 methods2 sp))))
+mapDeclWith ef pf df tf (DInstance ctxE head methods sp) =
+  Vuna.Compiler.Base.Common.bind
+    (mapExprList ef ctxE)
+    (\ctx2 => Vuna.Compiler.Base.Common.bind (ef head) (\head2 => Vuna.Compiler.Base.Common.bind (mapDeclsWith df methods) (\methods2 => OkC (DInstance ctx2 head2 methods2 sp))))
+
+mapCtors : (Expr -> Check Expr) -> List Ctor -> Check (List Ctor)
+mapCtors _ [] = OkC []
+mapCtors f (c :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f c.ctorType)
+    (\ty2 => Vuna.Compiler.Base.Common.bind (mapCtors f rest) (\rest2 => OkC (Ctor c.ctorName ty2 c.ctorArity c.ctorRef :: rest2)))
+
+mapFields : (Expr -> Check Expr) -> List Field -> Check (List Field)
+mapFields _ [] = OkC []
+mapFields f (field :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f field.fieldType)
+    (\ty2 => Vuna.Compiler.Base.Common.bind (mapFields f rest) (\rest2 => OkC (Field field.fieldName ty2 field.fieldRef :: rest2)))
+
+mapTraitMethods : (Expr -> Check Expr) -> List TraitMethod -> Check (List TraitMethod)
+mapTraitMethods _ [] = OkC []
+mapTraitMethods f (m :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f m.traitMethodType)
+    (\ty2 => Vuna.Compiler.Base.Common.bind (mapTraitMethods f rest) (\rest2 => OkC (TraitMethod m.traitMethodName ty2 m.traitMethodRef :: rest2)))
+
+mapTraitParams : (TraitParam -> Check TraitParam) -> List TraitParam -> Check (List TraitParam)
+mapTraitParams _ [] = OkC []
+mapTraitParams f (p :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f p)
+    (\p2 => Vuna.Compiler.Base.Common.bind (mapTraitParams f rest) (\rest2 => OkC (p2 :: rest2)))
+
+export mapDeclsWith : (Decl -> Check Decl) -> List Decl -> Check (List Decl)
+mapDeclsWith _ [] = OkC []
+mapDeclsWith f (d :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f d)
+    (\d2 => Vuna.Compiler.Base.Common.bind (mapDeclsWith f rest) (\rest2 => OkC (d2 :: rest2)))
+
+-- ---------------------------------------------------------------
+-- 作用域下降
+-- ---------------------------------------------------------------
+-- `Nothing` = 该构造子的 binder 可见性不是静态子节点表能表达的（顺序 `let` / do 链），
+-- 由 pass 自己的钩子处理；`Just kids` 里的每个子节点都已带好扩展后的 scope。
+export scopedExprChildren : List String -> Expr -> Maybe (List (List String, Expr))
+scopedExprChildren scope (EVar _ _) = Just []
+scopedExprChildren scope (EInt _ _) = Just []
+scopedExprChildren scope (EStr _ _) = Just []
+scopedExprChildren scope (EFloat _ _) = Just []
+scopedExprChildren scope (ELam ps body _) = Just [(append (map firstOf ps) scope, body)]
+scopedExprChildren scope (EApp fn args _) = Just (sameScope scope (fn :: args))
+scopedExprChildren scope (EPi name _ _ dom cod _) = Just [(scope, dom), (name :: scope, cod)]
+scopedExprChildren scope (ELet _ _ _ _) = Nothing
+scopedExprChildren scope (ECase scrut alts _) = Just ((scope, scrut) :: scopedAlts scope alts)
+scopedExprChildren scope (EIf c t el _) = Just (sameScope scope [c, t, el])
+scopedExprChildren scope (EField base _ _) = Just (sameScope scope [base])
+scopedExprChildren scope (ERecord _ fields _) = Just (sameScope scope (map secondOf fields))
+scopedExprChildren scope (ERecUpdate base fields _) =
+  Just (sameScope scope (base :: map secondOf fields))
+scopedExprChildren scope (EDo _ _) = Nothing
+scopedExprChildren scope (EInterp parts _) = Just (sameScope scope (interpExprs parts))
+
+scopedAlts : List String -> List Alt -> List (List String, Expr)
+scopedAlts _ [] = []
+scopedAlts scope (a :: rest) =
+  (append (patBinders a.altPat) scope, a.altBody) :: scopedAlts scope rest
+
+sameScope : List String -> List Expr -> List (List String, Expr)
+sameScope _ [] = []
+sameScope scope (e :: rest) = (scope, e) :: sameScope scope rest
+
+export patBinders : Pat -> List String
+patBinders (PVar name _) = [name]
+patBinders (PAs name inner _) = name :: patBinders inner
+patBinders (PWild _) = []
+patBinders (PCon _ pats _) = concatMap patBinders pats
+patBinders (PInt _ _) = []
+patBinders (PStr _ _) = []
+patBinders (PRecord _ fields _) = concatMap (\field => patBinders (secondOf field)) fields
