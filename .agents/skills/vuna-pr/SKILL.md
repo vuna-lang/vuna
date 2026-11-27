@@ -72,9 +72,9 @@ nix/tools/merge-queue.sh status              # 队列位置 / 状态 / ETA
 | `deep` | 跑完整便宜门禁 |
 | `suite` | 跑 tests-gate + tests-e2e |
 | `browser` | 跑浏览器 smoke |
-| `backend` | 只作为本地 `nix run .#ci -- backends|native` 的提示 |
+| `backend` | 提示先本地跑 `nix run .#ci -- backends|native`（矩阵本身只在定时 / 手动跑） |
 
-`backend` / `native` 目前不在 GitHub CI 跑；改后端时在 PR 里写清本地跑过哪些。
+`backend` / `native` 不进 PR 门禁，只在定时 / 手动跑；改后端时在 PR 里写清本地跑过哪些。
 标签加错可以 `gh pr edit <n> --remove-label <name>`；`gates` 的 concurrency 会取消旧运行。
 
 ## 4. 更新 PR

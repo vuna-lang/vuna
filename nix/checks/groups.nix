@@ -7,8 +7,8 @@
 # `pr` 是 push / PR 上的最小档；`deep` 是完整的便宜门禁（含 `pr`）；`suite` /
 # `browser` 是长尾，在定时、手动或带对应标签的 PR 上跑。PR 的增量检查由
 # `nix/checks/pr-gates.nix` 按 type + pkg/area 选择；`slices` 是 PR 用的 area 切片，
-# `gate` 是 main push 的完整 suite 层。`backends` / `native` 暂不在 GitHub CI 跑，
-# 只保留给本地 `nix run .#ci -- backends|native`。组成员在构建期展开进 `nix run .#ci`，
+# `gate` 是 main push 的完整 suite 层。`backends` / `native` 只在 CI 的定时 / 手动
+# 与本地 `nix run .#ci -- backends|native` 跑。组成员在构建期展开进 `nix run .#ci`，
 # 运行时不再枚举 flake；新增 check 必须被 `deep` / `suite` / `gate` / `slices` /
 # `backends` 之一覆盖，否则 `nix/checks/default.nix` 求值失败。
 let

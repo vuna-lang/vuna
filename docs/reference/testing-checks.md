@@ -36,8 +36,8 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `gate-shard-0..3` | `vuna-tests-gate-shard-i`（`--shard i/4`） | CI main push / 定时 / 手动，以及 PR 计划里含完整 gate 时（matrix 并行） |
 | `e2e-shard-0..3` | `vuna-tests-e2e-shard-i`（`--shard i/4`） | CI 定时 / 手动，以及 PR 计划里含完整 e2e 时（matrix 并行） |
 | `units` | `vuna-tests-units`（各包 `vuna test`） | CI main push / 定时 / 手动 |
-| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | **本地手动**（GitHub CI 暂不跑） |
-| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | **本地手动**（GitHub CI 暂不跑） |
+| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | CI 定时 / 手动；本地 `nix run .#ci -- backends` |
+| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | CI 定时 / 手动；本地 `nix run .#ci -- native` |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、`browser` 标签 |
 
 CI 的 `ci.yml` 把 gate / e2e 各拆成 4 个 matrix job：每个 shard 是一个独立 derivation
@@ -52,7 +52,8 @@ PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` �
 换成同一批 `gate-shard-*` / `e2e-shard-*`（`nix run .#ci -- plan-json` 的结果再切分），由
 `suite` 矩阵并行跑，`gates / run` 只跑计划里剩下的检查并把 shard 结论一并收成 required
 check。`deep` / `suite` / `browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub
-job，只在本地 `nix run .#ci -- backends|native`（见 [github-workflow.md](github-workflow.md)）。
+job：wasm / native 矩阵与自举 conformance 只在定时 / 手动跑（见下两节）；改后端时本地用
+`nix run .#ci -- backends|native` 先跑一遍（见 [github-workflow.md](github-workflow.md)）。
 
 ### PR 的 area 切片
 
@@ -72,8 +73,9 @@ job，只在本地 `nix run .#ci -- backends|native`（见 [github-workflow.md](
 
 选择是**风险定向**的：它回答「这类改动最可能被哪些用例抓到」，不是严格依赖图（严格依赖会
 让前端改动命中所有夹具）。完整覆盖由 nightly 的 `suite` 组（gate + e2e）兜底；切片保留
-`minCases` 下限，过滤后 case 数骤降直接失败。`codegen-wasm` / `codegen-native` 暂不进
-GitHub CI（维持只在本地 `backends` 组跑），它们的 area 标签只服务 `--area` 局部筛选。
+`minCases` 下限，过滤后 case 数骤降直接失败。`codegen-wasm` / `codegen-native` 不进 PR
+切片（PR 计划里不按这两个 area 选检查；nightly 的 `backends` 组跑完整矩阵），它们的 area
+标签只服务本地 `--area` 局部筛选。
 
 **合并队列与 main 基线**：auto-merge 只负责入队；队列在最新 main + 队前 PR 的组合 head 上
 重跑 `pr / run` 与完整 `gates / run`（gate-shard-0..3 + units + area），绿后 rebase 落
@@ -87,8 +89,7 @@ main。main push 仍跑完整 gate 作为合并后兜底，定时 `suite` 继续
 `continue-on-error` + 汇总 job：每个组的 job 状态就是结论。
 
 `CI_JOBS` 控制 `nix build` 的并行度：`pr` / `deep` 用默认 2（`--cores` 为核数/2），
-`suite` / `browser` 用 1，把 runner 的 4 核全给单个 derivation（`backends` / `native`
-本地手动跑时同样是 1）。
+`suite` / `browser` / `backends` / `native` 用 1，把 runner 的 4 核全给单个 derivation。
 
 保存前还有一个 `Drop builder lock files` 步：Nix 在 store 里留下 `<out>.lock`
 （root 0600），非 root 的 tar 读不动会让整次保存失败。
@@ -178,12 +179,11 @@ main。main push 仍跑完整 gate 作为合并后兜底，定时 `suite` 继续
 `vuna-native` 把「编译器编译自己」固化成可执行入口，CI 用它跑与 OCaml 版同规格的检查。
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
 自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
-CI 里由 `nix run .#ci -- native` 构建 `vuna-native-conformance`（构建即运行
-`backend-check --scope all`），只在**本地手动**（`nix run .#ci -- native`）上跑——
-GitHub CI 暂不跑，整轮成本高，且 native 后端仍有未关闭的边界
-（[native-runtime.md](native-runtime.md) §4），放在每次 push 上只会占满 runner 又被
-下一次 push 取消（`cancel-in-progress`），既拿不到读数也拖慢反馈。本地手动跑
-native 覆盖用 `nix run .#ci -- backends`（fast+integration 矩阵）。
+CI 里由 `ci.yml` 的 `native` job（定时 / 手动）构建 `vuna-native-conformance`（构建即运行
+`backend-check --scope all`）。整轮的大头是单线程的 native 自举编译（20+ 分钟），
+conformance 本身约 5 分钟，所以不放 push / PR；本地手动入口是
+`nix run .#ci -- native`。fast+integration 的 native / wasm 矩阵由 `backends` job
+（同样定时 / 手动）覆盖。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |

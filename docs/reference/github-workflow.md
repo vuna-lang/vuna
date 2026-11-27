@@ -100,7 +100,7 @@ area 切片（只跑该影响面的夹具，完整覆盖由 nightly 的 `suite` 
 - `breaking`：破坏性改动。
 - `no-issue`：PR 不关联 issue（PR-only 改动的默认做法）。
 - `deep` / `suite` / `browser`：手动强制跑整组门禁。
-- `backend`：后端矩阵提示；GitHub CI 不跑 wasm/native 矩阵，只在本地
+- `backend`：后端矩阵提示；wasm / native 矩阵只在定时 / 手动跑，本地先跑
   `nix run .#ci -- backends|native`。
 - `seed`：seed 轮换，优先合并。
 
@@ -144,8 +144,8 @@ PR 标题与分支名仍按 `<type>/<slug>`、`<type>(scope): 中文描述` 的�
 | `units` | 各包 `vuna test`（与 suite 解耦） | `merge_group`、main push、定时、手动 |
 | `deep` | pr + 全部便宜门禁 | 定时、手动、`deep` 标签 |
 | `suite` | tests-gate + units + tests-e2e（未分片） | 本地全量；`suite` 标签 |
-| `backends` | wasm / native suite 矩阵 | 本地手动 |
-| `native` | native 自举 conformance | 本地手动 |
+| `backends` | wasm / native suite 矩阵（fast+integration + 全包单测） | 定时、手动 |
+| `native` | native 自举 conformance（selfhost + parity + corpus） | 定时、手动 |
 | `browser` | 浏览器 smoke | 定时、手动、`browser` 标签 |
 
 PR 的增量检查由 [nix/checks/pr-gates.nix](../../nix/checks/pr-gates.nix) 计算，规则是：
