@@ -382,6 +382,43 @@ canContinue st blockCol =
       case lastPos st of
         Pos lastLine lastCol _ _ => line == lastLine || col > blockCol
 
+-- | 在**一条 do 语句**内、括号深度 0 上扫描 token：`decide` 返回 `Just b` 即定论；
+-- 语句边界（深度 0 上换行、列 <= `stmtCol` 的 token，或 EOF）返回 False。
+--
+-- 括号里的 token 不交给 `decide`：语句级符号（`<-`、`in` 等）只在最外层有意义，
+-- 括号内的是子表达式的语法。多行语句的续行（列 > `stmtCol`）仍在扫描范围内。
+export scanDoStmtLevel : PState -> Int -> (PTok -> Maybe Bool) -> Bool
+scanDoStmtLevel st stmtCol decide = stmtScanGo decide stmtCol 0 (posLine (peekPos st)) st.toksOf
+
+stmtScanGo : (PTok -> Maybe Bool) -> Int -> Int -> Int -> List PTok -> Bool
+stmtScanGo decide stmtCol depth prevLine [] = False
+stmtScanGo decide stmtCol depth prevLine ((PTok tok p) :: rest) =
+  if depth == 0 && posLine p > prevLine && posCol p <= stmtCol then
+    False
+  else
+    case tokBracketStep tok depth of
+      Just d2 => stmtScanGo decide stmtCol d2 (posLine p) rest
+      Nothing =>
+        if depth > 0 then
+          stmtScanGo decide stmtCol depth (posLine p) rest
+        else
+          case decide (PTok tok p) of
+            Just b => b
+            Nothing => stmtScanGo decide stmtCol depth (posLine p) rest
+
+-- 括号层数的一步：开括号 +1、闭括号 -1（不会低于 0），其它 token 不是括号。
+tokBracketStep : Tok -> Int -> Maybe Int
+tokBracketStep (TSym "(") d = Just (d + 1)
+tokBracketStep (TSym "[") d = Just (d + 1)
+tokBracketStep (TSym "{") d = Just (d + 1)
+tokBracketStep (TSym ")") d = Just (closeDepth d)
+tokBracketStep (TSym "]") d = Just (closeDepth d)
+tokBracketStep (TSym "}") d = Just (closeDepth d)
+tokBracketStep _ d = Nothing
+
+closeDepth : Int -> Int
+closeDepth d = if d > 0 then d - 1 else 0
+
 -- | 消费一个符号。返回后的状态即可继续解析（旧实现返回 `Pair Int PState` 的幽灵
 -- `Int`，恒为 0，已删）。
 export expectSym : PState -> String -> Check PState

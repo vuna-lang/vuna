@@ -2630,6 +2630,25 @@ parseDoStmt : Int -> PState -> Int -> Check (DoStmt, PState)
 parseDoStmt fuel st stmtCol =
   withExtent CstDoStmtKind semDoStmt st (\st0 => parseDoStmtBody fuel st0 stmtCol st0.openNodeId)
 
+-- `<-` 绑定判定用的语句级 token 谓词：模式能出现的东西继续扫描，`<-` 直接定论为绑定；
+-- 表达式独有的关键字 / 符号（`if`、`\`、`+`、`?` 等）定论为不是绑定。
+bindArrowTok : PTok -> Maybe Bool
+bindArrowTok (PTok (TSym "<-") _) = Just True
+bindArrowTok (PTok (TIdent _) _) = Nothing
+bindArrowTok (PTok (TInt _) _) = Nothing
+bindArrowTok (PTok (TFloat _) _) = Nothing
+bindArrowTok (PTok (TStr _) _) = Nothing
+bindArrowTok (PTok (TTmpl _ _ _) _) = Nothing
+bindArrowTok (PTok (TSym "@") _) = Nothing
+bindArrowTok (PTok (TSym "::") _) = Nothing
+bindArrowTok (PTok (TSym ",") _) = Nothing
+bindArrowTok _ = Just False
+
+-- | 当前 do 语句是否会走到 `<-` 绑定：模式原子 / 括号组之后直到语句边界出现 `<-`。
+-- 模式解析失败时用它区分「绑定写错了」与「这条语句本来就不是绑定」。
+doStmtBindsAhead : PState -> Int -> Bool
+doStmtBindsAhead st stmtCol = scanDoStmtLevel st stmtCol bindArrowTok
+
 parseDoStmtBody : Int -> PState -> Int -> Int -> Check (DoStmt, PState)
 parseDoStmtBody fuel st stmtCol nid =
   if fuel <= 0 then
@@ -2639,7 +2658,9 @@ parseDoStmtBody fuel st stmtCol nid =
   else
     case parsePatternSingle (stateFuel st) st stmtCol of
       OkC (pat, st1) => if atSym st1 "<-" then Vuna.Compiler.Base.Common.bind (checkBindersAt st [pat]) (\_ => Vuna.Compiler.Base.Common.bind (expectSym st1 "<-") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st2 stmtCol) (\e, st3 => OkC (DBind pat e (NodeRef nid (spanOf st st3)), st3)))) else parseDoExprStmt (fuel - 1) st stmtCol nid
-      ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol nid
+      -- 语句里确实有 `<-` ⇒ 模式错误是真的（左值不是模式）；否则这条语句是表达式，
+      -- 从原状态按表达式重解。
+      ErrC e => if doStmtBindsAhead st stmtCol then ErrC e else parseDoExprStmt (fuel - 1) st stmtCol nid
 
 -- do 语句位置的 `let`：do-let（绑定块后没有 `in`）或 `let ... in ...` 表达式语句。
 -- 两者共享同一个 `let` 前缀，只能在绑定块之后按是否出现 `in` 区分；parser 状态不可变，

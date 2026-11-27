@@ -1,0 +1,29 @@
+-- do 语句以表达式开头（括号表达式 / 应用 / λ / if）时按表达式解析，不要求模式绑定。
+trait Monad m where
+  (>>=) : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+instance Monad Maybe where
+  (>>=) m f = case m of
+    Nothing => Nothing
+    Just x => f x
+  pure x = Just x
+
+idM : Int -> Maybe Int
+idM x = Just x
+
+mixed : Maybe Int
+mixed = do
+  (pure 1)
+  idM 2
+  if True then pure 4 else pure 5
+  pure 6
+
+main : String
+main = case mixed of
+  Nothing => "Nothing"
+  Just n => strFromInt n
