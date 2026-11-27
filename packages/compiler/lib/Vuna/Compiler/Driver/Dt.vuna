@@ -983,7 +983,7 @@ evalDtMainCore program =
           VInt n => OkC (strFromInt n)
           VStr s => OkC (showValue mainVal)
           VBool b => OkC (showValue mainVal)
-          VFloat raw => OkC raw
+          VFloat x => OkC (showFloatOf x)
           VCon c args =>
             case natValueToInt mainVal of
               Just n => OkC (strFromInt n)

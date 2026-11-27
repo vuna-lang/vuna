@@ -60,9 +60,10 @@ data Term where
   定义体（签名表 `ecGlobalsTbl` 不参与展开）。
 - `quote` / `normalize`：值 → 项；深度正规化（构造子字段与卡住应用的实参也继续归约）
   用于显示与终止性检查。
-- 浮点值 `VFloat` 的载荷是 `string_of_float` 的规范文本：定义性相等比文本，算术 / 比较
-  先按 `[-]digits[.digits][e±NN]`、`nan`、`inf` 解析回宿主 `Float`。规范文本只有 12 位
-  有效数字，精度边界见 gh#48。
+- 浮点值 `VFloat` 的载荷是宿主 `Float`（IEEE-754 double）：算术与比较直接作用在 double
+  上，与编译产物逐位一致；`quote` / 展示才落成 `string_of_float` 的 12 位规范文本
+  （`showFloatOf`，与产物的 `floatRender` 同格式），文本不回灌进值。字面量文本在 `eval`
+  入口解析一次（`[-]digits[.digits][e±NN]`、`nan`、`inf`）。精度边界见 gh#48。
 - `Nat` 值按 `Zero` / `Succ` 链物化。interp 建链有规模上限（`natValueMaybe`：超过
   `natChainLimit = 65536` 不归约），避免为一个大整数分配上亿个构造子；超限时 `main`
   报 `CG_MainNotValue`。

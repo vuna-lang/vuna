@@ -79,8 +79,10 @@ import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文�
 全部浮点原语（`+ - * /`、`< <= > >=`、`==`、`/=`、`abs` / `sqrt` → `floatAbs` /
 `floatSqrt`、`floatFromInt` / `intFromFloat`），语义与编译产物一致
 （除零得 `infinity`、`0.0 / 0.0` 得 `nan`、`nan == nan` 为 False、`+0.0 == -0.0` 为
-True）。`VFloat` 的载荷与展示都走同一份 `%.12g` 文本（字面量在求值入口规范化），
-因此核心求值展示、定义性相等与编译产物三处同文本：
+True）。`VFloat` 的值形态就是宿主 double：算术与比较**不经过文本**，字面量文本只在
+求值入口解析一次（`quote` 时才按 `%.12g` 落回文本），因此 `1.0 / 3.0 * 3.0` 是 `1.0`、
+`0.1 + 0.2 == 0.3` 是 `False`，与产物逐位一致（回归夹具
+`packages/compiler/test/corpus/float/12_precision_roundtrip`）：
 
 ```console
 vuna> 1.5 + 2.25
@@ -180,5 +182,6 @@ Prelude 的是 trait、实例与 helper。取舍：
 
 `packages/compiler/test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
 模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float`、Prelude 默认
-可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。浮点夹具
+可见性（`10_prelude_float`）、核心求值的 double 精度（`12_precision_roundtrip`：文本往返
+不再参与算术/比较）与两条负例（隐式混用、类型表达式里的浮点字面量）。浮点夹具
 同时走核心求值与 run，二者都与同一份 golden 逐字节比较。

@@ -1,0 +1,74 @@
+-- 核心求值器的浮点值必须保持 double 精度：算术 / 比较不经过展示文本的往返。
+-- `1.0 / 3.0 * 3.0` 与 `0.1 + 0.2 == 0.3` 是「12 位规范文本恰好掩盖差异」的两种形状：
+-- 前者在文本往返后落在 `0.999999999999`，后者把两个不同 double 折成同一段 `0.3`。
+import Base
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Term
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("float precision failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "third-times-three-eq-one" thirdTimesThreeEqOne,
+    Pair "tenth-plus-fifth-ne-third" tenthPlusFifthNeThird,
+    Pair "third-times-three-is-one" thirdTimesThreeIsOne,
+    Pair "sign-preserved" signPreserved
+  ]
+
+defs : HashMap String Term
+defs = HashMap.fromList []
+
+floatBin : String -> Term -> Term -> Term
+floatBin name a b = TApp (TApp (TGlobal name) a Rig1) b Rig1
+
+-- 内核归约后的值（`eval` + `normalize` 走 force / primReduce，与 `main` 求值同一条路径）。
+valueOf : Term -> Maybe Float
+valueOf t = asFloat (normalize defs solsEmpty 64 (eval [] t))
+
+eqVals : Term -> Term -> Bool
+eqVals a b =
+  case valueEqFuel 64 (normalize defs solsEmpty 64 (eval [] a)) (normalize defs solsEmpty 64 (eval [] b)) of
+    Just x => x
+    Nothing => False
+
+thirdOfOne : Term
+thirdOfOne = floatBin "bi_div_float" (TFloat "1.0") (TFloat "3.0")
+
+thirdTimesThree : Term
+thirdTimesThree = floatBin "bi_mul_float" thirdOfOne (TFloat "3.0")
+
+tenthPlusFifth : Term
+tenthPlusFifth = floatBin "bi_add_float" (TFloat "0.1") (TFloat "0.2")
+
+thirdTimesThreeEqOne : Bool
+thirdTimesThreeEqOne = eqVals thirdTimesThree (TFloat "1.0")
+
+-- IEEE：`0.1 + 0.2` 是 `0.30000000000000004`，与 `0.3` 不是同一个 double。
+tenthPlusFifthNeThird : Bool
+tenthPlusFifthNeThird = not (eqVals tenthPlusFifth (TFloat "0.3"))
+
+thirdTimesThreeIsOne : Bool
+thirdTimesThreeIsOne =
+  case valueOf thirdTimesThree of
+    Just x => x == 1.0
+    Nothing => False
+
+-- `0.0 - 1.0 / 3.0 * 3.0` 的符号不能丢：结果是 `-1.0`。
+signPreserved : Bool
+signPreserved =
+  case valueOf (floatBin "bi_mul_float" (floatBin "bi_div_float" (TFloat "-1.0") (TFloat "3.0")) (TFloat "3.0")) of
+    Just x => x == 0.0 - 1.0
+    Nothing => False

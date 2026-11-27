@@ -214,8 +214,8 @@ export data Value(..) : Type where
   VStr : String -> Value
   VBool : Bool -> Value
   VIf : Value -> Value -> Value -> Value
-  -- `Float` 字面量的值形态（放末尾保持既有 tag 顺序）。
-  VFloat : String -> Value
+  -- `Float` 值（放末尾保持既有 tag 顺序）：载荷是宿主 double，算术与比较不经过文本。
+  VFloat : Float -> Value
 
 -- case 分支的值形态：绑定子 + 悬挂在「绑定子入环境后」的闭包。
 export record VCaseAlt(..) where
@@ -1075,7 +1075,7 @@ levelEscapes limit depth (VIf c th el) =
 levelEscapes limit depth (VType l) = False
 levelEscapes limit depth (VInt n) = False
 levelEscapes limit depth (VStr s) = False
-levelEscapes limit depth (VFloat raw) = False
+levelEscapes limit depth (VFloat _) = False
 levelEscapes limit depth (VBool b) = False
 
 export levelEscapesList : Int -> List Value -> Bool
