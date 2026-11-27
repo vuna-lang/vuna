@@ -253,18 +253,25 @@ let dtp_cleanup_reset () =
   let s = dtp_cleanup_state () in
   s.dtp_cs_stacks <- [];
   s.dtp_cs_fiber <- -1
-(* 当前 handler 的 self 栈（每个 Domain 一份）：opH 执行期间压入
+(* 当前 handler 的 self 栈（每个 Domain 一份）：handler 安装时压入
    (keyId,nameId,key,name,ret,h)，`prim_effectSelf` 用它把子计算重新装进同一个 handler。
-   帧在一次安装内不变，只分配一次；每次 perform 只做一次 cons。 *)
+   帧在一次安装内不变，只分配一次；压栈按 handler 安装计，不随 perform 次数增长。 *)
 let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : Obj.t list))
 let dtp_effect_run key name kid nid ret h th =
   let mark = dtp_cleanup_mark () in
   let st = Domain.DLS.get dtp_selfK in
-  (* 帧在一次安装内不变：只分配一次，resumption 闭包捕获它（1 个字段），
-     每次 perform 只 cons 一次。 *)
   let frame = Obj.repr (kid, nid, key, name, Obj.repr ret, Obj.repr h) in
+  let saved = !st in
+  st := frame :: saved;
+  let finish () =
+    st := saved;
+    dtp_cleanup_run_to mark
+  in
   (* 外层 Obj.magic 与 continuation 的 Obj.t 表示一致：effc 的 continue 返回 Obj.t，
-     去掉它会让 handler 的 answer 类型被钉成 Obj.t。 *)
+     去掉它会让 handler 的 answer 类型被钉成 Obj.t。
+     clause 的 resume 保持尾位置：OCaml 5 的 deep handler 只在这条路径上不把每次
+     perform 的帧留在栈上；非尾 resume 会让续延捕获/恢复随 perform 次数增长。所以
+     self 栈的恢复与 cleanup 都放到 handler 退出点，而不是每次 perform 之后。 *)
   try
     let r =
       Obj.magic
@@ -274,19 +281,14 @@ let dtp_effect_run key name kid nid ret h th =
             effc = (fun (type a) (eff : a Effect.t) -> match eff with
               | Perform (k, n, _, _, payload) when k = kid && n = nid ->
                 Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
-                  let saved = !st in
-                  st := frame :: saved;
-                  (try
-                     let r = (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)) in
-                     st := saved; r
-                   with e -> st := saved; raise e))
+                  (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)))
               | _ -> None) }
         with
         | r -> r
         | exception e -> raise e)
     in
-    dtp_cleanup_run_to mark; r
-  with e -> dtp_cleanup_run_to mark; raise e
+    finish (); r
+  with e -> finish (); raise e
 let dtp_effect_handle_id key name kid nid ret h th =
   fun u -> dtp_effect_run key name kid nid ret h (fun () -> (Obj.magic th) u)
 let dtp_effect_self th =
