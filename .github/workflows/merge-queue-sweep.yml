@@ -1,0 +1,29 @@
+name: merge-queue-sweep
+
+# GitHub 回归（community#209348，2026-09 起）：规则集合并队列下，已 arm 的 PR 在
+# required checks 变绿后不再自动入队，会一直停在 CLEAN。这里定期补一次 enqueue，
+# 只处理非 draft、无 hold 标签、已 arm、mergeStateStatus=CLEAN/UNSTABLE 且不在队列里的 PR。
+#
+# 手动执行：nix/tools/merge-queue.sh sweep [--dry-run] [<pr>...]
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: merge-queue-sweep
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: enqueue ready pull requests
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+        run: nix/tools/merge-queue.sh sweep
