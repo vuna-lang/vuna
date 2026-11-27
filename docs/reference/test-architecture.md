@@ -145,6 +145,8 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 - `cache-size` 必须是「整数 + 单位」：`1.5G` 这类小数不被 cache action 解析，等价于没设
   上限（日志 `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
   store 只涨不落——`pr` 组曾因此涨到 8.5G、restore 91s。
+- 上限设成会触发 gc 的值时，必须先把工具链登记成 GC root（预热步往
+  `/nix/var/nix/gcroots/` 放符号链接）：构建输入不在任何输出闭包里，gc 会当垃圾删掉。
 - gate / e2e 各拆成 4 个 matrix shard（`--shard i/4`，同一个 `nix-suite` cache 前缀）：
   每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。
 - 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
