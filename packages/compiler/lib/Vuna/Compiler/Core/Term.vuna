@@ -396,54 +396,73 @@ solsLookup i (Sols t xs d) = HashMap.lookup i t
 export solsCons : Int -> Value -> Sols -> Sols
 solsCons i v (Sols t xs d) = Sols (HashMap.insert i v t) ((i, v) :: xs) d
 
+-- 未解 meta / level 扫描的预算：耗尽一律按保守方向回答。项与值共用同一个上限
+-- （262144 远超正常项 / 值的深度与实参长度）。
+metaScanBound : Int
+metaScanBound = 262144
+
 -- 项里是否有**未解**元变量（值共享的安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，再求解也不会改写既有解。
+-- 走燃料版扫描：闭包体 / `VCase` 分支体这类项可能很深，耗尽按保守方向回答 `True`。
 export termHasUnsolvedMeta : Sols -> Term -> Bool
-termHasUnsolvedMeta sols (TMeta m) =
-  case solsLookup m sols of
-    Just _ => False
-    Nothing => True
-termHasUnsolvedMeta sols (TVar name i _) = False
-termHasUnsolvedMeta sols (TGlobal g) = False
-termHasUnsolvedMeta sols (TType l) = False
-termHasUnsolvedMeta sols (TPi name implicit rig dom cod) =
-  termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
-termHasUnsolvedMeta sols (TLam name rig slot _ body) =
-  let
-    tys =
-      case slot of
-        Nothing => False
-        Just (_, b, r) => termHasUnsolvedMetaMaybe sols b || termHasUnsolvedMetaMaybe sols r
-  in tys || termHasUnsolvedMeta sols body
-termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
-termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
-termHasUnsolvedMeta sols (TMk c args) = termHasUnsolvedMetaArgs sols args
-termHasUnsolvedMeta sols (TRecord c args) = termHasUnsolvedMetaArgs sols args
-termHasUnsolvedMeta sols (TProj base c tele i fi) = termHasUnsolvedMeta sols base
-termHasUnsolvedMeta sols (TRecUpd base c tele idxs body) =
-  termHasUnsolvedMeta sols base || termHasUnsolvedMeta sols body
-termHasUnsolvedMeta sols (TCase scrut alts) =
-  termHasUnsolvedMeta sols scrut || termHasUnsolvedMetaAlts sols alts
-termHasUnsolvedMeta sols (TInt n) = False
-termHasUnsolvedMeta sols (TStr s) = False
-termHasUnsolvedMeta sols (TFloat raw) = False
-termHasUnsolvedMeta sols (TBool b) = False
-termHasUnsolvedMeta sols (TIf c th el) =
-  termHasUnsolvedMeta sols c || termHasUnsolvedMeta sols th || termHasUnsolvedMeta sols el
+termHasUnsolvedMeta sols t = termHasUnsolvedMetaFuel metaScanBound sols t
 
-termHasUnsolvedMetaMaybe : Sols -> Maybe Term -> Bool
-termHasUnsolvedMetaMaybe sols Nothing = False
-termHasUnsolvedMetaMaybe sols (Just t) = termHasUnsolvedMeta sols t
+-- `fuel` 同时约束递归深度与实参 / 分支列表长度；耗尽返回 `True`（与值层扫描同口径）。
+termHasUnsolvedMetaFuel : Int -> Sols -> Term -> Bool
+termHasUnsolvedMetaFuel fuel sols t =
+  if fuel <= 0 then
+    True
+  else
+    case t of
+      TMeta m =>
+        case solsLookup m sols of
+          Just _ => False
+          Nothing => True
+      TVar name i sp => False
+      TGlobal g => False
+      TType l => False
+      TPi name implicit rig dom cod => termHasUnsolvedMetaFuel (fuel - 1) sols dom || termHasUnsolvedMetaFuel (fuel - 1) sols cod
+      TLam name rig slot _ body =>
+        let
+          tys =
+            case slot of
+              Nothing => False
+              Just (_, binderTy, resultTy) => termHasUnsolvedMetaMaybeFuel (fuel - 1) sols binderTy || termHasUnsolvedMetaMaybeFuel (fuel - 1) sols resultTy
+        in tys || termHasUnsolvedMetaFuel (fuel - 1) sols body
+      TApp f a rig => termHasUnsolvedMetaFuel (fuel - 1) sols f || termHasUnsolvedMetaFuel (fuel - 1) sols a
+      TCon c args => termHasUnsolvedMetaArgsFuel (fuel - 1) sols args
+      TMk c args => termHasUnsolvedMetaArgsFuel (fuel - 1) sols args
+      TRecord c args => termHasUnsolvedMetaArgsFuel (fuel - 1) sols args
+      TProj base c tele i fi => termHasUnsolvedMetaFuel (fuel - 1) sols base
+      TRecUpd base c tele idxs body => termHasUnsolvedMetaFuel (fuel - 1) sols base || termHasUnsolvedMetaFuel (fuel - 1) sols body
+      TCase scrut alts => termHasUnsolvedMetaFuel (fuel - 1) sols scrut || termHasUnsolvedMetaAltsFuel (fuel - 1) sols alts
+      TInt n => False
+      TStr s => False
+      TFloat raw => False
+      TBool b => False
+      TIf c th el => termHasUnsolvedMetaFuel (fuel - 1) sols c || termHasUnsolvedMetaFuel (fuel - 1) sols th || termHasUnsolvedMetaFuel (fuel - 1) sols el
 
-termHasUnsolvedMetaArgs : Sols -> List (Term, Rig) -> Bool
-termHasUnsolvedMetaArgs sols [] = False
-termHasUnsolvedMetaArgs sols ((a, rig) :: rest) =
-  termHasUnsolvedMeta sols a || termHasUnsolvedMetaArgs sols rest
+termHasUnsolvedMetaMaybeFuel : Int -> Sols -> Maybe Term -> Bool
+termHasUnsolvedMetaMaybeFuel fuel sols Nothing = False
+termHasUnsolvedMetaMaybeFuel fuel sols (Just t) = termHasUnsolvedMetaFuel fuel sols t
 
-termHasUnsolvedMetaAlts : Sols -> List CaseAlt -> Bool
-termHasUnsolvedMetaAlts sols [] = False
-termHasUnsolvedMetaAlts sols (alt :: rest) =
-  termHasUnsolvedMeta sols (caseAltBody alt) || termHasUnsolvedMetaAlts sols rest
+termHasUnsolvedMetaArgsFuel : Int -> Sols -> List (Term, Rig) -> Bool
+termHasUnsolvedMetaArgsFuel fuel sols args =
+  if fuel <= 0 then
+    True
+  else
+    case args of
+      [] => False
+      (a, rig) :: rest => termHasUnsolvedMetaFuel (fuel - 1) sols a || termHasUnsolvedMetaArgsFuel (fuel - 1) sols rest
+
+termHasUnsolvedMetaAltsFuel : Int -> Sols -> List CaseAlt -> Bool
+termHasUnsolvedMetaAltsFuel fuel sols alts =
+  if fuel <= 0 then
+    True
+  else
+    case alts of
+      [] => False
+      alt :: rest => termHasUnsolvedMetaFuel (fuel - 1) sols (caseAltBody alt) || termHasUnsolvedMetaAltsFuel (fuel - 1) sols rest
 
 -- | 项是否含浮点字面量，或引用名字在给定列表里的全局（`floatIntrinsicNames` 等）：
 -- interp/REPL 拒绝浮点求值、codegen 按需生成浮点 runtime helper 的共用判据。
@@ -929,9 +948,6 @@ anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeV
 
 -- 值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 -- 预算耗尽时按**保守方向**回答 `True`（当成「可能还有未解」），避免把不干净的值当可复用。
-metaScanBound : Int
-metaScanBound = 262144
-
 export hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel metaScanBound sols v
 
@@ -953,7 +969,9 @@ hasUnsolvedMetaValueFuel fuel sols v =
       VLam name rig clo => hasUnsolvedMetaCloFuel (fuel - 1) sols clo
       VCon c args => hasUnsolvedMetaListFuel (fuel - 1) sols args
       VApp f a => hasUnsolvedMetaValueFuel (fuel - 1) sols f || hasUnsolvedMetaValueFuel (fuel - 1) sols a
-      VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut
+      -- 分支闭包必须一起扫：scrutinee 干净但分支体里的未解 meta 仍是真实残留。
+      VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut || hasUnsolvedMetaCaseAltsFuel (fuel - 1) sols alts
+      -- tele 只有字段名 / multiplicity，不携带值；底座的 lambda 闭包体由值扫描下钻。
       VProj base c i fi n => hasUnsolvedMetaValueFuel (fuel - 1) sols base
       VIf c th el => hasUnsolvedMetaValueFuel (fuel - 1) sols c || hasUnsolvedMetaValueFuel (fuel - 1) sols th || hasUnsolvedMetaValueFuel (fuel - 1) sols el
       _ => False
@@ -970,6 +988,15 @@ hasUnsolvedMetaListFuel fuel sols vs =
       [] => False
       v :: rest => hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
+hasUnsolvedMetaCaseAltsFuel : Int -> Sols -> List VCaseAlt -> Bool
+hasUnsolvedMetaCaseAltsFuel fuel sols alts =
+  if fuel <= 0 then
+    True
+  else
+    case alts of
+      [] => False
+      alt :: rest => hasUnsolvedMetaCloFuel (fuel - 1) sols (vCaseAltClosure alt) || hasUnsolvedMetaCaseAltsFuel (fuel - 1) sols rest
+
 export hasUnsolvedMetaClo : Sols -> Closure -> Bool
 hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel metaScanBound sols clo
 
@@ -979,7 +1006,8 @@ hasUnsolvedMetaCloFuel fuel sols clo =
     True
   else
     case clo of
-      Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
+      -- env 之外还要扫体：闭包体里的 `TMeta` 不在环境里，只看 env 会漏判。
+      Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env || termHasUnsolvedMetaFuel (fuel - 1) sols body
 
 -- ---------------------------------------------------------------
 -- 宇宙 helper
@@ -1007,7 +1035,9 @@ levelEscapes limit depth (VLam name rig clo) = levelEscapesClo limit clo
 levelEscapes limit depth (VMeta m sp) = levelEscapesList limit sp
 levelEscapes limit depth (VCon c args) = levelEscapesList limit args
 levelEscapes limit depth (VApp f a) = levelEscapes limit depth f || levelEscapes limit depth a
-levelEscapes limit depth (VCase scrut alts) = levelEscapes limit depth scrut
+levelEscapes limit depth (VCase scrut alts) =
+  levelEscapes limit depth scrut || levelEscapesAlts limit alts
+-- tele 只有字段名 / multiplicity，不携带值；底座里的闭包由值遍历下钻。
 levelEscapes limit depth (VProj base c i fi n) = levelEscapes limit depth base
 levelEscapes limit depth (VIf c th el) =
   levelEscapes limit depth c || levelEscapes limit depth th || levelEscapes limit depth el
@@ -1023,6 +1053,13 @@ levelEscapesList limit (v :: rest) = levelEscapes limit 0 v || levelEscapesList 
 
 export levelEscapesClo : Int -> Closure -> Bool
 levelEscapesClo limit (Closure env body) = levelEscapesList limit env
+
+-- case 分支的闭包环境同样要扫：分支体悬挂在 binder 之下，逃逸只可能来自 env 里的
+-- 自由局部变量（body 自身的 binder 不算逃逸）。
+levelEscapesAlts : Int -> List VCaseAlt -> Bool
+levelEscapesAlts limit [] = False
+levelEscapesAlts limit (alt :: rest) =
+  levelEscapesClo limit (vCaseAltClosure alt) || levelEscapesAlts limit rest
 
 export showTerm : Term -> String
 showTerm (TVar name i _) = name
