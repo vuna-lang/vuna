@@ -11,20 +11,6 @@ on:
       timeout:
         required: true
         type: number
-      # 每组一份 Nix store cache：前缀带组名，互不干扰；没用到的组不写。
-      # `cache-key` 让多个 job（例如 suite 分片）共享同一个 cache 前缀。
-      cache-key:
-        required: false
-        type: string
-        default: ""
-      save:
-        required: false
-        type: boolean
-        default: false
-      cache-size:
-        required: false
-        type: string
-        default: "2G"
       # nix build 的并行度。suite 类长尾用 1（全部核给一个 derivation）。
       jobs:
         required: false
@@ -52,6 +38,12 @@ on:
         required: false
         type: string
         default: "success"
+      # 是否是「写缓存的那一个 job」。每个事件只留一个写入者（见 ci.yml / gates.yml）：
+      # 同一个键被两个 job 同时 save 会互相覆盖。
+      save:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -68,17 +60,22 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # 每组一个前缀：本组自己的缓存优先，冷启动时回退到 deep / pr（内容寻址的
-      # store 路径可以直接复用）。PR 只读 main 上的缓存，不写。
+      # store 缓存里只放「跨 commit 稳定」的第三方工具闭包（`.#ci-deps`，实测
+      # 1.3G nar / 149 路径），不放本 commit 的 vuna 产物：Nix 是内容寻址的，改一行
+      # 源码就换一批 store path，上一代产物对新 commit 全是垃圾，却要为它们付整份
+      # 解压（实测 1.4G 存档里 `tar -x` 占 62s，而能复用的只有 ~0.9G 依赖）。
+      #
+      # 键取「决定依赖闭包的那几个文件」而不是 `github.sha`：内容没变就必定命中
+      # primary-key，于是下面的 save 自动跳过（`hit-primary-key == 'true'`），缓存不再
+      # 被每次 main push 重写。只有 flake.lock / 工具集变了才重新写一代。
       - name: Restore Nix store
         id: restore
         uses: nix-community/cache-nix-action/restore@v7
         with:
-          primary-key: nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-${{ github.sha }}
+          primary-key: nix-deps-${{ runner.os }}-${{ hashFiles('flake.lock', 'nix/build/common.nix', 'nix/build/ci-deps.nix') }}
+          # 依赖换代时旧存档还能补齐没变的工具，比整份冷启动便宜。
           restore-prefixes-first-match: |
-            nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-
-            nix-deep-${{ runner.os }}-
-            nix-pr-${{ runner.os }}-
+            nix-deps-${{ runner.os }}-
 
       - name: flake 求值
         if: inputs.eval
@@ -103,39 +100,27 @@ jobs:
 
       # 所有要跑 vuna 的组先把工具链并行建：默认 `--max-jobs 1` 会把 vuna-seed / 编译器 /
       # 各插件串行编两分钟（链：seed 15s → compiler 30s → toolchain 34s → dev 28s）。
-      # 这些包彼此独立、单包单线程，4 并发摊开建；cache 命中时只是一次求值 + 确认已存在。
+      # 这些包彼此独立、单包单线程，4 并发摊开建。
       #
-      # 建完登记成 GC root：save 前的 `nix store gc --max` 只保「根闭包」，而工具链与
-      # `vuna-store`（插件构建要读的包状态）都是**构建输入**、不在任何输出闭包里——不登记
-      # 就会被当垃圾删掉。
-      #
-      # 分片组还要把本片 check 的整个**构建闭包**登记成根：这样 gc 只会掉上一次缓存里
-      # 残留的垃圾（实测 store 4.66G，而本片真正需要 ~2.2G），缓存与 restore 都能小一半。
+      # 建出来的产物**不登记 GC root**：它们由本 commit 的源码决定，下一个 commit 一定
+      # 用不上。save 前只登记 `.#ci-deps`，让 gc 把它们连同 check 输出一起收走。
       - name: 预热工具链
         if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-') || inputs.group == 'pr' || inputs.group == 'units'
         run: |
-          for p in $(nix build --max-jobs 4 --cores 1 --no-link --print-out-paths \
-              .#vuna .#vuna-seed .#vuna-compiler .#vuna-cli .#vuna-toolchain \
-              .#vuna-dev .#vuna-web-cli .#vuna-plugin-web \
-              .#vuna-target-native .#vuna-target-wasm .#vuna-store); do
-            sudo ln -sfn "$p" "/nix/var/nix/gcroots/vuna-ci-$(basename "$p")"
-          done
-          # 读数：根是否真的登记上了（登记成功与否要能看见）。
-          echo "=== gcroots vuna-ci: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-')"
+          nix build --max-jobs 4 --cores 1 --no-link \
+            .#vuna .#vuna-seed .#vuna-compiler .#vuna-cli .#vuna-toolchain \
+            .#vuna-dev .#vuna-web-cli .#vuna-plugin-web \
+            .#vuna-target-native .#vuna-target-wasm .#vuna-store
 
-      # 分片组把 check 的构建闭包也登记成根：`--include-outputs` 里还没建出来的输出会被
-      # 过滤掉（此时只有 check 输出缺失），其余 ~1900 个路径就是这一片真正会用的全部内容。
-      - name: 登记分片构建闭包
-        if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-')
+      # save 前的 `nix store gc --max` 只保「根闭包」：这里只登记跨 commit 稳定的依赖，
+      # 本 commit 的工具链 / check 输出于是被当成垃圾收走。存档因此收敛到依赖闭包
+      # （实测 store 3.5G → ~1.4G），restore 也随之从一分钟降到二十秒级。
+      - name: 登记依赖根
+        if: inputs.save
         run: |
-          sys=$(nix eval --impure --raw --expr builtins.currentSystem)
-          drv=$(nix eval --raw ".#checks.$sys.vuna-tests-${{ inputs.group }}.drvPath")
-          # 一次 sudo 建完（~1900 个路径，逐条 sudo 要半分钟）。
-          closure=$(nix-store -qR --include-outputs "$drv" | while read -r q; do [ -e "$q" ] && printf '%s\n' "$q"; done)
-          sudo mkdir -p /nix/var/nix/gcroots/vuna-ci-closure
-          # shellcheck disable=SC2086
-          sudo ln -sfn $closure /nix/var/nix/gcroots/vuna-ci-closure/
-          echo "=== gcroots closure: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-closure/')"
+          deps=$(nix build --no-link --print-out-paths .#ci-deps)
+          sudo ln -sfn "$deps" /nix/var/nix/gcroots/vuna-ci-deps
+          echo "=== gcroots vuna-ci-deps: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-deps')"
 
       - name: ${{ inputs.group }}
         env:
@@ -162,8 +147,6 @@ jobs:
             nix log "$p" 2>/dev/null |
               sed -n -e '/=== suite-timing/p' -e '/=== suite-costs begin/,/=== suite-costs end/p' || true
           done
-          # 紧挨 save 再读一次根：区分「链接没建上」与「链接建上了但 gc 不认」。
-          echo "=== gcroots vuna-ci（save 前）: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-')"
 
       # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
       - name: Drop builder lock files
@@ -172,14 +155,18 @@ jobs:
 
       # 独立 save action：check 失败也照常保存（if: always），所以不再需要
       # continue-on-error + ci-status 的间接层。
+      #
+      # `gc-max-store-size` 是**目标大小**：action 会算出（当前 store 大小 - 目标）交给
+      # `nix store gc --max`（Nix 的 `--max` 语义是「最多释放多少」）。目标取依赖闭包
+      # 大小 + 余量，per-commit 产物就被压掉了。
       - name: Save Nix store
         if: always() && inputs.save && steps.restore.outputs.hit-primary-key != 'true'
         uses: nix-community/cache-nix-action/save@v7
         with:
           primary-key: ${{ steps.restore.outputs.primary-key }}
-          gc-max-store-size-linux: ${{ inputs.cache-size }}
+          gc-max-store-size-linux: 1500M
           purge: true
-          purge-prefixes: nix-${{ inputs.cache-key != '' && inputs.cache-key || inputs.group }}-${{ runner.os }}-
+          purge-prefixes: nix-deps-${{ runner.os }}-
           # 只留一代：purge 在 save 之后执行，save 失败时不会清掉旧缓存。
           purge-created: 0
           purge-primary-key: never

@@ -137,24 +137,29 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 ## 6. CI
 
 - 每个 check 用私有对象库（`mktemp -d` 的 `VUNA_STORE`），父进程预热一次、worker/case 共享；
-  Nix store cache 只负责工具链与 `vuna` 二进制。
-- cache 的 `gc-max-store-size` 必须盖住整个 store：`nix store gc --max` 只保「输出引用图」，
-  工具链（`vuna` / seed / 插件）是 check 的**构建输入**、不在输出引用里，上限太小会在 save
-  前把它们当垃圾删掉，下一个 job 只能从头重编（实测 ~2 min/片）。
+  Nix store cache 只负责第三方工具闭包。
+- store cache 只存「跨 commit 稳定」的第三方工具闭包（`.#ci-deps`，实测 1.3G nar / 149
+  路径），不存本 commit 的 `vuna` 产物：Nix 是内容寻址的，改一行源码就换一批 store
+  path，上一代产物对下一个 commit 全是垃圾，却要为它们付整份解压（实测 1.4G 存档里
+  `tar -x` 占 62s，能复用的只有 ~0.9G 依赖）。
+- 缓存键取「决定依赖闭包的文件」（`flake.lock` + `nix/build/common.nix` +
+  `nix/build/ci-deps.nix`）而不是 `github.sha`：内容不变就必定命中 primary-key，save 按
+  `hit-primary-key == 'true'` 自动跳过，缓存不再被每次 main push 重写；`flake.lock` 换代
+  才重新写一代（`purge-created: 0` 顺手清掉旧的一代）。
+- 每个事件只有一个写入者：main push 由 `pr` job 写，定时 / 手动由 `deep` 写；分片、
+  `units`、`gates` 一律只读。同一个键被两个 job 同时 save 会互相覆盖。
+- `gc-max-store-size` 是**目标大小**（action 内部换算成 `nix store gc --max <当前值-目标>`
+  再执行；Nix 的 `--max` 语义是「最多释放多少字节」）。目标取依赖闭包大小 + 余量
+  （`1500M`），并且 save 前只登记 `.#ci-deps` 一个 GC root ⇒ 本 commit 的工具链与 check
+  输出被当垃圾收走，存档收敛到依赖闭包（store 3.5G → ~1.4G），restore 从一分钟降到
+  二十秒级。
+  这个值必须是「整数 + 单位」：`1.5G` 这类小数不被 action 解析，等价于没设上限（日志
+  `Not collecting garbage because none of "gc-max-store-size" ... are specified`）。
 - 工具链在 check 之前用 `--max-jobs 4 --cores 1` 预热：这些包彼此独立、单包单线程，
   默认 `--max-jobs 1` 会串行编两分钟（串行链 = seed 15s → compiler 30s → toolchain 34s
-  → dev 28s）。
-- `cache-size` 必须是「整数 + 单位」：`1.5G` 这类小数不被 cache action 解析，等价于没设
-  上限（日志 `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
-  store 只涨不落——`pr` 组曾因此涨到 8.5G、restore 91s。
-- 上限怎么取取决于「根登记了什么」：gc 只保根闭包，而工具链是构建输入。两条口径：
-  - 分片组：预热步把**本片 check 的整个构建闭包**（`nix-store -qR --include-outputs`，
-    实测 ~1965 条 / ~2.0G）登记进 `/nix/var/nix/gcroots/`，上限取 3G ⇒ gc 只掉缓存里
-    残留的垃圾（store 4.66G → ~2.2G），cache 与 restore 各小一半；
-  - 不登记构建闭包的组（`pr` / `units`）：上限必须盖住整个 store，否则 gc 会把
-    `vuna-toolchain` / `vuna-dev` / `vuna-store` 当垃圾删掉（实测重编 112s）。
-- gate 拆 4 个、e2e 拆 8 个 matrix shard（`--shard i/N`，同一个 `nix-suite` cache 前缀）：
-  每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。e2e 用 8 片是因为
+  → dev 28s）。预热产物**不登记 root**：它们由本 commit 的源码决定，下一个 commit 用不上。
+- gate 拆 4 个、e2e 拆 8 个 matrix shard（`--shard i/N`，共用同一份依赖缓存）：
+  每片跑完整 case 集合的一部分，不采样。e2e 用 8 片是因为
   单片 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 runner 比片内加并发有效。
 - `--all` + `--shard i/N` 时桶下标按 suite 序号轮转（`(i + k) mod N`）：每个 suite 的 LPT
   都把最重的 case 放进自己的 bin 0，不轮转的话各 suite 的 bin 0 会堆进同一片（实测

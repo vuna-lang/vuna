@@ -49,13 +49,9 @@ jobs:
       timeout: 30
       jobs: 2
       eval: true
-      # 必须是「整数 + 单位」：`1.5G` 不被 action 解析，会被当成没设上限（日志
-      # `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
-      # pr 的 store 因此一路涨到 8.5G、restore 91s。
-      # 上限要盖住整个 store 而不是「真实闭包」：gc 只保根闭包，工具链是构建输入，
-      # 上限一触发就把它删掉（实测登记 GC root 也没兜住，见 _check.yml 的预热步）；
-      # pr 的 store 实测 3.5G，取 6G 与分片同口径，正常情况不触发 gc。
-      cache-size: 6G
+      # main push 的写入者。merge_group / PR 只读：缓存内容与 commit 无关（只有跨
+      # commit 稳定的 `.#ci-deps` 依赖闭包），所以 PR 上写它没有意义，还会和主分支
+      # 的存档抢同一个键。
       save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
   # main push 的完整 suite 层（fast+integration）：PR 只跑命中的 area 切片
@@ -70,13 +66,10 @@ jobs:
     uses: ./.github/workflows/_check.yml
     with:
       group: gate-shard-${{ matrix.shard }}
-      cache-key: suite
       timeout: 60
       jobs: 1
-      # 预热步把工具链与**本片的构建闭包**登记成 GC root（见 _check.yml），gc 只会掉缓存里
-      # 残留的垃圾：闭包实测 ~2.2G，上限取 3G 就能在收敛后不再触发 gc。
-      cache-size: 3G
-      save: ${{ matrix.shard == 0 }}
+      # 只读：store 缓存由 pr job 在 main push 上写一次（内容与 commit 无关），
+      # 分片这里只有各自的 check 输出，写进去对下一次 run 没有价值。
 
   deep:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -85,7 +78,8 @@ jobs:
       group: deep
       timeout: 60
       jobs: 2
-      cache-size: 2G
+      # 定时 / 手动的写入者：这些事件上没有 pr job（它只跑 push / PR / merge_group），
+      # 所以由 deep 负责在 flake.lock 换代时补写一代依赖缓存。
       save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
   # 后端矩阵（wasm / native suite）：两遍完整 fast+integration + 全包单测。
@@ -97,8 +91,6 @@ jobs:
       group: backends
       timeout: 90
       jobs: 1
-      cache-size: 2G
-      save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
   # native 自举 conformance（构建即运行 `backend-check --scope all`）。大头是单线程的
   # native 自举编译（20+ 分钟），conformance 本身约 5 分钟；只放定时 / 手动。
@@ -109,8 +101,6 @@ jobs:
       group: native
       timeout: 120
       jobs: 1
-      cache-size: 2G
-      save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
   # e2e（steps / 长 case）按耗时均分成 8 片并行：case 总耗时是 gate 的两倍多，而单片
   # 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 shard 比片内加并发有效。
@@ -123,13 +113,8 @@ jobs:
     uses: ./.github/workflows/_check.yml
     with:
       group: e2e-shard-${{ matrix.shard }}
-      cache-key: suite
       timeout: 60
       jobs: 1
-      # 同上：闭包登记成根后 gc 只清垃圾；第 0 片把这份 cache 写到 `nix-suite-` 前缀
-      # （夜间 / 手动）。
-      cache-size: 3G
-      save: ${{ matrix.shard == 0 }}
 
   # 包内单测（vuna test packages/*）与 suite 解耦，独立并行。
   units:
@@ -137,10 +122,8 @@ jobs:
     uses: ./.github/workflows/_check.yml
     with:
       group: units
-      cache-key: suite
       timeout: 45
       jobs: 1
-      cache-size: 2G
 
   browser:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
