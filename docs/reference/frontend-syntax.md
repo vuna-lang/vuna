@@ -85,7 +85,7 @@
 | `perform` | `perform (Print s)` | `Base.Effect.Core.performCore` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | `handle` | `handle c { return x -> e`，随后每个 `C p k -> e` 一行，`}` 收尾 | `handleWith` / `handleWithAt` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | 记录构造 | `Point { y = 2, x = 1 }` | 合成位置构造子应用；字段必须写全、必须写 `=` | `Elab.Records`、[records-traits.md](records-traits.md) |
-| 记录更新 | `{ p \| x = 3 }` | `TRecUpd`（语义 = 单分支 case） | `Elab.Term.Impl` |
+| 记录更新 | `{ p \| x = 3 }`；可直接作实参 `f { p \| x = 3 }` | `TRecUpd`（语义 = 单分支 case）。实参位置的 `{ name \|` 按更新解析，`{ field = …` 仍是记录字面量 | `Elab.Term.Impl`、`Frontend.Parser` |
 | 字段访问 | `p.x` / `s.start.x` | `TProj`；刚性类型变量走 `HasField` | `Elab.Term.Impl`、[records-traits.md](records-traits.md) |
 | 列表字面量 | `[]` / `[a, b]` | 保留名 `@vuna@list@nil` / `@vuna@list@cons`，按期望族展开成 `Nil` / `(::)` | `Elab.Term.Impl`、[language.md](language.md) |
 | 行字面量 | `[Fetch]` / `[ConsoleOp@audit]` | 与列表同一语法；行位置的元素展开成 `Named "default"/"audit" ...` | `Elab.Term.Impl`、[effects.md](effects.md) |

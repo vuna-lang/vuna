@@ -1952,10 +1952,12 @@ parseAtomBase fuel st blockCol =
     icFuel "parser"
   else
     case peekTok st of
+      -- `f { r | x = 3 }`：这里的 `{` 是记录更新实参，标识符本身只作应用头返回，
+      -- `{` 留给 `parseArgs` 按更新原子解析。记录字面量（`P { x = 1 }`）仍走下面分支。
       PTok (TIdent name) p =>
         let
           st1 = advance st
-        in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (ERecord name fields (detachedNodeRef (spanOf st st2)), st2))) else if macroBangAt st1 p name then parseMacroAtom (fuel - 1) st blockCol name else OkC (EVar name (detachedNodeRef (spanOf st st1)), st1)
+        in if atSym st1 "{" then if recordUpdateAhead st1 then OkC (EVar name (detachedNodeRef (spanOf st st1)), st1) else Vuna.Compiler.Base.Common.bind (expectSym st1 "{") (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (ERecord name fields (detachedNodeRef (spanOf st st2)), st2))) else if macroBangAt st1 p name then parseMacroAtom (fuel - 1) st blockCol name else OkC (EVar name (detachedNodeRef (spanOf st st1)), st1)
       PTok (TInt n) p => OkC (EInt n (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TFloat raw) p => OkC (EFloat raw (detachedNodeRef (spanOf st (advance st))), advance st)
       PTok (TStr s) p => OkC (EStr s (detachedNodeRef (spanOf st (advance st))), advance st)

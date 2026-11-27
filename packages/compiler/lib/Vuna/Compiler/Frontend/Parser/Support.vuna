@@ -480,6 +480,18 @@ underscoreCtorName s =
 export ctorPatternStart : String -> Bool
 ctorPatternStart name = upperFirst name || underscoreCtorName name
 
+-- | `st` 在 `{` 上，且花括号里是 `name |`：这是**记录更新**原子（`{ r | x = 3 }`），
+-- 而不是 `TypeName { field = ... }` 记录字面量的开头。实参位置的记录更新先由这里
+-- 放行（`startsAtom`），再由 `parseAtomBase` 的 `{` 分支解析成 `ERecUpdate`。
+export recordUpdateAhead : PState -> Bool
+recordUpdateAhead st =
+  case peekTokAt st 1 of
+    Just (PTok (TIdent _) _) =>
+      case peekTokAt st 2 of
+        Just (PTok (TSym "|") _) => True
+        _ => False
+    _ => False
+
 export startsAtom : PState -> Bool
 startsAtom st =
   case peekTok st of
@@ -491,6 +503,7 @@ startsAtom st =
     PTok (TKw "Type") p => True
     PTok (TSym "(") p => True
     PTok (TSym "[") p => True
+    PTok (TSym "{") p => recordUpdateAhead st
     PTok (TSym "?") p =>
       case holeAtomAt st of
         Just _ => True
