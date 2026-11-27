@@ -520,6 +520,8 @@ nix/tools/merge-queue.sh sweep [--dry-run]      # 扫 CLEAN 的 PR 补 enqueue�
 - 普通 PR 靠 auto-merge 的 arm；stack 不依赖 arm（`includeStack` 可能被 GitHub 拒绝），
   由 `sweep` 在 checks 绿后整条入队。`enqueue` / `sweep` 同时补 GitHub 回归
   （community#209348）的兜底，`dequeue` / `wait` 用于人工干预。
+- `status` 的 `STACK` 列是 `<stack-number>/<position>`；bottom 合并后剩余层仍显示同一 stack，
+  `sweep` 会对新的 top 再入队。
 - `gh stack` 是官方扩展：`gh extension install github/gh-stack`（要求 gh ≥2.0、git ≥2.36），
   升级用 `gh extension upgrade stack`。它只负责本地分支链与远端 stack
   （`init` / `add` / `push` / `link` / `rebase` / `sync` / `unstack`），不改合并队列。
