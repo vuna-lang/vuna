@@ -3,6 +3,8 @@ name: automerge
 # 门禁全绿的 PR 自动进入合并队列。非 draft、同仓库分支、没有 hold 标签时打开
 # auto-merge；draft / hold 时先从队列移除再关闭 auto-merge。队列的合并由 GitHub 执行，
 # 不在本 workflow 里直接 merge。
+# GitHub 回归（community#209348）后 armed PR 不会在 checks 变绿时自动入队，
+# 补 enqueue 由 merge-queue-sweep.yml 定期负责；本 workflow 只 arm / disarm。
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, synchronize]
