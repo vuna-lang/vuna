@@ -307,6 +307,8 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
   含 `inlineDefs` 两遍、`resolveDefAliases` 两次与条件剪枝）与 `Target.Wasm.Module.build`
   （host-rewrite / prune / cps / anf / tail；directable 路径跳过 cps）。顺序仍由各链自己的
   数据依赖串接；表负责命名、观测与后续 `--only` / dump 的公共词汇。
+- `vuna dev ir dump --after ir.<pass>` 可以停在机器链的任意一步（`cpsMachineAfter`）；
+  `--after ir.tail.annotate` 与 `--after machine` 输出逐字节一致。
 - `psCheckBefore` / `psCheckAfter` / `psDump` 目前是声明位：post-CPS 的运行时符号
   （`@ir@cps@*` / `@ir@m@*`）不在 `Ir.Runtime` 契约里，逐步校验需要先补 scoped-only 入口，
   不能直接复用 `validateUnit`。
