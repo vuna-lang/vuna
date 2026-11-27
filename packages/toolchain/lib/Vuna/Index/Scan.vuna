@@ -517,7 +517,7 @@ indexOne env dir pkgName path ctxR =
     else
       pure (env, err "${path}: no such file")
 
--- | 内部：`indexOne` 的文件存在分支——读源码、按已解析上下文取程序级 fixity 并重排，
+-- | 内部：`indexOne` 的文件存在分支——读源码、按已解析上下文取本文件可见 fixity 并重排，
 -- 再抽模块名、模块 doc、符号与引用。
 indexOneExisting : Member nFs FsOp r => FixityEnv -> String -> String -> String -> Check PackageContext -> Eff r (FixityEnv, Check Built)
 indexOneExisting env dir pkgName path ctxR =

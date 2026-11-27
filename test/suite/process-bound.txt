@@ -48,6 +48,7 @@
 35_goal_lsp.steps	check,fmt,goal,lint	cli-text;fmt-text;goal-session
 36_gen_errors.steps	gen-errors	tooling-output
 39_lint_cli.steps	lint	cli-text;tooling-output
+116_lint_fixity_scope.steps	lint,check	cli-text;tooling-output	39_lint_cli
 39_context.steps	build,check,compile,help	build-link;cli-text;tooling-output
 40_toolchain_m30.steps	doc	tooling-output
 41_workspace_build.steps	build,check,test,fmt,doc,lint,compile	artifact-exec;build-link;cli-text;tooling-output

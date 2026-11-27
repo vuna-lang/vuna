@@ -1,0 +1,37 @@
+# 116) 可见 fixity 的唯一判据是「本处声明 + 本处 import 的传递闭包」：
+# 同一文件单独 lint 与在目录里 lint 看到同一张表，文件顺序交换不改变结果；
+# unused-import 与重排用同一条判据（只被闭包提供的 fixity 也算使用）。
+#
+# `Uses` 没有 import `Ops`，却和 import 了 `Ops` 的 `Noise` 同目录：`Ops` 的声明
+# 不能因为 `Noise` 先被 lint 过就泄漏进 `Uses` 的表。
+run: sh -c 'p="$TMPDIR/fixity-scope"; mkdir -p "$p/lib"; printf "[package]\nname = \"fixity-scope\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\n" "$VUNA_BASE" > "$p/vuna.toml"; printf "%s\n" "module Ops where" "" "infixl 6 <+>" "" "export (<+>) : Int -> Int -> Int" "export (<+>) a _ = a" > "$p/lib/Ops.vuna"; printf "%s\n" "module Noise where" "" "import Ops" "" "noise : Int" "noise = 2 <+> 3" > "$p/lib/Noise.vuna"; printf "%s\n" "module Uses where" "" "probe : Int" "probe = 1 <+> 2" > "$p/lib/Uses.vuna"'
+exit: 0
+
+# 单独 lint：没有 import `Ops`，`<+>` 没有可见 fixity。
+run: "$VUNA" lint "$TMPDIR/fixity-scope/lib/Uses.vuna" 2>&1
+exit: 2
+out-contains: RN_UnknownFixity
+
+# 目录 lint：`Ops` 被 `Noise` import 过，但不得泄漏到 `Uses` 的可见表。
+run: "$VUNA" lint "$TMPDIR/fixity-scope/lib" 2>&1
+exit: 2
+out-contains: Uses.vuna:4:11
+out-contains: RN_UnknownFixity
+
+# 文件顺序交换：先 lint 谁都必须得到与单文件一致的结果。
+run: "$VUNA" lint "$TMPDIR/fixity-scope/lib/Noise.vuna" "$TMPDIR/fixity-scope/lib/Uses.vuna" 2>&1
+exit: 2
+out-contains: RN_UnknownFixity
+run: "$VUNA" lint "$TMPDIR/fixity-scope/lib/Uses.vuna" "$TMPDIR/fixity-scope/lib/Noise.vuna" 2>&1
+exit: 2
+out-contains: RN_UnknownFixity
+
+# unused-import 与重排同一条判据：`Mid` 自己的名字没人用，但它经 import 闭包
+# （`Mid` -> `Fx`）提供了 `Main` 里 `<+>` 的 fixity；删掉它会让 `<+>` 变成 unknown
+# fixity，因此不能报 unused。
+run: sh -c 'w="$TMPDIR/fixity-warn"; mkdir -p "$w/lib" "$w/app"; printf "[package]\nname = \"fixity-warn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$w/vuna.toml"; printf "%s\n" "module Fx where" "" "infixl 6 <+>" > "$w/lib/Fx.vuna"; printf "%s\n" "module Def where" "" "export (<+>) : Int -> Int -> Int" "export (<+>) a _ = a" > "$w/lib/Def.vuna"; printf "%s\n" "module Mid where" "" "import Fx" "import Def" "" "mid : Int" "mid = 1 <+> 2" > "$w/lib/Mid.vuna"; printf "%s\n" "import Mid" "import Def" "" "main : Int" "main = 1 <+> 2" > "$w/app/Main.vuna"'
+exit: 0
+run: "$VUNA" check -W "$TMPDIR/fixity-warn/app/Main.vuna" 2>&1
+exit: 0
+run: sh -c '"$VUNA" check -W "$TMPDIR/fixity-warn/app/Main.vuna" 2>&1 | grep -c UN_UnusedImport || true'
+out-equals: 0
