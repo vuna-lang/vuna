@@ -709,16 +709,16 @@ let v_macroAtom = (fun (dtb_u_u527 : string) (dtb_u_u528 : Frontend_dAst.t_Expr 
   | _ -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText (Frontend_dReserved.C_Reserved_RsMacro (dtb_u_u527))), (Frontend_dAst.v_detachedNodeRef dtb_u_u530))), dtb_u_u528, (Frontend_dAst.v_detachedNodeRef dtb_u_u529)))
 ))
 
-# 2042 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2044 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_holeSpan = (fun (dtb_u_u531 : string) (dtb_u_u532 : Base_dSource.t_Pos) -> (match dtb_u_u532 with
   | { Base_dSource.f_Pos_posLine = dtb_u_u533; Base_dSource.f_Pos_posCol = dtb_u_u534; Base_dSource.f_Pos_posOffset = dtb_u_u535; Base_dSource.f_Pos_posEndOffset = dtb_u_u536 } -> { Base_dSource.f_Span_spanFile = dtb_u_u531; Base_dSource.f_Span_spanStartLine = dtb_u_u533; Base_dSource.f_Span_spanStartCol = dtb_u_u534; Base_dSource.f_Span_spanEndLine = dtb_u_u533; Base_dSource.f_Span_spanEndCol = dtb_u_u534; Base_dSource.f_Span_spanStartOffset = dtb_u_u535; Base_dSource.f_Span_spanEndOffset = dtb_u_u535 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2046 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2048 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_toksFuel = (fun (dtb_u_u537 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> ((128 * (B_dData_dList.v_length dtb_u_u537)) + 1024))
 
-# 2050 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2052 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_textPartsOf = (fun (dtb_u_u538 : Frontend_dLexer.t_TmplPart B_dData_dList.t_List) -> (match dtb_u_u538 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u539, dtb_u_u540) -> (match dtb_u_u539 with
   | Frontend_dLexer.C_TmplPart_TPHole (dtb_u_u541) -> B_dData_dMaybe.C_Maybe_Nothing
@@ -733,7 +733,7 @@ let rec v_textPartsOf = (fun (dtb_u_u538 : Frontend_dLexer.t_TmplPart B_dData_dL
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2085 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2087 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_foldPairExprs = (fun (dtb_u_u544 : Frontend_dAst.t_NodeRef) (dtb_u_u545 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (match dtb_u_u545 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u546, dtb_u_u547) -> (match dtb_u_u547 with
   | B_dData_dList.C_List_Nil -> dtb_u_u546
@@ -743,13 +743,13 @@ let rec v_foldPairExprs = (fun (dtb_u_u544 : Frontend_dAst.t_NodeRef) (dtb_u_u54
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2122 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2124 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_sectionLeftExpr = (fun (dtb_u_u548 : string) (dtb_u_u549 : Frontend_dAst.t_Expr) (dtb_u_u550 : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_ELam ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = Frontend_dReserved.v_sectionBinderName; B_dData_dPair.f_Pair_second = (Frontend_dAst.v_nodeRefSpan dtb_u_u550) }, B_dData_dList.C_List_Nil)), (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (dtb_u_u548, (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u550)))), (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EVar (Frontend_dReserved.v_sectionBinderName, (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u550)))), (B_dData_dList.C_List__x58__x58_ (dtb_u_u549, B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u550)))), dtb_u_u550)))
 
-# 2129 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2131 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_sectionRightExpr = (fun (dtb_u_u551 : string) (dtb_u_u552 : Frontend_dAst.t_Expr) (dtb_u_u553 : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_ELam ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = Frontend_dReserved.v_sectionBinderName; B_dData_dPair.f_Pair_second = (Frontend_dAst.v_nodeRefSpan dtb_u_u553) }, B_dData_dList.C_List_Nil)), (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar (dtb_u_u551, (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u553)))), (B_dData_dList.C_List__x58__x58_ (dtb_u_u552, (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_Expr_EVar (Frontend_dReserved.v_sectionBinderName, (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u553)))), B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef (Frontend_dAst.v_nodeRefSpan dtb_u_u553)))), dtb_u_u553)))
 
-# 2160 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2162 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_parsePiNamesRest = (fun (dtb_u_u554 : int) (dtb_u_u555 : Frontend_dParser_dSupport.t_PState) (dtb_u_u556 : string B_dData_dList.t_List) -> (if (dtb_u_u554 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u557 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u555) in (match dtb_u_u557 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u558; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u559 } -> (match dtb_u_u558 with
   | Frontend_dLexer.C_Tok_TIdent (dtb_u_u560) -> (((v_parsePiNamesRest (dtb_u_u554 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u555)) (B_dData_dList.C_List__x58__x58_ (dtb_u_u560, dtb_u_u556)))
@@ -758,24 +758,24 @@ let rec v_parsePiNamesRest = (fun (dtb_u_u554 : int) (dtb_u_u555 : Frontend_dPar
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 2151 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2153 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parsePiNames = (fun (dtb_u_u561 : int) (dtb_u_u562 : Frontend_dParser_dSupport.t_PState) -> (if (dtb_u_u561 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (Frontend_dParser_dSupport.v_expectIdent dtb_u_u562)) (fun (dtb_u_u563 : string) (dtb_u_u564 : Frontend_dParser_dSupport.t_PState) -> (((v_parsePiNamesRest (dtb_u_u561 - 1)) dtb_u_u564) (B_dData_dList.C_List__x58__x58_ (dtb_u_u563, B_dData_dList.C_List_Nil)))))))
 
-# 2170 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2172 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_foldPiNames = (fun (dtb_u_u565 : string B_dData_dList.t_List) (dtb_u_u566 : bool) (dtb_u_u567 : Frontend_dAst.t_Qty B_dData_dMaybe.t_Maybe) (dtb_u_u568 : Frontend_dAst.t_Expr) (dtb_u_u569 : Frontend_dAst.t_Expr) (dtb_u_u570 : Frontend_dAst.t_NodeRef) -> (match dtb_u_u565 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u571, dtb_u_u572) -> (Frontend_dAst.C_Expr_EPi (dtb_u_u571, dtb_u_u566, dtb_u_u567, dtb_u_u568, ((((((v_foldPiNames dtb_u_u572) dtb_u_u566) dtb_u_u567) dtb_u_u568) dtb_u_u569) dtb_u_u570), dtb_u_u570))
   | B_dData_dList.C_List_Nil -> dtb_u_u569
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2175 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2177 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_anyDottedName = (fun (dtb_u_u573 : string B_dData_dList.t_List) -> (match dtb_u_u573 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u574, dtb_u_u575) -> (if (Base_dSource.v_containsDot dtb_u_u574) then true else (v_anyDottedName dtb_u_u575))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2180 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2182 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_consumeQty = (fun (dtb_u_u576 : Frontend_dParser_dSupport.t_PState) (dtb_u_u577 : Frontend_dAst.t_Qty B_dData_dMaybe.t_Maybe) -> (match dtb_u_u577 with
   | B_dData_dMaybe.C_Maybe_Just (dtb_u_u578) -> (let dtb_u_u579 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u576) in (match dtb_u_u579 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u580; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u581 } -> (match dtb_u_u580 with
@@ -788,26 +788,26 @@ let v_consumeQty = (fun (dtb_u_u576 : Frontend_dParser_dSupport.t_PState) (dtb_u
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2241 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2243 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_foldCons = (fun (dtb_u_u583 : Frontend_dAst.t_NodeRef) (dtb_u_u584 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (match dtb_u_u584 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u585, dtb_u_u586) -> (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListCons), dtb_u_u583)), (B_dData_dList.C_List__x58__x58_ (dtb_u_u585, (B_dData_dList.C_List__x58__x58_ (((v_foldCons dtb_u_u583) dtb_u_u586), B_dData_dList.C_List_Nil)))), dtb_u_u583))
   | B_dData_dList.C_List_Nil -> (Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListNil), dtb_u_u583))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2255 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2257 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parseLambdaParam = (fun (dtb_u_u587 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (Frontend_dParser_dSupport.v_expectIdent dtb_u_u587)) (fun (dtb_u_u588 : string) (dtb_u_u589 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u588; B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_tokenSpan dtb_u_u587) }; B_dData_dPair.f_Pair_second = dtb_u_u589 })))))
 
-# 2259 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2261 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_parseLambdaParams = (fun (dtb_u_u590 : int) (dtb_u_u591 : Frontend_dParser_dSupport.t_PState) (dtb_u_u592 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (dtb_u_u590 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u591) ",") then ((Base_dCommon.v_step (v_parseLambdaParam (Frontend_dParser_dSupport.v_advance dtb_u_u591))) (fun (dtb_u_u593 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair) (dtb_u_u594 : Frontend_dParser_dSupport.t_PState) -> (((v_parseLambdaParams (dtb_u_u590 - 1)) dtb_u_u594) ((B_dData_dList.v_append dtb_u_u592) (B_dData_dList.C_List__x58__x58_ (dtb_u_u593, B_dData_dList.C_List_Nil)))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u592; B_dData_dPair.f_Pair_second = dtb_u_u591 })))))
 
-# 2350 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2352 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_rowAtNameExpr = (fun (dtb_u_u595 : Frontend_dAst.t_Expr) -> (match dtb_u_u595 with
   | Frontend_dAst.C_Expr_EVar (dtb_u_u596, dtb_u_u597) -> (Frontend_dAst.C_Expr_EStr (dtb_u_u596, dtb_u_u597))
   | _ -> dtb_u_u595
 ))
 
-# 2439 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2441 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_isReturnClauseHead = (fun (dtb_u_u598 : Frontend_dParser_dSupport.t_PState) -> (let dtb_u_u599 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u598) in (match dtb_u_u599 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u600; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u601 } -> (match dtb_u_u600 with
   | Frontend_dLexer.C_Tok_TIdent (dtb_u_u602) -> (dtb_u_u602 = "return")
@@ -816,20 +816,20 @@ let v_isReturnClauseHead = (fun (dtb_u_u598 : Frontend_dParser_dSupport.t_PState
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 2533 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2535 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_handleOpKName = (fun (dtb_u_u603 : t_HandleOp) -> (match dtb_u_u603 with
   | C_HandleOp_HandleOp (dtb_u_u604, dtb_u_u605, dtb_u_u606, dtb_u_u607, dtb_u_u608, dtb_u_u609) -> dtb_u_u608
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2537 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2539 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_firstOtherKName = (fun (dtb_u_u610 : t_HandleOp B_dData_dList.t_List) (dtb_u_u611 : string) -> (match dtb_u_u610 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u612, dtb_u_u613) -> (let dtb_u_u614 = (v_handleOpKName dtb_u_u612) in (if (dtb_u_u614 = dtb_u_u611) then ((v_firstOtherKName dtb_u_u613) dtb_u_u611) else (B_dData_dMaybe.C_Maybe_Just (dtb_u_u614))))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2545 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2547 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_handleAlt = (fun (dtb_u_u615 : t_HandleOp) -> (match dtb_u_u615 with
   | C_HandleOp_HandleOp (dtb_u_u616, dtb_u_u617, dtb_u_u618, dtb_u_u619, dtb_u_u620, dtb_u_u621) -> { Frontend_dAst.f_Alt_altPat = (Frontend_dAst.C_Pat_PCon (dtb_u_u616, dtb_u_u617, dtb_u_u618)); Frontend_dAst.f_Alt_altBody = dtb_u_u621; Frontend_dAst.f_Alt_altRef = dtb_u_u619 }
   | _ -> failwith "DT: impossible branch"
@@ -838,7 +838,7 @@ let v_handleAlt = (fun (dtb_u_u615 : t_HandleOp) -> (match dtb_u_u615 with
 # 216 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_semHandleOp = (fun (dtb_u_u622 : t_HandleOp) -> (B_dData_dMaybe.C_Maybe_Just ((Frontend_dCst.C_CstSem_SemAlt ((v_handleAlt dtb_u_u622))))))
 
-# 2549 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2551 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_handleRetExpr = (fun (dtb_u_u623 : (string, (Frontend_dAst.t_Expr, Frontend_dAst.t_NodeRef) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) (dtb_u_u624 : Frontend_dAst.t_NodeRef) -> (match dtb_u_u623 with
   | B_dData_dMaybe.C_Maybe_Just (dtb_u_u625) -> (match dtb_u_u625 with
   | { B_dData_dPair.f_Pair_first = dtb_u_u626; B_dData_dPair.f_Pair_second = dtb_u_u627 } -> (match dtb_u_u627 with
@@ -851,10 +851,10 @@ let v_handleRetExpr = (fun (dtb_u_u623 : (string, (Frontend_dAst.t_Expr, Fronten
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2554 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2556 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_handleOpLam = (fun (dtb_u_u630 : t_HandleOp B_dData_dList.t_List) (dtb_u_u631 : string) (dtb_u_u632 : Frontend_dAst.t_NodeRef) -> (Frontend_dAst.C_Expr_ELam ((B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = Frontend_dReserved.v_handleOpIndexBinderName; B_dData_dPair.f_Pair_second = Base_dSource.v_spanEmpty }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = Frontend_dReserved.v_handleOpBinderName; B_dData_dPair.f_Pair_second = Base_dSource.v_spanEmpty }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb_u_u631; B_dData_dPair.f_Pair_second = Base_dSource.v_spanEmpty }, B_dData_dList.C_List_Nil)))))), (Frontend_dAst.C_Expr_ECase ((Frontend_dAst.C_Expr_EVar (Frontend_dReserved.v_handleOpBinderName, dtb_u_u632)), ((B_dData_dList.v_map v_handleAlt) dtb_u_u630), dtb_u_u632)), dtb_u_u632)))
 
-# 2562 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2564 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_handleExpr = (fun (dtb_u_u633 : Frontend_dAst.t_Expr) (dtb_u_u634 : t_HandleBlock) (dtb_u_u635 : Frontend_dAst.t_NodeRef) -> (match dtb_u_u634 with
   | C_HandleBlock_HandleBlock (dtb_u_u636, dtb_u_u637) -> (match dtb_u_u637 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u638, dtb_u_u639) -> (match ((v_firstOtherKName dtb_u_u639) (v_handleOpKName dtb_u_u638)) with
@@ -868,7 +868,7 @@ let v_handleExpr = (fun (dtb_u_u633 : Frontend_dAst.t_Expr) (dtb_u_u634 : t_Hand
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2636 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2638 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_bindArrowTok = (fun (dtb_u_u641 : Frontend_dLexer.t_PTok) -> (match dtb_u_u641 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u642; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u643 } -> (match dtb_u_u642 with
   | Frontend_dLexer.C_Tok_TSym (dtb_u_u644) -> (if (dtb_u_u644 = "<-") then (B_dData_dMaybe.C_Maybe_Just (true)) else (if (dtb_u_u644 = "@") then B_dData_dMaybe.C_Maybe_Nothing else (if (dtb_u_u644 = "::") then B_dData_dMaybe.C_Maybe_Nothing else (if (dtb_u_u644 = ",") then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just (false))))))
@@ -882,10 +882,10 @@ let v_bindArrowTok = (fun (dtb_u_u641 : Frontend_dLexer.t_PTok) -> (match dtb_u_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2650 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2652 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_doStmtBindsAhead = (fun (dtb_u_u652 : Frontend_dParser_dSupport.t_PState) (dtb_u_u653 : int) -> (((Frontend_dParser_dSupport.v_scanDoStmtLevel dtb_u_u652) dtb_u_u653) v_bindArrowTok))
 
-# 2702 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2704 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_patBinderBindings = (fun (dtb_u_u654 : Frontend_dAst.t_Pat) -> (match dtb_u_u654 with
   | Frontend_dAst.C_Pat_PStr (dtb_u_u655, dtb_u_u656) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PInt (dtb_u_u657, dtb_u_u658) -> B_dData_dList.C_List_Nil
@@ -897,7 +897,7 @@ let rec v_patBinderBindings = (fun (dtb_u_u654 : Frontend_dAst.t_Pat) -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2716 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2718 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_firstRepeatedBindingGo = (fun (dtb_u_u672 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u673 : string B_dData_dList.t_List) -> (match dtb_u_u672 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u674, dtb_u_u675) -> (match dtb_u_u674 with
   | { B_dData_dPair.f_Pair_first = dtb_u_u676; B_dData_dPair.f_Pair_second = dtb_u_u677 } -> (if ((B_dData_dList.v_memName dtb_u_u676) dtb_u_u673) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb_u_u676; B_dData_dPair.f_Pair_second = dtb_u_u677 })) else ((v_firstRepeatedBindingGo dtb_u_u675) (B_dData_dList.C_List__x58__x58_ (dtb_u_u676, dtb_u_u673))))
@@ -907,10 +907,10 @@ let rec v_firstRepeatedBindingGo = (fun (dtb_u_u672 : (string, Base_dSource.t_Sp
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2712 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2714 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_firstRepeatedBinding = (fun (dtb_u_u678 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((v_firstRepeatedBindingGo dtb_u_u678) B_dData_dList.C_List_Nil))
 
-# 2731 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2733 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_checkNoRepeatedBinders = (fun (dtb_u_u679 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (let dtb_u_u680 = (v_firstRepeatedBinding ((B_dData_dList.v_concatMap v_patBinderBindings) dtb_u_u679)) in (match dtb_u_u680 with
   | B_dData_dMaybe.C_Maybe_Just (dtb_u_u681) -> (match dtb_u_u681 with
   | { B_dData_dPair.f_Pair_first = dtb_u_u682; B_dData_dPair.f_Pair_second = dtb_u_u683 } -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withLabel { Base_dDiag.f_Label_labelSpan = (B_dData_dMaybe.C_Maybe_Just (dtb_u_u683)); Base_dDiag.f_Label_labelText = ""; Base_dDiag.f_Label_labelStyle = Base_dDiag.C_LabelStyle_LabelPrimary; Base_dDiag.f_Label_labelProvenance = B_dData_dMaybe.C_Maybe_Nothing }) ((Base_dDiag.v_appendMessage (String.concat "" [" (repeated name: `"; dtb_u_u682; "`)"])) ((Base_dDiagnostics_dFrontend.v_psMsg Base_dDiagnostics_dFrontend.C_PsDiag_RepeatedPatternBinder) B_dData_dVec.C_Vec_Nil)))))
@@ -920,14 +920,14 @@ let v_checkNoRepeatedBinders = (fun (dtb_u_u679 : Frontend_dAst.t_Pat B_dData_dL
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 2725 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2727 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_checkBindersAt = (fun (dtb_u_u684 : Frontend_dParser_dSupport.t_PState) (dtb_u_u685 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (match (Frontend_dParser_dSupport.v_pmodeOf dtb_u_u684) with
   | Frontend_dParser_dSupport.C_ParseMode_PmTool -> (Base_dDiag.C_Check_OkC (dtb_u_u685))
   | Frontend_dParser_dSupport.C_ParseMode_PmStrict -> (v_checkNoRepeatedBinders dtb_u_u685)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2850 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2852 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parseAsName = (fun (dtb_u_u686 : int) (dtb_u_u687 : Frontend_dParser_dSupport.t_PState) -> (if (dtb_u_u686 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u688 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u687) in (match dtb_u_u688 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u689; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u690 } -> (match dtb_u_u689 with
   | Frontend_dLexer.C_Tok_TIdent (dtb_u_u691) -> (if (dtb_u_u691 = "_") then ((v_ps0 dtb_u_u687) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedPattern) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u691; B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u687) })))
@@ -936,14 +936,14 @@ let v_parseAsName = (fun (dtb_u_u686 : int) (dtb_u_u687 : Frontend_dParser_dSupp
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 2907 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2909 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_foldPCon = (fun (dtb_u_u692 : Frontend_dAst.t_NodeRef) (dtb_u_u693 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (match dtb_u_u693 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u694, dtb_u_u695) -> (Frontend_dAst.C_Pat_PCon ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListCons), (B_dData_dList.C_List__x58__x58_ (dtb_u_u694, (B_dData_dList.C_List__x58__x58_ (((v_foldPCon dtb_u_u692) dtb_u_u695), B_dData_dList.C_List_Nil)))), dtb_u_u692))
   | B_dData_dList.C_List_Nil -> (Frontend_dAst.C_Pat_PCon ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListNil), B_dData_dList.C_List_Nil, dtb_u_u692))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2922 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2924 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_foldPairPats = (fun (dtb_u_u696 : Frontend_dAst.t_NodeRef) (dtb_u_u697 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (match dtb_u_u697 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u698, dtb_u_u699) -> (match dtb_u_u699 with
   | B_dData_dList.C_List_Nil -> dtb_u_u698
@@ -953,13 +953,13 @@ let rec v_foldPairPats = (fun (dtb_u_u696 : Frontend_dAst.t_NodeRef) (dtb_u_u697
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2740 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2742 "Vuna/Compiler/Frontend/Parser.vuna"
 let rec v_parsePatternSingle = (fun (dtb_u_u700 : int) (dtb_u_u701 : Frontend_dParser_dSupport.t_PState) (dtb_u_u702 : int) -> ((((Frontend_dParser_dSupport.v_withExtent Frontend_dCst.C_CstKind_CstPatKind) v_semPat) dtb_u_u701) (fun (dtb_u_u703 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parsePatternSingleBody dtb_u_u700) dtb_u_u703) dtb_u_u702)) (fun (dtb_u_u704 : Frontend_dAst.t_Pat) (dtb_u_u705 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((Frontend_dAst.v_withPatId (dtb_u_u703).Frontend_dParser_dSupport.f_PState_openNodeId) dtb_u_u704); B_dData_dPair.f_Pair_second = dtb_u_u705 })))))))
-# 2748 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2750 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternSingleBody = (fun (dtb_u_u706 : int) (dtb_u_u707 : Frontend_dParser_dSupport.t_PState) (dtb_u_u708 : int) -> (if (dtb_u_u706 <= 0) then (Base_dDiag.v_icFuel "parser") else (((v_parsePatternCons (dtb_u_u706 - 1)) dtb_u_u707) dtb_u_u708)))
-# 2753 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2755 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternCons = (fun (dtb_u_u709 : int) (dtb_u_u710 : Frontend_dParser_dSupport.t_PState) (dtb_u_u711 : int) -> (if (dtb_u_u709 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternHead (dtb_u_u709 - 1)) dtb_u_u710) dtb_u_u711)) (fun (dtb_u_u712 : Frontend_dAst.t_Pat) (dtb_u_u713 : Frontend_dParser_dSupport.t_PState) -> (if (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u713) "::") then ((Frontend_dParser_dSupport.v_canContinue dtb_u_u713) dtb_u_u711) else false) then ((Base_dCommon.v_step (((v_parsePatternCons (dtb_u_u709 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u713)) dtb_u_u711)) (fun (dtb_u_u714 : Frontend_dAst.t_Pat) (dtb_u_u715 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PCon ("::", (B_dData_dList.C_List__x58__x58_ (dtb_u_u712, (B_dData_dList.C_List__x58__x58_ (dtb_u_u714, B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u710) dtb_u_u715)))); B_dData_dPair.f_Pair_second = dtb_u_u715 })))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u712; B_dData_dPair.f_Pair_second = dtb_u_u713 })))))))
-# 2762 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2764 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternHead = (fun (dtb_u_u716 : int) (dtb_u_u717 : Frontend_dParser_dSupport.t_PState) (dtb_u_u718 : int) -> (if (dtb_u_u716 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u719 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u717) in (match dtb_u_u719 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u720; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u721 } -> (match dtb_u_u720 with
   | Frontend_dLexer.C_Tok_TSym (dtb_u_u722) -> (if (dtb_u_u722 = "(") then (let dtb_u_u723 = ((Frontend_dParser_dSupport.v_peekTokAt dtb_u_u717) 1) in (match dtb_u_u723 with
@@ -986,11 +986,11 @@ and v_parsePatternHead = (fun (dtb_u_u716 : int) (dtb_u_u717 : Frontend_dParser_
 )
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2785 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2787 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseRecordPatternFields = (fun (dtb_u_u741 : int) (dtb_u_u742 : Frontend_dParser_dSupport.t_PState) (dtb_u_u743 : int) -> (if (dtb_u_u741 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u742) "{")) (fun (dtb_u_u744 : Frontend_dParser_dSupport.t_PState) -> (((v_parseRecordPatternList (dtb_u_u741 - 1)) dtb_u_u744) dtb_u_u743)))))
-# 2794 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2796 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseRecordPatternList = (fun (dtb_u_u745 : int) (dtb_u_u746 : Frontend_dParser_dSupport.t_PState) (dtb_u_u747 : int) -> (if (dtb_u_u745 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u746) "}") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u746) })) else ((Base_dCommon.v_step (((v_parseRecordPatternField (dtb_u_u745 - 1)) dtb_u_u746) dtb_u_u747)) (fun (dtb_u_u748 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) (dtb_u_u749 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u749) ",") then ((Base_dCommon.v_step (((v_parseRecordPatternList (dtb_u_u745 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u749)) dtb_u_u747)) (fun (dtb_u_u750 : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u751 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u748, dtb_u_u750)); B_dData_dPair.f_Pair_second = dtb_u_u751 })))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u749) "}")) (fun (dtb_u_u752 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u748, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = dtb_u_u752 }))))))))))
-# 2805 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2807 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseRecordPatternField = (fun (dtb_u_u753 : int) (dtb_u_u754 : Frontend_dParser_dSupport.t_PState) (dtb_u_u755 : int) -> (if (dtb_u_u753 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u756 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u754) in (match dtb_u_u756 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u757; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u758 } -> (match dtb_u_u757 with
   | Frontend_dLexer.C_Tok_TIdent (dtb_u_u759) -> (let dtb_u_u760 = (Frontend_dParser_dSupport.v_advance dtb_u_u754) in (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u760) "=") then ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u760) "=")) (fun (dtb_u_u761 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parsePatternSingle (dtb_u_u753 - 1)) dtb_u_u761) dtb_u_u755)) (fun (dtb_u_u762 : Frontend_dAst.t_Pat) (dtb_u_u763 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u759; B_dData_dPair.f_Pair_second = dtb_u_u762 }; B_dData_dPair.f_Pair_second = dtb_u_u763 })))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u759; B_dData_dPair.f_Pair_second = (Frontend_dAst.C_Pat_PVar (dtb_u_u759, (Frontend_dAst.v_detachedNodeRef { Base_dSource.f_Span_spanFile = (Frontend_dParser_dSupport.v_fileOf dtb_u_u754); Base_dSource.f_Span_spanStartLine = (Base_dSource.v_posLine dtb_u_u758); Base_dSource.f_Span_spanStartCol = (Base_dSource.v_posCol dtb_u_u758); Base_dSource.f_Span_spanEndLine = (Base_dSource.v_posLine dtb_u_u758); Base_dSource.f_Span_spanEndCol = (Base_dSource.v_posCol dtb_u_u758); Base_dSource.f_Span_spanStartOffset = (Base_dSource.v_posOffset dtb_u_u758); Base_dSource.f_Span_spanEndOffset = (Base_dSource.v_posOffset dtb_u_u758) }))) }; B_dData_dPair.f_Pair_second = dtb_u_u760 }))))
@@ -998,16 +998,16 @@ and v_parseRecordPatternField = (fun (dtb_u_u753 : int) (dtb_u_u754 : Frontend_d
 )
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2817 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2819 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternAtoms = (fun (dtb_u_u764 : int) (dtb_u_u765 : Frontend_dParser_dSupport.t_PState) (dtb_u_u766 : int) -> (if (dtb_u_u764 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (if (Frontend_dParser_dSupport.v_startsPatternAtom dtb_u_u765) then ((Frontend_dParser_dSupport.v_canContinue dtb_u_u765) dtb_u_u766) else false) then ((Base_dCommon.v_step (((v_parsePatternAtom (dtb_u_u764 - 1)) dtb_u_u765) dtb_u_u766)) (fun (dtb_u_u767 : Frontend_dAst.t_Pat) (dtb_u_u768 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parsePatternAtoms (dtb_u_u764 - 1)) dtb_u_u768) dtb_u_u766)) (fun (dtb_u_u769 : Frontend_dAst.t_Pat B_dData_dList.t_List) (dtb_u_u770 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u767, dtb_u_u769)); B_dData_dPair.f_Pair_second = dtb_u_u770 })))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb_u_u765 })))))
-# 2828 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2830 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternAtom = (fun (dtb_u_u771 : int) (dtb_u_u772 : Frontend_dParser_dSupport.t_PState) (dtb_u_u773 : int) -> (if (dtb_u_u771 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternAtomBase (dtb_u_u771 - 1)) dtb_u_u772) dtb_u_u773)) (fun (dtb_u_u774 : Frontend_dAst.t_Pat) (dtb_u_u775 : Frontend_dParser_dSupport.t_PState) -> (((((v_finishAsPattern (dtb_u_u771 - 1)) dtb_u_u772) dtb_u_u774) dtb_u_u775) dtb_u_u773)))))
-# 2838 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2840 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_finishAsPattern = (fun (dtb_u_u776 : int) (dtb_u_u777 : Frontend_dParser_dSupport.t_PState) (dtb_u_u778 : Frontend_dAst.t_Pat) (dtb_u_u779 : Frontend_dParser_dSupport.t_PState) (dtb_u_u780 : int) -> (if (dtb_u_u776 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u779) "@") then ((Frontend_dParser_dSupport.v_canContinue dtb_u_u779) dtb_u_u780) else false) then (let dtb_u_u781 = dtb_u_u778 in (match dtb_u_u781 with
   | Frontend_dAst.C_Pat_PVar (dtb_u_u782, dtb_u_u783) -> (if (dtb_u_u782 = "_") then ((Base_dCommon.v_step ((v_parseAsName (dtb_u_u776 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u779))) (fun (dtb_u_u784 : string) (dtb_u_u785 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PAs (dtb_u_u784, (Frontend_dAst.C_Pat_PWild (dtb_u_u783)), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u777) dtb_u_u785)))); B_dData_dPair.f_Pair_second = dtb_u_u785 })))) else ((Base_dCommon.v_step (((v_parsePatternAtom (dtb_u_u776 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u779)) dtb_u_u780)) (fun (dtb_u_u786 : Frontend_dAst.t_Pat) (dtb_u_u787 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PAs (dtb_u_u782, dtb_u_u786, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u777) dtb_u_u787)))); B_dData_dPair.f_Pair_second = dtb_u_u787 })))))
   | _ -> ((Base_dCommon.v_step ((v_parseAsName (dtb_u_u776 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u779))) (fun (dtb_u_u788 : string) (dtb_u_u789 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PAs (dtb_u_u788, dtb_u_u778, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u777) dtb_u_u789)))); B_dData_dPair.f_Pair_second = dtb_u_u789 }))))
 )) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u778; B_dData_dPair.f_Pair_second = dtb_u_u779 })))))
-# 2859 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2861 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternAtomBase = (fun (dtb_u_u790 : int) (dtb_u_u791 : Frontend_dParser_dSupport.t_PState) (dtb_u_u792 : int) -> (if (dtb_u_u790 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u793 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u791) in (match dtb_u_u793 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u794; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u795 } -> (match dtb_u_u794 with
   | Frontend_dLexer.C_Tok_TSym (dtb_u_u796) -> (if (dtb_u_u796 = "(") then (if ((Frontend_dParser_dSupport.v_atSym (Frontend_dParser_dSupport.v_advance dtb_u_u791)) ")") then (let dtb_u_u797 = (Frontend_dParser_dSupport.v_advance (Frontend_dParser_dSupport.v_advance dtb_u_u791)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PCon ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsTupleUnit), B_dData_dList.C_List_Nil, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u791) dtb_u_u797)))); B_dData_dPair.f_Pair_second = dtb_u_u797 }))) else ((Base_dCommon.v_step (((v_parsePatternSingle (dtb_u_u790 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u791)) dtb_u_u792)) (fun (dtb_u_u798 : Frontend_dAst.t_Pat) (dtb_u_u799 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u799) ",") then ((Base_dCommon.v_step ((((v_parsePatternTupleRest (dtb_u_u790 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u799)) dtb_u_u792) (B_dData_dList.C_List__x58__x58_ (dtb_u_u798, B_dData_dList.C_List_Nil)))) (fun (dtb_u_u800 : Frontend_dAst.t_Pat B_dData_dList.t_List) (dtb_u_u801 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_foldPairPats (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u791) dtb_u_u801))) dtb_u_u800); B_dData_dPair.f_Pair_second = dtb_u_u801 })))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u799) ")")) (fun (dtb_u_u802 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u798; B_dData_dPair.f_Pair_second = dtb_u_u802 })))))))) else (if (dtb_u_u796 = "[") then (((v_parseListPattern (dtb_u_u790 - 1)) dtb_u_u791) dtb_u_u792) else ((v_ps0 dtb_u_u791) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedPattern)))
@@ -1023,11 +1023,11 @@ and v_parsePatternAtomBase = (fun (dtb_u_u790 : int) (dtb_u_u791 : Frontend_dPar
 )
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2888 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2890 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseListPattern = (fun (dtb_u_u812 : int) (dtb_u_u813 : Frontend_dParser_dSupport.t_PState) (dtb_u_u814 : int) -> (if (dtb_u_u812 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u813) "[")) (fun (dtb_u_u815 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u815) "]") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Pat_PCon ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListNil), B_dData_dList.C_List_Nil, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u813) (Frontend_dParser_dSupport.v_advance dtb_u_u815))))); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u815) })) else ((Base_dCommon.v_step (((v_parseListPatternElems (dtb_u_u812 - 1)) dtb_u_u815) dtb_u_u814)) (fun (dtb_u_u816 : Frontend_dAst.t_Pat B_dData_dList.t_List) (dtb_u_u817 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_foldPCon (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u813) dtb_u_u817))) dtb_u_u816); B_dData_dPair.f_Pair_second = dtb_u_u817 })))))))))
-# 2897 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2899 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseListPatternElems = (fun (dtb_u_u818 : int) (dtb_u_u819 : Frontend_dParser_dSupport.t_PState) (dtb_u_u820 : int) -> (if (dtb_u_u818 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternSingle (dtb_u_u818 - 1)) dtb_u_u819) dtb_u_u820)) (fun (dtb_u_u821 : Frontend_dAst.t_Pat) (dtb_u_u822 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u822) ",") then ((Base_dCommon.v_step (((v_parseListPatternElems (dtb_u_u818 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u822)) dtb_u_u820)) (fun (dtb_u_u823 : Frontend_dAst.t_Pat B_dData_dList.t_List) (dtb_u_u824 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u821, dtb_u_u823)); B_dData_dPair.f_Pair_second = dtb_u_u824 })))) else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u822) "]") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u821, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u822) })) else ((v_ps0 dtb_u_u822) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedCommaOrBracket)))))))
-# 2912 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2914 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePatternTupleRest = (fun (dtb_u_u825 : int) (dtb_u_u826 : Frontend_dParser_dSupport.t_PState) (dtb_u_u827 : int) (dtb_u_u828 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (if (dtb_u_u825 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternSingle (dtb_u_u825 - 1)) dtb_u_u826) dtb_u_u827)) (fun (dtb_u_u829 : Frontend_dAst.t_Pat) (dtb_u_u830 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u830) ",") then ((((v_parsePatternTupleRest (dtb_u_u825 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u830)) dtb_u_u827) (B_dData_dList.C_List__x58__x58_ (dtb_u_u829, dtb_u_u828))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u830) ")")) (fun (dtb_u_u831 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (dtb_u_u829, dtb_u_u828))); B_dData_dPair.f_Pair_second = dtb_u_u831 })))))))))
 
 # 1390 "Vuna/Compiler/Frontend/Parser.vuna"
@@ -1137,14 +1137,14 @@ and v_parseAtomBase = (fun (dtb_u_u992 : int) (dtb_u_u993 : Frontend_dParser_dSu
   | Frontend_dLexer.C_Tok_TStr (dtb_u_u1015) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EStr (dtb_u_u1015, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) (Frontend_dParser_dSupport.v_advance dtb_u_u993))))); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u993) }))
   | Frontend_dLexer.C_Tok_TFloat (dtb_u_u1016) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EFloat (dtb_u_u1016, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) (Frontend_dParser_dSupport.v_advance dtb_u_u993))))); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u993) }))
   | Frontend_dLexer.C_Tok_TInt (dtb_u_u1017) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInt (dtb_u_u1017, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) (Frontend_dParser_dSupport.v_advance dtb_u_u993))))); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u993) }))
-  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u1018) -> (let dtb_u_u1019 = (Frontend_dParser_dSupport.v_advance dtb_u_u993) in (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1019) "{") then ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1019) "{")) (fun (dtb_u_u1020 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseRecordAssignments (dtb_u_u992 - 1)) dtb_u_u1020) dtb_u_u994)) (fun (dtb_u_u1021 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u1022 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecord (dtb_u_u1018, dtb_u_u1021, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) dtb_u_u1022)))); B_dData_dPair.f_Pair_second = dtb_u_u1022 })))))) else (if (((v_macroBangAt dtb_u_u1019) dtb_u_u997) dtb_u_u1018) then ((((v_parseMacroAtom (dtb_u_u992 - 1)) dtb_u_u993) dtb_u_u994) dtb_u_u1018) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb_u_u1018, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) dtb_u_u1019)))); B_dData_dPair.f_Pair_second = dtb_u_u1019 })))))
+  | Frontend_dLexer.C_Tok_TIdent (dtb_u_u1018) -> (let dtb_u_u1019 = (Frontend_dParser_dSupport.v_advance dtb_u_u993) in (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1019) "{") then (if (Frontend_dParser_dSupport.v_recordUpdateAhead dtb_u_u1019) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb_u_u1018, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) dtb_u_u1019)))); B_dData_dPair.f_Pair_second = dtb_u_u1019 })) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1019) "{")) (fun (dtb_u_u1020 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseRecordAssignments (dtb_u_u992 - 1)) dtb_u_u1020) dtb_u_u994)) (fun (dtb_u_u1021 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u1022 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ERecord (dtb_u_u1018, dtb_u_u1021, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) dtb_u_u1022)))); B_dData_dPair.f_Pair_second = dtb_u_u1022 }))))))) else (if (((v_macroBangAt dtb_u_u1019) dtb_u_u997) dtb_u_u1018) then ((((v_parseMacroAtom (dtb_u_u992 - 1)) dtb_u_u993) dtb_u_u994) dtb_u_u1018) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb_u_u1018, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u993) dtb_u_u1019)))); B_dData_dPair.f_Pair_second = dtb_u_u1019 })))))
   | _ -> ((v_ps0 dtb_u_u993) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedExpression)
 )
   | _ -> failwith "DT: impossible branch"
 ))))
-# 1989 "Vuna/Compiler/Frontend/Parser.vuna"
+# 1991 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseTemplateAtom = (fun (dtb_u_u1023 : int) (dtb_u_u1024 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1025 : bool) (dtb_u_u1026 : Frontend_dLexer.t_TmplPart B_dData_dList.t_List) (dtb_u_u1027 : Base_dSource.t_Pos) -> (if (dtb_u_u1023 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((((v_parseTemplateParts (dtb_u_u1023 - 1)) dtb_u_u1024) (Frontend_dParser_dSupport.v_tokSpan dtb_u_u1024)) dtb_u_u1026)) (fun (dtb_u_u1028 : (Frontend_dAst.t_InterpPart B_dData_dList.t_List, Frontend_dCst.t_CstNode B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (let dtb_u_u1029 = (B_dData_dPair.v_firstOf dtb_u_u1028) in (let dtb_u_u1030 = (B_dData_dPair.v_secondOf dtb_u_u1028) in (let dtb_u_u1031 = (Frontend_dParser_dSupport.v_advance dtb_u_u1024) in (let dtb_u_u1032 = (((Frontend_dParser_dSupport.v_addInterpMulti (Base_dSource.v_posOffset (Frontend_dParser_dSupport.v_peekPos dtb_u_u1024))) dtb_u_u1025) (((Frontend_dParser_dSupport.v_addTemplateHoles (dtb_u_u1024).Frontend_dParser_dSupport.f_PState_openNodeId) dtb_u_u1030) ((Frontend_dParser_dSupport.v_withLastPos dtb_u_u1027) dtb_u_u1031))) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EInterp (dtb_u_u1029, { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1024).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1024) dtb_u_u1032) })); B_dData_dPair.f_Pair_second = dtb_u_u1032 }))))))))))
-# 2005 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2007 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseTemplateParts = (fun (dtb_u_u1033 : int) (dtb_u_u1034 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1035 : Base_dSource.t_Span) (dtb_u_u1036 : Frontend_dLexer.t_TmplPart B_dData_dList.t_List) -> (if (dtb_u_u1033 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u1037 = dtb_u_u1036 in (match dtb_u_u1037 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u1038, dtb_u_u1039) -> (match dtb_u_u1038 with
   | Frontend_dLexer.C_TmplPart_TPHole (dtb_u_u1040) -> ((Base_dCommon.v_bind ((((v_parseTemplateHole (v_toksFuel dtb_u_u1040)) dtb_u_u1034) dtb_u_u1035) dtb_u_u1040)) (fun (dtb_u_u1041 : (Frontend_dAst.t_Expr, Frontend_dCst.t_CstNode) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_parseTemplateParts (dtb_u_u1033 - 1)) dtb_u_u1034) dtb_u_u1035) dtb_u_u1039)) (fun (dtb_u_u1042 : (Frontend_dAst.t_InterpPart B_dData_dList.t_List, Frontend_dCst.t_CstNode B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ((Frontend_dAst.C_InterpPart_IPHole ((B_dData_dPair.v_firstOf dtb_u_u1041))), (B_dData_dPair.v_firstOf dtb_u_u1042))); B_dData_dPair.f_Pair_second = (B_dData_dList.C_List__x58__x58_ ((B_dData_dPair.v_secondOf dtb_u_u1041), (B_dData_dPair.v_secondOf dtb_u_u1042))) }))))))
@@ -1154,7 +1154,7 @@ and v_parseTemplateParts = (fun (dtb_u_u1033 : int) (dtb_u_u1034 : Frontend_dPar
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2018 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2020 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseTemplateHole = (fun (dtb_u_u1045 : int) (dtb_u_u1046 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1047 : Base_dSource.t_Span) (dtb_u_u1048 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (if (dtb_u_u1045 <= 0) then (Base_dDiag.v_icFuel "parser") else (match dtb_u_u1048 with
   | B_dData_dList.C_List_Nil -> ((Base_dDiagnostics_dFrontend.v_psErr0At dtb_u_u1047) Base_dDiagnostics_dFrontend.C_PsDiag_TemplateHoleEmpty)
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u1049, dtb_u_u1050) -> (let dtb_u_u1051 = (dtb_u_u1049).Frontend_dLexer.f_PTok_ptokPos in (let dtb_u_u1052 = (Frontend_dParser_dSupport.v_fileOf dtb_u_u1046) in (let dtb_u_u1053 = (((((((Frontend_dParser_dSupport.v_mkStateAt dtb_u_u1052) (dtb_u_u1046).Frontend_dParser_dSupport.f_PState_sourceOf) dtb_u_u1048) dtb_u_u1051) (B_dData_dList.v_length dtb_u_u1048)) (Frontend_dParser_dSupport.v_pmodeOf dtb_u_u1046)) (Frontend_dParser_dSupport.v_eventMode dtb_u_u1046)) in (let dtb_u_u1054 = (((v_parseExpr (dtb_u_u1045 - 1)) dtb_u_u1053) 0) in (match dtb_u_u1054 with
@@ -1167,36 +1167,36 @@ and v_parseTemplateHole = (fun (dtb_u_u1045 : int) (dtb_u_u1046 : Frontend_dPars
 )))))
   | _ -> failwith "DT: impossible branch"
 )))
-# 2059 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2061 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseParenAtom = (fun (dtb_u_u1061 : int) (dtb_u_u1062 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1063 : int) -> (if (dtb_u_u1061 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1062) "(")) (fun (dtb_u_u1064 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1064) ")") then (let dtb_u_u1065 = (Frontend_dParser_dSupport.v_advance dtb_u_u1064) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsTupleUnit), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1062) dtb_u_u1065)))); B_dData_dPair.f_Pair_second = dtb_u_u1065 }))) else ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1061 - 1)) dtb_u_u1064) dtb_u_u1063)) (fun (dtb_u_u1066 : Frontend_dAst.t_Expr) (dtb_u_u1067 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1067) ",") then ((Base_dCommon.v_step ((((v_parseParenTupleRest (dtb_u_u1061 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u1067)) dtb_u_u1063) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1066, B_dData_dList.C_List_Nil)))) (fun (dtb_u_u1068 : Frontend_dAst.t_Expr B_dData_dList.t_List) (dtb_u_u1069 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_foldPairExprs (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1062) dtb_u_u1069))) dtb_u_u1068); B_dData_dPair.f_Pair_second = dtb_u_u1069 })))) else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1067) ":") then ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1061 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u1067)) dtb_u_u1063)) (fun (dtb_u_u1070 : Frontend_dAst.t_Expr) (dtb_u_u1071 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1071) ")")) (fun (dtb_u_u1072 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsAscribe), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1062) dtb_u_u1067)))), (B_dData_dList.C_List__x58__x58_ (dtb_u_u1066, (B_dData_dList.C_List__x58__x58_ (dtb_u_u1070, B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1062) dtb_u_u1072)))); B_dData_dPair.f_Pair_second = dtb_u_u1072 })))))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1067) ")")) (fun (dtb_u_u1073 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u1066; B_dData_dPair.f_Pair_second = dtb_u_u1073 })))))))))))))
-# 2075 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2077 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseParenTupleRest = (fun (dtb_u_u1074 : int) (dtb_u_u1075 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1076 : int) (dtb_u_u1077 : Frontend_dAst.t_Expr B_dData_dList.t_List) -> (if (dtb_u_u1074 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1074 - 1)) dtb_u_u1075) dtb_u_u1076)) (fun (dtb_u_u1078 : Frontend_dAst.t_Expr) (dtb_u_u1079 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1079) ",") then ((((v_parseParenTupleRest (dtb_u_u1074 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u1079)) dtb_u_u1076) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1078, dtb_u_u1077))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1079) ")")) (fun (dtb_u_u1080 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (dtb_u_u1078, dtb_u_u1077))); B_dData_dPair.f_Pair_second = dtb_u_u1080 })))))))))
-# 2094 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2096 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseSectionAtom = (fun (dtb_u_u1081 : int) (dtb_u_u1082 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1083 : int) (dtb_u_u1084 : string) -> (if (dtb_u_u1081 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1082) "(")) (fun (dtb_u_u1085 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1085) dtb_u_u1084)) (fun (dtb_u_u1086 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1086) ")") then (let dtb_u_u1087 = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1082) (Frontend_dParser_dSupport.v_advance dtb_u_u1086)) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar (dtb_u_u1084, { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1082).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = dtb_u_u1087 })); B_dData_dPair.f_Pair_second = (((Frontend_dParser_dSupport.v_addSectionShape (Base_dSource.v_spanStartOffset dtb_u_u1087)) (Frontend_dCst.C_SectionShape_SectionOp (dtb_u_u1084))) (Frontend_dParser_dSupport.v_advance dtb_u_u1086)) }))) else ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1081 - 1)) dtb_u_u1086) dtb_u_u1083)) (fun (dtb_u_u1088 : Frontend_dAst.t_Expr) (dtb_u_u1089 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1089) ")")) (fun (dtb_u_u1090 : Frontend_dParser_dSupport.t_PState) -> (let dtb_u_u1091 = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1082) dtb_u_u1090) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_sectionLeftExpr dtb_u_u1084) dtb_u_u1088) { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1082).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = dtb_u_u1091 }); B_dData_dPair.f_Pair_second = (((Frontend_dParser_dSupport.v_addSectionShape (Base_dSource.v_spanStartOffset dtb_u_u1091)) (Frontend_dCst.C_SectionShape_SectionLeft (dtb_u_u1084))) dtb_u_u1090) }))))))))))))))
-# 2139 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2141 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePiBinder = (fun (dtb_u_u1092 : int) (dtb_u_u1093 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1094 : int) (dtb_u_u1095 : Frontend_dAst.t_Qty B_dData_dMaybe.t_Maybe) (dtb_u_u1096 : string B_dData_dList.t_List) (dtb_u_u1097 : bool) (dtb_u_u1098 : string) (dtb_u_u1099 : string) -> (if (dtb_u_u1092 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (v_anyDottedName dtb_u_u1096) then ((v_ps0 dtb_u_u1093) Base_dDiagnostics_dFrontend.C_PsDiag_PiBinderNameNotSimple) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1093) dtb_u_u1098)) (fun (dtb_u_u1100 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((v_consumeQty dtb_u_u1100) dtb_u_u1095)) (fun (dtb_u_u1101 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step ((v_parsePiNames (dtb_u_u1092 - 1)) dtb_u_u1101)) (fun (dtb_u_u1102 : string B_dData_dList.t_List) (dtb_u_u1103 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1103) ":")) (fun (dtb_u_u1104 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1092 - 1)) dtb_u_u1104) dtb_u_u1094)) (fun (dtb_u_u1105 : Frontend_dAst.t_Expr) (dtb_u_u1106 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1106) dtb_u_u1099)) (fun (dtb_u_u1107 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1107) "->")) (fun (dtb_u_u1108 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1092 - 1)) dtb_u_u1108) dtb_u_u1094)) (fun (dtb_u_u1109 : Frontend_dAst.t_Expr) (dtb_u_u1110 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((((((v_foldPiNames dtb_u_u1102) dtb_u_u1097) dtb_u_u1095) dtb_u_u1105) dtb_u_u1109) (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1093) dtb_u_u1110))); B_dData_dPair.f_Pair_second = dtb_u_u1110 })))))))))))))))))))))
-# 2189 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2191 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseRecordAssignments = (fun (dtb_u_u1111 : int) (dtb_u_u1112 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1113 : int) -> (if (dtb_u_u1111 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1112) "}") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u1112) })) else ((Base_dCommon.v_step (((v_parseRecordAssignList (dtb_u_u1111 - 1)) dtb_u_u1112) dtb_u_u1113)) (fun (dtb_u_u1114 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u1115 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u1114; B_dData_dPair.f_Pair_second = dtb_u_u1115 })))))))
-# 2200 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2202 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseRecordAssignList = (fun (dtb_u_u1116 : int) (dtb_u_u1117 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1118 : int) -> (if (dtb_u_u1116 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (Frontend_dParser_dSupport.v_expectIdent dtb_u_u1117)) (fun (dtb_u_u1119 : string) (dtb_u_u1120 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1120) "=")) (fun (dtb_u_u1121 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1116 - 1)) dtb_u_u1121) dtb_u_u1118)) (fun (dtb_u_u1122 : Frontend_dAst.t_Expr) (dtb_u_u1123 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1123) ",") then ((Base_dCommon.v_step (((v_parseRecordAssignList (dtb_u_u1116 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u1123)) dtb_u_u1118)) (fun (dtb_u_u1124 : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u1125 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb_u_u1119; B_dData_dPair.f_Pair_second = dtb_u_u1122 }, dtb_u_u1124)); B_dData_dPair.f_Pair_second = dtb_u_u1125 })))) else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1123) "}")) (fun (dtb_u_u1126 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb_u_u1119; B_dData_dPair.f_Pair_second = dtb_u_u1122 }, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = dtb_u_u1126 })))))))))))))
-# 2209 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2211 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseListExpr = (fun (dtb_u_u1127 : int) (dtb_u_u1128 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1129 : int) -> (if (dtb_u_u1127 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1128) "[")) (fun (dtb_u_u1130 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1130) "]") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsListNil), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1128) (Frontend_dParser_dSupport.v_advance dtb_u_u1130))))); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u1130) })) else ((Base_dCommon.v_step (((v_parseListExprElems (dtb_u_u1127 - 1)) dtb_u_u1130) dtb_u_u1129)) (fun (dtb_u_u1131 : Frontend_dAst.t_Expr B_dData_dList.t_List) (dtb_u_u1132 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((v_foldCons (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1128) dtb_u_u1132))) dtb_u_u1131); B_dData_dPair.f_Pair_second = dtb_u_u1132 })))))))))
-# 2218 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2220 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseListExprElems = (fun (dtb_u_u1133 : int) (dtb_u_u1134 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1135 : int) -> (if (dtb_u_u1133 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1133 - 1)) dtb_u_u1134) dtb_u_u1135)) (fun (dtb_u_u1136 : Frontend_dAst.t_Expr) (dtb_u_u1137 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseListElemAt (dtb_u_u1133 - 1)) dtb_u_u1136) dtb_u_u1137)) (fun (dtb_u_u1138 : Frontend_dAst.t_Expr) (dtb_u_u1139 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1139) ",") then ((Base_dCommon.v_step (((v_parseListExprElems (dtb_u_u1133 - 1)) (Frontend_dParser_dSupport.v_advance dtb_u_u1139)) dtb_u_u1135)) (fun (dtb_u_u1140 : Frontend_dAst.t_Expr B_dData_dList.t_List) (dtb_u_u1141 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u1138, dtb_u_u1140)); B_dData_dPair.f_Pair_second = dtb_u_u1141 })))) else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1139) "]") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u1138, B_dData_dList.C_List_Nil)); B_dData_dPair.f_Pair_second = (Frontend_dParser_dSupport.v_advance dtb_u_u1139) })) else ((v_ps0 dtb_u_u1139) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedCommaOrBracket)))))))))
-# 2229 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2231 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseListElemAt = (fun (dtb_u_u1142 : int) (dtb_u_u1143 : Frontend_dAst.t_Expr) (dtb_u_u1144 : Frontend_dParser_dSupport.t_PState) -> (if (dtb_u_u1142 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1144) "@") then ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1144) "@")) (fun (dtb_u_u1145 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseAtom (dtb_u_u1142 - 1)) dtb_u_u1145) 0)) (fun (dtb_u_u1146 : Frontend_dAst.t_Expr) (dtb_u_u1147 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsRowAt), (Frontend_dAst.v_detachedNodeRef ((v_spanFromExpr dtb_u_u1143) dtb_u_u1147)))), (B_dData_dList.C_List__x58__x58_ (dtb_u_u1143, (B_dData_dList.C_List__x58__x58_ ((v_rowAtNameExpr dtb_u_u1146), B_dData_dList.C_List_Nil)))), (Frontend_dAst.v_detachedNodeRef ((v_spanFromExpr dtb_u_u1143) dtb_u_u1147)))); B_dData_dPair.f_Pair_second = dtb_u_u1147 })))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u1143; B_dData_dPair.f_Pair_second = dtb_u_u1144 })))))
-# 2245 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2247 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseLambda = (fun (dtb_u_u1148 : int) (dtb_u_u1149 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1150 : int) -> (if (dtb_u_u1148 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1149) "\\")) (fun (dtb_u_u1151 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (v_parseLambdaParam dtb_u_u1151)) (fun (dtb_u_u1152 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair) (dtb_u_u1153 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseLambdaParams (Frontend_dParser_dSupport.v_stateFuel dtb_u_u1153)) dtb_u_u1153) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1152, B_dData_dList.C_List_Nil)))) (fun (dtb_u_u1154 : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u1155 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1155) "=>")) (fun (dtb_u_u1156 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1148 - 1)) dtb_u_u1156) dtb_u_u1150)) (fun (dtb_u_u1157 : Frontend_dAst.t_Expr) (dtb_u_u1158 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELam (dtb_u_u1154, dtb_u_u1157, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1149) dtb_u_u1158)))); B_dData_dPair.f_Pair_second = dtb_u_u1158 }))))))))))))))
-# 2270 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2272 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseLet = (fun (dtb_u_u1159 : int) (dtb_u_u1160 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1161 : int) -> (if (dtb_u_u1159 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1160) "let")) (fun (dtb_u_u1162 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseLetBindings (dtb_u_u1159 - 1)) dtb_u_u1162) dtb_u_u1161)) (fun (dtb_u_u1163 : Frontend_dAst.t_Binding B_dData_dList.t_List) (dtb_u_u1164 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1164) "in")) (fun (dtb_u_u1165 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1159 - 1)) dtb_u_u1165) dtb_u_u1161)) (fun (dtb_u_u1166 : Frontend_dAst.t_Expr) (dtb_u_u1167 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ELet (dtb_u_u1163, dtb_u_u1166, false, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1160) dtb_u_u1167)))); B_dData_dPair.f_Pair_second = dtb_u_u1167 }))))))))))))
-# 2281 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2283 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseLetBindings = (fun (dtb_u_u1168 : int) (dtb_u_u1169 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1170 : int) -> (if (dtb_u_u1168 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1169) then ((v_ps0 dtb_u_u1169) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedLetBinding) else (if ((Frontend_dParser_dSupport.v_atKw dtb_u_u1169) "in") then ((v_ps0 dtb_u_u1169) Base_dDiagnostics_dFrontend.C_PsDiag_ExpectedLetBinding) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1169) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1171; Base_dSource.f_Pos_posCol = dtb_u_u1172; Base_dSource.f_Pos_posOffset = dtb_u_u1173; Base_dSource.f_Pos_posEndOffset = dtb_u_u1174 } -> (if (dtb_u_u1172 <= dtb_u_u1170) then ((v_ps0 dtb_u_u1169) Base_dDiagnostics_dFrontend.C_PsDiag_LetBindingNotIndented) else ((Base_dCommon.v_step (((v_parseBindingItemsAt (dtb_u_u1168 - 1)) dtb_u_u1169) dtb_u_u1172)) (fun (dtb_u_u1175 : t_BindingItem B_dData_dList.t_List) (dtb_u_u1176 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind (v_bindingItemsToBinds dtb_u_u1175)) (fun (dtb_u_u1177 : Frontend_dAst.t_Binding B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u1177; B_dData_dPair.f_Pair_second = dtb_u_u1176 })))))))
   | _ -> failwith "DT: impossible branch"
 )))))
-# 2293 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2295 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseCase = (fun (dtb_u_u1178 : int) (dtb_u_u1179 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1180 : int) -> (if (dtb_u_u1178 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1179) "case")) (fun (dtb_u_u1181 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1178 - 1)) dtb_u_u1181) dtb_u_u1180)) (fun (dtb_u_u1182 : Frontend_dAst.t_Expr) (dtb_u_u1183 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1183) "of")) (fun (dtb_u_u1184 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseCaseAlts (dtb_u_u1178 - 1)) dtb_u_u1184) dtb_u_u1180)) (fun (dtb_u_u1185 : Frontend_dAst.t_Alt B_dData_dList.t_List) (dtb_u_u1186 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_ECase (dtb_u_u1182, dtb_u_u1185, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1179) dtb_u_u1186)))); B_dData_dPair.f_Pair_second = dtb_u_u1186 }))))))))))))
-# 2302 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2304 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseCaseAlts = (fun (dtb_u_u1187 : int) (dtb_u_u1188 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1189 : int) -> (if (dtb_u_u1187 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1188) then ((v_ps0 dtb_u_u1188) Base_dDiagnostics_dFrontend.C_PsDiag_CaseNeedsAlternative) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1188) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1190; Base_dSource.f_Pos_posCol = dtb_u_u1191; Base_dSource.f_Pos_posOffset = dtb_u_u1192; Base_dSource.f_Pos_posEndOffset = dtb_u_u1193 } -> (if (dtb_u_u1191 <= dtb_u_u1189) then ((v_ps0 dtb_u_u1188) Base_dDiagnostics_dFrontend.C_PsDiag_CaseAltNotIndented) else ((Base_dCommon.v_step (((v_parseAltList (dtb_u_u1187 - 1)) dtb_u_u1188) dtb_u_u1191)) (fun (dtb_u_u1194 : Frontend_dAst.t_Alt B_dData_dList.t_List) (dtb_u_u1195 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_badCaseIndent dtb_u_u1195) dtb_u_u1191) then ((v_ps0 dtb_u_u1195) Base_dDiagnostics_dFrontend.C_PsDiag_UnexpectedIndentAfterCaseAlt) else (match dtb_u_u1194 with
   | B_dData_dList.C_List_Nil -> ((v_ps0 dtb_u_u1195) Base_dDiagnostics_dFrontend.C_PsDiag_CaseNeedsAlternative)
@@ -1204,24 +1204,24 @@ and v_parseCaseAlts = (fun (dtb_u_u1187 : int) (dtb_u_u1188 : Frontend_dParser_d
 )))))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2324 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2326 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseAltList = (fun (dtb_u_u1196 : int) (dtb_u_u1197 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1198 : int) -> (if (dtb_u_u1196 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1197) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb_u_u1197 })) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1197) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1199; Base_dSource.f_Pos_posCol = dtb_u_u1200; Base_dSource.f_Pos_posOffset = dtb_u_u1201; Base_dSource.f_Pos_posEndOffset = dtb_u_u1202 } -> (if (dtb_u_u1200 = dtb_u_u1198) then ((Base_dCommon.v_step (((v_parseAlt (dtb_u_u1196 - 1)) dtb_u_u1197) dtb_u_u1198)) (fun (dtb_u_u1203 : Frontend_dAst.t_Alt) (dtb_u_u1204 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseAltList (dtb_u_u1196 - 1)) dtb_u_u1204) dtb_u_u1198)) (fun (dtb_u_u1205 : Frontend_dAst.t_Alt B_dData_dList.t_List) (dtb_u_u1206 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.C_List__x58__x58_ (dtb_u_u1203, dtb_u_u1205)); B_dData_dPair.f_Pair_second = dtb_u_u1206 })))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb_u_u1197 })))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2335 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2337 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseAlt = (fun (dtb_u_u1207 : int) (dtb_u_u1208 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1209 : int) -> ((((Frontend_dParser_dSupport.v_withExtent Frontend_dCst.C_CstKind_CstAltKind) v_semAlt) dtb_u_u1208) (fun (dtb_u_u1210 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseAltBody dtb_u_u1207) dtb_u_u1210) dtb_u_u1209)) (fun (dtb_u_u1211 : Frontend_dAst.t_Alt) (dtb_u_u1212 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Alt_altPat = (dtb_u_u1211).Frontend_dAst.f_Alt_altPat; Frontend_dAst.f_Alt_altBody = (dtb_u_u1211).Frontend_dAst.f_Alt_altBody; Frontend_dAst.f_Alt_altRef = { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1210).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1208) dtb_u_u1212) } }; B_dData_dPair.f_Pair_second = dtb_u_u1212 })))))))
-# 2343 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2345 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseAltBody = (fun (dtb_u_u1213 : int) (dtb_u_u1214 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1215 : int) -> ((Base_dCommon.v_step (((v_parsePatternSingle (Frontend_dParser_dSupport.v_stateFuel dtb_u_u1214)) dtb_u_u1214) dtb_u_u1215)) (fun (dtb_u_u1216 : Frontend_dAst.t_Pat) (dtb_u_u1217 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((v_checkBindersAt dtb_u_u1214) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1216, B_dData_dList.C_List_Nil)))) (fun (dtb_u_u1218 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1217) "=>")) (fun (dtb_u_u1219 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1213 - 1)) dtb_u_u1219) dtb_u_u1215)) (fun (dtb_u_u1220 : Frontend_dAst.t_Expr) (dtb_u_u1221 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { Frontend_dAst.f_Alt_altPat = dtb_u_u1216; Frontend_dAst.f_Alt_altBody = dtb_u_u1220; Frontend_dAst.f_Alt_altRef = { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1214).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1214) dtb_u_u1221) } }; B_dData_dPair.f_Pair_second = dtb_u_u1221 })))))))))))
-# 2356 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2358 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parsePerform = (fun (dtb_u_u1222 : int) (dtb_u_u1223 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1224 : int) -> (if (dtb_u_u1222 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1223) "perform")) (fun (dtb_u_u1225 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseApplication (dtb_u_u1222 - 1)) dtb_u_u1225) dtb_u_u1224)) (fun (dtb_u_u1226 : Frontend_dAst.t_Expr) (dtb_u_u1227 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsPerform), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1223) dtb_u_u1227)))), (B_dData_dList.C_List__x58__x58_ (dtb_u_u1226, B_dData_dList.C_List_Nil)), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1223) dtb_u_u1227)))); B_dData_dPair.f_Pair_second = dtb_u_u1227 }))))))))
-# 2385 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2387 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandle = (fun (dtb_u_u1228 : int) (dtb_u_u1229 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1230 : int) -> (if (dtb_u_u1228 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1229) "handle")) (fun (dtb_u_u1231 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseHandleComp (dtb_u_u1228 - 1)) dtb_u_u1231) dtb_u_u1230)) (fun (dtb_u_u1232 : Frontend_dAst.t_Expr) (dtb_u_u1233 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1233) "{")) (fun (dtb_u_u1234 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseHandleBody (dtb_u_u1228 - 1)) dtb_u_u1234) dtb_u_u1230)) (fun (dtb_u_u1235 : t_HandleBlock) (dtb_u_u1236 : Frontend_dParser_dSupport.t_PState) -> (match (((v_handleExpr dtb_u_u1232) dtb_u_u1235) (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1229) dtb_u_u1236))) with
   | Base_dDiag.C_Check_ErrC (dtb_u_u1237) -> (Base_dDiag.C_Check_ErrC (dtb_u_u1237))
   | Base_dDiag.C_Check_OkC (dtb_u_u1238) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb_u_u1238; B_dData_dPair.f_Pair_second = dtb_u_u1236 }))
   | _ -> failwith "DT: impossible branch"
 )))))))))))
-# 2407 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2409 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleComp = (fun (dtb_u_u1239 : int) (dtb_u_u1240 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1241 : int) -> (if (dtb_u_u1239 <= 0) then (Base_dDiag.v_icFuel "parser") else (let dtb_u_u1242 = (Frontend_dParser_dSupport.v_peekTok dtb_u_u1240) in (match dtb_u_u1242 with
   | { Frontend_dLexer.f_PTok_ptokTok = dtb_u_u1243; Frontend_dLexer.f_PTok_ptokPos = dtb_u_u1244 } -> (match dtb_u_u1243 with
   | Frontend_dLexer.C_Tok_TIdent (dtb_u_u1245) -> (let dtb_u_u1246 = ((Frontend_dParser_dSupport.v_peekTokAt dtb_u_u1240) 1) in (match dtb_u_u1246 with
@@ -1238,7 +1238,7 @@ and v_parseHandleComp = (fun (dtb_u_u1239 : int) (dtb_u_u1240 : Frontend_dParser
 )
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2420 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2422 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleBody = (fun (dtb_u_u1251 : int) (dtb_u_u1252 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1253 : int) -> (if (dtb_u_u1251 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1252) "}") then ((v_ps0 dtb_u_u1252) Base_dDiagnostics_dFrontend.C_PsDiag_HandleNeedsOpClause) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1252) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1254; Base_dSource.f_Pos_posCol = dtb_u_u1255; Base_dSource.f_Pos_posOffset = dtb_u_u1256; Base_dSource.f_Pos_posEndOffset = dtb_u_u1257 } -> (if (dtb_u_u1255 <= dtb_u_u1253) then ((v_ps0 dtb_u_u1252) Base_dDiagnostics_dFrontend.C_PsDiag_HandleClauseNotIndented) else ((Base_dCommon.v_step (((((v_parseHandleClauses (dtb_u_u1251 - 1)) dtb_u_u1252) dtb_u_u1255) B_dData_dMaybe.C_Maybe_Nothing) B_dData_dList.C_List_Nil)) (fun (dtb_u_u1258 : ((string, (Frontend_dAst.t_Expr, Frontend_dAst.t_NodeRef) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe, t_HandleOp B_dData_dList.t_List) B_dData_dPair.t_Pair) (dtb_u_u1259 : Frontend_dParser_dSupport.t_PState) -> (match dtb_u_u1258 with
   | { B_dData_dPair.f_Pair_first = dtb_u_u1260; B_dData_dPair.f_Pair_second = dtb_u_u1261 } -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1259) "}")) (fun (dtb_u_u1262 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_HandleBlock_HandleBlock (dtb_u_u1260, dtb_u_u1261)); B_dData_dPair.f_Pair_second = dtb_u_u1262 }))))
@@ -1246,7 +1246,7 @@ and v_parseHandleBody = (fun (dtb_u_u1251 : int) (dtb_u_u1252 : Frontend_dParser
 ))))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2446 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2448 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleClauses = (fun (dtb_u_u1263 : int) (dtb_u_u1264 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1265 : int) (dtb_u_u1266 : (string, (Frontend_dAst.t_Expr, Frontend_dAst.t_NodeRef) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) (dtb_u_u1267 : t_HandleOp B_dData_dList.t_List) -> (if (dtb_u_u1263 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1264) then ((v_ps0 dtb_u_u1264) Base_dDiagnostics_dFrontend.C_PsDiag_UnexpectedEndOfInput) else (if ((Frontend_dParser_dSupport.v_atSym dtb_u_u1264) "}") then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u1266; B_dData_dPair.f_Pair_second = (B_dData_dList.v_reverse dtb_u_u1267) }; B_dData_dPair.f_Pair_second = dtb_u_u1264 })) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1264) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1268; Base_dSource.f_Pos_posCol = dtb_u_u1269; Base_dSource.f_Pos_posOffset = dtb_u_u1270; Base_dSource.f_Pos_posEndOffset = dtb_u_u1271 } -> (if (dtb_u_u1269 = dtb_u_u1265) then (if (v_isReturnClauseHead dtb_u_u1264) then (match dtb_u_u1266 with
   | B_dData_dMaybe.C_Maybe_Just (dtb_u_u1272) -> ((v_ps0 dtb_u_u1264) Base_dDiagnostics_dFrontend.C_PsDiag_HandleReturnMisplaced)
@@ -1265,11 +1265,11 @@ and v_parseHandleClauses = (fun (dtb_u_u1263 : int) (dtb_u_u1264 : Frontend_dPar
 ) else ((Base_dCommon.v_step (((v_parseHandleOpClause (dtb_u_u1263 - 1)) dtb_u_u1264) dtb_u_u1265)) (fun (dtb_u_u1282 : t_HandleOp) (dtb_u_u1283 : Frontend_dParser_dSupport.t_PState) -> (((((v_parseHandleClauses (dtb_u_u1263 - 1)) dtb_u_u1283) dtb_u_u1265) dtb_u_u1266) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1282, dtb_u_u1267)))))) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u1266; B_dData_dPair.f_Pair_second = (B_dData_dList.v_reverse dtb_u_u1267) }; B_dData_dPair.f_Pair_second = dtb_u_u1264 })))
   | _ -> failwith "DT: impossible branch"
 )))))
-# 2476 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2478 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleRetClause = (fun (dtb_u_u1284 : int) (dtb_u_u1285 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1286 : int) -> (if (dtb_u_u1284 <= 0) then (Base_dDiag.v_icFuel "parser") else ((((Frontend_dParser_dSupport.v_withExtent Frontend_dCst.C_CstKind_CstAltKind) v_semHandleRet) dtb_u_u1285) (fun (dtb_u_u1287 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (Frontend_dParser_dSupport.v_expectIdent dtb_u_u1287)) (fun (dtb_u_u1288 : string) (dtb_u_u1289 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (Frontend_dParser_dSupport.v_expectIdent dtb_u_u1289)) (fun (dtb_u_u1290 : string) (dtb_u_u1291 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1291) "->")) (fun (dtb_u_u1292 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1284 - 1)) dtb_u_u1292) dtb_u_u1286)) (fun (dtb_u_u1293 : Frontend_dAst.t_Expr) (dtb_u_u1294 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = dtb_u_u1290; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb_u_u1293; B_dData_dPair.f_Pair_second = { Frontend_dAst.f_NodeRef_nodeRefId = (dtb_u_u1287).Frontend_dParser_dSupport.f_PState_openNodeId; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1287) dtb_u_u1294) } } }; B_dData_dPair.f_Pair_second = dtb_u_u1294 }))))))))))))))
-# 2488 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2490 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleOpClause = (fun (dtb_u_u1295 : int) (dtb_u_u1296 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1297 : int) -> (if (dtb_u_u1295 <= 0) then (Base_dDiag.v_icFuel "parser") else ((((Frontend_dParser_dSupport.v_withExtent Frontend_dCst.C_CstKind_CstAltKind) v_semHandleOp) dtb_u_u1296) (fun (dtb_u_u1298 : Frontend_dParser_dSupport.t_PState) -> ((((v_parseHandleOpClauseBody dtb_u_u1295) dtb_u_u1298) dtb_u_u1297) (dtb_u_u1298).Frontend_dParser_dSupport.f_PState_openNodeId)))))
-# 2500 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2502 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleOpClauseBody = (fun (dtb_u_u1299 : int) (dtb_u_u1300 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1301 : int) (dtb_u_u1302 : int) -> (if (dtb_u_u1299 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternSingle (Frontend_dParser_dSupport.v_stateFuel dtb_u_u1300)) dtb_u_u1300) dtb_u_u1301)) (fun (dtb_u_u1303 : Frontend_dAst.t_Pat) (dtb_u_u1304 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((v_checkBindersAt dtb_u_u1300) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1303, B_dData_dList.C_List_Nil)))) (fun (dtb_u_u1305 : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (match dtb_u_u1303 with
   | Frontend_dAst.C_Pat_PCon (dtb_u_u1306, dtb_u_u1307, dtb_u_u1308) -> (match (B_dData_dList.v_reverse dtb_u_u1307) with
   | B_dData_dList.C_List_Nil -> ((Base_dDiagnostics_dFrontend.v_psErr0At (Frontend_dAst.v_nodeRefSpan dtb_u_u1308)) Base_dDiagnostics_dFrontend.C_PsDiag_HandleClauseNeedsCtor)
@@ -1282,11 +1282,11 @@ and v_parseHandleOpClauseBody = (fun (dtb_u_u1299 : int) (dtb_u_u1300 : Frontend
 )
   | _ -> ((v_ps0 dtb_u_u1300) Base_dDiagnostics_dFrontend.C_PsDiag_HandleClauseNeedsCtor)
 )))))))
-# 2523 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2525 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_handleOpTail = (fun (dtb_u_u1314 : int) (dtb_u_u1315 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1316 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1317 : int) (dtb_u_u1318 : string) (dtb_u_u1319 : Frontend_dAst.t_Pat B_dData_dList.t_List) (dtb_u_u1320 : Frontend_dAst.t_NodeRef) (dtb_u_u1321 : int) (dtb_u_u1322 : string) -> (if (dtb_u_u1314 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym dtb_u_u1316) "->")) (fun (dtb_u_u1323 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1314 - 1)) dtb_u_u1323) dtb_u_u1317)) (fun (dtb_u_u1324 : Frontend_dAst.t_Expr) (dtb_u_u1325 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (C_HandleOp_HandleOp (dtb_u_u1318, dtb_u_u1319, dtb_u_u1320, { Frontend_dAst.f_NodeRef_nodeRefId = dtb_u_u1321; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1315) dtb_u_u1325) }, dtb_u_u1322, dtb_u_u1324)); B_dData_dPair.f_Pair_second = dtb_u_u1325 }))))))))
-# 2575 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2577 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseIf = (fun (dtb_u_u1326 : int) (dtb_u_u1327 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1328 : int) -> (if (dtb_u_u1326 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1327) "if")) (fun (dtb_u_u1329 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1326 - 1)) dtb_u_u1329) dtb_u_u1328)) (fun (dtb_u_u1330 : Frontend_dAst.t_Expr) (dtb_u_u1331 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1331) "then")) (fun (dtb_u_u1332 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1326 - 1)) dtb_u_u1332) dtb_u_u1328)) (fun (dtb_u_u1333 : Frontend_dAst.t_Expr) (dtb_u_u1334 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1334) "else")) (fun (dtb_u_u1335 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1326 - 1)) dtb_u_u1335) dtb_u_u1328)) (fun (dtb_u_u1336 : Frontend_dAst.t_Expr) (dtb_u_u1337 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EIf (dtb_u_u1330, dtb_u_u1333, dtb_u_u1336, (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1327) dtb_u_u1337)))); B_dData_dPair.f_Pair_second = dtb_u_u1337 }))))))))))))))))
-# 2586 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2588 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseDo = (fun (dtb_u_u1338 : int) (dtb_u_u1339 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1340 : int) -> (if (dtb_u_u1338 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1339) "do")) (fun (dtb_u_u1341 : Frontend_dParser_dSupport.t_PState) -> (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1341) then ((v_ps0 dtb_u_u1341) Base_dDiagnostics_dFrontend.C_PsDiag_DoBlockNeedsStatement) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1341) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1342; Base_dSource.f_Pos_posCol = dtb_u_u1343; Base_dSource.f_Pos_posOffset = dtb_u_u1344; Base_dSource.f_Pos_posEndOffset = dtb_u_u1345 } -> (if (dtb_u_u1343 <= dtb_u_u1340) then ((v_ps0 dtb_u_u1341) Base_dDiagnostics_dFrontend.C_PsDiag_DoStatementNotIndented) else ((Base_dCommon.v_step ((((v_parseDoStmts (dtb_u_u1338 - 1)) dtb_u_u1341) dtb_u_u1343) B_dData_dList.C_List_Nil)) (fun (dtb_u_u1346 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) (dtb_u_u1347 : Frontend_dParser_dSupport.t_PState) -> (let dtb_u_u1348 = (B_dData_dList.v_reverse dtb_u_u1346) in (match dtb_u_u1348 with
   | B_dData_dList.C_List__x58__x58_ (dtb_u_u1349, dtb_u_u1350) -> (match dtb_u_u1349 with
@@ -1297,7 +1297,7 @@ and v_parseDo = (fun (dtb_u_u1338 : int) (dtb_u_u1339 : Frontend_dParser_dSuppor
 )))))
   | _ -> failwith "DT: impossible branch"
 ))))))
-# 2609 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2611 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseDoStmts = (fun (dtb_u_u1353 : int) (dtb_u_u1354 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1355 : int) (dtb_u_u1356 : Frontend_dAst.t_DoStmt B_dData_dList.t_List) -> (if (dtb_u_u1353 <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1354) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse dtb_u_u1356); B_dData_dPair.f_Pair_second = dtb_u_u1354 })) else (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1354) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1357; Base_dSource.f_Pos_posCol = dtb_u_u1358; Base_dSource.f_Pos_posOffset = dtb_u_u1359; Base_dSource.f_Pos_posEndOffset = dtb_u_u1360 } -> (if (dtb_u_u1358 < dtb_u_u1355) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse dtb_u_u1356); B_dData_dPair.f_Pair_second = dtb_u_u1354 })) else (if (dtb_u_u1358 > dtb_u_u1355) then ((v_ps0 dtb_u_u1354) Base_dDiagnostics_dFrontend.C_PsDiag_UnexpectedIndentInDo) else ((Base_dCommon.v_step (((v_parseDoStmt (dtb_u_u1353 - 1)) dtb_u_u1354) dtb_u_u1355)) (fun (dtb_u_u1361 : Frontend_dAst.t_DoStmt) (dtb_u_u1362 : Frontend_dParser_dSupport.t_PState) -> (match (Frontend_dParser_dSupport.v_peekPos dtb_u_u1362) with
   | { Base_dSource.f_Pos_posLine = dtb_u_u1363; Base_dSource.f_Pos_posCol = dtb_u_u1364; Base_dSource.f_Pos_posOffset = dtb_u_u1365; Base_dSource.f_Pos_posEndOffset = dtb_u_u1366 } -> (if (Frontend_dParser_dSupport.v_isEof dtb_u_u1362) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (dtb_u_u1361, dtb_u_u1356))); B_dData_dPair.f_Pair_second = dtb_u_u1362 })) else (if (dtb_u_u1364 < dtb_u_u1355) then (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (B_dData_dList.v_reverse (B_dData_dList.C_List__x58__x58_ (dtb_u_u1361, dtb_u_u1356))); B_dData_dPair.f_Pair_second = dtb_u_u1362 })) else (if (dtb_u_u1364 > dtb_u_u1355) then ((v_ps0 dtb_u_u1362) Base_dDiagnostics_dFrontend.C_PsDiag_UnexpectedIndentInDo) else ((((v_parseDoStmts (dtb_u_u1353 - 1)) dtb_u_u1362) dtb_u_u1355) (B_dData_dList.C_List__x58__x58_ (dtb_u_u1361, dtb_u_u1356))))))
@@ -1305,9 +1305,9 @@ and v_parseDoStmts = (fun (dtb_u_u1353 : int) (dtb_u_u1354 : Frontend_dParser_dS
 )))))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 2630 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2632 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseDoStmt = (fun (dtb_u_u1367 : int) (dtb_u_u1368 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1369 : int) -> ((((Frontend_dParser_dSupport.v_withExtent Frontend_dCst.C_CstKind_CstDoStmtKind) v_semDoStmt) dtb_u_u1368) (fun (dtb_u_u1370 : Frontend_dParser_dSupport.t_PState) -> ((((v_parseDoStmtBody dtb_u_u1367) dtb_u_u1370) dtb_u_u1369) (dtb_u_u1370).Frontend_dParser_dSupport.f_PState_openNodeId))))
-# 2653 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2655 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseDoStmtBody = (fun (dtb_u_u1371 : int) (dtb_u_u1372 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1373 : int) (dtb_u_u1374 : int) -> (if (dtb_u_u1371 <= 0) then (Base_dDiag.v_icFuel "parser") else (if ((Frontend_dParser_dSupport.v_atKw dtb_u_u1372) "let") then ((((v_doLetOrExpr dtb_u_u1371) dtb_u_u1372) dtb_u_u1373) dtb_u_u1374) else (let dtb_u_u1375 = (((v_parsePatternSingle (Frontend_dParser_dSupport.v_stateFuel dtb_u_u1372)) dtb_u_u1372) dtb_u_u1373) in (match dtb_u_u1375 with
   | Base_dDiag.C_Check_ErrC (dtb_u_u1376) -> (if ((v_doStmtBindsAhead dtb_u_u1372) dtb_u_u1373) then (Base_dDiag.C_Check_ErrC (dtb_u_u1376)) else ((((v_parseDoExprStmt (dtb_u_u1371 - 1)) dtb_u_u1372) dtb_u_u1373) dtb_u_u1374))
   | Base_dDiag.C_Check_OkC (dtb_u_u1377) -> (match dtb_u_u1377 with
@@ -1316,7 +1316,7 @@ and v_parseDoStmtBody = (fun (dtb_u_u1371 : int) (dtb_u_u1372 : Frontend_dParser
 )
   | _ -> failwith "DT: impossible branch"
 )))))
-# 2671 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2673 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_doLetOrExpr = (fun (dtb_u_u1384 : int) (dtb_u_u1385 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1386 : int) (dtb_u_u1387 : int) -> (if (dtb_u_u1384 <= 0) then (Base_dDiag.v_icFuel "parser") else (match ((Frontend_dParser_dSupport.v_expectKw dtb_u_u1385) "let") with
   | Base_dDiag.C_Check_ErrC (dtb_u_u1388) -> (Base_dDiag.C_Check_ErrC (dtb_u_u1388))
   | Base_dDiag.C_Check_OkC (dtb_u_u1389) -> (let dtb_u_u1390 = (((v_parseLetBindings (dtb_u_u1384 - 1)) dtb_u_u1389) dtb_u_u1386) in (match dtb_u_u1390 with
@@ -1329,7 +1329,7 @@ and v_doLetOrExpr = (fun (dtb_u_u1384 : int) (dtb_u_u1385 : Frontend_dParser_dSu
 ))
   | _ -> failwith "DT: impossible branch"
 )))
-# 2683 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2685 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseDoExprStmt = (fun (dtb_u_u1395 : int) (dtb_u_u1396 : Frontend_dParser_dSupport.t_PState) (dtb_u_u1397 : int) (dtb_u_u1398 : int) -> (if (dtb_u_u1395 <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parseExpr (dtb_u_u1395 - 1)) (Frontend_dParser_dSupport.v_sameLineState dtb_u_u1396)) dtb_u_u1397)) (fun (dtb_u_u1399 : Frontend_dAst.t_Expr) (dtb_u_u1400 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_DoStmt_DExpr (dtb_u_u1399, { Frontend_dAst.f_NodeRef_nodeRefId = dtb_u_u1398; Frontend_dAst.f_NodeRef_nodeRefSpan = ((Frontend_dParser_dSupport.v_spanOf dtb_u_u1396) dtb_u_u1400) })); B_dData_dPair.f_Pair_second = dtb_u_u1400 }))))))
 
 # 110 "Vuna/Compiler/Frontend/Parser.vuna"
@@ -1720,10 +1720,10 @@ let v_parseSource = (fun (dtb_u_u1999 : string) (dtb_u_u2000 : string) -> (let d
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 2942 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2944 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parseSourceRecoveringTokens = (fun (dtb_u_u2006 : string) (dtb_u_u2007 : string) (dtb_u_u2008 : Frontend_dParser_dSupport.t_ParseMode) (dtb_u_u2009 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> (let dtb_u_u2010 = (((((Frontend_dParser_dSupport.v_mkState dtb_u_u2006) dtb_u_u2007) dtb_u_u2009) dtb_u_u2008) Frontend_dParser_dSupport.C_EventMode_EvLayout) in ((Base_dCommon.v_bind ((v_parseSourceFile true) dtb_u_u2010)) (fun (dtb_u_u2011 : ((Frontend_dAst.t_SourceFile, Frontend_dParser_dSupport.t_PState) B_dData_dPair.t_Pair, Base_dDiag.t_Diagnostic B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (let dtb_u_u2012 = (B_dData_dPair.v_secondOf (B_dData_dPair.v_firstOf dtb_u_u2011)) in (let dtb_u_u2013 = (Frontend_dParser_dSupport.v_eventsOf dtb_u_u2012) in (let dtb_u_u2014 = ((Frontend_dCst.v_parenEntriesOf dtb_u_u2009) dtb_u_u2013) in (let dtb_u_u2015 = ((B_dData_dList.v_concatMap B_dData_dPair.v_secondOf) (dtb_u_u2012).Frontend_dParser_dSupport.f_PState_templateHoles) in (let dtb_u_u2016 = ((((Frontend_dCst.v_fixityFactsOfParts dtb_u_u2014) (dtb_u_u2012).Frontend_dParser_dSupport.f_PState_backtickShapes) (dtb_u_u2012).Frontend_dParser_dSupport.f_PState_sectionShapes) dtb_u_u2015) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf (B_dData_dPair.v_firstOf dtb_u_u2011)); B_dData_dPair.f_Pair_second = dtb_u_u2016 }; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf dtb_u_u2011) })))))))))))
 
-# 2930 "Vuna/Compiler/Frontend/Parser.vuna"
+# 2932 "Vuna/Compiler/Frontend/Parser.vuna"
 let v_parseSourceRecovering = (fun (dtb_u_u2017 : string) (dtb_u_u2018 : string) -> ((Base_dCommon.v_bind (Frontend_dLexer.v_lexSource dtb_u_u2018)) (fun (dtb_u_u2019 : Frontend_dLexer.t_PTok B_dData_dList.t_List) -> ((((v_parseSourceRecoveringTokens dtb_u_u2017) dtb_u_u2018) Frontend_dParser_dSupport.C_ParseMode_PmStrict) dtb_u_u2019))))
 
 # 36 "Vuna/Compiler/Frontend/Parser.vuna"

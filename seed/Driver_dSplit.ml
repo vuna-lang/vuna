@@ -202,23 +202,43 @@ let v_splitText = (fun (dtb_u_u119 : t_SplitFile) -> (match dtb_u_u119 with
 
 # 33 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_writeSplitFiles = (fun (dtb_u_u123 : string) (dtb_u_u126 : string) (dtb_u_u127 : t_SplitFile B_dData_dList.t_List) -> (match dtb_u_u127 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u128, dtb_u_u129) -> (Obj.repr ((fun (dtb_u_u134 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u135 = Obj.obj ((((v_writeSplitFiles dtb_u_u123) dtb_u_u126) dtb_u_u129)) in (let dtb_u_u137 = (dtb_u_u135 dtb_u_u134) in (match dtb_u_u137 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u128, dtb_u_u129) -> (Obj.repr ((fun (dtb_u_u134 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u137 = ((((v_writeSplitFiles_u_udirect dtb_u_u123) dtb_u_u126) dtb_u_u129) dtb_u_u134) in (match dtb_u_u137 with
   | Base_dDiag.C_Check_ErrC (dtb_u_u138) -> (let dtb_u_u140 = (Base_dDiag.C_Check_ErrC (dtb_u_u138)) in dtb_u_u140)
-  | Base_dDiag.C_Check_OkC (dtb_u_u142) -> (let dtb_u_u148 = Obj.obj ((((B_dEffect_dFs.v_fsWriteFile dtb_u_u123) (String.concat "" [dtb_u_u126; "/"; (v_splitName dtb_u_u128)])) (v_splitText dtb_u_u128))) in (let dtb_u_u150 = (dtb_u_u148 dtb_u_u134) in (let dtb_u_u152 = (Base_dDiag.C_Check_OkC ((dtb_u_u142 + 1))) in dtb_u_u152)))
+  | Base_dDiag.C_Check_OkC (dtb_u_u142) -> (let dtb_u_u150 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect dtb_u_u123) (String.concat "" [dtb_u_u126; "/"; (v_splitName dtb_u_u128)])) (v_splitText dtb_u_u128)) dtb_u_u134) in (let dtb_u_u152 = (Base_dDiag.C_Check_OkC ((dtb_u_u142 + 1))) in dtb_u_u152))
   | _ -> failwith "DT: impossible branch"
-))))))
+)))))
   | B_dData_dList.C_List_Nil -> (let dtb_u_u155 = (Base_dDiag.C_Check_OkC (0)) in (Obj.repr ((fun (dtb_u_u156 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u155))))
+  | _ -> failwith "DT: impossible branch"
+))
+# 33 "Vuna/Compiler/Driver/Split.vuna"
+and v_writeSplitFiles_u_udirect = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFile B_dData_dList.t_List) _u_ueffTok -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u128, dtb_u_u129) -> (let dtb_u_u137 = ((((v_writeSplitFiles_u_udirect nFs) mc0) dtb_u_u129) _u_ueffTok) in (match dtb_u_u137 with
+  | Base_dDiag.C_Check_ErrC (dtb_u_u138) -> (let dtb_u_u140 = (Base_dDiag.C_Check_ErrC (dtb_u_u138)) in dtb_u_u140)
+  | Base_dDiag.C_Check_OkC (dtb_u_u142) -> (let dtb_u_u150 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect nFs) (String.concat "" [mc0; "/"; (v_splitName dtb_u_u128)])) (v_splitText dtb_u_u128)) _u_ueffTok) in (let dtb_u_u152 = (Base_dDiag.C_Check_OkC ((dtb_u_u142 + 1))) in dtb_u_u152))
+  | _ -> failwith "DT: impossible branch"
+))
+  | B_dData_dList.C_List_Nil -> (let dtb_u_u155 = (Base_dDiag.C_Check_OkC (0)) in dtb_u_u155)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 46 "Vuna/Compiler/Driver/Split.vuna"
 let rec v_writeSplitFilesIfChanged = (fun (dtb_u_u157 : string) (dtb_u_u160 : string) (dtb_u_u161 : t_SplitFile B_dData_dList.t_List) -> (match dtb_u_u161 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u162, dtb_u_u163) -> (Obj.repr ((fun (dtb_u_u168 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u169 = Obj.obj ((((v_writeSplitFilesIfChanged dtb_u_u157) dtb_u_u160) dtb_u_u163)) in (let dtb_u_u171 = (dtb_u_u169 dtb_u_u168) in (match dtb_u_u171 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u162, dtb_u_u163) -> (Obj.repr ((fun (dtb_u_u168 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u171 = ((((v_writeSplitFilesIfChanged_u_udirect dtb_u_u157) dtb_u_u160) dtb_u_u163) dtb_u_u168) in (match dtb_u_u171 with
   | Base_dDiag.C_Check_ErrC (dtb_u_u172) -> (let dtb_u_u174 = (Base_dDiag.C_Check_ErrC (dtb_u_u172)) in dtb_u_u174)
-  | Base_dDiag.C_Check_OkC (dtb_u_u176) -> (let dtb_u_u177 = (String.concat "" [dtb_u_u160; "/"; (v_splitName dtb_u_u162)]) in (let dtb_u_u178 = (v_splitText dtb_u_u162) in (let dtb_u_u184 = Obj.obj (((B_dEffect_dFs.v_fsFileExists dtb_u_u157) dtb_u_u177)) in (let dtb_u_u186 = (dtb_u_u184 dtb_u_u168) in (if dtb_u_u186 then (let dtb_u_u192 = Obj.obj (((B_dEffect_dFs.v_fsReadFile dtb_u_u157) dtb_u_u177)) in (let dtb_u_u194 = (dtb_u_u192 dtb_u_u168) in (if (dtb_u_u194 = dtb_u_u178) then (let dtb_u_u196 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u196) else (let dtb_u_u203 = Obj.obj ((((B_dEffect_dFs.v_fsWriteFile dtb_u_u157) dtb_u_u177) dtb_u_u178)) in (let dtb_u_u205 = (dtb_u_u203 dtb_u_u168) in (let dtb_u_u207 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u207)))))) else (let dtb_u_u214 = Obj.obj ((((B_dEffect_dFs.v_fsWriteFile dtb_u_u157) dtb_u_u177) dtb_u_u178)) in (let dtb_u_u216 = (dtb_u_u214 dtb_u_u168) in (let dtb_u_u218 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u218))))))))
+  | Base_dDiag.C_Check_OkC (dtb_u_u176) -> (let dtb_u_u177 = (String.concat "" [dtb_u_u160; "/"; (v_splitName dtb_u_u162)]) in (let dtb_u_u178 = (v_splitText dtb_u_u162) in (let dtb_u_u186 = (((B_dEffect_dFs.v_fsFileExists_u_udirect dtb_u_u157) dtb_u_u177) dtb_u_u168) in (if dtb_u_u186 then (let dtb_u_u194 = (((B_dEffect_dFs.v_fsReadFile_u_udirect dtb_u_u157) dtb_u_u177) dtb_u_u168) in (if (dtb_u_u194 = dtb_u_u178) then (let dtb_u_u196 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u196) else (let dtb_u_u205 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect dtb_u_u157) dtb_u_u177) dtb_u_u178) dtb_u_u168) in (let dtb_u_u207 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u207)))) else (let dtb_u_u216 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect dtb_u_u157) dtb_u_u177) dtb_u_u178) dtb_u_u168) in (let dtb_u_u218 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u218))))))
   | _ -> failwith "DT: impossible branch"
-))))))
+)))))
   | B_dData_dList.C_List_Nil -> (let dtb_u_u221 = (Base_dDiag.C_Check_OkC (0)) in (Obj.repr ((fun (dtb_u_u222 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u221))))
+  | _ -> failwith "DT: impossible branch"
+))
+# 46 "Vuna/Compiler/Driver/Split.vuna"
+and v_writeSplitFilesIfChanged_u_udirect = (fun (nFs : string) (mc0 : string) (mc1 : t_SplitFile B_dData_dList.t_List) _u_ueffTok -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u162, dtb_u_u163) -> (let dtb_u_u171 = ((((v_writeSplitFilesIfChanged_u_udirect nFs) mc0) dtb_u_u163) _u_ueffTok) in (match dtb_u_u171 with
+  | Base_dDiag.C_Check_ErrC (dtb_u_u172) -> (let dtb_u_u174 = (Base_dDiag.C_Check_ErrC (dtb_u_u172)) in dtb_u_u174)
+  | Base_dDiag.C_Check_OkC (dtb_u_u176) -> (let dtb_u_u177 = (String.concat "" [mc0; "/"; (v_splitName dtb_u_u162)]) in (let dtb_u_u178 = (v_splitText dtb_u_u162) in (let dtb_u_u186 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) dtb_u_u177) _u_ueffTok) in (if dtb_u_u186 then (let dtb_u_u194 = (((B_dEffect_dFs.v_fsReadFile_u_udirect nFs) dtb_u_u177) _u_ueffTok) in (if (dtb_u_u194 = dtb_u_u178) then (let dtb_u_u196 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u196) else (let dtb_u_u205 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect nFs) dtb_u_u177) dtb_u_u178) _u_ueffTok) in (let dtb_u_u207 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u207)))) else (let dtb_u_u216 = ((((B_dEffect_dFs.v_fsWriteFile_u_udirect nFs) dtb_u_u177) dtb_u_u178) _u_ueffTok) in (let dtb_u_u218 = (Base_dDiag.C_Check_OkC ((dtb_u_u176 + 1))) in dtb_u_u218))))))
+  | _ -> failwith "DT: impossible branch"
+))
+  | B_dData_dList.C_List_Nil -> (let dtb_u_u221 = (Base_dDiag.C_Check_OkC (0)) in dtb_u_u221)
   | _ -> failwith "DT: impossible branch"
 ))
 
