@@ -27,15 +27,13 @@ bump xs k n acc =
 
 main : Int
 main =
-  runPure (
-      MutDynArray.withMutDynArray (
-          \xs =>
-            do
-              pushAll xs 2000 2000
-              s <- bump xs 2000 2000 0
-              n1 <- MutDynArray.size xs
-              MutDynArray.clear xs
-              m <- MutDynArray.size xs
-              pure (s + natToInt n1 + natToInt m)
-        )
+  MutDynArray.withMutDynArrayPure (
+      \xs =>
+        do
+          pushAll xs 2000 2000
+          s <- bump xs 2000 2000 0
+          n1 <- MutDynArray.size xs
+          MutDynArray.clear xs
+          m <- MutDynArray.size xs
+          pure (s + natToInt n1 + natToInt m)
     )

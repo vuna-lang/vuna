@@ -851,10 +851,8 @@ tryLock / 嵌套 spawn 只开 `ocaml,native`，三条并行组合子（`thread_p
 
 T10 覆盖 `Base.Container.Mut*`：`micro_mut_ref`（MutRef 读改写）、`mut_array`（定长原地写）、
 `mut_barrier`（老数组写入年轻对象，触发 old→young 写屏障）、`mut_dyn`（MutDynArray 容量增长）、
-`mut_buffer`（MutBuffer 字节构建）、`mut_vec`（MutVec + Fin）。`micro_mut_ref` / `mut_array` /
-`mut_barrier` / `mut_dyn` / `mut_buffer` 三端都跑；`mut_vec` 的 native
-codegen 对动态 `Fin` 结果错误，只开 `ocaml,wasm`。native 的 pure 包装 CAF 初始化顺序问题
-已在用例源码用 `runPure (…with… )` 绕过。
+`mut_buffer`（MutBuffer 字节构建）、`mut_vec`（MutVec + Fin）。t10 六个用例三端都跑，
+`with*Pure` 包装直接写在用例源码里（不再需要 `runPure (…with… )` 绕过）。
 
 T12 覆盖宿主层：`host_clock`（Clock.Now）、`host_env`（Env.GetEnv）三端都跑；
 `fs_roundtrip` / `fs_cursor` 用 `${TMPDIR:-/tmp}` 下的临时文件，只开 `ocaml,native`
