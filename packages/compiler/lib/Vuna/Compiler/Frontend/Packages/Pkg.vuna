@@ -30,13 +30,16 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Types as EffTypes
 
--- 模块根：目录、包名、可选导出模块列表。
+-- 模块根：目录、所属包目录、包名、可选导出模块列表。
 -- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有
 -- mods 里的模块可被跨包 import。
+-- `rootPkgDir` 是该根所属包的目录（模块根通常是 `<包目录>/lib`）：包状态目录
+-- `<包目录>/.vuna` 由它给出，不能从 `rootDir` 反推（lib 布局只是约定，不是定义）。
 -- 抽象性：导出表只写 `Root`（不含 `(..)`）——record 的裸导出隐藏构造子，
 -- 外部只能读字段、不能构造。
 export record Root where
   rootDir : String
+  rootPkgDir : String
   rootName : String
   rootExports : Maybe (List String)
   rootLayerRules : List Layer
@@ -65,7 +68,7 @@ export record PackageContext where
   contextRelease : Bool
 
 export rootLayers : Root -> List Layer
-rootLayers (Root dir name exports layers _) = layers
+rootLayers (Root dir pkgDir name exports layers _) = layers
 
 -- rootName 的别名（Loader/CLI 侧更常用的叫法）。
 export rootPackage : Root -> String
@@ -522,6 +525,7 @@ dependencyRootOf : Package -> Root
 dependencyRootOf package =
   Root
     "${packageDir package}/lib"
+    (packageDir package)
     (packageName package)
     (packageExports package)
     (packageLayers package)
@@ -551,6 +555,7 @@ packageRoots package =
     selfRoot =
       Root
         "${packageDir package}/lib"
+        (packageDir package)
         selfName
         Nothing
         (packageLayers package)

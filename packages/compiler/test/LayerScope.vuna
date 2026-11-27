@@ -47,10 +47,11 @@ outsideLayers =
     ErrC _ => False
 
 deniedRoot : Root
-deniedRoot = Root "/p/lib" "p" (Just ["L.A", "L.B"]) [Layer "L.A" [] 0, Layer "L.B" [] 0] True
+deniedRoot = Root "/p/lib" "/p" "p" (Just ["L.A", "L.B"]) [Layer "L.A" [] 0, Layer "L.B" [] 0] True
 
 allowedRoot : Root
-allowedRoot = Root "/p/lib" "p" (Just ["L.A", "L.B"]) [Layer "L.A" ["L.B"] 0, Layer "L.B" [] 0] True
+allowedRoot =
+  Root "/p/lib" "/p" "p" (Just ["L.A", "L.B"]) [Layer "L.A" ["L.B"] 0, Layer "L.B" [] 0] True
 
 emptyIndex : HashMap String (List ExportEntry)
 emptyIndex = HashMap.fromList []
