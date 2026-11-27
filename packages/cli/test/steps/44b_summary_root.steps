@@ -1,14 +1,17 @@
-# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 44b) 根包（入口-only 包，没有 lib 模块接口可写）：依赖接口命中 ⇒ 摘要路径
-#      （`cache-path=summary deps=2`：vuna-base + dep）；依赖模块**不再 parse 源码**
-#      （无 `parse-module=Dep`）；check 通过。夹具 $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root。
-run: sh -c 'rm -rf "$TMPDIR/44b-store"'
-run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" "$VUNA" check "$VUNA_BASE"'
-run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep'
-run: VUNA_STORE="$TMPDIR/44b-store" VUNA_LOG=debug "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root
+# store-isolated: 断言缓存/包状态目录行为，使用 case 私有 store 与状态目录。
+# 44b) 根包（入口-only 包）：依赖接口命中 ⇒ 摘要路径（`cache-path=summary deps=2`：
+#      vuna-base + dep）；依赖模块**不再 parse 源码**（无 `parse-module=Dep`）；check 通过。
+#      接口落在包状态目录（`$VUNA_PKG_STATE/iface`），不在共享 store 里。
+#      夹具 $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root。
+run: sh -c 'rm -rf "$TMPDIR/44b-store" "$TMPDIR/44b-state"'
+run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" VUNA_PKG_STATE="$TMPDIR/44b-state" "$VUNA" check "$VUNA_BASE"'
+run: sh -c 'VUNA_STORE="$TMPDIR/44b-store" VUNA_PKG_STATE="$TMPDIR/44b-state" "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep'
+run: VUNA_STORE="$TMPDIR/44b-store" VUNA_PKG_STATE="$TMPDIR/44b-state" VUNA_LOG=debug "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root
 exit: 0
-# 44b-2) 对象库冷/热：删掉整个 store 后重跑根包，仍然通过（对象全部按 miss 重建）。
-run: sh -c 'rm -rf "$TMPDIR/44b-store2" "$TMPDIR/44b-cache2"; export VUNA_STORE="$TMPDIR/44b-store2" TMPDIR="$TMPDIR/44b-cache2"; "$VUNA" check "$VUNA_BASE" && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root'
+out-contains: cache-path=summary
+out-not-contains: parse-module=Dep
+# 44b-2) 冷状态目录：删掉整个状态目录后重跑根包，仍然通过（接口全部按 miss 重建）。
+run: sh -c 'rm -rf "$TMPDIR/44b-store2" "$TMPDIR/44b-state2" "$TMPDIR/44b-cache2"; export VUNA_STORE="$TMPDIR/44b-store2" VUNA_PKG_STATE="$TMPDIR/44b-state2" TMPDIR="$TMPDIR/44b-cache2"; "$VUNA" check "$VUNA_BASE" && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep && "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root'
 exit: 0
-run: sh -c 'n=$(ls "$TMPDIR/44b-store2/objects/module-iface" 2>/dev/null | wc -l); [ "$n" -gt 0 ]'
+run: sh -c 'n=$(ls "$TMPDIR/44b-state2/iface" 2>/dev/null | wc -l); [ "$n" -gt 0 ]'
 exit: 0
