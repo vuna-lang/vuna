@@ -2169,8 +2169,10 @@ checkEFuelNoRowPlainGo fuel globals ctx ec expr expected =
       EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected (nodeRefSpan sp)
       EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
       -- D51 补：check 位的 `if` 先用期望类型检查两个分支（矩阵降级产生的 `if` 体不会
-      -- 丢期望类型，`Row.Cons`/`List.Cons` 这类同名构造子因此能按族消歧）；分支检查失败时
-      -- 回退旧的推断路径（保留 Nat/Int 混合提升等推断期行为）。
+      -- 丢期望类型，`Row.Cons`/`List.Cons` 这类同名构造子因此能按族消歧）。
+      -- 分支检查失败时才回退到推断路径（保住既有的接受面，如 Nat/Int 混合提升），
+      -- 回退沿用条件已精化后的 `ec1`；**诊断不跟着回退**：回退也失败时报首个失败分支
+      -- 的错误——位置与期望类型都来自那个分支，而不是整体的推断失配。
       EIf c t e sp =>
         Vuna.Compiler.Base.Common.bind (checkCondBoolFuel (fuel - 1) globals ctx ec c (nodeRefSpan sp)) (
             \pc =>
@@ -2190,7 +2192,10 @@ checkEFuelNoRowPlainGo fuel globals ctx ec expr expected =
                         )
                   in case attempt of
                     OkC p => OkC p
-                    ErrC _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+                    ErrC branchErr =>
+                      case checkByInferFuel (fuel - 1) globals ctx ec1 expr expected of
+                        OkC p2 => OkC p2
+                        ErrC _ => ErrC branchErr
           )
       ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut (altsToPairs alts) expected (nodeRefSpan csp)
       ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected (nodeRefSpan sp)

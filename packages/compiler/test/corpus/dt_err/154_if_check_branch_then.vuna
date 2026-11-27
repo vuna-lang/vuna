@@ -1,0 +1,7 @@
+-- 反例：check 位的 `if` 分支按期望类型检查失败后，诊断必须指向失败的那个分支
+-- （位置 + 期望类型都来自分支），不能退化成整体的推断失配（无位置、expected/found 颠倒）。
+f : Bool -> Int
+f b = if b then "no" else 0
+
+main : Int
+main = f True

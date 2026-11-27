@@ -1,0 +1,7 @@
+-- 反例：then 分支通过、else 分支与期望类型不符 —— 诊断同样落在 else 分支上，
+-- 而不是整体 `if` 的推断结果。
+g : Bool -> String
+g b = if b then "ok" else 2
+
+main : String
+main = g True
