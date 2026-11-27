@@ -14,8 +14,8 @@
 | CPS 机器节点类型 | 机器级类型（`Control` / 续延 / `Step`）不进 `IrTy`，机器 pass 的节点类型槽统一 `IrTyOpaque`；空槽由 `Ir.Validate` 拒绝 | [ir.md](ir.md)「已知边界」 |
 | native 线程表固定 4096 槽 | 表容量与并发解耦（GC 按 `rt_thread_hi` 扫、槽在 join 时 CAS 复用）；上限显式 trap `too many threads`，不做动态扩容——真正的上限是内核 task 数 / 地址空间 | [primitives.md](primitives.md) §6.2 |
 | native 子进程 pid 表进程级 64 槽 | 语义正确的一侧（SIGALRM 要看到全进程的子进程）；写者一把 futex 锁、读者（信号处理器）不拿锁；槽满时收掉新子进程并报 `ProcessTooManyChildren` | [native-runtime.md](native-runtime.md) §4 |
-| DEC-stack | 大任务拆 phase 时用 stacked PR + 合并队列：一个 stack 作为一个 merge group 原子落 `main`（bottom → top），上层在下层冻结后即可开工 | [github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」 |
+| DEC-stack | 大任务拆 phase 时用 stacked PR + 合并队列，逐层推进；下层合并后上层 retarget 到 `main` 并由 sweep 重新入队，**不承诺整条原子落库** | [github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」 |
 | DEC-phase-concurrency | 2 个 dev 槽；每 stack ≤3 层、全局 ≤4 个 open layer、队列 ≤3 entry；线性 stack 同一时刻只有 1 个写代码的 agent | 技能 `vuna-phase`、[github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」 |
 | DEC-phase-remote | 远端写（push / PR / label / arm / enqueue / merge / teardown）只由 orchestrator 执行；phase agent 只改代码、跑验证、commit | 技能 `vuna-phase` |
 | DEC-phase-ci | stack 保持每层完整 gates：`pull_request` 每层都跑，`merge_group` 按入队组完整跑，不为 stack 缩减检查 | [testing-checks.md](testing-checks.md)「stacked PR 的 CI 成本」 |
-| DEC-phase-seed | seed rotation 只放 stack 最低层，独立 `chore(seed): ...`；上层不碰 `seed/`，全局同时只有一次 rotation | [github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」 |
+| DEC-phase-seed | seed rotation 跟随真正改变 codegen 的层；每层独立满足「当前 seed 编译当前源码」，不假设最终组合态自洽 | [github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」 |

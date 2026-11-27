@@ -281,18 +281,22 @@ CONTRIBUTING.md。
 ## Stacked PR 与合并队列
 
 大任务拆 phase、上层依赖下层代码时用 stacked PR：每层一个 PR，base 指向下一层，bottom 的
-base 是 `main`；整条 stack 经合并队列原子落 `main`。排班与并发上限见技能 `vuna-phase`，
-提交整理与 PR 操作见技能 `vuna-pr`。
+base 是 `main`；stack 通过合并队列逐层推进，**不承诺整条原子落库**。排班与并发上限见技能
+`vuna-phase`，提交整理与 PR 操作见技能 `vuna-pr`。
 
-机制（官方行为）：
+机制与实测：
 
-- 一个 stack 作为一个 merge group 入队，bottom → top 原子落库；只合到某一层时，它下方的层
-  一起落，上方层自动 retarget 到 stack base。
+- GitHub 文档把 stack 描述为一个 merge group；但通过 REST `merge-async` 入队时，各层是独立
+  entry，队列按 FIFO / HEADGREEN 分组，可能把 bottom 与前序普通 PR 合成一组，其余层被
+  eject。2026-11 的 2 层 pilot 实测如此。
+- 下层合并后，剩余层会自动 retarget 到 `main`；`sweep` 会把它们重新入队。因此 stack 是
+  **有序流水线**，不是原子事务。
 - 每层按 **stack base（`main`）** 的 rules 与 required checks 评估，即使直接 base 是下层
   分支；`pull_request` workflow 对每层都跑。
-- 队列为保持 stack 完整，允许 group 超过 `max_entries_to_merge`（当前 6）的 50%，即最多 9；
-  更大的 stack 整体进入下一组。仓库上限是每 stack 3 层，正常不会拆组。
-- 某层被移除 / 弹出队列，上方所有层一起被移除；hold 一层等于挡住上方所有层。
+- **每层都必须独立可合并**：seed 能编译该层源码、gates 在该层通过；不要假设“最终组合态
+  自洽就够了”。
+- 某层被移除 / 弹出队列，上方所有层一起被移除；hold 一层等于挡住上方所有层；修好后由
+  `sweep` 重新入队。
 - 失去线性历史（下层被改、`main` 前进）时用 `gh stack rebase` 或 PR 的 **Rebase stack**
   恢复；bottom 合并后剩余层自动 retarget。
 - `merge_group` 侧每个入队组各跑一次完整门禁；层数越多，总 CI 成本越高。
@@ -331,8 +335,9 @@ nix/tools/merge-queue.sh sweep        # checks 绿后整条入队（stack 不依
 - 每 stack ≤3 层；全局 ≤4 个 open layer；队列 ≤3 entry；2 个 dev 槽（见技能 `vuna-phase`）。
 - CI 不为 stack 缩减检查：`pull_request` 每层都跑，`merge_group` 按入队组完整跑；单次耗时
   按实测。层数是门禁成本的乘数。
-- **seed**：rotation 只在最低层，独立 `chore(seed): ...`；上层不碰 `seed/`。把 stack 拆成
-  两条时，seed 边界跟着各自的 bottom 走，全局同时只允许一次 rotation。
+- **seed**：rotation 放在真正改变 codegen 的那一层；如果多层都改 codegen，每层各自带
+  rotation；上层不改 codegen 就不碰 `seed/`。每层都必须独立满足「当前 seed 编译当前源码」，
+  不能把 rotation 推到后续层。
 - hold 用 `blocked` / `needs-info` / draft；它挡住上方所有层，解除后由 sweep 直接入队，
   不要逐层重试。
 

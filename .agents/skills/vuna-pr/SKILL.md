@@ -146,15 +146,16 @@ gh stack link <pr1> <pr2>
 - `Closes #N` 只放 bottom 的 PR；上层用 `Refs #N`，PR-only 的层加 `no-issue`。
 - stack **不依赖 arm**：GitHub 可能在只想 rebase 的仓库上按默认 squash 拒绝 `includeStack`；
   checks 绿后由 sweep 整条入队（手动 `enqueue <top>` 仅在全部 open 层 `CLEAN` 时）。
-  stack 作为一个 merge group 入队；`gh pr merge` 与 GraphQL `enqueuePullRequest` 都不认
-  stack，整条入队走 REST `merge-async`。
+  stack 的各层作为独立 entry 入队；队列可能把 bottom 与前序普通 PR 合组，其余层被 eject 后
+  自动 retarget 到 `main`，再由 sweep 重新入队。`gh pr merge` 与 GraphQL
+  `enqueuePullRequest` 都不认 stack，整条入队走 REST `merge-async`。
 - 某一层被 hold 或移出队列，它上方所有层一起被挡住 / 移除；修根因后由 sweep 重新入队，
   不要逐层重试。
 - 合并后用 `gh stack sync` 级联（fetch + rebase + push + 同步 PR）；冲突用
   `gh stack rebase` 解决，不要手写 `git rebase --onto`。整条 stack 合并完再
   `gh stack sync --prune` 或 `gh stack unstack`，然后 teardown。
-- seed rotation 只放最低层，独立 `chore(seed): ...`；上层 PR 一律不得改 `seed/`，
-  全局同时只允许一次 rotation。
+- seed rotation 跟随真正改变 codegen 的层，独立 `chore(seed): ...`；每层都要独立满足
+  「当前 seed 编译当前源码」，不能把 rotation 推到后续层；不改 codegen 的层不碰 `seed/`。
 - CI 不因 stack 缩减检查：`pull_request` 对每层都跑，`merge_group` 按入队组完整验证。
   层数就是门禁成本的乘数，这是 3 层上限的原因之一。
 
