@@ -1,0 +1,158 @@
+-- `AstWalk` 是 AST 形状的唯一真源：子节点表必须覆盖全部构造子（含 EDo / EInterp /
+-- ERecUpdate 字段 / trait 参数 kind），重写必须保留 NodeRef，作用域表必须区分
+-- 「静态可下降」与「顺序 let / do 链」。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <- consolePrint ("ast walk skipped: " ++ join ", " xs ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "children-rec-update" recUpdateChildrenOk,
+    Pair "children-do" doChildrenOk,
+    Pair "children-interp" interpChildrenOk,
+    Pair "fold-expr" foldExprOk,
+    Pair "fold-trait-kind" foldTraitKindOk,
+    Pair "fold-nested-pat" foldNestedPatOk,
+    Pair "map-preserves-id" mapPreservesIdOk,
+    Pair "map-record-fields" mapRecordFieldsOk,
+    Pair "scoped-case" scopedCaseOk,
+    Pair "scoped-let-opaque" scopedLetOk,
+    Pair "pat-binders" patBindersOk
+  ]
+
+ref : NodeRef
+ref = noNodeRef
+
+recUpdateChildrenOk : Bool
+recUpdateChildrenOk =
+  length (exprChildren (ERecUpdate (EVar "b" ref) [("x", EVar "f" ref)] ref)) == 2
+
+doChildrenOk : Bool
+doChildrenOk =
+  length
+    (exprChildren (EDo [DBind (PVar "x" ref) (EVar "e" ref) ref, DExpr (EVar "d" ref) ref] ref))
+    == 2
+
+interpChildrenOk : Bool
+interpChildrenOk = length (exprChildren (EInterp [IPText "t", IPHole (EVar "h" ref)] ref)) == 1
+
+foldExprOk : Bool
+foldExprOk =
+  foldExpr addExprName [] (ERecord "R" [("a", EVar "f" ref), ("b", EVar "g" ref)] ref) == ["g", "f"]
+
+addExprName : List String -> Expr -> List String
+addExprName acc e =
+  case e of
+    EVar name _ => name :: acc
+    EInt _ _ => acc
+    EStr _ _ => acc
+    EFloat _ _ => acc
+    ELam _ _ _ => acc
+    EApp _ _ _ => acc
+    EPi _ _ _ _ _ _ => acc
+    ELet _ _ _ _ => acc
+    ECase _ _ _ => acc
+    EIf _ _ _ _ => acc
+    EField _ _ _ => acc
+    ERecord _ _ _ => acc
+    ERecUpdate _ _ _ => acc
+    EDo _ _ => acc
+    EInterp _ _ => acc
+
+foldTraitKindOk : Bool
+foldTraitKindOk =
+  foldDecl addExprName addPatName [] (DTrait "C" [TraitParam "f" (Just (EVar "K" ref))] [] [] ref)
+    == ["K"]
+
+addPatName : List String -> Pat -> List String
+addPatName acc _ = acc
+
+foldNestedPatOk : Bool
+foldNestedPatOk =
+  let
+    body =
+      ELet
+        [Binding (PCon "Pair" [PVar "x" ref] ref) (BVal (EInt 1 ref)) Nothing ref]
+        (EVar "x" ref)
+        False
+        ref
+  in foldDecl addExprName addPatRef [] (DFun "f" [] body ref) == ["x", "Pair"]
+
+addPatRef : List String -> Pat -> List String
+addPatRef acc p =
+  case p of
+    PVar _ _ => acc
+    PAs _ _ _ => acc
+    PWild _ => acc
+    PCon name _ _ => name :: acc
+    PInt _ _ => acc
+    PStr _ _ => acc
+    PRecord name _ _ => name :: acc
+
+mapPreservesIdOk : Bool
+mapPreservesIdOk =
+  case mapExpr (\e => OkC e) (ELam [("x", spanEmpty)] (EInt 1 (nodeRefFor 7 (spanEmpty))) (nodeRefFor 9 (spanEmpty))) of
+    OkC (ELam _ (EInt 1 inner) outer) => nodeRefId inner == 7 && nodeRefId outer == 9
+    _ => False
+
+mapRecordFieldsOk : Bool
+mapRecordFieldsOk =
+  case mapExpr incExpr (ERecord "R" [("a", EInt 1 ref)] ref) of
+    OkC (ERecord _ [("a", EInt 2 _)] _) => True
+    _ => False
+
+incExpr : Expr -> Check Expr
+incExpr e =
+  case e of
+    EInt n sp => OkC (EInt (n + 1) sp)
+    EVar _ _ => OkC e
+    EStr _ _ => OkC e
+    EFloat _ _ => OkC e
+    ELam _ _ _ => OkC e
+    EApp _ _ _ => OkC e
+    EPi _ _ _ _ _ _ => OkC e
+    ELet _ _ _ _ => OkC e
+    ECase _ _ _ => OkC e
+    EIf _ _ _ _ => OkC e
+    EField _ _ _ => OkC e
+    ERecord _ _ _ => OkC e
+    ERecUpdate _ _ _ => OkC e
+    EDo _ _ => OkC e
+    EInterp _ _ => OkC e
+
+scopedCaseOk : Bool
+scopedCaseOk =
+  case scopedExprChildren ["outer"] (ECase (EVar "s" ref) [Alt (PVar "x" ref) (EVar "x" ref) ref] ref) of
+    Just [(scrutScope, _), (altScope, _)] => scrutScope == ["outer"] && altScope == ["x", "outer"]
+    _ => False
+
+scopedLetOk : Bool
+scopedLetOk =
+  case scopedExprChildren [] (ELet [] (EVar "b" ref) False ref) of
+    Nothing => True
+    Just _ => False
+
+patBindersOk : Bool
+patBindersOk =
+  patBinders (PAs "whole" (PCon "Pair" [PVar "a" ref, PWild ref] ref) ref) == ["whole", "a"]
+
+nodeRefFor : Int -> Span -> NodeRef
+nodeRefFor id sp = NodeRef id sp
