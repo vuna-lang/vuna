@@ -1,8 +1,10 @@
 # store-isolated: 断言缓存/包状态目录行为，使用 case 私有 store 与状态目录。
 # 77) 并发安全：同一输入的两个 `check` 进程同时写共享包状态目录（模块接口是输入寻址 + 原子写）。
+#     两个进程读到的既有接口可能不同，`mergeDefLocsFrom` 会让它们写出的字节不同，所以并发之后
+#     允许**一次**收敛；断言的是「再跑一次就稳定」（持续不收敛、或状态被写坏仍是失败）。
 run: sh -c 'rm -rf "$TMPDIR/con-pkg" "$TMPDIR/con-store" "$TMPDIR/con-state"; mkdir -p "$TMPDIR/con-pkg/lib" "$TMPDIR/con-pkg/app"; printf "[package]\nname = \"con-pkg\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/con-pkg/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$TMPDIR/con-pkg/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$TMPDIR/con-pkg/app/Main.vuna"'
 exit: 0
 run: sh -c 'VUNA_STORE="$TMPDIR/con-store" VUNA_PKG_STATE="$TMPDIR/con-state" "$VUNA" check "$TMPDIR/con-pkg" >/dev/null 2>&1 & p1=$!; VUNA_STORE="$TMPDIR/con-store" VUNA_PKG_STATE="$TMPDIR/con-state" "$VUNA" check "$TMPDIR/con-pkg" >/dev/null 2>&1 & p2=$!; wait $p1; r1=$?; wait $p2; r2=$?; [ "$r1" -eq 0 ] && [ "$r2" -eq 0 ]'
 exit: 0
-run: sh -c 'test -n "$(find "$TMPDIR/con-state/iface" -type f | head -1)"; VUNA_STORE="$TMPDIR/con-store" VUNA_PKG_STATE="$TMPDIR/con-state" VUNA_LOG=debug "$VUNA" check "$TMPDIR/con-pkg" 2>&1 | grep -q "iface-write=0/"'
+run: sh -c 'test -n "$(find "$TMPDIR/con-state/iface" -type f | head -1)"; export VUNA_STORE="$TMPDIR/con-store" VUNA_PKG_STATE="$TMPDIR/con-state"; a=$(VUNA_LOG=debug "$VUNA" check "$TMPDIR/con-pkg" 2>&1 | grep -o "iface-write=[0-9]*/[0-9]*" | head -1); b=$(VUNA_LOG=debug "$VUNA" check "$TMPDIR/con-pkg" 2>&1 | grep -o "iface-write=[0-9]*/[0-9]*" | head -1); echo "converge: after-concurrent=$a next=$b"; case "$b" in iface-write=0/*) exit 0 ;; *) exit 1 ;; esac'
 exit: 0
