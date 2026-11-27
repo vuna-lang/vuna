@@ -779,29 +779,32 @@ resolvePattern fuel modules label prefix ns imports pat =
   if fuel <= 0 then
     icFuel "resolver"
   else
-    case pat of
-      PWild sp => OkC (PWild sp, [])
-      PVar name sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (checkBinder label name)) (\_ => OkC (PVar name sp, [name]))
-      PAs name inner sp => Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner) (\p => OkC (PAs name (firstOf p) sp, (::) name (secondOf p)))
-      PInt n sp => OkC (PInt n sp, [])
-      PStr s sp => OkC (PStr s sp, [])
-      PCon name pats sp =>
-        case classify name of
-          Just RsTuplePair => resolvePattern (fuel - 1) modules label prefix ns imports (PCon "Pair" pats sp)
-          Just RsTupleUnit => resolvePattern (fuel - 1) modules label prefix ns imports (PCon "MkUnit" [] sp)
-          _ => if isInternalSyntaxName name then Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (PCon name (map firstOf parts) sp, concatMap secondOf parts)) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolvePattern (fuel - 1) modules label prefix ns imports dtv) pats) (\parts => OkC (PCon name2 (map firstOf parts) sp, concatMap secondOf parts)))
-      PRecord name fields sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\dtv => resolveRecordPatternField (fuel - 1) modules label prefix ns imports dtv) fields) (\parts => OkC (PRecord name2 (map firstOf parts) sp, concatMap secondOf parts)))
+    foldPatAlg (resolvePatAlg fuel modules label prefix ns imports) pat
 
-resolveRecordPatternField : Int -> List Module -> String -> String -> Namespaces -> List Import -> (String, Pat) -> Check ((String, Pat), List String)
-resolveRecordPatternField fuel modules label prefix ns imports (fname, pat) =
-  if fuel <= 0 then
-    icFuel "resolver"
-  else
-    Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (
-        \p =>
-          case p of
-            (pat2, bound) => OkC ((fname, pat2), bound)
-      )
+resolvePatAlg : Int -> List Module -> String -> String -> Namespaces -> List Import -> PatAlg
+resolvePatAlg fuel modules label prefix ns imports =
+  PatAlg
+    (\name => \sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (checkBinder label name)) (\_ => OkC (PVar name sp, [name])))
+    (\sp => OkC (PWild sp, []))
+    (\n => \sp => OkC (PInt n sp, []))
+    (\str => \sp => OkC (PStr str sp, []))
+    (
+      \name =>
+        \inner =>
+          \sp =>
+            case inner of
+              (p, bound) => OkC (PAs name p sp, name :: bound)
+    )
+    (
+      \name =>
+        \parts =>
+          \sp =>
+            case classify name of
+              Just RsTuplePair => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports "Pair")) (\name2 => OkC (PCon name2 (map firstOf parts) sp, concatMap secondOf parts))
+              Just RsTupleUnit => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports "MkUnit")) (\name2 => OkC (PCon name2 [] sp, []))
+              _ => if isInternalSyntaxName name then OkC (PCon name (map firstOf parts) sp, concatMap secondOf parts) else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => OkC (PCon name2 (map firstOf parts) sp, concatMap secondOf parts))
+    )
+    (\name => \fields => \sp => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan (nodeRefSpan sp)) (resolveCtor modules label prefix ns imports name)) (\name2 => OkC (PRecord name2 (map firstOf fields) sp, concatMap secondOf fields)))
 
 resolveBindingSig : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Maybe BindingSig -> Check (Maybe BindingSig)
 resolveBindingSig fuel modules label prefix ns imports scope Nothing = OkC Nothing
