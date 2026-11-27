@@ -964,6 +964,8 @@ ifacesForRootsEff ctx =
 --
 -- 地址已含包身份，所以同一目录里放本包 + 依赖模块也安全；依赖模块默认读它自己包的
 -- `.vuna`，`VUNA_PKG_STATE` 非空时所有包共享重定向目录。写侧只写本包模块。
+-- 包目录来自 `rootPkgDir`（与写侧的 `contextDir` 同一口径），不从模块根
+-- （`<包目录>/lib`）反推。
 -- ---------------------------------------------------------------
 rootOfName : String -> List Root -> Maybe Root
 rootOfName _ [] = Nothing
@@ -973,7 +975,7 @@ rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
 moduleStateDirEff : Member nEnv EnvOp r => PackageContext -> ClosureMod -> Eff r String
 moduleStateDirEff ctx m =
   case rootOfName m.cmPkg (contextRoots ctx) of
-    Just root => pkgStateDirEff (rootDir root)
+    Just root => pkgStateDirEff (rootPkgDir root)
     Nothing => pkgStateDirEff (contextDir ctx)
 
 -- | 模块接口目录（读路径，不创建）。

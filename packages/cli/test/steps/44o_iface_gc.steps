@@ -17,3 +17,11 @@ out-equals: state-ok
 # 共享 store 不再承接接口对象。
 run: sh -c 'test ! -d "$TMPDIR/44o-store/objects/module-iface"; echo store-clean'
 out-equals: store-clean
+# 读路径与写路径同一口径：不设 `VUNA_PKG_STATE` 时第二次 check 命中包内接口
+# （摘要路径 + 本包模块干净），不从模块根（`lib/`）推导状态目录。
+run: sh -c 'env -u VUNA_PKG_STATE VUNA_STORE="$TMPDIR/44o-store" TMPDIR="$TMPDIR/44o-cache" VUNA_LOG=debug "$VUNA" check "$TMPDIR/44o-pkg/dep"'
+exit: 0
+out-contains: cache-path=summary
+out-contains: cache-own-clean=
+out-not-contains: cache-path=full
+out-not-contains: iface-reject=dep-iface-missing
