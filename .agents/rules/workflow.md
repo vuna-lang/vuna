@@ -21,8 +21,12 @@ git switch -c <type>/<slug> origin/main   # 在副 worktree 内
   `gh issue develop <n> --name <type>/<n>-<slug> --checkout`。
 - **所有改动都在副 worktree 内完成**（`~/.local/share/opencode/worktree/…` /
   `.local/worktrees/…`），主工作区只读；**不要**再把提交 cherry-pick 回主仓。
-- 分支落后时 `git rebase origin/main`；冲突**按语义合并、双方改动都保留**，不要
+- 分支不必追着 `main` rebase：合并队列会在最新 `main` + 队列前序 PR 的组合 head 上
+  重新验证。只有 GitHub 报冲突（`mergeable=CONFLICTING`）或需要基于新 `main` 调试时
+  才 `git rebase origin/main`；冲突**按语义合并、双方改动都保留**，不要
   `-X ours` / `-X theirs` 整片丢对方变更。
+- 开 PR 时可以 rebase 一次得到干净的历史；**PR 打开后不要因为其他 PR 合入就反复 rebase**，
+  队列会处理顺序。
 - 历史必须**线性**：分支里不产生 merge 提交（`.githooks/pre-push` 会拒绝）。
 - rebase 后按需重建本地编译器（需要固定二进制时 `nix build .#vuna --out-link result`，否则
   直接用 `nix run .#vuna -- <subcommand>`），先跑 `nix run .#vuna -- check .` 与相关 suite 再继续。
@@ -69,20 +73,21 @@ gh pr create --base main --title "<type(scope): 中文描述>" --body-file <file
   [`.github/pull_request_template.md`](../../.github/pull_request_template.md) 写清
   「跑过 / 没跑」、seed 与后端影响。有关联 issue 时描述含 `Closes #N` 或 `Refs #N`；
   PR-only 改动加 `no-issue` 标签。
-- PR 的必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（按 `type` + `pkg` /
-  `area` 自动选择的检查；完整 gate / e2e 由 `suite` matrix 按 shard 并行，`gates / run`
-  收齐结论）。`pr-triage` 自动维护 type / pkg / area 标签，不再手工加
-  `deep` / `suite`；需要强制整组时再加 `deep` / `suite` / `browser`。
-- PR 已经有提交后再改动：重新 `git rebase -i origin/main` 整理，然后
-  `git push --force-with-lease`；**不要**对 `main` 使用 force push。
-- 默认交给 auto-merge 在 required checks 全绿后合并；需要 hold 时加 `blocked` / `needs-info`
-  或转 draft。不要手动 merge 绕过检查；完整规程见技能 `vuna-pr`。
+- PR 的必需检查是 `pr / run`（fmt + lint + 自检）与 `gates / run`（PR 上是按 `type` +
+  `pkg` / `area` 自动选择的切片；在 `merge_group` 上是完整 gate-shard + units + area）。
+  `pr-triage` 自动维护 type / pkg / area 标签，不再手工加 `deep` / `suite`；需要强制整组时
+  再加 `deep` / `suite` / `browser`。
+- PR 已经有提交后再改动：用 `git rebase -i origin/main` 整理提交（不要求追上最新 main），
+  然后 `git push --force-with-lease`；**不要**对 `main` 使用 force push。
+- 默认交给 auto-merge：required checks 全绿后进合并队列，队列的 `gates / run` 在组合 head
+  上跑完整门禁，绿后 rebase 落 `main`。需要 hold 时加 `blocked` / `needs-info` 或转 draft
+  （automerge 会把已在队列里的 PR 移出）。不要手动 merge 绕过检查；完整规程见技能 `vuna-pr`。
 
 ## 5. 合并与收尾
 
 ```console
-gh pr checks <n> --watch
-gh pr merge <n> --rebase
+nix/tools/merge-queue.sh status        # 队列位置 / 状态 / ETA
+gh pr checks <n>                       # PR 自己的检查（不是队列状态）
 git -C <MAIN_ROOT> pull --ff-only
 ~/.config/opencode/skills/worktree/scripts/worktree-teardown.sh --json \
   --main <MAIN_ROOT> --worktree <WORKTREE> --branch <BRANCH> --delete-branch
@@ -90,12 +95,26 @@ git -C <MAIN_ROOT> pull --ff-only
 
 - 只允许 **rebase merge**（squash 关闭）：整理过的提交原样落到 `main`，`chore(seed)` 不会被压扁。
 - 非 draft、同仓库分支、无 `blocked` / `needs-info` / `wontfix` 的 PR 由 workflow 自动打开
-  auto-merge；`pr / run` 与 `gates / run` 全绿且分支与 main 同步后自动合并。检查失败、
-  取消或落后于 main 都不会合并。
-- 落后时在分支上 `git rebase origin/main && git push --force-with-lease`；不要手动绕过
-  required checks。
+  auto-merge；required checks 全绿后进入 GitHub 合并队列，队列在**最新 main + 前序 PR**
+  的组合 head 上重跑必需检查，绿后自动落 `main`。
+- **分支落后（`BEHIND`）不是失败，不要 rebase**；队列会把它排到最新 main 后面。只有冲突
+  时才在分支上 `git rebase origin/main && git push --force-with-lease`。
+- 队列把 PR 移除时先看原因：冲突才 rebase；检查失败就修；超时重新 arm auto-merge。
+  不要用 `gh pr merge --rebase` 手动绕过队列。
 - 合并后主仓 `git pull --ff-only`，再按技能 `worktree` 的 teardown 清掉副 worktree 与本地分支。
 - 分支不合并就放弃时保留 worktree 或按需删除，**不要**把提交带回 `main`。
+
+## 6. main 红灯：先认领再修
+
+`main` 的 `ci` 失败时，`main-red.yml` 会维护一个 `main-red` issue（失败追加、恢复绿自动关闭）。
+
+- 开始修之前先 `gh issue list --label main-red --state open`。
+- issue 已有 assignee 或 `status:in-progress`：**不要开修复 PR**，在 issue / PR 里说明并让出。
+- 没有认领：先评论 claim，再
+  `gh issue edit <n> --add-assignee @me --add-label status:in-progress`。
+- 修复 PR 写 `Closes #<n>` 并加 `main-red` 标签；`main-red-guard.yml` 会把第二个修复 PR
+  加 `blocked` 并移出队列。
+- `main` 还没绿时，不要给无关 PR arm auto-merge；队列会在红灯基线上失败并反复踢出。
 
 ## 不要做的事
 
@@ -106,3 +125,5 @@ git -C <MAIN_ROOT> pull --ff-only
 - 把「这次没超时 / CI 绿了」当成验证完成；本地能跑的检查先跑，跑不了要明说。
 - 为了过 CI 手改 `seed/` 或 `seed/` 里的生成文件。
 - 在提交信息 / PR 标题里写「update」「fix bug」这类无法回溯意图的描述。
+- 因为 `BEHIND` 就 rebase，或手动 `gh pr merge --rebase` 绕过合并队列。
+- 在 `main` 红灯时给无关 PR arm auto-merge，或无视已认领的 `main-red` issue 再开一个修复 PR。

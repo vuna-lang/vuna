@@ -1,7 +1,7 @@
 # Issue / PR / 门禁协作
 
 本页是仓库的 GitHub 工作流说明：issue 状态机、标签含义、PR 与 issue 的联动、
-按 `type + area` 选择的 PR 门禁，以及自动合并的边界。分支与提交整理见
+按 `type + area` 选择的 PR 门禁、合并队列，以及 main 红灯的认领流程。分支与提交整理见
 [CONTRIBUTING.md](../../CONTRIBUTING.md) 与技能 `vuna-pr`；门禁语义见
 [testing-checks.md](testing-checks.md)。
 
@@ -96,6 +96,7 @@ area 切片（只跑该影响面的夹具，完整覆盖由 nightly 的 `suite` 
 - `needs-refinement`：等待 agent 查重、补全内容与元信息。
 - `needs-info`：等待用户补充信息。
 - `blocked`：被依赖或外部条件阻塞。
+- `main-red`：main 门禁失败事故单与修复 PR（由 `main-red.yml` 维护）。
 - `breaking`：破坏性改动。
 - `no-issue`：PR 不关联 issue（PR-only 改动的默认做法）。
 - `deep` / `suite` / `browser`：手动强制跑整组门禁。
@@ -137,10 +138,10 @@ PR 标题与分支名仍按 `<type>/<slug>`、`<type>(scope): 中文描述` 的�
 
 | group | 内容 | 何时跑 |
 | --- | --- | --- |
-| `pr` | fmt / lint / typecheck | 所有 PR 与 main push（`pr / run`） |
-| `gate` / `gate-shard-0..3` | tests-gate（fast+integration）+ 单测；CI 里拆 4 片并行 | main push、定时、手动 |
+| `pr` | fmt / lint / typecheck | 所有 PR、`merge_group`、main push（`pr / run`） |
+| `gate` / `gate-shard-0..3` | tests-gate（fast+integration）+ 单测；CI 里拆 4 片并行 | `merge_group`、main push、定时、手动 |
 | `e2e-shard-0..3` | tests-e2e（steps / 长 case）4 片并行 | 定时、手动 |
-| `units` | 各包 `vuna test`（与 suite 解耦） | main push、定时、手动 |
+| `units` | 各包 `vuna test`（与 suite 解耦） | `merge_group`、main push、定时、手动 |
 | `deep` | pr + 全部便宜门禁 | 定时、手动、`deep` 标签 |
 | `suite` | tests-gate + units + tests-e2e（未分片） | 本地全量；`suite` 标签 |
 | `backends` | wasm / native suite 矩阵 | 本地手动 |
@@ -161,34 +162,58 @@ nix run .#ci -- plan type:bug pkg:compiler
 nix run .#ci -- run-plan type:docs area:docs
 ```
 
-`gates.yml` 在 PR 上做三件事：
+`gates.yml` 同时服务 PR 与 `merge_group`：
 
-1. `detect`：从 diff 和 issue/PR 标签得到 type + pkg/area、检查 issue 关联，并用
-   `nix run .#ci -- plan-json <labels>` 算出门禁计划；
-2. `suite`：计划里含完整 gate / e2e 时，按 `gate-shard-*` / `e2e-shard-*` 组起 4+4 的
-   matrix job 并行跑（与 main 基线同一批 check，每片仍是完整 case 集合的一部分）；
-   计划里没有时整个 job 跳过，不占 runner；
-3. `gates`：跑计划里剩下的检查（`nix run .#ci -- run-plan --without-suite <labels>`），
-   结果汇总成 `gates / run`。
+1. `detect`：PR 上从 diff 和 issue/PR 标签得到 type + pkg/area；`merge_group` 上从
+   `merge_group.base_sha...head_sha` 的完整 diff 取 area，从 `head_ref` 里的组头 PR 取
+   type / issue 信息。两条路径产出同一形状的 labels。
+2. `suite`：PR 上用 `plan-json` 判断计划是否含完整 gate / e2e，含则起对应 shard matrix；
+   `merge_group` 上固定起 `gate-shard-0..3 + units`，覆盖 main push 的完整 suite 基线。
+3. `gates`：用 `run-plan --without-suite` 按 labels 跑 area 检查，并汇总 `suite` 结论为
+   `gates / run`。
 
-`gates / run` 是 required check，它同时把 `suite` 的结论收进来：`detect` 失败或任一 shard
-失败都会让它失败，不会因为 job 跳过而卡在 Expected。`pr / run` 与 `gates / run` 都绿且
-分支与 main 同步后，PR 才能合并。
+`gates / run` 是 required check：PR 上是轻量切片，`merge_group` 上是完整 gate + units +
+area。`detect` 失败或任一 shard 失败都会让它失败，不会因为 job 跳过而卡在 Expected。
+`pr / run` 与 `gates / run` 都绿后，PR 才能进入合并队列。
 
-## 自动合并
+## 合并队列
 
 `automerge.yml` 对非 draft、同仓库分支、没有 `blocked` / `needs-info` / `wontfix`
-标签的 PR 打开 GitHub auto-merge；draft 或 hold 标签出现时关闭。
+标签的 PR 打开 GitHub auto-merge；draft 或 hold 标签出现时先把已在队列里的 PR
+`dequeuePullRequest`，再关闭 auto-merge。PR 落后于 main 不需要处理——队列会基于最新
+`main` + 队前 PR 建临时组合分支并重跑 required checks。
 
-GitHub 只在 required checks 全绿、分支满足 strict up-to-date 时执行 rebase merge；
-检查失败、取消或 PR 落后于 main 都不会合并。落后时仍需 agent 在分支上
-`git rebase origin/main && git push --force-with-lease`。
+启用顺序：先合并 workflow 改动（`ci.yml` / `gates.yml` 的 `merge_group` 支持），再跑
+[nix/tools/github-branch-protection.sh](../../nix/tools/github-branch-protection.sh) 打开
+队列；反过来的话 required checks 在 `merge_group` 上还没有报告者。
 
-合并身份是 `github-actions[bot]`（`GITHUB_TOKEN`），GitHub 不为该身份的推送创建工作流，
-所以 main push 的 `gate-shards` 只覆盖人工 / break-glass 推送。配 `AUTOMERGE_TOKEN` 后合并会
-触发 push 门禁；否则 main 的完整基线由定时任务承担（gate 4 片 + e2e 4 片 + units 并行）。
+队列配置在 [nix/tools/github-branch-protection.sh](../../nix/tools/github-branch-protection.sh)
+的 ruleset 里：
 
-`AUTOMERGE_TOKEN` 用**细粒度 PAT**（仓库 secret，不是 org secret）：
+- `merge_method: REBASE`，保持线性历史与独立提交；
+- `grouping_strategy: HEADGREEN`，只要求组头通过；
+- `min_entries_to_merge: 2`、`max_entries_to_merge: 6`、等待 5 分钟；
+- `max_entries_to_build: 2`；
+- `strict_required_status_checks_policy: false`（队列已经承担 up-to-date 验证）。
+
+因此 **`BEHIND` 不是失败信号**：不要为了追 `main` 反复 rebase。只有 GitHub 报
+`mergeable=CONFLICTING` 时才在分支上 `git rebase origin/main && git push --force-with-lease`。
+PR 被队列移除时看原因：冲突才 rebase，检查失败就修，超时重新 arm。
+
+队列状态用 helper 查看（`gh` CLI 没有队列子命令，底层是 GraphQL）：
+
+```console
+nix/tools/merge-queue.sh status
+nix/tools/merge-queue.sh wait <n> [timeout]
+nix/tools/merge-queue.sh dequeue <n>
+```
+
+需要 hold 时加 `blocked` / `needs-info` 或转 draft；只 `--disable-auto` 不会把已经在队列里的
+PR 拿掉。手动 `gh pr merge --rebase` 只用于 break-glass。
+
+main push 仍跑完整 `gate-shards` + `units` 作为合并后兜底。合并由 GitHub 队列执行；
+`AUTOMERGE_TOKEN` 仍用于 automerge 的入队身份（细粒度 PAT，仓库 secret，不是 org
+secret）：
 
 1. <https://github.com/settings/personal-access-tokens/new> → 只授权 `vuna-lang/vuna`；
 2. 权限：Contents = Read and write、Pull requests = Read and write、Workflows = Read and write
@@ -202,15 +227,31 @@ token 不适合当长期 secret。
 管理，required checks 是 `pr / run` 与 `gates / run`。没有 bypass；break-glass 流程见
 CONTRIBUTING.md。
 
+## main 红灯
+
+`main` 的 `ci` 失败时，[main-red.yml](../../.github/workflows/main-red.yml) 维护唯一的
+`main-red` issue：失败创建/追加失败 job 与相关 PR，恢复绿自动关闭。
+
+- 修复前先 `gh issue list --label main-red --state open`；
+- issue 已有 assignee 或 `status:in-progress` 时让出，不要开第二个修复 PR；
+- 没有认领时评论 claim，再
+  `gh issue edit <n> --add-assignee @me --add-label status:in-progress`；
+- 修复 PR 写 `Closes #<n>` 并加 `main-red` 标签；
+- [main-red-guard.yml](../../.github/workflows/main-red-guard.yml) 会把第二个引用同一
+  issue 的 PR 加 `blocked` 并移出队列；换人时先在 issue 上 unassign；
+- `main` 未恢复绿时不要给无关 PR arm auto-merge。
+
 ## 常用查询
 
 ```console
 gh issue list --label status:todo
 gh issue list --label status:backlog --label needs-refinement
+gh issue list --label main-red --state open
 gh issue list --milestone "native 自举"
 gh issue list --label pkg:compiler --state all --search "elab in:title,body"
 gh pr view <n> --json autoMergeRequest,labels,isDraft
-gh pr checks <n> --watch
+gh pr checks <n>
+nix/tools/merge-queue.sh status
 ```
 
 ## 故障
@@ -219,9 +260,16 @@ gh pr checks <n> --watch
   首次上线时先在测试 PR 上确认实际 check 名，再写进 ruleset。
 - `gates` 选错检查：先在本地跑 `nix run .#ci -- plan <labels>`，再检查 PR 的 `type:*` /
   `pkg:*` / `area:*` 是否完整。
-- auto-merge 没打开：确认 PR 非 draft、同仓库、没有 hold 标签，且仓库仍允许 auto-merge。
-- `pr-triage` / `automerge` 没跑：它们用 `pull_request_target`，workflow 从默认分支读取；
-  修改必须先合入 main 才会对该 PR 生效。
+- PR 一直 `BEHIND`：正常；合并队列会在最新 main 上重新验证，不要 rebase。
+- 队列一直等 check：确认 `ci.yml` / `gates.yml` 有 `merge_group` 触发器，且 `gates / run`
+  在组合 head 上有结论；检查 `merge_group.head_ref` 是否能解析出 PR 号。
+- PR 被移出队列：看 PR 时间线的原因；冲突才 rebase，检查失败就修，超时重新 arm。
+- `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
+- auto-merge 没打开：确认 PR 非 draft、同仓库、没有 hold 标签；队列启用后不再需要
+  `strict up-to-date`。
+- `main-red` issue 重复：确认 `main-red.yml` 已合入 main；guard 依赖同一个 issue 的 assignee。
+- `pr-triage` / `automerge` / `main-red-guard` 没跑：它们用 `pull_request_target`，workflow
+  从默认分支读取；修改必须先合入 main 才会对该 PR 生效。
 - 标签迁移失败：先跑 `nix/tools/github-labels.sh --sync`，再跑 `--migrate`；脚本只加新标签、
   删旧标签，不直接重命名。
 - 没有 `pkg:*` / `area:*`：`nix/tools/pr-labels.sh` 对路径做映射；新增目录时同步补映射与

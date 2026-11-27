@@ -19,11 +19,14 @@ git status --short                     # 应为干净；脏就先提交或放 _s
 主工作区路径用 `git worktree list` 找 `[main]` 那一行。issue 可选：PR-only 改动加
 `no-issue` 标签；需要追踪的复杂工作再按技能 `vuna-issue` 建/领并标 `status:in-progress`。
 
+如果 `main` 是红的（`gh issue list --label main-red --state open`），先按
+[workflow.md §6](../../rules/workflow.md) 认领；已被别人认领就让出，不要另开修复 PR。
+
 ## 1. 开 PR 前：rebase + 整理提交
 
 ```console
 git fetch origin
-git rebase origin/main
+git rebase origin/main      # 可选：只为整理历史；不要求追上最新 main
 git rebase -i origin/main
 nix run .#ci -- pr
 ```
@@ -32,6 +35,7 @@ nix run .#ci -- pr
 - 不允许残留 `fixup!` / `squash!` / `WIP`；一个提交只做一件事。
 - `chore(seed): ...` 保持独立提交，不压进特性提交。
 - 整理完分支必须是线性的：`git rev-list --merges origin/main..HEAD` 无输出。
+- 开 PR 后不要因为其他 PR 合入、自己变成 `BEHIND` 就反复 rebase；只有冲突才 rebase。
 
 ## 2. 推送并创建 PR
 
@@ -50,15 +54,15 @@ gh pr create --base main --title "<type(scope): 中文描述>" \
 ## 3. 门禁：自动计划，不手工选组
 
 PR 的必需检查是 `pr / run` 与 `gates / run`。`pr-triage` 会根据标题、路径与关联 issue
-自动维护 `type:*`、`pkg:*`、`area:*`；`gates.yml` 用这些标签选出检查子集（suite 侧是
-`nix/checks/slices.nix` 的 area 切片；计划里的完整 gate / e2e 换成 `gate-shard-*` /
-`e2e-shard-*` 由 `suite` matrix 并行，`gates / run` 收齐结论），不需要手工加
-`deep` / `suite`。main push 会额外跑完整 `gate`（fast+integration），完整 suite 仍由
-nightly 的 `suite` 组兜底。
+自动维护 `type:*`、`pkg:*`、`area:*`；PR 上 `gates.yml` 用这些标签选出 area 切片
+（suite 侧是 `nix/checks/slices.nix`），`merge_group` 上同一个 `gates / run` 固定跑
+完整 `gate-shard-0..3 + units` + area 计划，作为合并队列的最终验证。不需要手工加
+`deep` / `suite`；main push 仍跑完整 `gate` 作为合并后兜底。
 
 ```console
 nix run .#ci -- plan type:bug pkg:compiler   # 本地预览将跑哪些检查
-gh pr checks <n> --watch
+gh pr checks <n>                             # PR 自己的检查
+nix/tools/merge-queue.sh status              # 队列位置 / 状态 / ETA
 ```
 
 需要强制整组时再手动加标签：
@@ -89,18 +93,23 @@ force push 只对特性分支使用；`main` 受保护，永远不要对它 forc
 ## 5. 合并
 
 非 draft、同仓库分支、无 `blocked` / `needs-info` / `wontfix` 的 PR 会自动打开
-GitHub auto-merge；`pr / run` 与 `gates / run` 全绿且分支与 main 同步后自动 rebase merge。
+GitHub auto-merge；required checks 全绿后进入合并队列。队列在**最新 main + 队前 PR** 的
+组合 head 上重跑 `pr / run` 与完整 `gates / run`，绿后自动 rebase 落 `main`。
 
 ```console
-gh pr checks <n> --watch
+nix/tools/merge-queue.sh status
 gh pr view <n> --json autoMergeRequest,labels,isDraft
 ```
 
 - 只允许 rebase merge；不要用 squash / merge commit。
-- 需要 hold 时加 `blocked` / `needs-info` 或转 draft，auto-merge 会自动关闭。
-- 分支落后于 main 时 GitHub 不会合并；在分支上 rebase 后 `git push --force-with-lease`。
+- **`BEHIND` 不是失败，不要 rebase**；队列会把 PR 排到最新 main 后面。只有冲突
+  （`mergeable=CONFLICTING`）时才 `git rebase origin/main && git push --force-with-lease`。
+- 需要 hold 时加 `blocked` / `needs-info` 或转 draft；automerge 会把已在队列里的 PR
+  显式 dequeue（只 disable auto-merge 不够）。解除 hold 后会重新 arm。
+- 队列把 PR 移除时先看原因：冲突才 rebase；检查失败就修；超时重新 arm。
 - 不要手动 merge 绕过 required checks；手动 `gh pr merge <n> --rebase` 只用于 break-glass
   或用户明确要求。
+- 用 `nix/tools/merge-queue.sh dequeue <n>` 手动移出队列；`wait <n>` 只在明确要阻塞等结果时用。
 
 ## 6. seed 轮换 PR
 
@@ -108,7 +117,8 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
 - rebase 到最新 `origin/main` 时如果 `seed/` 冲突：abort，先 rebase 非 seed 提交，再重新
   `nix build .#vuna --out-link result && sh nix/seed/rotate.sh ./result/bin/vuna`。
   **不要**手选 `seed/` 冲突两侧。
-- 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 在它合并后重新 rebase。
+- 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 不需要跟着 rebase，队列会在
+  最新 `main` 上重新验证；只有 `seed/` 冲突时才按上面的流程处理。
 
 ## 7. break-glass
 
@@ -130,5 +140,5 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
 - 提交：<sha> <subject> …
 - 标签：type / pkg / area / 手动 gate
 - 门禁：pr / run 绿；gates / run 绿或失败原因
-- 状态：auto-merge 已排队 / 已合并 <sha> / 已 hold（原因）
+- 状态：auto-merge 已 arm / 队列 position N / 已合并 <sha> / 已 hold（原因）
 ```
