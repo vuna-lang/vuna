@@ -117,13 +117,6 @@ record DeclTable where
 emptyDeclTable : DeclTable
 emptyDeclTable = DeclTable [] [] [] [] [] [] []
 
--- | 源码文本 → 声明表；parse 失败给空表。
-declTableFor : String -> DeclTable
-declTableFor text =
-  case parseSource "<semantic>" text of
-    ErrC _ => emptyDeclTable
-    OkC sf => declTableOf sf
-
 -- | 内部：从 parse 结果按类别收集声明名。
 declTableOf : SourceFile -> DeclTable
 declTableOf sf =
@@ -298,11 +291,16 @@ semanticTokensJson text = JObj [("data", JArr (map JNum (semanticTokenData text)
 -- | 内部：按 token 顺序展开的 delta 编码整数流；词法失败给空。
 semanticTokenData : String -> List Int
 semanticTokenData text =
-  let
-    table = declTableFor text
-  in case lexCst text of
-    Nothing => []
-    Just toks => rowsGo (split "\n" text) table 0 0 Nothing toks
+  case parseSourceDetailed "<semantic>" text of
+    ErrC _ => []
+    OkC parsed =>
+      rowsGo
+        (split "\n" text)
+        (declTableOf parsed.parsedFile)
+        0
+        0
+        Nothing
+        (lexTokensOf text parsed.parsedRawToks parsed.parsedComments)
 
 -- | 内部：逐 token 累积 `(上一行, 上一列)` 状态，把分类结果拼成 delta 流。
 rowsGo : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> List CstToken -> List Int
