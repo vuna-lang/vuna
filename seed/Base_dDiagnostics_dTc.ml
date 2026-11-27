@@ -1,82 +1,83 @@
 open Vuna_runtime
-type t_TcErr = C_TcErr_BoolCaseRestriction | C_TcErr_CaseBranchTooFewArgs of (string) * (string) | C_TcErr_CaptureFuel | C_TcErr_CatchAllNotLast | C_TcErr_ClauseTooManyPatterns | C_TcErr_ClauseUnreachable | C_TcErr_DataKindArrows | C_TcErr_DefMoreParams | C_TcErr_DefParamsMustBeVars | C_TcErr_DoUnsupported | C_TcErr_FunctionNoClauses | C_TcErr_HoleNoExpectedType | C_TcErr_ImplicitParamKind | C_TcErr_ImpossibleBranchEmptyCtx | C_TcErr_ImpossibleBranchIndex | C_TcErr_IndexFuel | C_TcErr_InstanceHeadNotApp | C_TcErr_ConstraintNotDict | C_TcErr_InstanceMissingMethod | C_TcErr_OrphanInstance | C_TcErr_InterfaceNoParam | C_TcErr_NoInstParam | C_TcErr_IntStringCaseNeedsFallback | C_TcErr_IntStringCaseRestriction | C_TcErr_InvalidArrowType | C_TcErr_LambdaNoSignature | C_TcErr_LambdaTooManyParams | C_TcErr_NestedPatterns | C_TcErr_NatLiteralOutOfRange | C_TcErr_NotInductiveFamily | C_TcErr_OnlyCtorPatterns | C_TcErr_PatternFuel | C_TcErr_RecordsUnsupported | C_TcErr_TooManyArgs | C_TcErr_TypeLevelArg | C_TcErr_TypeMismatchCaseCount | C_TcErr_TypeMismatchCtorArity | C_TcErr_UniverseLevelNonNegative | C_TcErr_AxiomWithDefinition of (string) | C_TcErr_BranchTooManyArgs of (string) | C_TcErr_CannotProveTermination of (string) | C_TcErr_TerminationBudgetExhausted of (string) | C_TcErr_CannotRedefineBuiltin of (string) | C_TcErr_CannotSolveMetavar of (string) | C_TcErr_CannotSolveHigherOrder of (string) | C_TcErr_CannotSolveOccurs of (string) | C_TcErr_TypeMismatchCaseVars of (string) | C_TcErr_DuplicateInstance of (string) | C_TcErr_InstanceContextMissing of (string) | C_TcErr_SuperclassNotSatisfied of (string) * (string) | C_TcErr_OverlappingInstances of (string) | C_TcErr_DuplicateSignature of (string) | C_TcErr_ExpectedSignature of (string) | C_TcErr_ExpectedType of (string) | C_TcErr_FfiTypeUnsupported of (string) | C_TcErr_EqRequiresEvidence of (string) | C_TcErr_InstanceUnknownMethod of (string) | C_TcErr_InstanceDuplicateMethod of (string) | C_TcErr_NeedsTwoArgs of (string) | C_TcErr_NoInstanceFound of (string) | C_TcErr_InstanceSearchExhausted of (string) | C_TcErr_InterpNoInstance of (string) | C_TcErr_NotExhaustive of (string) | C_TcErr_SignatureNoDef of (string) | C_TcErr_UnknownInterface of (string) | C_TcErr_UnknownName of (string) | C_TcErr_UnsolvedHole of (string) | C_TcErr_UnsolvedMetavarInfer of (string) | C_TcErr_LinearUnused of (string) | C_TcErr_LinearOverused of (string) | C_TcErr_ErasedBinderUsed of (string) | C_TcErr_MultiplicityImplicit of (string) | C_TcErr_MultiplicityTypeDomain of (string) | C_TcErr_LinearTypeNeedsOne of (string) | C_TcErr_LinearValueNeedsLinearBinder of (string) | C_TcErr_LinearTopLevel of (string) | C_TcErr_LinearCaptureEscapes of (string) | C_TcErr_UnhandledEffects of (string) | C_TcErr_DebugConstructInRelease of (string) | C_TcErr_MainArity of (string) | C_TcErr_EffResFamilyMissing of (string) | C_TcErr_HandleFamilyUnsupported of (string) | C_TcErr_AmbiguousCtor of (string) * (string) | C_TcErr_AmbiguousName of (string) * (string) | C_TcErr_AmbiguousInstance of (string) * (string) | C_TcErr_HandleClauseFamilyMismatch of (string) * (string) | C_TcErr_AppliedNotType of (string) | C_TcErr_CtorDoesNotReturn of (string) * (string) | C_TcErr_CtorError of (string) * (string) | C_TcErr_CtorWrongIndices of (string) * (string) | C_TcErr_NotTraitMethod of (string) * (string) | C_TcErr_OpNotDefinedFor of (string) * (string) | C_TcErr_OpOnlyIntString of (string) * (string) | C_TcErr_UnknownConstructorInCase of (string) * (string) | C_TcErr_UnsolvedMetavar of (string) * (string) | C_TcErr_TypeMismatch of (string) * (string) | C_TcErr_TypeMismatchCaseBranch of (string) * (string) | C_TcErr_WhereNeedsSig of (string) * (string) | C_TcErr_DerivingViaUnboxedRequired | C_TcErr_DerivingViaOnlyRecord | C_TcErr_ReprAliasInvalid | C_TcErr_RecordDuplicateField | C_TcErr_RecordMissingField of (string) | C_TcErr_RecordUnknownField of (string) | C_TcErr_UnknownRecord of (string) | C_TcErr_DeriveCtorFieldCount of (string) | C_TcErr_DeriveFieldType of (string) * (string) * (string) | C_TcErr_DeriveSingleCtor of (string) | C_TcErr_DeriveUnsupportedKind of (string) | C_TcErr_EntryInstanceNotDefault of (string)
+type t_TcErr = C_TcErr_BoolCaseRestriction | C_TcErr_CaseBranchTooFewArgs of (string) * (string) | C_TcErr_CaptureFuel | C_TcErr_CatchAllNotLast | C_TcErr_ClauseTooManyPatterns | C_TcErr_ClauseUnreachable | C_TcErr_DataKindArrows | C_TcErr_DefMoreParams | C_TcErr_DefParamsMustBeVars | C_TcErr_DoUnsupported | C_TcErr_FunctionNoClauses | C_TcErr_HoleNoExpectedType | C_TcErr_ImplicitParamKind | C_TcErr_ImpossibleBranchEmptyCtx | C_TcErr_ImpossibleBranchIndex | C_TcErr_IndexFuel | C_TcErr_InstanceHeadNotApp | C_TcErr_ConstraintNotDict | C_TcErr_InstanceMissingMethod | C_TcErr_OrphanInstance | C_TcErr_InterfaceNoParam | C_TcErr_NoInstParam | C_TcErr_IntStringCaseNeedsFallback | C_TcErr_IntStringCaseRestriction | C_TcErr_InvalidArrowType | C_TcErr_LambdaNoSignature | C_TcErr_LambdaTooManyParams | C_TcErr_NestedPatterns | C_TcErr_NatLiteralOutOfRange | C_TcErr_NotInductiveFamily | C_TcErr_OnlyCtorPatterns | C_TcErr_PatternFuel | C_TcErr_RecordsUnsupported | C_TcErr_TooManyArgs | C_TcErr_TypeLevelArg | C_TcErr_TypeMismatchCaseCount | C_TcErr_TypeMismatchCtorArity | C_TcErr_UniverseLevelNonNegative | C_TcErr_AxiomWithDefinition of (string) | C_TcErr_BranchTooManyArgs of (string) | C_TcErr_CannotProveTermination of (string) | C_TcErr_TerminationBudgetExhausted of (string) | C_TcErr_CannotRedefineBuiltin of (string) | C_TcErr_CannotSolveMetavar of (string) | C_TcErr_CannotSolveHigherOrder of (string) | C_TcErr_CannotSolveOccurs of (string) | C_TcErr_TypeMismatchCaseVars of (string) | C_TcErr_DuplicateInstance of (string) | C_TcErr_InstanceContextMissing of (string) | C_TcErr_SuperclassNotSatisfied of (string) * (string) | C_TcErr_OverlappingInstances of (string) | C_TcErr_DuplicateSignature of (string) | C_TcErr_ExpectedSignature of (string) | C_TcErr_ExpectedType of (string) | C_TcErr_FfiTypeUnsupported of (string) | C_TcErr_EqRequiresEvidence of (string) | C_TcErr_InstanceUnknownMethod of (string) | C_TcErr_InstanceDuplicateMethod of (string) | C_TcErr_NeedsTwoArgs of (string) | C_TcErr_NoInstanceFound of (string) | C_TcErr_InstanceSearchExhausted of (string) | C_TcErr_InterpNoInstance of (string) | C_TcErr_NotExhaustive of (string) | C_TcErr_SignatureNoDef of (string) | C_TcErr_UnknownInterface of (string) | C_TcErr_UnknownName of (string) | C_TcErr_UnsolvedHole of (string) | C_TcErr_UnsolvedMetavarInfer of (string) | C_TcErr_LinearUnused of (string) | C_TcErr_LinearOverused of (string) | C_TcErr_ErasedBinderUsed of (string) | C_TcErr_MultiplicityImplicit of (string) | C_TcErr_MultiplicityTypeDomain of (string) | C_TcErr_LinearTypeNeedsOne of (string) | C_TcErr_LinearValueNeedsLinearBinder of (string) | C_TcErr_LinearTopLevel of (string) | C_TcErr_LinearCaptureEscapes of (string) | C_TcErr_UnhandledEffects of (string) | C_TcErr_DebugConstructInRelease of (string) | C_TcErr_MainArity of (string) | C_TcErr_EffResFamilyMissing of (string) | C_TcErr_HandleFamilyUnsupported of (string) | C_TcErr_AmbiguousCtor of (string) * (string) | C_TcErr_AmbiguousName of (string) * (string) | C_TcErr_AmbiguousInstance of (string) * (string) | C_TcErr_HandleClauseFamilyMismatch of (string) * (string) | C_TcErr_AppliedNotType of (string) | C_TcErr_CtorDoesNotReturn of (string) * (string) | C_TcErr_CtorError of (string) * (string) | C_TcErr_CtorWrongIndices of (string) * (string) | C_TcErr_CtorNotStrictlyPositive of (string) * (string) | C_TcErr_NotTraitMethod of (string) * (string) | C_TcErr_OpNotDefinedFor of (string) * (string) | C_TcErr_OpOnlyIntString of (string) * (string) | C_TcErr_UnknownConstructorInCase of (string) * (string) | C_TcErr_UnsolvedMetavar of (string) * (string) | C_TcErr_TypeMismatch of (string) * (string) | C_TcErr_TypeMismatchCaseBranch of (string) * (string) | C_TcErr_WhereNeedsSig of (string) * (string) | C_TcErr_DerivingViaUnboxedRequired | C_TcErr_DerivingViaOnlyRecord | C_TcErr_ReprAliasInvalid | C_TcErr_RecordDuplicateField | C_TcErr_RecordMissingField of (string) | C_TcErr_RecordUnknownField of (string) | C_TcErr_UnknownRecord of (string) | C_TcErr_DeriveCtorFieldCount of (string) | C_TcErr_DeriveFieldType of (string) * (string) * (string) | C_TcErr_DeriveSingleCtor of (string) | C_TcErr_DeriveUnsupportedKind of (string) | C_TcErr_EntryInstanceNotDefault of (string)
 and t_TcEntry = { f_TcEntry_tcEntryCode : string; f_TcEntry_tcEntryTemplate : string; f_TcEntry_tcEntryDesc : string }
 
-# 157 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcCode = (fun (dtb_u_u2 : t_TcErr) -> (match dtb_u_u2 with
-  | C_TcErr_DeriveUnsupportedKind (dtb_u_u3) -> "TC_DeriveUnsupportedKind"
-  | C_TcErr_DeriveSingleCtor (dtb_u_u4) -> "TC_DeriveSingleCtor"
-  | C_TcErr_DeriveFieldType (dtb_u_u5, dtb_u_u6, dtb_u_u7) -> "TC_DeriveFieldType"
-  | C_TcErr_DeriveCtorFieldCount (dtb_u_u8) -> "TC_DeriveCtorFieldCount"
-  | C_TcErr_UnknownRecord (dtb_u_u9) -> "TC_UnknownRecord"
-  | C_TcErr_RecordUnknownField (dtb_u_u10) -> "TC_RecordUnknownField"
-  | C_TcErr_RecordMissingField (dtb_u_u11) -> "TC_RecordMissingField"
+# 159 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcCode = (fun (mc0 : t_TcErr) -> (match mc0 with
+  | C_TcErr_DeriveUnsupportedKind (dtb__0) -> "TC_DeriveUnsupportedKind"
+  | C_TcErr_DeriveSingleCtor (dtb__1) -> "TC_DeriveSingleCtor"
+  | C_TcErr_DeriveFieldType (dtb__2, dtb__3, dtb__4) -> "TC_DeriveFieldType"
+  | C_TcErr_DeriveCtorFieldCount (dtb__5) -> "TC_DeriveCtorFieldCount"
+  | C_TcErr_UnknownRecord (dtb__6) -> "TC_UnknownRecord"
+  | C_TcErr_RecordUnknownField (dtb__7) -> "TC_RecordUnknownField"
+  | C_TcErr_RecordMissingField (dtb__8) -> "TC_RecordMissingField"
   | C_TcErr_RecordDuplicateField -> "TC_RecordDuplicateField"
   | C_TcErr_ReprAliasInvalid -> "TC_ReprAliasInvalid"
   | C_TcErr_DerivingViaOnlyRecord -> "TC_DerivingViaOnlyRecord"
   | C_TcErr_DerivingViaUnboxedRequired -> "TC_DerivingViaUnboxedRequired"
-  | C_TcErr_WhereNeedsSig (dtb_u_u12, dtb_u_u13) -> "TC_WhereNeedsSig"
-  | C_TcErr_TypeMismatchCaseBranch (dtb_u_u14, dtb_u_u15) -> "TC_TypeMismatchCaseBranch"
-  | C_TcErr_TypeMismatch (dtb_u_u16, dtb_u_u17) -> "TC_TypeMismatch"
-  | C_TcErr_UnsolvedMetavar (dtb_u_u18, dtb_u_u19) -> "TC_UnsolvedMetavar"
-  | C_TcErr_UnknownConstructorInCase (dtb_u_u20, dtb_u_u21) -> "TC_UnknownConstructorInCase"
-  | C_TcErr_OpOnlyIntString (dtb_u_u22, dtb_u_u23) -> "TC_OpOnlyIntString"
-  | C_TcErr_OpNotDefinedFor (dtb_u_u24, dtb_u_u25) -> "TC_OpNotDefinedFor"
-  | C_TcErr_NotTraitMethod (dtb_u_u26, dtb_u_u27) -> "TC_NotTraitMethod"
-  | C_TcErr_CtorWrongIndices (dtb_u_u28, dtb_u_u29) -> "TC_CtorWrongIndices"
-  | C_TcErr_CtorError (dtb_u_u30, dtb_u_u31) -> "TC_CtorError"
-  | C_TcErr_CtorDoesNotReturn (dtb_u_u32, dtb_u_u33) -> "TC_CtorDoesNotReturn"
-  | C_TcErr_AppliedNotType (dtb_u_u34) -> "TC_AppliedNotType"
-  | C_TcErr_HandleClauseFamilyMismatch (dtb_u_u35, dtb_u_u36) -> "TC_HandleClauseFamilyMismatch"
-  | C_TcErr_AmbiguousInstance (dtb_u_u37, dtb_u_u38) -> "TC_AmbiguousInstance"
-  | C_TcErr_AmbiguousName (dtb_u_u39, dtb_u_u40) -> "TC_AmbiguousName"
-  | C_TcErr_AmbiguousCtor (dtb_u_u41, dtb_u_u42) -> "TC_AmbiguousCtor"
-  | C_TcErr_HandleFamilyUnsupported (dtb_u_u43) -> "TC_HandleFamilyUnsupported"
-  | C_TcErr_EffResFamilyMissing (dtb_u_u44) -> "TC_EffResFamilyMissing"
-  | C_TcErr_UnsolvedMetavarInfer (dtb_u_u45) -> "TC_UnsolvedMetavarInfer"
-  | C_TcErr_UnsolvedHole (dtb_u_u46) -> "TC_UnsolvedHole"
-  | C_TcErr_UnknownName (dtb_u_u47) -> "TC_UnknownName"
-  | C_TcErr_UnknownInterface (dtb_u_u48) -> "TC_UnknownInterface"
-  | C_TcErr_SignatureNoDef (dtb_u_u49) -> "TC_SignatureNoDef"
-  | C_TcErr_NotExhaustive (dtb_u_u50) -> "TC_NotExhaustive"
-  | C_TcErr_InterpNoInstance (dtb_u_u51) -> "TC_InterpNoInstance"
-  | C_TcErr_InstanceSearchExhausted (dtb_u_u52) -> "TC_InstanceSearchExhausted"
-  | C_TcErr_NoInstanceFound (dtb_u_u53) -> "TC_NoInstanceFound"
-  | C_TcErr_NeedsTwoArgs (dtb_u_u54) -> "TC_NeedsTwoArgs"
-  | C_TcErr_InstanceDuplicateMethod (dtb_u_u55) -> "TC_InstanceDuplicateMethod"
-  | C_TcErr_InstanceUnknownMethod (dtb_u_u56) -> "TC_InstanceUnknownMethod"
-  | C_TcErr_EqRequiresEvidence (dtb_u_u57) -> "TC_EqRequiresEvidence"
-  | C_TcErr_FfiTypeUnsupported (dtb_u_u58) -> "TC_FfiTypeUnsupported"
-  | C_TcErr_ExpectedType (dtb_u_u59) -> "TC_ExpectedType"
-  | C_TcErr_ExpectedSignature (dtb_u_u60) -> "TC_ExpectedSignature"
-  | C_TcErr_DuplicateSignature (dtb_u_u61) -> "TC_DuplicateSignature"
-  | C_TcErr_OverlappingInstances (dtb_u_u62) -> "TC_OverlappingInstances"
-  | C_TcErr_SuperclassNotSatisfied (dtb_u_u63, dtb_u_u64) -> "TC_SuperclassNotSatisfied"
-  | C_TcErr_InstanceContextMissing (dtb_u_u65) -> "TC_InstanceContextMissing"
-  | C_TcErr_DuplicateInstance (dtb_u_u66) -> "TC_DuplicateInstance"
-  | C_TcErr_TypeMismatchCaseVars (dtb_u_u67) -> "TC_TypeMismatchCaseVars"
-  | C_TcErr_EntryInstanceNotDefault (dtb_u_u68) -> "TC_EntryInstanceNotDefault"
-  | C_TcErr_MainArity (dtb_u_u69) -> "TC_MainArity"
-  | C_TcErr_DebugConstructInRelease (dtb_u_u70) -> "TC_DebugConstructInRelease"
-  | C_TcErr_UnhandledEffects (dtb_u_u71) -> "TC_UnhandledEffects"
-  | C_TcErr_LinearCaptureEscapes (dtb_u_u72) -> "TC_LinearCaptureEscapes"
-  | C_TcErr_LinearTopLevel (dtb_u_u73) -> "TC_LinearTopLevel"
-  | C_TcErr_LinearValueNeedsLinearBinder (dtb_u_u74) -> "TC_LinearValueNeedsLinearBinder"
-  | C_TcErr_LinearTypeNeedsOne (dtb_u_u75) -> "TC_LinearTypeNeedsOne"
-  | C_TcErr_MultiplicityTypeDomain (dtb_u_u76) -> "TC_MultiplicityTypeDomain"
-  | C_TcErr_MultiplicityImplicit (dtb_u_u77) -> "TC_MultiplicityImplicit"
-  | C_TcErr_ErasedBinderUsed (dtb_u_u78) -> "TC_ErasedBinderUsed"
-  | C_TcErr_LinearOverused (dtb_u_u79) -> "TC_LinearOverused"
-  | C_TcErr_LinearUnused (dtb_u_u80) -> "TC_LinearUnused"
-  | C_TcErr_CannotSolveOccurs (dtb_u_u81) -> "TC_CannotSolveOccurs"
-  | C_TcErr_CannotSolveHigherOrder (dtb_u_u82) -> "TC_CannotSolveHigherOrder"
-  | C_TcErr_CannotSolveMetavar (dtb_u_u83) -> "TC_CannotSolveMetavar"
-  | C_TcErr_CannotRedefineBuiltin (dtb_u_u84) -> "TC_CannotRedefineBuiltin"
-  | C_TcErr_TerminationBudgetExhausted (dtb_u_u85) -> "TC_TerminationBudgetExhausted"
-  | C_TcErr_CannotProveTermination (dtb_u_u86) -> "TC_CannotProveTermination"
+  | C_TcErr_WhereNeedsSig (dtb__9, dtb__10) -> "TC_WhereNeedsSig"
+  | C_TcErr_TypeMismatchCaseBranch (dtb__11, dtb__12) -> "TC_TypeMismatchCaseBranch"
+  | C_TcErr_TypeMismatch (dtb__13, dtb__14) -> "TC_TypeMismatch"
+  | C_TcErr_UnsolvedMetavar (dtb__15, dtb__16) -> "TC_UnsolvedMetavar"
+  | C_TcErr_UnknownConstructorInCase (dtb__17, dtb__18) -> "TC_UnknownConstructorInCase"
+  | C_TcErr_OpOnlyIntString (dtb__19, dtb__20) -> "TC_OpOnlyIntString"
+  | C_TcErr_OpNotDefinedFor (dtb__21, dtb__22) -> "TC_OpNotDefinedFor"
+  | C_TcErr_NotTraitMethod (dtb__23, dtb__24) -> "TC_NotTraitMethod"
+  | C_TcErr_CtorNotStrictlyPositive (dtb__25, dtb__26) -> "TC_CtorNotStrictlyPositive"
+  | C_TcErr_CtorWrongIndices (dtb__27, dtb__28) -> "TC_CtorWrongIndices"
+  | C_TcErr_CtorError (dtb__29, dtb__30) -> "TC_CtorError"
+  | C_TcErr_CtorDoesNotReturn (dtb__31, dtb__32) -> "TC_CtorDoesNotReturn"
+  | C_TcErr_AppliedNotType (dtb__33) -> "TC_AppliedNotType"
+  | C_TcErr_HandleClauseFamilyMismatch (dtb__34, dtb__35) -> "TC_HandleClauseFamilyMismatch"
+  | C_TcErr_AmbiguousInstance (dtb__36, dtb__37) -> "TC_AmbiguousInstance"
+  | C_TcErr_AmbiguousName (dtb__38, dtb__39) -> "TC_AmbiguousName"
+  | C_TcErr_AmbiguousCtor (dtb__40, dtb__41) -> "TC_AmbiguousCtor"
+  | C_TcErr_HandleFamilyUnsupported (dtb__42) -> "TC_HandleFamilyUnsupported"
+  | C_TcErr_EffResFamilyMissing (dtb__43) -> "TC_EffResFamilyMissing"
+  | C_TcErr_UnsolvedMetavarInfer (dtb__44) -> "TC_UnsolvedMetavarInfer"
+  | C_TcErr_UnsolvedHole (dtb__45) -> "TC_UnsolvedHole"
+  | C_TcErr_UnknownName (dtb__46) -> "TC_UnknownName"
+  | C_TcErr_UnknownInterface (dtb__47) -> "TC_UnknownInterface"
+  | C_TcErr_SignatureNoDef (dtb__48) -> "TC_SignatureNoDef"
+  | C_TcErr_NotExhaustive (dtb__49) -> "TC_NotExhaustive"
+  | C_TcErr_InterpNoInstance (dtb__50) -> "TC_InterpNoInstance"
+  | C_TcErr_InstanceSearchExhausted (dtb__51) -> "TC_InstanceSearchExhausted"
+  | C_TcErr_NoInstanceFound (dtb__52) -> "TC_NoInstanceFound"
+  | C_TcErr_NeedsTwoArgs (dtb__53) -> "TC_NeedsTwoArgs"
+  | C_TcErr_InstanceDuplicateMethod (dtb__54) -> "TC_InstanceDuplicateMethod"
+  | C_TcErr_InstanceUnknownMethod (dtb__55) -> "TC_InstanceUnknownMethod"
+  | C_TcErr_EqRequiresEvidence (dtb__56) -> "TC_EqRequiresEvidence"
+  | C_TcErr_FfiTypeUnsupported (dtb__57) -> "TC_FfiTypeUnsupported"
+  | C_TcErr_ExpectedType (dtb__58) -> "TC_ExpectedType"
+  | C_TcErr_ExpectedSignature (dtb__59) -> "TC_ExpectedSignature"
+  | C_TcErr_DuplicateSignature (dtb__60) -> "TC_DuplicateSignature"
+  | C_TcErr_OverlappingInstances (dtb__61) -> "TC_OverlappingInstances"
+  | C_TcErr_SuperclassNotSatisfied (dtb__62, dtb__63) -> "TC_SuperclassNotSatisfied"
+  | C_TcErr_InstanceContextMissing (dtb__64) -> "TC_InstanceContextMissing"
+  | C_TcErr_DuplicateInstance (dtb__65) -> "TC_DuplicateInstance"
+  | C_TcErr_TypeMismatchCaseVars (dtb__66) -> "TC_TypeMismatchCaseVars"
+  | C_TcErr_EntryInstanceNotDefault (dtb__67) -> "TC_EntryInstanceNotDefault"
+  | C_TcErr_MainArity (dtb__68) -> "TC_MainArity"
+  | C_TcErr_DebugConstructInRelease (dtb__69) -> "TC_DebugConstructInRelease"
+  | C_TcErr_UnhandledEffects (dtb__70) -> "TC_UnhandledEffects"
+  | C_TcErr_LinearCaptureEscapes (dtb__71) -> "TC_LinearCaptureEscapes"
+  | C_TcErr_LinearTopLevel (dtb__72) -> "TC_LinearTopLevel"
+  | C_TcErr_LinearValueNeedsLinearBinder (dtb__73) -> "TC_LinearValueNeedsLinearBinder"
+  | C_TcErr_LinearTypeNeedsOne (dtb__74) -> "TC_LinearTypeNeedsOne"
+  | C_TcErr_MultiplicityTypeDomain (dtb__75) -> "TC_MultiplicityTypeDomain"
+  | C_TcErr_MultiplicityImplicit (dtb__76) -> "TC_MultiplicityImplicit"
+  | C_TcErr_ErasedBinderUsed (dtb__77) -> "TC_ErasedBinderUsed"
+  | C_TcErr_LinearOverused (dtb__78) -> "TC_LinearOverused"
+  | C_TcErr_LinearUnused (dtb__79) -> "TC_LinearUnused"
+  | C_TcErr_CannotSolveOccurs (dtb__80) -> "TC_CannotSolveOccurs"
+  | C_TcErr_CannotSolveHigherOrder (dtb__81) -> "TC_CannotSolveHigherOrder"
+  | C_TcErr_CannotSolveMetavar (dtb__82) -> "TC_CannotSolveMetavar"
+  | C_TcErr_CannotRedefineBuiltin (dtb__83) -> "TC_CannotRedefineBuiltin"
+  | C_TcErr_TerminationBudgetExhausted (dtb__84) -> "TC_TerminationBudgetExhausted"
+  | C_TcErr_CannotProveTermination (dtb__85) -> "TC_CannotProveTermination"
   | C_TcErr_ClauseUnreachable -> "TC_ClauseUnreachable"
-  | C_TcErr_BranchTooManyArgs (dtb_u_u87) -> "TC_BranchTooManyArgs"
-  | C_TcErr_AxiomWithDefinition (dtb_u_u88) -> "TC_AxiomWithDefinition"
+  | C_TcErr_BranchTooManyArgs (dtb__86) -> "TC_BranchTooManyArgs"
+  | C_TcErr_AxiomWithDefinition (dtb__87) -> "TC_AxiomWithDefinition"
   | C_TcErr_UniverseLevelNonNegative -> "TC_UniverseLevelNonNegative"
   | C_TcErr_TypeMismatchCtorArity -> "TC_TypeMismatchCtorArity"
   | C_TcErr_TypeMismatchCaseCount -> "TC_TypeMismatchCaseCount"
@@ -112,86 +113,87 @@ let v_tcCode = (fun (dtb_u_u2 : t_TcErr) -> (match dtb_u_u2 with
   | C_TcErr_ClauseTooManyPatterns -> "TC_ClauseTooManyPatterns"
   | C_TcErr_CatchAllNotLast -> "TC_CatchAllNotLast"
   | C_TcErr_CaptureFuel -> "TC_CaptureFuel"
-  | C_TcErr_CaseBranchTooFewArgs (dtb_u_u89, dtb_u_u90) -> "TC_CaseBranchTooFewArgs"
+  | C_TcErr_CaseBranchTooFewArgs (dtb__88, dtb__89) -> "TC_CaseBranchTooFewArgs"
   | C_TcErr_BoolCaseRestriction -> "TC_BoolCaseRestriction"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 273 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcTemplate = (fun (dtb_u_u92 : t_TcErr) -> (match dtb_u_u92 with
-  | C_TcErr_EntryInstanceNotDefault (dtb_u_u93) -> "a builtin effect in main's row may only use the default instance (got <0>)"
-  | C_TcErr_MainArity (dtb_u_u94) -> "main must not take parameters (got <0>)"
-  | C_TcErr_DebugConstructInRelease (dtb_u_u95) -> "<0> is only available in debug builds (remove it before a release build)"
-  | C_TcErr_UnhandledEffects (dtb_u_u96) -> "row must be Nil here (the action still has unhandled effects: <0>)"
-  | C_TcErr_LinearCaptureEscapes (dtb_u_u97) -> "lambda <0> captures a linear value that may escape"
-  | C_TcErr_LinearTopLevel (dtb_u_u98) -> "top-level <0> has a linear type (linear values cannot be global)"
-  | C_TcErr_LinearValueNeedsLinearBinder (dtb_u_u99) -> "linear value <0> can be bound or passed only at multiplicity 1"
-  | C_TcErr_LinearTypeNeedsOne (dtb_u_u100) -> "binder <0> has a linear type (its multiplicity must be 1)"
-  | C_TcErr_MultiplicityTypeDomain (dtb_u_u101) -> "binder <0> has a type-level domain, so its multiplicity must be 0"
-  | C_TcErr_MultiplicityImplicit (dtb_u_u102) -> "implicit binder <0> must have multiplicity 0"
-  | C_TcErr_ErasedBinderUsed (dtb_u_u103) -> "binder <0> has multiplicity 0 (it is used at runtime)"
-  | C_TcErr_LinearOverused (dtb_u_u104) -> "linear binder <0> must be used exactly once at runtime (it is used more than once)"
-  | C_TcErr_LinearUnused (dtb_u_u105) -> "linear binder <0> must be used exactly once at runtime (it is never used)"
-  | C_TcErr_DeriveUnsupportedKind (dtb_u_u106) -> "cannot derive <0> (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
-  | C_TcErr_DeriveSingleCtor (dtb_u_u107) -> "cannot derive <0>: type must have exactly one constructor"
-  | C_TcErr_DeriveFieldType (dtb_u_u108, dtb_u_u109, dtb_u_u110) -> "cannot derive <0>: field type must be <1> (got <2>)"
-  | C_TcErr_DeriveCtorFieldCount (dtb_u_u111) -> "cannot derive <0>: constructor must have exactly one field"
-  | C_TcErr_UnknownRecord (dtb_u_u112) -> "unknown record: <0>"
-  | C_TcErr_RecordUnknownField (dtb_u_u113) -> "unknown field <0>"
-  | C_TcErr_RecordMissingField (dtb_u_u114) -> "missing field <0>"
+# 276 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcTemplate = (fun (mc0 : t_TcErr) -> (match mc0 with
+  | C_TcErr_EntryInstanceNotDefault (dtb__90) -> "a builtin effect in main's row may only use the default instance (got <0>)"
+  | C_TcErr_MainArity (dtb__91) -> "main must not take parameters (got <0>)"
+  | C_TcErr_DebugConstructInRelease (dtb__92) -> "<0> is only available in debug builds (remove it before a release build)"
+  | C_TcErr_UnhandledEffects (dtb__93) -> "row must be Nil here (the action still has unhandled effects: <0>)"
+  | C_TcErr_LinearCaptureEscapes (dtb__94) -> "lambda <0> captures a linear value that may escape"
+  | C_TcErr_LinearTopLevel (dtb__95) -> "top-level <0> has a linear type (linear values cannot be global)"
+  | C_TcErr_LinearValueNeedsLinearBinder (dtb__96) -> "linear value <0> can be bound or passed only at multiplicity 1"
+  | C_TcErr_LinearTypeNeedsOne (dtb__97) -> "binder <0> has a linear type (its multiplicity must be 1)"
+  | C_TcErr_MultiplicityTypeDomain (dtb__98) -> "binder <0> has a type-level domain, so its multiplicity must be 0"
+  | C_TcErr_MultiplicityImplicit (dtb__99) -> "implicit binder <0> must have multiplicity 0"
+  | C_TcErr_ErasedBinderUsed (dtb__100) -> "binder <0> has multiplicity 0 (it is used at runtime)"
+  | C_TcErr_LinearOverused (dtb__101) -> "linear binder <0> must be used exactly once at runtime (it is used more than once)"
+  | C_TcErr_LinearUnused (dtb__102) -> "linear binder <0> must be used exactly once at runtime (it is never used)"
+  | C_TcErr_DeriveUnsupportedKind (dtb__103) -> "cannot derive <0> (supported: Show, Eq, Ord, Hashable, FromString, FromInt, FromFloat)"
+  | C_TcErr_DeriveSingleCtor (dtb__104) -> "cannot derive <0>: type must have exactly one constructor"
+  | C_TcErr_DeriveFieldType (dtb__105, dtb__106, dtb__107) -> "cannot derive <0>: field type must be <1> (got <2>)"
+  | C_TcErr_DeriveCtorFieldCount (dtb__108) -> "cannot derive <0>: constructor must have exactly one field"
+  | C_TcErr_UnknownRecord (dtb__109) -> "unknown record: <0>"
+  | C_TcErr_RecordUnknownField (dtb__110) -> "unknown field <0>"
+  | C_TcErr_RecordMissingField (dtb__111) -> "missing field <0>"
   | C_TcErr_RecordDuplicateField -> "duplicate field"
   | C_TcErr_ReprAliasInvalid -> "declared alias requires exactly one non-recursive runtime field"
   | C_TcErr_DerivingViaOnlyRecord -> "deriving via field is only allowed on record declarations (data no longer has record semantics)"
   | C_TcErr_DerivingViaUnboxedRequired -> "deriving via field requires a zero-cost single-field wrapper (auto-unboxed)"
-  | C_TcErr_WhereNeedsSig (dtb_u_u115, dtb_u_u116) -> "where binding <0> needs a type signature (write <1> : <type> before the clause)"
-  | C_TcErr_TypeMismatchCaseBranch (dtb_u_u117, dtb_u_u118) -> "type mismatch: case branch <0> vs <1>"
-  | C_TcErr_TypeMismatch (dtb_u_u119, dtb_u_u120) -> "type mismatch: expected <0>, got <1>"
-  | C_TcErr_UnsolvedMetavar (dtb_u_u121, dtb_u_u122) -> "unsolved metavariable ?<0><1>"
-  | C_TcErr_UnknownConstructorInCase (dtb_u_u123, dtb_u_u124) -> "unknown constructor <0> in case <1>"
-  | C_TcErr_OpOnlyIntString (dtb_u_u125, dtb_u_u126) -> "<0> is only defined for Int and String (found <1>)"
-  | C_TcErr_OpNotDefinedFor (dtb_u_u127, dtb_u_u128) -> "<0> is not defined for <1> (Ord instance required)"
-  | C_TcErr_NotTraitMethod (dtb_u_u129, dtb_u_u130) -> "<0> is not a method of trait <1>"
-  | C_TcErr_CtorWrongIndices (dtb_u_u131, dtb_u_u132) -> "constructor <0> has the wrong number of indices for <1>"
-  | C_TcErr_CtorError (dtb_u_u133, dtb_u_u134) -> "constructor <0>: <1>"
-  | C_TcErr_CtorDoesNotReturn (dtb_u_u135, dtb_u_u136) -> "constructor <0> does not return <1>"
-  | C_TcErr_AppliedNotType (dtb_u_u137) -> "expected a type (got <0> applied to these arguments)"
-  | C_TcErr_HandleClauseFamilyMismatch (dtb_u_u138, dtb_u_u139) -> "all handle clauses must use constructors of the same operation family (got <0> and <1>)"
-  | C_TcErr_AmbiguousInstance (dtb_u_u140, dtb_u_u141) -> "ambiguous instance for <0> (candidates: <1>)"
-  | C_TcErr_AmbiguousName (dtb_u_u142, dtb_u_u143) -> "ambiguous name <0> (candidates: <1>)"
-  | C_TcErr_AmbiguousCtor (dtb_u_u144, dtb_u_u145) -> "ambiguous constructor <0> (candidates: <1>)"
-  | C_TcErr_HandleFamilyUnsupported (dtb_u_u146) -> "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
-  | C_TcErr_EffResFamilyMissing (dtb_u_u147) -> "cannot find the op family for <0> (expected <Op> : params -> Type -> Type)"
-  | C_TcErr_UnsolvedMetavarInfer (dtb_u_u148) -> "cannot infer a type for this expression without an annotation (unsolved metavariable ?<0>)"
-  | C_TcErr_UnsolvedHole (dtb_u_u149) -> "unsolved hole <0>"
-  | C_TcErr_UnknownName (dtb_u_u150) -> "unknown name <0>"
-  | C_TcErr_UnknownInterface (dtb_u_u151) -> "unknown interface <0> in instance head or constraint"
-  | C_TcErr_SignatureNoDef (dtb_u_u152) -> "signature for <0> has no definition"
-  | C_TcErr_NotExhaustive (dtb_u_u153) -> "case is not exhaustive: missing <0>"
-  | C_TcErr_InterpNoInstance (dtb_u_u154) -> "template interpolation needs an Interp or Show instance for <0> (derive Show, define instance Interp <0>, or convert with show / strFromInt)"
-  | C_TcErr_InstanceSearchExhausted (dtb_u_u155) -> "instance search gave up on <0>: recursion budget exhausted (not a missing instance)"
-  | C_TcErr_NoInstanceFound (dtb_u_u156) -> "no instance found for <0>"
-  | C_TcErr_NeedsTwoArgs (dtb_u_u157) -> "<0> needs exactly two arguments"
-  | C_TcErr_InstanceDuplicateMethod (dtb_u_u158) -> "instance declares method <0> more than once (same method, two spellings)"
-  | C_TcErr_InstanceUnknownMethod (dtb_u_u159) -> "instance has unknown method <0>"
-  | C_TcErr_EqRequiresEvidence (dtb_u_u160) -> "cannot use == or /= on values of type <0> without an Eq instance (derive Eq or bring the Eq trait into scope)"
-  | C_TcErr_FfiTypeUnsupported (dtb_u_u161) -> "extern type is outside the supported FFI subset: <0>"
-  | C_TcErr_ExpectedType (dtb_u_u162) -> "expected a type (got <0>)"
-  | C_TcErr_ExpectedSignature (dtb_u_u163) -> "expected a type signature for <0>"
-  | C_TcErr_DuplicateSignature (dtb_u_u164) -> "duplicate signature for <0>"
-  | C_TcErr_OverlappingInstances (dtb_u_u165) -> "overlapping instance <0>"
-  | C_TcErr_SuperclassNotSatisfied (dtb_u_u166, dtb_u_u167) -> "instance <0> requires superclass instance <1>"
-  | C_TcErr_InstanceContextMissing (dtb_u_u168) -> "instance context cannot be satisfied: <0>"
-  | C_TcErr_DuplicateInstance (dtb_u_u169) -> "duplicate instance <0>"
-  | C_TcErr_TypeMismatchCaseVars (dtb_u_u170) -> "type mismatch: case branch <0> binds a different number of variables"
-  | C_TcErr_CannotSolveOccurs (dtb_u_u171) -> "cannot solve metavariable ?<0> (occurs check)"
-  | C_TcErr_CannotSolveHigherOrder (dtb_u_u172) -> "cannot solve higher-order metavariable ?<0>"
-  | C_TcErr_CannotSolveMetavar (dtb_u_u173) -> "cannot solve metavariable ?<0> (solution would escape its scope)"
-  | C_TcErr_CannotRedefineBuiltin (dtb_u_u174) -> "cannot redefine builtin <0>"
-  | C_TcErr_TerminationBudgetExhausted (dtb_u_u175) -> "termination analysis gave up on <0>: budget exhausted (not a proof of non-termination)"
-  | C_TcErr_CannotProveTermination (dtb_u_u176) -> "cannot prove termination of <0>"
+  | C_TcErr_WhereNeedsSig (dtb__112, dtb__113) -> "where binding <0> needs a type signature (write <1> : <type> before the clause)"
+  | C_TcErr_TypeMismatchCaseBranch (dtb__114, dtb__115) -> "type mismatch: case branch <0> vs <1>"
+  | C_TcErr_TypeMismatch (dtb__116, dtb__117) -> "type mismatch: expected <0>, got <1>"
+  | C_TcErr_UnsolvedMetavar (dtb__118, dtb__119) -> "unsolved metavariable ?<0><1>"
+  | C_TcErr_UnknownConstructorInCase (dtb__120, dtb__121) -> "unknown constructor <0> in case <1>"
+  | C_TcErr_OpOnlyIntString (dtb__122, dtb__123) -> "<0> is only defined for Int and String (found <1>)"
+  | C_TcErr_OpNotDefinedFor (dtb__124, dtb__125) -> "<0> is not defined for <1> (Ord instance required)"
+  | C_TcErr_NotTraitMethod (dtb__126, dtb__127) -> "<0> is not a method of trait <1>"
+  | C_TcErr_CtorNotStrictlyPositive (dtb__128, dtb__129) -> "constructor <0> is not strictly positive: <1>"
+  | C_TcErr_CtorWrongIndices (dtb__130, dtb__131) -> "constructor <0> has the wrong number of indices for <1>"
+  | C_TcErr_CtorError (dtb__132, dtb__133) -> "constructor <0>: <1>"
+  | C_TcErr_CtorDoesNotReturn (dtb__134, dtb__135) -> "constructor <0> does not return <1>"
+  | C_TcErr_AppliedNotType (dtb__136) -> "expected a type (got <0> applied to these arguments)"
+  | C_TcErr_HandleClauseFamilyMismatch (dtb__137, dtb__138) -> "all handle clauses must use constructors of the same operation family (got <0> and <1>)"
+  | C_TcErr_AmbiguousInstance (dtb__139, dtb__140) -> "ambiguous instance for <0> (candidates: <1>)"
+  | C_TcErr_AmbiguousName (dtb__141, dtb__142) -> "ambiguous name <0> (candidates: <1>)"
+  | C_TcErr_AmbiguousCtor (dtb__143, dtb__144) -> "ambiguous constructor <0> (candidates: <1>)"
+  | C_TcErr_HandleFamilyUnsupported (dtb__145) -> "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
+  | C_TcErr_EffResFamilyMissing (dtb__146) -> "cannot find the op family for <0> (expected <Op> : params -> Type -> Type)"
+  | C_TcErr_UnsolvedMetavarInfer (dtb__147) -> "cannot infer a type for this expression without an annotation (unsolved metavariable ?<0>)"
+  | C_TcErr_UnsolvedHole (dtb__148) -> "unsolved hole <0>"
+  | C_TcErr_UnknownName (dtb__149) -> "unknown name <0>"
+  | C_TcErr_UnknownInterface (dtb__150) -> "unknown interface <0> in instance head or constraint"
+  | C_TcErr_SignatureNoDef (dtb__151) -> "signature for <0> has no definition"
+  | C_TcErr_NotExhaustive (dtb__152) -> "case is not exhaustive: missing <0>"
+  | C_TcErr_InterpNoInstance (dtb__153) -> "template interpolation needs an Interp or Show instance for <0> (derive Show, define instance Interp <0>, or convert with show / strFromInt)"
+  | C_TcErr_InstanceSearchExhausted (dtb__154) -> "instance search gave up on <0>: recursion budget exhausted (not a missing instance)"
+  | C_TcErr_NoInstanceFound (dtb__155) -> "no instance found for <0>"
+  | C_TcErr_NeedsTwoArgs (dtb__156) -> "<0> needs exactly two arguments"
+  | C_TcErr_InstanceDuplicateMethod (dtb__157) -> "instance declares method <0> more than once (same method, two spellings)"
+  | C_TcErr_InstanceUnknownMethod (dtb__158) -> "instance has unknown method <0>"
+  | C_TcErr_EqRequiresEvidence (dtb__159) -> "cannot use == or /= on values of type <0> without an Eq instance (derive Eq or bring the Eq trait into scope)"
+  | C_TcErr_FfiTypeUnsupported (dtb__160) -> "extern type is outside the supported FFI subset: <0>"
+  | C_TcErr_ExpectedType (dtb__161) -> "expected a type (got <0>)"
+  | C_TcErr_ExpectedSignature (dtb__162) -> "expected a type signature for <0>"
+  | C_TcErr_DuplicateSignature (dtb__163) -> "duplicate signature for <0>"
+  | C_TcErr_OverlappingInstances (dtb__164) -> "overlapping instance <0>"
+  | C_TcErr_SuperclassNotSatisfied (dtb__165, dtb__166) -> "instance <0> requires superclass instance <1>"
+  | C_TcErr_InstanceContextMissing (dtb__167) -> "instance context cannot be satisfied: <0>"
+  | C_TcErr_DuplicateInstance (dtb__168) -> "duplicate instance <0>"
+  | C_TcErr_TypeMismatchCaseVars (dtb__169) -> "type mismatch: case branch <0> binds a different number of variables"
+  | C_TcErr_CannotSolveOccurs (dtb__170) -> "cannot solve metavariable ?<0> (occurs check)"
+  | C_TcErr_CannotSolveHigherOrder (dtb__171) -> "cannot solve higher-order metavariable ?<0>"
+  | C_TcErr_CannotSolveMetavar (dtb__172) -> "cannot solve metavariable ?<0> (solution would escape its scope)"
+  | C_TcErr_CannotRedefineBuiltin (dtb__173) -> "cannot redefine builtin <0>"
+  | C_TcErr_TerminationBudgetExhausted (dtb__174) -> "termination analysis gave up on <0>: budget exhausted (not a proof of non-termination)"
+  | C_TcErr_CannotProveTermination (dtb__175) -> "cannot prove termination of <0>"
   | C_TcErr_ClauseUnreachable -> "clause is unreachable: the earlier clauses already match every value it matches"
-  | C_TcErr_BranchTooManyArgs (dtb_u_u177) -> "branch for constructor <0> has too many arguments"
-  | C_TcErr_AxiomWithDefinition (dtb_u_u178) -> "axiom <0> cannot have a definition"
+  | C_TcErr_BranchTooManyArgs (dtb__176) -> "branch for constructor <0> has too many arguments"
+  | C_TcErr_AxiomWithDefinition (dtb__177) -> "axiom <0> cannot have a definition"
   | C_TcErr_UniverseLevelNonNegative -> "universe level must be non-negative"
   | C_TcErr_TypeMismatchCtorArity -> "type mismatch: constructor arguments differ in length"
   | C_TcErr_TypeMismatchCaseCount -> "type mismatch: case branches differ in number"
@@ -227,109 +229,109 @@ let v_tcTemplate = (fun (dtb_u_u92 : t_TcErr) -> (match dtb_u_u92 with
   | C_TcErr_ClauseTooManyPatterns -> "clause has more patterns than the function arity"
   | C_TcErr_CatchAllNotLast -> "catch-all branch must come last"
   | C_TcErr_CaptureFuel -> "linear capture check ran out of reduction fuel (program rejected conservatively)"
-  | C_TcErr_CaseBranchTooFewArgs (dtb_u_u179, dtb_u_u180) -> "case branch for constructor <0> is missing fields: <1>"
+  | C_TcErr_CaseBranchTooFewArgs (dtb__178, dtb__179) -> "case branch for constructor <0> is missing fields: <1>"
   | C_TcErr_BoolCaseRestriction -> "case on Bool accepts only True, False, or variable patterns"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 427 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 431 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk0 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_BoolCaseRestriction); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_BoolCaseRestriction); f_TcEntry_tcEntryDesc = "Bool \231\154\132 case \229\143\170\230\142\165\229\143\151 True\227\128\129False \230\136\150\229\143\152\233\135\143\230\168\161\229\188\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_AxiomWithDefinition (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_AxiomWithDefinition (""))); f_TcEntry_tcEntryDesc = "axiom \228\184\141\232\131\189\229\184\166\229\174\154\228\185\137\228\189\147" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CaseBranchTooFewArgs ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CaseBranchTooFewArgs ("", ""))); f_TcEntry_tcEntryDesc = "case \229\136\134\230\148\175\231\154\132\229\174\158\229\143\130\229\176\145\228\186\142\230\158\132\233\128\160\229\173\144\229\173\151\230\174\181" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_CaptureFuel); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_CaptureFuel); f_TcEntry_tcEntryDesc = "\231\186\191\230\128\167\230\141\149\232\142\183\230\163\128\230\159\165\232\128\151\229\176\189\229\189\146\231\186\166\231\135\131\230\150\153\239\188\136\228\191\157\229\174\136\230\139\146\231\187\157\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_CatchAllNotLast); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_CatchAllNotLast); f_TcEntry_tcEntryDesc = "\229\133\156\229\186\149\229\136\134\230\148\175\229\191\133\233\161\187\229\156\168\230\156\128\229\144\142" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ClauseTooManyPatterns); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ClauseTooManyPatterns); f_TcEntry_tcEntryDesc = "\229\173\144\229\143\165\231\154\132\230\168\161\229\188\143\229\164\154\228\186\142\229\135\189\230\149\176\229\133\131\230\149\176" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DataKindArrows); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DataKindArrows); f_TcEntry_tcEntryDesc = "data \229\163\176\230\152\142\231\154\132 kind \229\191\133\233\161\187\230\152\175\228\187\165 Type \231\187\147\229\176\190\231\154\132\231\174\173\229\164\180\233\147\190" }, B_dData_dList.C_List_Nil))))))))))))))
 
-# 457 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 461 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk1 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DefMoreParams); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DefMoreParams); f_TcEntry_tcEntryDesc = "\229\174\154\228\185\137\231\154\132\229\189\162\229\143\130\229\164\154\228\186\142\231\173\190\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DefParamsMustBeVars); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DefParamsMustBeVars); f_TcEntry_tcEntryDesc = "\229\174\154\228\185\137\231\154\132\229\189\162\229\143\130\229\191\133\233\161\187\230\152\175\229\143\152\233\135\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DoUnsupported); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DoUnsupported); f_TcEntry_tcEntryDesc = "do \229\157\151\230\156\170\233\153\141\231\186\167\228\184\186 bind \229\186\148\231\148\168\229\176\177\232\191\155\229\133\165\231\178\190\229\140\150\239\188\136\229\134\133\233\131\168\228\184\141\229\143\152\233\135\143\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_FunctionNoClauses); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_FunctionNoClauses); f_TcEntry_tcEntryDesc = "\229\135\189\230\149\176\230\178\161\230\156\137\229\173\144\229\143\165" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_HoleNoExpectedType); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_HoleNoExpectedType); f_TcEntry_tcEntryDesc = "\230\180\158\231\188\186\229\176\145\230\156\159\230\156\155\231\177\187\229\158\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ImplicitParamKind); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ImplicitParamKind); f_TcEntry_tcEntryDesc = "\233\154\144\229\188\143\229\189\162\229\143\130\229\191\133\233\161\187\230\152\175\231\177\187\229\158\139\230\136\150\229\189\146\231\186\179\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ImpossibleBranchEmptyCtx); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ImpossibleBranchEmptyCtx); f_TcEntry_tcEntryDesc = "\229\136\134\230\148\175\228\184\141\229\143\175\232\190\190\239\188\136\228\184\138\228\184\139\230\150\135\229\144\171\231\169\186\229\189\146\231\186\179\230\151\143\239\188\137" }, B_dData_dList.C_List_Nil))))))))))))))
 
-# 481 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 485 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk2 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ImpossibleBranchIndex); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ImpossibleBranchIndex); f_TcEntry_tcEntryDesc = "\229\136\134\230\148\175\228\184\141\229\143\175\232\190\190\239\188\136\231\180\162\229\188\149\231\186\166\230\157\159\228\184\141\229\143\175\230\187\161\232\182\179\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_IndexFuel); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_IndexFuel); f_TcEntry_tcEntryDesc = "\231\180\162\229\188\149\229\189\146\228\184\128\229\140\150\232\128\151\229\176\189\229\189\146\231\186\166\231\135\131\230\150\153" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_InstanceHeadNotApp); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_InstanceHeadNotApp); f_TcEntry_tcEntryDesc = "instance \229\164\180\229\191\133\233\161\187\230\152\175\230\142\165\229\143\163\229\186\148\231\148\168" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ConstraintNotDict); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ConstraintNotDict); f_TcEntry_tcEntryDesc = "\231\186\166\230\157\159\229\191\133\233\161\187\230\152\175\230\142\165\229\143\163\229\186\148\231\148\168" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_InstanceMissingMethod); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_InstanceMissingMethod); f_TcEntry_tcEntryDesc = "instance \231\188\186\229\176\145\230\142\165\229\143\163\230\150\185\230\179\149\229\174\158\231\142\176" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_OrphanInstance); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_OrphanInstance); f_TcEntry_tcEntryDesc = "\229\174\158\228\190\139\229\186\148\229\163\176\230\152\142\229\156\168 trait \230\136\150 head \231\177\187\229\158\139\231\154\132\229\174\154\228\185\137\230\168\161\229\157\151" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_InterfaceNoParam); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_InterfaceNoParam); f_TcEntry_tcEntryDesc = "\230\142\165\229\143\163\232\135\179\229\176\145\233\156\128\232\166\129\228\184\128\228\184\170\229\143\130\230\149\176" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_NoInstParam); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_NoInstParam); f_TcEntry_tcEntryDesc = "@ \232\166\134\231\155\150\233\156\128\232\166\129\233\154\144\229\188\143 String \229\174\158\228\190\139\229\143\130\230\149\176" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_IntStringCaseNeedsFallback); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_IntStringCaseNeedsFallback); f_TcEntry_tcEntryDesc = "Int\227\128\129String\227\128\129Nat \231\154\132 case \233\156\128\232\166\129\229\143\152\233\135\143\230\136\150\233\128\154\233\133\141\231\172\166\229\133\156\229\186\149\229\136\134\230\148\175" }, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 510 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 514 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk3 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_IntStringCaseRestriction); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_IntStringCaseRestriction); f_TcEntry_tcEntryDesc = "Int\227\128\129String\227\128\129Nat \231\154\132 case \229\143\170\230\142\165\229\143\151\229\173\151\233\157\162\233\135\143\230\136\150\229\143\152\233\135\143\230\168\161\229\188\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_InvalidArrowType); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_InvalidArrowType); f_TcEntry_tcEntryDesc = "\231\174\173\229\164\180\231\177\187\229\158\139\228\184\141\229\144\136\230\179\149" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_LambdaNoSignature); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_LambdaNoSignature); f_TcEntry_tcEntryDesc = "lambda \231\188\186\229\176\145\231\177\187\229\158\139\231\173\190\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_LambdaTooManyParams); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_LambdaTooManyParams); f_TcEntry_tcEntryDesc = "lambda \231\154\132\229\189\162\229\143\130\229\164\154\228\186\142\230\156\159\230\156\155\231\154\132\229\135\189\230\149\176\231\177\187\229\158\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_NatLiteralOutOfRange); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_NatLiteralOutOfRange); f_TcEntry_tcEntryDesc = "Nat \229\173\151\233\157\162\233\135\143\232\182\133\229\135\186\232\140\131\229\155\180" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_NestedPatterns); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_NestedPatterns); f_TcEntry_tcEntryDesc = "\229\181\140\229\165\151\230\168\161\229\188\143\229\191\133\233\161\187\230\152\175\230\158\132\233\128\160\229\173\144\230\168\161\229\188\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_NotInductiveFamily); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_NotInductiveFamily); f_TcEntry_tcEntryDesc = "case \231\154\132\230\163\128\230\159\165\233\161\185\228\184\141\230\152\175\229\189\146\231\186\179\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_OnlyCtorPatterns); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_OnlyCtorPatterns); f_TcEntry_tcEntryDesc = "case \229\143\170\230\148\175\230\140\129\230\158\132\233\128\160\229\173\144\230\168\161\229\188\143" }, B_dData_dList.C_List_Nil))))))))))))))))
 
-# 538 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 542 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk4 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_PatternFuel); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_PatternFuel); f_TcEntry_tcEntryDesc = "\230\168\161\229\188\143\231\159\169\233\152\181\233\128\146\229\189\146\232\128\151\229\176\189\231\135\131\230\150\153" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_RecordsUnsupported); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_RecordsUnsupported); f_TcEntry_tcEntryDesc = "record \229\173\151\233\157\162\233\135\143\230\156\170\233\153\141\231\186\167\228\184\186\230\158\132\233\128\160\229\173\144\229\176\177\232\191\155\229\133\165\231\178\190\229\140\150\239\188\136\229\134\133\233\131\168\228\184\141\229\143\152\233\135\143\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_TooManyArgs); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_TooManyArgs); f_TcEntry_tcEntryDesc = "\229\174\158\229\143\130\232\191\135\229\164\154\239\188\136\228\184\141\230\152\175\229\135\189\230\149\176\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_TypeLevelArg); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_TypeLevelArg); f_TcEntry_tcEntryDesc = "Type \233\156\128\232\166\129\230\129\176\229\165\189\228\184\128\228\184\170\233\157\158\232\180\159\229\177\130\231\186\167\230\136\150\228\184\141\229\184\166\229\177\130\231\186\167" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_TypeMismatchCaseCount); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_TypeMismatchCaseCount); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141\239\188\154case \229\136\134\230\148\175\230\149\176\233\135\143\228\184\141\229\144\140" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_TypeMismatchCtorArity); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_TypeMismatchCtorArity); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141\239\188\154\230\158\132\233\128\160\229\173\144\229\174\158\229\143\130\228\184\170\230\149\176\228\184\141\229\144\140" }, B_dData_dList.C_List_Nil))))))))))))
 
-# 561 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 565 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk5 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_UniverseLevelNonNegative); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_UniverseLevelNonNegative); f_TcEntry_tcEntryDesc = "\229\174\135\229\174\153\229\177\130\231\186\167\229\191\133\233\161\187\233\157\158\232\180\159" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_BranchTooManyArgs (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_BranchTooManyArgs (""))); f_TcEntry_tcEntryDesc = "\229\136\134\230\148\175\231\154\132\229\174\158\229\143\130\229\164\154\228\186\142\230\158\132\233\128\160\229\173\144\229\173\151\230\174\181" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ClauseUnreachable); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ClauseUnreachable); f_TcEntry_tcEntryDesc = "\229\173\144\229\143\165\232\162\171\229\137\141\233\157\162\231\154\132\229\173\144\229\143\165\229\174\140\229\133\168\232\166\134\231\155\150\239\188\136\228\184\141\229\143\175\232\190\190\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CannotProveTermination (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CannotProveTermination (""))); f_TcEntry_tcEntryDesc = "\230\151\160\230\179\149\232\175\129\230\152\142\231\187\136\230\173\162\230\128\167" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TerminationBudgetExhausted (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TerminationBudgetExhausted (""))); f_TcEntry_tcEntryDesc = "\231\187\136\230\173\162\230\128\167\229\136\134\230\158\144\233\162\132\231\174\151\232\128\151\229\176\189\239\188\136\229\164\167\229\176\143\229\143\152\229\140\150\229\155\190\233\151\173\229\140\133\230\156\170\230\148\182\230\149\155\239\188\137\239\188\140\228\184\141\230\152\175\232\175\129\230\152\142\228\184\141\231\187\136\230\173\162" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CannotRedefineBuiltin (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CannotRedefineBuiltin (""))); f_TcEntry_tcEntryDesc = "\228\184\141\232\131\189\233\135\141\229\174\154\228\185\137\229\134\133\229\187\186\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CannotSolveMetavar (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CannotSolveMetavar (""))); f_TcEntry_tcEntryDesc = "\229\133\131\229\143\152\233\135\143\231\154\132\232\167\163\228\188\154\233\128\131\233\128\184\229\133\182\228\189\156\231\148\168\229\159\159" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CannotSolveHigherOrder (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CannotSolveHigherOrder (""))); f_TcEntry_tcEntryDesc = "\233\171\152\233\152\182\229\133\131\229\143\152\233\135\143\230\151\160\230\179\149\230\177\130\232\167\163" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CannotSolveOccurs (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CannotSolveOccurs (""))); f_TcEntry_tcEntryDesc = "\232\167\163\228\184\173\229\135\186\231\142\176\232\135\170\232\186\171\239\188\136occurs check\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TypeMismatchCaseVars (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TypeMismatchCaseVars (""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141\239\188\154case \229\136\134\230\148\175\231\187\145\229\174\154\231\154\132\229\143\152\233\135\143\230\149\176\228\184\141\229\144\140" }, B_dData_dList.C_List_Nil))))))))))))))))))))
 
-# 606 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 610 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk6 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DuplicateInstance (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DuplicateInstance (""))); f_TcEntry_tcEntryDesc = "\233\135\141\229\164\141\231\154\132\229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_InstanceContextMissing (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_InstanceContextMissing (""))); f_TcEntry_tcEntryDesc = "\229\174\158\228\190\139\228\184\138\228\184\139\230\150\135\230\151\160\230\179\149\230\187\161\232\182\179" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_SuperclassNotSatisfied ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_SuperclassNotSatisfied ("", ""))); f_TcEntry_tcEntryDesc = "\229\174\158\228\190\139\231\188\186\229\176\145\230\137\128\233\156\128\231\154\132\231\136\182\231\177\187\229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_OverlappingInstances (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_OverlappingInstances (""))); f_TcEntry_tcEntryDesc = "\233\135\141\229\143\160\231\154\132\229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DuplicateSignature (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DuplicateSignature (""))); f_TcEntry_tcEntryDesc = "\233\135\141\229\164\141\231\154\132\231\173\190\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_ExpectedSignature (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_ExpectedSignature (""))); f_TcEntry_tcEntryDesc = "\231\188\186\229\176\145\231\177\187\229\158\139\231\173\190\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_ExpectedType (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_ExpectedType (""))); f_TcEntry_tcEntryDesc = "\233\156\128\232\166\129\231\177\187\229\158\139\239\188\136\232\175\165\232\161\168\232\190\190\229\188\143\228\184\141\230\152\175\231\177\187\229\158\139\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_FfiTypeUnsupported (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_FfiTypeUnsupported (""))); f_TcEntry_tcEntryDesc = "extern \231\177\187\229\158\139\232\182\133\229\135\186\229\143\151\233\153\144\231\154\132 FFI \229\173\144\233\155\134" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_EqRequiresEvidence (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_EqRequiresEvidence (""))); f_TcEntry_tcEntryDesc = "\231\155\184\231\173\137\230\175\148\232\190\131\233\156\128\232\166\129 Eq \229\174\158\228\190\139\239\188\136\230\178\161\230\156\137\230\179\155\229\158\139\229\133\156\229\186\149\239\188\137" }, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 638 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 642 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk7 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_InstanceUnknownMethod (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_InstanceUnknownMethod (""))); f_TcEntry_tcEntryDesc = "instance \229\144\171\230\156\170\231\159\165\231\154\132\230\142\165\229\143\163\230\150\185\230\179\149" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_InstanceDuplicateMethod (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_InstanceDuplicateMethod (""))); f_TcEntry_tcEntryDesc = "instance \233\135\141\229\164\141\229\163\176\230\152\142\229\144\140\228\184\128\230\142\165\229\143\163\230\150\185\230\179\149\239\188\136\228\184\164\231\167\141\229\134\153\230\179\149\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_NeedsTwoArgs (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_NeedsTwoArgs (""))); f_TcEntry_tcEntryDesc = "\233\156\128\232\166\129\230\129\176\229\165\189\228\184\164\228\184\170\229\174\158\229\143\130" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_NoInstanceFound (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_NoInstanceFound (""))); f_TcEntry_tcEntryDesc = "\230\137\190\228\184\141\229\136\176\229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_InstanceSearchExhausted (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_InstanceSearchExhausted (""))); f_TcEntry_tcEntryDesc = "\229\174\158\228\190\139\230\144\156\231\180\162\233\128\146\229\189\146\233\162\132\231\174\151\232\128\151\229\176\189\239\188\140\228\184\141\230\152\175\231\188\186\229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_InterpNoInstance (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_InterpNoInstance (""))); f_TcEntry_tcEntryDesc = "\230\143\146\229\128\188\231\188\186\229\176\145 Interp \230\136\150 Show \229\174\158\228\190\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_NotExhaustive (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_NotExhaustive (""))); f_TcEntry_tcEntryDesc = "case \232\166\134\231\155\150\230\128\167\228\184\141\232\182\179\239\188\154\231\188\186\229\176\145\229\136\134\230\148\175" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_SignatureNoDef (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_SignatureNoDef (""))); f_TcEntry_tcEntryDesc = "\231\173\190\229\144\141\230\178\161\230\156\137\229\175\185\229\186\148\231\154\132\229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnknownInterface (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnknownInterface (""))); f_TcEntry_tcEntryDesc = "\230\156\170\231\159\165\230\142\165\229\143\163" }, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 670 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 674 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk8 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnknownName (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnknownName (""))); f_TcEntry_tcEntryDesc = "\229\188\149\231\148\168\228\186\134\230\156\170\231\187\145\229\174\154\231\154\132\229\144\141\229\173\151" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnsolvedHole (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnsolvedHole (""))); f_TcEntry_tcEntryDesc = "\230\156\170\229\161\171\229\134\153\231\154\132\230\180\158" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnsolvedMetavarInfer (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnsolvedMetavarInfer (""))); f_TcEntry_tcEntryDesc = "\230\151\160\230\179\149\230\142\168\230\150\173\231\177\187\229\158\139\239\188\136\229\173\152\229\156\168\230\156\170\230\177\130\232\167\163\231\154\132\229\133\131\229\143\152\233\135\143\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_EffResFamilyMissing (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_EffResFamilyMissing (""))); f_TcEntry_tcEntryDesc = "\230\137\190\228\184\141\229\136\176\230\149\136\229\186\148\231\187\147\230\158\156\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_HandleFamilyUnsupported (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_HandleFamilyUnsupported (""))); f_TcEntry_tcEntryDesc = "handle \232\175\173\230\179\149\228\184\141\230\148\175\230\140\129\232\175\165 op \230\151\143\229\189\162\231\138\182" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_AmbiguousCtor ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_AmbiguousCtor ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\230\173\167\228\185\137\239\188\154\229\173\152\229\156\168\229\164\154\228\184\170\229\128\153\233\128\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_AmbiguousName ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_AmbiguousName ("", ""))); f_TcEntry_tcEntryDesc = "\229\144\141\229\173\151\230\173\167\228\185\137\239\188\154\229\173\152\229\156\168\229\164\154\228\184\170\229\128\153\233\128\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_AmbiguousInstance ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_AmbiguousInstance ("", ""))); f_TcEntry_tcEntryDesc = "\229\174\158\228\190\139\230\173\167\228\185\137\239\188\154\229\173\152\229\156\168\229\164\154\228\184\170\229\128\153\233\128\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_HandleClauseFamilyMismatch ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_HandleClauseFamilyMismatch ("", ""))); f_TcEntry_tcEntryDesc = "handle \229\173\144\229\143\165\231\154\132\230\158\132\233\128\160\229\173\144\232\183\168 op \230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_AppliedNotType (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_AppliedNotType (""))); f_TcEntry_tcEntryDesc = "\229\186\148\231\148\168\231\187\147\230\158\156\228\184\141\230\152\175\231\177\187\229\158\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CtorDoesNotReturn ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CtorDoesNotReturn ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\230\178\161\230\156\137\232\191\148\229\155\158\230\137\128\229\163\176\230\152\142\231\154\132\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CtorError ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CtorError ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\229\186\148\231\148\168\229\189\162\230\128\129\228\184\141\229\144\136\230\179\149" }, B_dData_dList.C_List_Nil))))))))))))))))))))))))
 
-# 714 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcChunk9 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CtorWrongIndices ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CtorWrongIndices ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\231\180\162\229\188\149\228\184\170\230\149\176\228\184\141\231\172\166" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_NotTraitMethod ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_NotTraitMethod ("", ""))); f_TcEntry_tcEntryDesc = "\229\144\141\229\173\151\228\184\141\230\152\175\232\175\165 trait \231\154\132\230\150\185\230\179\149" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_OpNotDefinedFor ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_OpNotDefinedFor ("", ""))); f_TcEntry_tcEntryDesc = "\232\191\144\231\174\151\231\172\166\230\156\170\229\175\185\232\175\165\231\177\187\229\158\139\229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_OpOnlyIntString ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_OpOnlyIntString ("", ""))); f_TcEntry_tcEntryDesc = "\232\191\144\231\174\151\231\172\166\229\143\170\229\175\185 Int \229\146\140 String \229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnknownConstructorInCase ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnknownConstructorInCase ("", ""))); f_TcEntry_tcEntryDesc = "\229\136\134\230\148\175\231\154\132\230\158\132\233\128\160\229\173\144\228\184\141\229\177\158\228\186\142\232\175\165\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnsolvedMetavar ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnsolvedMetavar ("", ""))); f_TcEntry_tcEntryDesc = "\230\156\170\230\177\130\232\167\163\231\154\132\229\133\131\229\143\152\233\135\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TypeMismatch ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TypeMismatch ("", ""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TypeMismatchCaseBranch ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TypeMismatchCaseBranch ("", ""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141\239\188\154case \229\136\134\230\148\175\228\185\139\233\151\180\228\184\141\228\184\128\232\135\180" }, B_dData_dList.C_List_Nil))))))))))))))))
+# 718 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcChunk9 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CtorWrongIndices ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CtorWrongIndices ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\231\180\162\229\188\149\228\184\170\230\149\176\228\184\141\231\172\166" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_CtorNotStrictlyPositive ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_CtorNotStrictlyPositive ("", ""))); f_TcEntry_tcEntryDesc = "\230\158\132\233\128\160\229\173\144\229\173\151\230\174\181\229\156\168\232\180\159\228\189\141\231\189\174\229\188\149\231\148\168\230\156\172\230\151\143\239\188\136\228\184\141\230\187\161\232\182\179\228\184\165\230\160\188\230\173\163\230\128\167\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_NotTraitMethod ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_NotTraitMethod ("", ""))); f_TcEntry_tcEntryDesc = "\229\144\141\229\173\151\228\184\141\230\152\175\232\175\165 trait \231\154\132\230\150\185\230\179\149" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_OpNotDefinedFor ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_OpNotDefinedFor ("", ""))); f_TcEntry_tcEntryDesc = "\232\191\144\231\174\151\231\172\166\230\156\170\229\175\185\232\175\165\231\177\187\229\158\139\229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_OpOnlyIntString ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_OpOnlyIntString ("", ""))); f_TcEntry_tcEntryDesc = "\232\191\144\231\174\151\231\172\166\229\143\170\229\175\185 Int \229\146\140 String \229\174\154\228\185\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnknownConstructorInCase ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnknownConstructorInCase ("", ""))); f_TcEntry_tcEntryDesc = "\229\136\134\230\148\175\231\154\132\230\158\132\233\128\160\229\173\144\228\184\141\229\177\158\228\186\142\232\175\165\230\151\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnsolvedMetavar ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnsolvedMetavar ("", ""))); f_TcEntry_tcEntryDesc = "\230\156\170\230\177\130\232\167\163\231\154\132\229\133\131\229\143\152\233\135\143" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TypeMismatch ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TypeMismatch ("", ""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_TypeMismatchCaseBranch ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_TypeMismatchCaseBranch ("", ""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\228\184\141\229\140\185\233\133\141\239\188\154case \229\136\134\230\148\175\228\185\139\233\151\180\228\184\141\228\184\128\232\135\180" }, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 748 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 756 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk10 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_WhereNeedsSig ("", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_WhereNeedsSig ("", ""))); f_TcEntry_tcEntryDesc = "where \231\187\145\229\174\154\231\188\186\229\176\145\231\177\187\229\158\139\231\173\190\229\144\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DerivingViaUnboxedRequired); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DerivingViaUnboxedRequired); f_TcEntry_tcEntryDesc = "deriving via field \233\156\128\232\166\129\232\135\170\229\138\168\229\142\187\232\163\133\231\174\177\231\154\132\229\141\149\229\173\151\230\174\181\229\140\133\232\163\133" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_DerivingViaOnlyRecord); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_DerivingViaOnlyRecord); f_TcEntry_tcEntryDesc = "deriving via field \229\143\170\229\133\129\232\174\184 record \229\163\176\230\152\142\239\188\136data \228\184\141\229\134\141\229\133\183\230\156\137\232\174\176\229\189\149\232\175\173\228\185\137\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_ReprAliasInvalid); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_ReprAliasInvalid); f_TcEntry_tcEntryDesc = "alias record \232\166\129\230\177\130\230\147\166\233\153\164\229\144\142\230\129\176\229\165\189\228\184\128\228\184\170\233\157\158\233\128\146\229\189\146\232\191\144\232\161\140\230\151\182\229\173\151\230\174\181" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode C_TcErr_RecordDuplicateField); f_TcEntry_tcEntryTemplate = (v_tcTemplate C_TcErr_RecordDuplicateField); f_TcEntry_tcEntryDesc = "record \229\173\151\230\174\181\233\135\141\229\164\141" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_RecordMissingField (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_RecordMissingField (""))); f_TcEntry_tcEntryDesc = "record \231\188\186\229\176\145\229\173\151\230\174\181" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_RecordUnknownField (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_RecordUnknownField (""))); f_TcEntry_tcEntryDesc = "record \230\156\137\230\156\170\231\159\165\229\173\151\230\174\181" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnknownRecord (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnknownRecord (""))); f_TcEntry_tcEntryDesc = "\230\156\170\231\159\165\231\154\132 record" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DeriveCtorFieldCount (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DeriveCtorFieldCount (""))); f_TcEntry_tcEntryDesc = "deriving \233\156\128\232\166\129\229\141\149\229\173\151\230\174\181\230\158\132\233\128\160\229\173\144" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DeriveFieldType ("", "", ""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DeriveFieldType ("", "", ""))); f_TcEntry_tcEntryDesc = "deriving \231\154\132\229\173\151\230\174\181\231\177\187\229\158\139\228\184\141\231\172\166" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DeriveSingleCtor (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DeriveSingleCtor (""))); f_TcEntry_tcEntryDesc = "deriving \233\156\128\232\166\129\229\141\149\230\158\132\233\128\160\229\173\144" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DeriveUnsupportedKind (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DeriveUnsupportedKind (""))); f_TcEntry_tcEntryDesc = "\228\184\141\230\148\175\230\140\129\232\175\165 deriving \231\177\187\229\158\139" }, B_dData_dList.C_List_Nil))))))))))))))))))))))))
 
-# 795 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 803 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk11 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearUnused (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearUnused (""))); f_TcEntry_tcEntryDesc = "\231\148\168\233\135\143\228\184\186 1 \231\154\132 binder \229\156\168\232\191\144\232\161\140\230\151\182\230\156\170\228\189\191\231\148\168" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearOverused (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearOverused (""))); f_TcEntry_tcEntryDesc = "\231\148\168\233\135\143\228\184\186 1 \231\154\132 binder \229\156\168\232\191\144\232\161\140\230\151\182\228\189\191\231\148\168\229\164\154\228\186\142\228\184\128\230\172\161" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_ErasedBinderUsed (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_ErasedBinderUsed (""))); f_TcEntry_tcEntryDesc = "\231\148\168\233\135\143\228\184\186 0 \231\154\132 binder \229\156\168\232\191\144\232\161\140\230\151\182\232\162\171\228\189\191\231\148\168" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_MultiplicityImplicit (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_MultiplicityImplicit (""))); f_TcEntry_tcEntryDesc = "\233\154\144\229\188\143 binder \231\154\132\231\148\168\233\135\143\229\191\133\233\161\187\228\184\186 0" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_MultiplicityTypeDomain (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_MultiplicityTypeDomain (""))); f_TcEntry_tcEntryDesc = "\231\177\187\229\158\139\229\177\130 binder \231\154\132\231\148\168\233\135\143\229\191\133\233\161\187\228\184\186 0" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearTypeNeedsOne (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearTypeNeedsOne (""))); f_TcEntry_tcEntryDesc = "\231\186\191\230\128\167\231\177\187\229\158\139\231\154\132 binder \231\148\168\233\135\143\229\191\133\233\161\187\228\184\186 1" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearValueNeedsLinearBinder (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearValueNeedsLinearBinder (""))); f_TcEntry_tcEntryDesc = "\231\186\191\230\128\167\229\128\188\229\143\170\232\131\189\229\156\168\231\148\168\233\135\143\228\184\186 1 \231\154\132 binder \229\164\132\231\187\145\229\174\154\230\136\150\228\188\160\233\128\146" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearTopLevel (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearTopLevel (""))); f_TcEntry_tcEntryDesc = "\233\161\182\229\177\130\229\174\154\228\185\137\228\184\141\232\131\189\230\152\175\231\186\191\230\128\167\231\177\187\229\158\139" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_LinearCaptureEscapes (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_LinearCaptureEscapes (""))); f_TcEntry_tcEntryDesc = "lambda \230\141\149\232\142\183\231\186\191\230\128\167\229\128\188\228\184\148\229\143\175\232\131\189\233\128\131\233\128\184" }, B_dData_dList.C_List_Nil))))))))))))))))))
 
-# 837 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 845 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcChunk12 = (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_UnhandledEffects (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_UnhandledEffects (""))); f_TcEntry_tcEntryDesc = "\230\149\136\230\158\156\232\191\144\232\161\140\229\133\165\229\143\163\228\187\141\230\156\137\230\156\170\229\164\132\231\144\134\230\149\136\229\186\148\239\188\136\232\161\140\229\191\133\233\161\187\228\184\186 Nil\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_DebugConstructInRelease (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_DebugConstructInRelease (""))); f_TcEntry_tcEntryDesc = "release \230\158\132\229\187\186\233\135\140\228\189\191\231\148\168 assert\227\128\129todo \231\173\137 debug-only \230\158\132\233\128\160" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_MainArity (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_MainArity (""))); f_TcEntry_tcEntryDesc = "main \229\184\166\229\189\162\229\143\130\239\188\136\229\133\165\229\143\163\229\191\133\233\161\187\233\155\182\229\143\130\239\188\137" }, (B_dData_dList.C_List__x58__x58_ ({ f_TcEntry_tcEntryCode = (v_tcCode (C_TcErr_EntryInstanceNotDefault (""))); f_TcEntry_tcEntryTemplate = (v_tcTemplate (C_TcErr_EntryInstanceNotDefault (""))); f_TcEntry_tcEntryDesc = "\229\133\165\229\143\163\232\161\140\233\135\140\231\154\132\229\134\133\229\187\186\229\174\191\228\184\187\230\149\136\229\186\148\231\148\168\228\186\134\233\157\158 default \231\154\132\229\174\158\228\190\139\229\144\141\239\188\136entry \229\143\170\233\162\132\232\163\133\233\187\152\232\174\164\229\174\158\228\190\139\239\188\137" }, B_dData_dList.C_List_Nil))))))))
 
-# 858 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+# 866 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
 let v_tcAll = (Base_dDiagnostics_dCommon.v_concatLists (B_dData_dList.C_List__x58__x58_ (v_tcChunk0, (B_dData_dList.C_List__x58__x58_ (v_tcChunk1, (B_dData_dList.C_List__x58__x58_ (v_tcChunk2, (B_dData_dList.C_List__x58__x58_ (v_tcChunk3, (B_dData_dList.C_List__x58__x58_ (v_tcChunk4, (B_dData_dList.C_List__x58__x58_ (v_tcChunk5, (B_dData_dList.C_List__x58__x58_ (v_tcChunk6, (B_dData_dList.C_List__x58__x58_ (v_tcChunk7, (B_dData_dList.C_List__x58__x58_ (v_tcChunk8, (B_dData_dList.C_List__x58__x58_ (v_tcChunk9, (B_dData_dList.C_List__x58__x58_ (v_tcChunk10, (B_dData_dList.C_List__x58__x58_ (v_tcChunk11, (B_dData_dList.C_List__x58__x58_ (v_tcChunk12, B_dData_dList.C_List_Nil)))))))))))))))))))))))))))
 
-# 867 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcMsg = (fun (dtb_u_u182 : t_TcErr) (dtb_u_u183 : string B_dData_dVec.t_Vec) -> (((((Base_dDiagnostics_dCommon.v_mkDiag Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhElab) Base_dDiag.C_Category_CatTypes) (v_tcCode dtb_u_u182)) ((Base_dDiagnostics_dCommon.v_diagBody (v_tcTemplate dtb_u_u182)) dtb_u_u183)))
+# 875 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcMsg = (fun (e : t_TcErr) (args : string B_dData_dVec.t_Vec) -> (((((Base_dDiagnostics_dCommon.v_mkDiag Base_dDiag.C_Severity_SevError) Base_dDiag.C_Phase_PhElab) Base_dDiag.C_Category_CatTypes) (v_tcCode e)) ((Base_dDiagnostics_dCommon.v_diagBody (v_tcTemplate e)) args)))
 
-# 871 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr = (fun (dtb_u_u186 : Base_dSource.t_Span) (dtb_u_u187 : t_TcErr) (dtb_u_u188 : string B_dData_dVec.t_Vec) -> (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dCommon.v_withDiagSpan dtb_u_u186) ((v_tcMsg dtb_u_u187) dtb_u_u188)))))
-
-# 878 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr0 = (fun (dtb_u_u190 : Base_dSource.t_Span) (dtb_u_u191 : t_TcErr) -> (((v_tcErr dtb_u_u190) dtb_u_u191) B_dData_dVec.C_Vec_Nil))
-
-# 882 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr1 = (fun (dtb_u_u193 : Base_dSource.t_Span) (dtb_u_u194 : t_TcErr) (dtb_u_u195 : string) -> (((v_tcErr dtb_u_u193) dtb_u_u194) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u195, B_dData_dVec.C_Vec_Nil))))
+# 879 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcErr = (fun (sp : Base_dSource.t_Span) (e : t_TcErr) (args : string B_dData_dVec.t_Vec) -> (Base_dDiag.C_Check_ErrC (((Base_dDiagnostics_dCommon.v_withDiagSpan sp) ((v_tcMsg e) args)))))
 
 # 886 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr2 = (fun (dtb_u_u197 : Base_dSource.t_Span) (dtb_u_u198 : t_TcErr) (dtb_u_u199 : string) (dtb_u_u200 : string) -> (((v_tcErr dtb_u_u197) dtb_u_u198) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u199, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u200, B_dData_dVec.C_Vec_Nil))))))
+let v_tcErr0 = (fun (sp : Base_dSource.t_Span) (e : t_TcErr) -> (((v_tcErr sp) e) B_dData_dVec.C_Vec_Nil))
+
+# 890 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcErr1 = (fun (sp : Base_dSource.t_Span) (e : t_TcErr) (a0 : string) -> (((v_tcErr sp) e) (B_dData_dVec.C_Vec__x58__x58_ (a0, B_dData_dVec.C_Vec_Nil))))
 
 # 894 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr0NoLoc = (fun (dtb_u_u202 : t_TcErr) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg dtb_u_u202) B_dData_dVec.C_Vec_Nil))))
-
-# 898 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr1NoLoc = (fun (dtb_u_u204 : t_TcErr) (dtb_u_u205 : string) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg dtb_u_u204) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u205, B_dData_dVec.C_Vec_Nil))))))
+let v_tcErr2 = (fun (sp : Base_dSource.t_Span) (e : t_TcErr) (a0 : string) (a1 : string) -> (((v_tcErr sp) e) (B_dData_dVec.C_Vec__x58__x58_ (a0, (B_dData_dVec.C_Vec__x58__x58_ (a1, B_dData_dVec.C_Vec_Nil))))))
 
 # 902 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr2NoLoc = (fun (dtb_u_u207 : t_TcErr) (dtb_u_u208 : string) (dtb_u_u209 : string) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg dtb_u_u207) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u208, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u209, B_dData_dVec.C_Vec_Nil))))))))
+let v_tcErr0NoLoc = (fun (e : t_TcErr) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg e) B_dData_dVec.C_Vec_Nil))))
 
-# 909 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcTypeMismatch = (fun (dtb_u_u211 : Base_dSource.t_Span) (dtb_u_u212 : string) (dtb_u_u213 : string) -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldFound (dtb_u_u213))) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldExpected (dtb_u_u212))) ((Base_dDiagnostics_dCommon.v_withDiagSpan dtb_u_u211) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: expected " ^ dtb_u_u212); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: found " ^ dtb_u_u213); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((v_tcMsg (C_TcErr_TypeMismatch (dtb_u_u212, dtb_u_u213))) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u212, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u213, B_dData_dVec.C_Vec_Nil)))))))))))))
+# 906 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcErr1NoLoc = (fun (e : t_TcErr) (a0 : string) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg e) (B_dData_dVec.C_Vec__x58__x58_ (a0, B_dData_dVec.C_Vec_Nil))))))
 
-# 915 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcTypeMismatchNoLoc = (fun (dtb_u_u215 : string) (dtb_u_u216 : string) -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldFound (dtb_u_u216))) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldExpected (dtb_u_u215))) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: expected " ^ dtb_u_u215); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: found " ^ dtb_u_u216); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((v_tcMsg (C_TcErr_TypeMismatch (dtb_u_u215, dtb_u_u216))) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u215, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u216, B_dData_dVec.C_Vec_Nil))))))))))))
+# 910 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcErr2NoLoc = (fun (e : t_TcErr) (a0 : string) (a1 : string) -> (Base_dDiag.C_Check_ErrC (((v_tcMsg e) (B_dData_dVec.C_Vec__x58__x58_ (a0, (B_dData_dVec.C_Vec__x58__x58_ (a1, B_dData_dVec.C_Vec_Nil))))))))
 
-# 921 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcErr3 = (fun (dtb_u_u218 : Base_dSource.t_Span) (dtb_u_u219 : t_TcErr) (dtb_u_u220 : string) (dtb_u_u221 : string) (dtb_u_u222 : string) -> (((v_tcErr dtb_u_u218) dtb_u_u219) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u220, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u221, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u222, B_dData_dVec.C_Vec_Nil))))))))
+# 917 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcTypeMismatch = (fun (sp : Base_dSource.t_Span) (expected : string) (found : string) -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldFound (found))) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldExpected (expected))) ((Base_dDiagnostics_dCommon.v_withDiagSpan sp) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: expected " ^ expected); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: found " ^ found); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((v_tcMsg (C_TcErr_TypeMismatch (expected, found))) (B_dData_dVec.C_Vec__x58__x58_ (expected, (B_dData_dVec.C_Vec__x58__x58_ (found, B_dData_dVec.C_Vec_Nil)))))))))))))
 
-# 935 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_coverageCandidate = (fun (dtb_u_u223 : (string, Base_dSource.t_Span B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) -> (match dtb_u_u223 with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u224; B_dData_dPair.f_Pair_second = dtb_u_u225 } -> { Base_dDiag.f_Candidate_candidateText = dtb_u_u224; Base_dDiag.f_Candidate_candidateSpan = dtb_u_u225; Base_dDiag.f_Candidate_candidateReason = (B_dData_dMaybe.C_Maybe_Just ("not covered by any branch")) }
+# 923 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcTypeMismatchNoLoc = (fun (expected : string) (found : string) -> (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldFound (found))) ((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldExpected (expected))) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: expected " ^ expected); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((Base_dDiag.v_withTrace { Base_dDiag.f_TraceFrame_tracePhase = Base_dDiag.C_Phase_PhUnify; Base_dDiag.f_TraceFrame_traceText = ("unify: found " ^ found); Base_dDiag.f_TraceFrame_traceSpan = B_dData_dMaybe.C_Maybe_Nothing; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }) ((v_tcMsg (C_TcErr_TypeMismatch (expected, found))) (B_dData_dVec.C_Vec__x58__x58_ (expected, (B_dData_dVec.C_Vec__x58__x58_ (found, B_dData_dVec.C_Vec_Nil))))))))))))
+
+# 929 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcErr3 = (fun (sp : Base_dSource.t_Span) (e : t_TcErr) (a0 : string) (a1 : string) (a2 : string) -> (((v_tcErr sp) e) (B_dData_dVec.C_Vec__x58__x58_ (a0, (B_dData_dVec.C_Vec__x58__x58_ (a1, (B_dData_dVec.C_Vec__x58__x58_ (a2, B_dData_dVec.C_Vec_Nil))))))))
+
+# 943 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_coverageCandidate = (fun (mc0 : (string, Base_dSource.t_Span B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) -> (match mc0 with
+  | { B_dData_dPair.f_Pair_first = dtb__180; B_dData_dPair.f_Pair_second = dtb__181 } -> { Base_dDiag.f_Candidate_candidateText = dtb__180; Base_dDiag.f_Candidate_candidateSpan = dtb__181; Base_dDiag.f_Candidate_candidateReason = (B_dData_dMaybe.C_Maybe_Just ("not covered by any branch")) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 926 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcCoverageMissing = (fun (dtb_u_u227 : Base_dSource.t_Span) (dtb_u_u228 : (string, Base_dSource.t_Span B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let dtb_u_u229 = ((B_dData_dString.v_join ", ") ((B_dData_dList.v_map B_dData_dPair.v_firstOf) dtb_u_u228)) in (let dtb_u_u230 = ((B_dData_dList.v_map v_coverageCandidate) dtb_u_u228) in (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldCandidates (dtb_u_u230))) ((Base_dDiagnostics_dCommon.v_withDiagSpan dtb_u_u227) ((v_tcMsg (C_TcErr_NotExhaustive (dtb_u_u229))) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u229, B_dData_dVec.C_Vec_Nil))))))))))
+# 934 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcCoverageMissing = (fun (sp : Base_dSource.t_Span) (ctors : (string, Base_dSource.t_Span B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (let joined = ((B_dData_dString.v_join ", ") ((B_dData_dList.v_map B_dData_dPair.v_firstOf) ctors)) in (let cands = ((B_dData_dList.v_map v_coverageCandidate) ctors) in (Base_dDiag.C_Check_ErrC (((Base_dDiag.v_withField (Base_dDiag.C_DiagField_FieldCandidates (cands))) ((Base_dDiagnostics_dCommon.v_withDiagSpan sp) ((v_tcMsg (C_TcErr_NotExhaustive (joined))) (B_dData_dVec.C_Vec__x58__x58_ (joined, B_dData_dVec.C_Vec_Nil))))))))))
 
-# 417 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcEntryCode = (fun (dtb_u_u231 : t_TcEntry) -> (match dtb_u_u231 with
-  | { f_TcEntry_tcEntryCode = dtb_u_u232; f_TcEntry_tcEntryTemplate = dtb_u_u233; f_TcEntry_tcEntryDesc = dtb_u_u234 } -> dtb_u_u232
+# 421 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryCode = (fun (p : t_TcEntry) -> (match p with
+  | { f_TcEntry_tcEntryCode = dtb__182; f_TcEntry_tcEntryTemplate = dtb__183; f_TcEntry_tcEntryDesc = dtb__184 } -> dtb__182
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 418 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcEntryTemplate = (fun (dtb_u_u235 : t_TcEntry) -> (match dtb_u_u235 with
-  | { f_TcEntry_tcEntryCode = dtb_u_u236; f_TcEntry_tcEntryTemplate = dtb_u_u237; f_TcEntry_tcEntryDesc = dtb_u_u238 } -> dtb_u_u237
+# 422 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryTemplate = (fun (p : t_TcEntry) -> (match p with
+  | { f_TcEntry_tcEntryCode = dtb__185; f_TcEntry_tcEntryTemplate = dtb__186; f_TcEntry_tcEntryDesc = dtb__187 } -> dtb__186
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 419 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_tcEntryDesc = (fun (dtb_u_u239 : t_TcEntry) -> (match dtb_u_u239 with
-  | { f_TcEntry_tcEntryCode = dtb_u_u240; f_TcEntry_tcEntryTemplate = dtb_u_u241; f_TcEntry_tcEntryDesc = dtb_u_u242 } -> dtb_u_u242
+# 423 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
+let v_tcEntryDesc = (fun (p : t_TcEntry) -> (match p with
+  | { f_TcEntry_tcEntryCode = dtb__188; f_TcEntry_tcEntryTemplate = dtb__189; f_TcEntry_tcEntryDesc = dtb__190 } -> dtb__190
   | _ -> failwith "DT: impossible branch"
 ))

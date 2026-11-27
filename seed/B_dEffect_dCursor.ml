@@ -2,7 +2,7 @@ open Vuna_runtime
 type ('a0, 'a1) t_Cursor = C_Cursor_MkCursor of ('a0) * (('a0) -> ('a1 B_dData_dMaybe.t_Maybe, 'a0) B_dData_dPair.t_Pair B_dEffect_dCore.t_Eff)
 
 # 25 "Base/Effect/Cursor.vuna"
-let v_cursorOfState = (fun dtb_u_u4 dtb_u_u5 -> (C_Cursor_MkCursor (dtb_u_u4, dtb_u_u5)))
+let v_cursorOfState = (fun s step -> (C_Cursor_MkCursor (s, step)))
 
 # 29 "Base/Effect/Cursor.vuna"
 let v_next = (fun dtb_u_u9 -> (match dtb_u_u9 with
@@ -29,8 +29,8 @@ let v_mapStep_u_udirect = (fun f step s _u_ueffTok -> (let dtb_u_u35 = Obj.obj (
 ))))
 
 # 33 "Base/Effect/Cursor.vuna"
-let v_mapC = (fun dtb_u_u47 dtb_u_u48 -> (match dtb_u_u48 with
-  | C_Cursor_MkCursor (dtb_u_u49, dtb_u_u50) -> (C_Cursor_MkCursor (dtb_u_u49, ((v_mapStep dtb_u_u47) dtb_u_u50)))
+let v_mapC = (fun mc0 mc1 -> (match mc1 with
+  | C_Cursor_MkCursor (dtb__8, dtb__9) -> (C_Cursor_MkCursor (dtb__8, ((v_mapStep mc0) dtb__9)))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -49,7 +49,7 @@ let v_ofListStep_u_udirect = (fun mc0 _u_ueffTok -> (match mc0 with
 ))
 
 # 43 "Base/Effect/Cursor.vuna"
-let v_ofList = (fun dtb_u_u64 -> (C_Cursor_MkCursor (dtb_u_u64, v_ofListStep)))
+let v_ofList = (fun xs -> (C_Cursor_MkCursor (xs, v_ofListStep)))
 
 # 51 "Base/Effect/Cursor.vuna"
 let rec v_takeC = (fun (dtb_u_u68 : int) dtb_u_u69 -> (if (dtb_u_u68 <= 0) then (let dtb_u_u71 = { B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb_u_u69 } in (Obj.repr ((fun (dtb_u_u72 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u71)))) else (Obj.repr ((fun (dtb_u_u77 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u80 = ((v_next_u_udirect dtb_u_u69) dtb_u_u77) in (match dtb_u_u80 with

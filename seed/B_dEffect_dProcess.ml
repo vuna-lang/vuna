@@ -4,55 +4,55 @@ and t_ProcessError = C_ProcessError_ProcessNoDir of (string) | C_ProcessError_Pr
 and t_ProcessErrorOp = C_ProcessErrorOp_ProcessFail of (t_ProcessError)
 
 # 29 "Base/Effect/Process.vuna"
-let v_processArgs = (fun (dtb_u_u1 : string) -> (((((B_dEffect_dCore.v_sendCoreId "process") dtb_u_u1) 485051770) (dtp_effectId dtb_u_u1)) C_ProcessOp_Args))
+let v_processArgs = (fun (n : string) -> (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) C_ProcessOp_Args))
 
 # 29 "Base/Effect/Process.vuna"
 let v_processArgs_u_udirect = (fun (n : string) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) C_ProcessOp_Args)) _u_ueffTok))
 
 # 33 "Base/Effect/Process.vuna"
-let v_processExit = (fun (dtb_u_u4 : string) (dtb_u_u7 : int) -> (((((B_dEffect_dCore.v_sendCoreId "process") dtb_u_u4) 485051770) (dtp_effectId dtb_u_u4)) (C_ProcessOp_Exit (dtb_u_u7))))
+let v_processExit = (fun (n : string) (c : int) -> (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Exit (c))))
 
 # 33 "Base/Effect/Process.vuna"
 let v_processExit_u_udirect = (fun (n : string) (c : int) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Exit (c)))) _u_ueffTok))
 
 # 37 "Base/Effect/Process.vuna"
-let v_processRunIn = (fun (dtb_u_u8 : string) (dtb_u_u11 : string) (dtb_u_u12 : string B_dData_dList.t_List) -> (((((B_dEffect_dCore.v_sendCoreId "process") dtb_u_u8) 485051770) (dtp_effectId dtb_u_u8)) (C_ProcessOp_RunIn (dtb_u_u11, dtb_u_u12))))
+let v_processRunIn = (fun (n : string) (dir : string) (args : string B_dData_dList.t_List) -> (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_RunIn (dir, args))))
 
 # 37 "Base/Effect/Process.vuna"
 let v_processRunIn_u_udirect = (fun (n : string) (dir : string) (args : string B_dData_dList.t_List) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_RunIn (dir, args)))) _u_ueffTok))
 
 # 43 "Base/Effect/Process.vuna"
-let v_processSpawn = (fun (dtb_u_u13 : string) (dtb_u_u16 : string B_dData_dList.t_List) -> (((((B_dEffect_dCore.v_sendCoreId "process") dtb_u_u13) 485051770) (dtp_effectId dtb_u_u13)) (C_ProcessOp_Spawn (dtb_u_u16))))
+let v_processSpawn = (fun (n : string) (args : string B_dData_dList.t_List) -> (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Spawn (args))))
 
 # 43 "Base/Effect/Process.vuna"
 let v_processSpawn_u_udirect = (fun (n : string) (args : string B_dData_dList.t_List) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Spawn (args)))) _u_ueffTok))
 
 # 49 "Base/Effect/Process.vuna"
-let v_processWait = (fun (dtb_u_u17 : string) (dtb_u_u20 : int) -> (((((B_dEffect_dCore.v_sendCoreId "process") dtb_u_u17) 485051770) (dtp_effectId dtb_u_u17)) (C_ProcessOp_Wait (dtb_u_u20))))
+let v_processWait = (fun (n : string) (h : int) -> (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Wait (h))))
 
 # 49 "Base/Effect/Process.vuna"
 let v_processWait_u_udirect = (fun (n : string) (h : int) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process") n) 485051770) (dtp_effectId n)) (C_ProcessOp_Wait (h)))) _u_ueffTok))
 
 # 69 "Base/Effect/Process.vuna"
-let v_processFail = (fun (dtb_u_u21 : string) (dtb_u_u25 : t_ProcessError) -> (((((B_dEffect_dCore.v_sendCoreId "process-error") dtb_u_u21) 44116993) (dtp_effectId dtb_u_u21)) (C_ProcessErrorOp_ProcessFail (dtb_u_u25))))
+let v_processFail = (fun (n : string) (e : t_ProcessError) -> (((((B_dEffect_dCore.v_sendCoreId "process-error") n) 44116993) (dtp_effectId n)) (C_ProcessErrorOp_ProcessFail (e))))
 
 # 69 "Base/Effect/Process.vuna"
 let v_processFail_u_udirect = (fun (n : string) (e : t_ProcessError) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "process-error") n) 44116993) (dtp_effectId n)) (C_ProcessErrorOp_ProcessFail (e)))) _u_ueffTok))
 
 # 73 "Base/Effect/Process.vuna"
-let v_processErrorOfCode = (fun (dtb_u_u26 : string) (dtb_u_u27 : int) -> (if (dtb_u_u27 = 1) then (C_ProcessError_ProcessNoDir (dtb_u_u26)) else (if (dtb_u_u27 = 2) then (C_ProcessError_ProcessLaunchDenied (dtb_u_u26)) else (if (dtb_u_u27 = 10) then (C_ProcessError_ProcessTooManyChildren (dtb_u_u26)) else (C_ProcessError_ProcessHostIo (dtb_u_u26))))))
+let v_processErrorOfCode = (fun (mc0 : string) (mc1 : int) -> (if (mc1 = 1) then (C_ProcessError_ProcessNoDir (mc0)) else (if (mc1 = 2) then (C_ProcessError_ProcessLaunchDenied (mc0)) else (if (mc1 = 10) then (C_ProcessError_ProcessTooManyChildren (mc0)) else (C_ProcessError_ProcessHostIo (mc0))))))
 
 # 80 "Base/Effect/Process.vuna"
-let v_processErrorText = (fun (dtb_u_u28 : t_ProcessError) -> (match dtb_u_u28 with
-  | C_ProcessError_ProcessHostIo (dtb_u_u29) -> (String.concat "" ["process: "; dtb_u_u29; ": host I/O error"])
-  | C_ProcessError_ProcessTooManyChildren (dtb_u_u30) -> (String.concat "" ["process: "; dtb_u_u30; ": too many concurrent child processes"])
-  | C_ProcessError_ProcessLaunchDenied (dtb_u_u31) -> (String.concat "" ["process: "; dtb_u_u31; ": permission denied"])
-  | C_ProcessError_ProcessNoDir (dtb_u_u32) -> (String.concat "" ["process: "; dtb_u_u32; ": no such directory"])
+let v_processErrorText = (fun (mc0 : t_ProcessError) -> (match mc0 with
+  | C_ProcessError_ProcessHostIo (dtb__0) -> (String.concat "" ["process: "; dtb__0; ": host I/O error"])
+  | C_ProcessError_ProcessTooManyChildren (dtb__1) -> (String.concat "" ["process: "; dtb__1; ": too many concurrent child processes"])
+  | C_ProcessError_ProcessLaunchDenied (dtb__2) -> (String.concat "" ["process: "; dtb__2; ": permission denied"])
+  | C_ProcessError_ProcessNoDir (dtb__3) -> (String.concat "" ["process: "; dtb__3; ": no such directory"])
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 87 "Base/Effect/Process.vuna"
-let v_handleProcess = (fun (dtb_u_u38 : string) dtb_u_u40 dtb_u_u41 dtb_u_u42 -> (((((((B_dEffect_dCore.v_handleCoreId "process") dtb_u_u38) 485051770) (dtp_effectId dtb_u_u38)) dtb_u_u40) (Obj.magic dtb_u_u41)) dtb_u_u42))
+let v_handleProcess = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_handleCoreId "process") n) 485051770) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 87 "Base/Effect/Process.vuna"
 let v_handleProcess_u_udirect = (fun (n : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreId "process") n) 485051770) (dtp_effectId n)) ret) (Obj.magic opH)) comp)) _u_ueffTok))
@@ -113,28 +113,28 @@ let v_handleProcessHostWithHost = (fun (dtb_u_u176 : string) dtb_u_u177 -> (((((
 let v_handleProcessHostWithHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun dtb_u_u178 -> (let dtb_u_u180 = dtb_u_u178 in (Obj.repr ((fun (dtb_u_u181 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u180)))))) v_processOpHIOWithHost) comp)) _u_ueffTok))
 
 # 157 "Base/Effect/Process.vuna"
-let v_runProcessHost = (fun dtb_u_u184 -> (B_dEffect_dCore.v_joinEff ((v_handleProcessHostWithHost "default") dtb_u_u184)))
+let v_runProcessHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleProcessHostWithHost "default") comp)))
 
 # 157 "Base/Effect/Process.vuna"
 let v_runProcessHost_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic (B_dEffect_dCore.v_joinEff ((v_handleProcessHostWithHost "default") comp))) _u_ueffTok))
 
 # 161 "Base/Effect/Process.vuna"
-let v_processErrorRet = (fun dtb_u_u186 -> (B_dData_dResult.C_Result_Ok (dtb_u_u186)))
+let v_processErrorRet = (fun a -> (B_dData_dResult.C_Result_Ok (a)))
 
 # 165 "Base/Effect/Process.vuna"
-let v_processErrorOpHR = (fun (dtb_u_u189 : t_ProcessErrorOp) dtb_u_u190 -> (match dtb_u_u189 with
-  | C_ProcessErrorOp_ProcessFail (dtb_u_u191) -> (B_dData_dResult.C_Result_Err ((v_processErrorText dtb_u_u191)))
+let v_processErrorOpHR = (fun (op : t_ProcessErrorOp) _u -> (match op with
+  | C_ProcessErrorOp_ProcessFail (dtb__40) -> (B_dData_dResult.C_Result_Err ((v_processErrorText dtb__40)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 171 "Base/Effect/Process.vuna"
-let v_runProcessError = (fun (dtb_u_u192 : string) dtb_u_u195 -> (((((((B_dEffect_dCore.v_handleCoreAtId "process-error") dtb_u_u192) 44116993) (dtp_effectId dtb_u_u192)) v_processErrorRet) v_processErrorOpHR) dtb_u_u195))
+let v_runProcessError = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "process-error") n) 44116993) (dtp_effectId n)) v_processErrorRet) v_processErrorOpHR) comp))
 
 # 171 "Base/Effect/Process.vuna"
 let v_runProcessError_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process-error") n) 44116993) (dtp_effectId n)) v_processErrorRet) v_processErrorOpHR) comp)) _u_ueffTok))
 
 # 176 "Base/Effect/Process.vuna"
-let v_runProcessResult = (fun dtb_u_u197 -> ((v_runProcessError "process-error") (v_runProcessHost dtb_u_u197)))
+let v_runProcessResult = (fun comp -> ((v_runProcessError "process-error") (v_runProcessHost comp)))
 
 # 176 "Base/Effect/Process.vuna"
 let v_runProcessResult_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic ((v_runProcessError "process-error") (v_runProcessHost comp))) _u_ueffTok))

@@ -7,13 +7,13 @@ and t_OTerm = C_OTerm_OName of (string) | C_OTerm_ORaw of (string) | C_OTerm_OAp
 and t_ODef = C_ODef_ODValue of (string) * (t_OTerm) | C_ODef_ODExternal of (string) * (string) * (string)
 
 # 25 "Vuna/Target/Ocaml/Model.vuna"
-let v_ocName = (fun (dtb_u_u1 : t_OCtor) -> (match dtb_u_u1 with
-  | { f_OCtor_ocName = dtb_u_u2; f_OCtor_ocFields = dtb_u_u3 } -> dtb_u_u2
+let v_ocName = (fun (p : t_OCtor) -> (match p with
+  | { f_OCtor_ocName = dtb__0; f_OCtor_ocFields = dtb__1 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 26 "Vuna/Target/Ocaml/Model.vuna"
-let v_ocFields = (fun (dtb_u_u4 : t_OCtor) -> (match dtb_u_u4 with
-  | { f_OCtor_ocName = dtb_u_u5; f_OCtor_ocFields = dtb_u_u6 } -> dtb_u_u6
+let v_ocFields = (fun (p : t_OCtor) -> (match p with
+  | { f_OCtor_ocName = dtb__2; f_OCtor_ocFields = dtb__3 } -> dtb__3
   | _ -> failwith "DT: impossible branch"
 ))

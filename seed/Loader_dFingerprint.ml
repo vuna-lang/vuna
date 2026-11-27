@@ -6,16 +6,16 @@ let v_buildIdFileName = "build-id"
 let v_buildIdSchema = "vuna-compiler-id 1"
 
 # 53 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_sourceFrag = (fun (dtb_u_u1 : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [(B_dData_dPair.v_firstOf dtb_u_u1); "="; (string_of_int (B_dData_dPair.v_secondOf dtb_u_u1))]))
+let v_sourceFrag = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [(B_dData_dPair.v_firstOf p); "="; (string_of_int (B_dData_dPair.v_secondOf p))]))
 
 # 48 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_compilerIdOf = (fun (dtb_u_u2 : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u3 : string) -> (Loader_dAddr.v_addrOf (B_dData_dList.C_List__x58__x58_ (v_buildIdSchema, (B_dData_dList.C_List__x58__x58_ (dtb_u_u3, ((B_dData_dList.v_map v_sourceFrag) ((B_dData_dSort.v_sortBy (fun (dtb_u_u4 : (string, int) B_dData_dPair.t_Pair) (dtb_u_u5 : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf dtb_u_u4)) (B_dData_dPair.v_firstOf dtb_u_u5)))) dtb_u_u2))))))))
+let v_compilerIdOf = (fun (own : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (depsDigest : string) -> (Loader_dAddr.v_addrOf (B_dData_dList.C_List__x58__x58_ (v_buildIdSchema, (B_dData_dList.C_List__x58__x58_ (depsDigest, ((B_dData_dList.v_map v_sourceFrag) ((B_dData_dSort.v_sortBy (fun (a : (string, int) B_dData_dPair.t_Pair) (b : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf a)) (B_dData_dPair.v_firstOf b)))) own))))))))
 
 # 60 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_textHashOf = (fun (dtb_u_u6 : string) -> (Base_dHash.v_contentKey dtb_u_u6))
+let v_textHashOf = (fun (s : string) -> (Base_dHash.v_contentKey s))
 
 # 57 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_fingerprintOfStat = (fun (dtb_u_u7 : string) (dtb_u_u8 : int) (dtb_u_u9 : int) -> (v_textHashOf (String.concat "" [dtb_u_u7; ":"; (string_of_int dtb_u_u8); ":"; (string_of_int dtb_u_u9)])))
+let v_fingerprintOfStat = (fun (exe : string) (size : int) (mtime : int) -> (v_textHashOf (String.concat "" [exe; ":"; (string_of_int size); ":"; (string_of_int mtime)])))
 
 # 104 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_cacheTagFileName = "cache-tag"
@@ -34,13 +34,13 @@ and v_readFirstBuildId_u_udirect = (fun (nFs : string) (mc0 : string B_dData_dLi
 ))
 
 # 113 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_readNamedNear = (fun (dtb_u_u38 : string) (dtb_u_u41 : string) (dtb_u_u42 : string) -> (let dtb_u_u43 = (Base_dSource.v_parentOfPath dtb_u_u41) in (let dtb_u_u44 = (Base_dSource.v_parentOfPath dtb_u_u43) in ((v_readFirstBuildId dtb_u_u38) (B_dData_dList.C_List__x58__x58_ ((String.concat "" [dtb_u_u44; "/"; dtb_u_u42]), (B_dData_dList.C_List__x58__x58_ ((String.concat "" [dtb_u_u43; "/"; dtb_u_u42]), B_dData_dList.C_List_Nil))))))))
+let v_readNamedNear = (fun (nFs : string) (exe : string) (name : string) -> (let binDir = (Base_dSource.v_parentOfPath exe) in (let outDir = (Base_dSource.v_parentOfPath binDir) in ((v_readFirstBuildId nFs) (B_dData_dList.C_List__x58__x58_ ((String.concat "" [outDir; "/"; name]), (B_dData_dList.C_List__x58__x58_ ((String.concat "" [binDir; "/"; name]), B_dData_dList.C_List_Nil))))))))
 
 # 113 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_readNamedNear_u_udirect = (fun (nFs : string) (exe : string) (name : string) _u_ueffTok -> (let dtb_u_u43 = (Base_dSource.v_parentOfPath exe) in (let dtb_u_u44 = (Base_dSource.v_parentOfPath dtb_u_u43) in ((Obj.magic ((v_readFirstBuildId nFs) (B_dData_dList.C_List__x58__x58_ ((String.concat "" [dtb_u_u44; "/"; name]), (B_dData_dList.C_List__x58__x58_ ((String.concat "" [dtb_u_u43; "/"; name]), B_dData_dList.C_List_Nil)))))) _u_ueffTok))))
 
 # 109 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_readBuildIdNear = (fun (dtb_u_u45 : string) (dtb_u_u48 : string) -> (((v_readNamedNear dtb_u_u45) dtb_u_u48) v_buildIdFileName))
+let v_readBuildIdNear = (fun (nFs : string) (exe : string) -> (((v_readNamedNear nFs) exe) v_buildIdFileName))
 
 # 109 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_readBuildIdNear_u_udirect = (fun (nFs : string) (exe : string) _u_ueffTok -> ((Obj.magic (((v_readNamedNear nFs) exe) v_buildIdFileName)) _u_ueffTok))

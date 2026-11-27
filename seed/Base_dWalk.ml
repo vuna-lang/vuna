@@ -1,6 +1,6 @@
 open Vuna_runtime
 # 18 "Vuna/Compiler/Base/Walk.vuna"
-let v_walkFuelExhausted = (fun (dtb_u_u2 : string) -> ((fun msg -> failwith msg) (String.concat "" ["vuna: internal: "; dtb_u_u2; " fuel exhausted"])))
+let v_walkFuelExhausted = (fun (what : string) -> ((fun msg -> failwith msg) (String.concat "" ["vuna: internal: "; what; " fuel exhausted"])))
 
 # 73 "Vuna/Compiler/Base/Walk.vuna"
 let v_pathExistsDir = (fun (dtb_u_u3 : string) (dtb_u_u6 : string) -> (Obj.repr ((fun (dtb_u_u11 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u14 = (((B_dEffect_dFs.v_fsFileExists_u_udirect dtb_u_u3) dtb_u_u6) dtb_u_u11) in (if dtb_u_u14 then ((Obj.magic ((B_dEffect_dFs.v_fsIsDirectory dtb_u_u3) dtb_u_u6)) dtb_u_u11) else (let dtb_u_u16 = false in dtb_u_u16)))))))

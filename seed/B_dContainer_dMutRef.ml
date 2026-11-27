@@ -26,13 +26,13 @@ let v_modify = (fun dtb_u_u33 dtb_u_u34 -> (Obj.repr ((fun (dtb_u_u39 : B_dEffec
 let v_modify_u_udirect = (fun m f _u_ueffTok -> (let dtb_u_u42 = ((v_read_u_udirect m) _u_ueffTok) in ((Obj.magic ((v_write m) (f dtb_u_u42))) _u_ueffTok)))
 
 # 41 "Base/Container/MutRef.vuna"
-let v_withMutRef = (fun dtb_u_u46 dtb_u_u47 -> (B_dEffect_dCore.v_dropEffHead (dtb_u_u47 ((fun x -> ref x) dtb_u_u46))))
+let v_withMutRef = (fun init body -> (B_dEffect_dCore.v_dropEffHead (body ((fun x -> ref x) init))))
 
 # 41 "Base/Container/MutRef.vuna"
 let v_withMutRef_u_udirect = (fun init body _u_ueffTok -> ((Obj.magic (B_dEffect_dCore.v_dropEffHead (body ((fun x -> ref x) init)))) _u_ueffTok))
 
 # 45 "Base/Container/MutRef.vuna"
-let v_withMutRefPure = (fun dtb_u_u50 dtb_u_u51 -> (B_dEffect_dCore.v_runPure ((v_withMutRef dtb_u_u50) dtb_u_u51)))
+let v_withMutRefPure = (fun init body -> (B_dEffect_dCore.v_runPure ((v_withMutRef init) body)))
 
 # 15 "Base/Container/MutRef.vuna"
-let v_cell = (fun dtb_u_u53 -> (let dtb_u_u54 = dtb_u_u53 in dtb_u_u54))
+let v_cell = (fun p -> (let dtb__6 = p in dtb__6))

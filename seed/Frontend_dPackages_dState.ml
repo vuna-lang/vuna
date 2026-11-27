@@ -6,7 +6,7 @@ let v_pkgStateDirName = ".vuna"
 let v_pkgStateEnv = "VUNA_PKG_STATE"
 
 # 25 "Vuna/Compiler/Frontend/Packages/State.vuna"
-let v_pkgStateDirOf = (fun (dtb_u_u1 : string) (dtb_u_u2 : string) -> (if (dtb_u_u2 = "") then (String.concat "" [dtb_u_u1; "/"; v_pkgStateDirName]) else dtb_u_u2))
+let v_pkgStateDirOf = (fun (pkgDir : string) (override : string) -> (if (override = "") then (String.concat "" [pkgDir; "/"; v_pkgStateDirName]) else override))
 
 # 29 "Vuna/Compiler/Frontend/Packages/State.vuna"
 let v_pkgStateDirEff = (fun (dtb_u_u3 : string) (dtb_u_u6 : string) -> (Obj.repr ((fun (dtb_u_u11 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u14 = (((B_dEffect_dEnv.v_envGetEnv_u_udirect dtb_u_u3) v_pkgStateEnv) dtb_u_u11) in (let dtb_u_u16 = ((v_pkgStateDirOf dtb_u_u6) dtb_u_u14) in dtb_u_u16))))))
@@ -15,7 +15,7 @@ let v_pkgStateDirEff = (fun (dtb_u_u3 : string) (dtb_u_u6 : string) -> (Obj.repr
 let v_pkgStateDirEff_u_udirect = (fun (nEnv : string) (pkgDir : string) _u_ueffTok -> (let dtb_u_u14 = (((B_dEffect_dEnv.v_envGetEnv_u_udirect nEnv) v_pkgStateEnv) _u_ueffTok) in (let dtb_u_u16 = ((v_pkgStateDirOf pkgDir) dtb_u_u14) in dtb_u_u16)))
 
 # 44 "Vuna/Compiler/Frontend/Packages/State.vuna"
-let v_ifaceDirOf = (fun (dtb_u_u18 : string) -> (dtb_u_u18 ^ "/iface"))
+let v_ifaceDirOf = (fun (stateDir : string) -> (stateDir ^ "/iface"))
 
 # 66 "Vuna/Compiler/Frontend/Packages/State.vuna"
 let v_pathIsDir = (fun (dtb_u_u19 : string) (dtb_u_u22 : string) -> (Obj.repr ((fun (dtb_u_u27 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u30 = (((B_dEffect_dFs.v_fsFileExists_u_udirect dtb_u_u19) dtb_u_u22) dtb_u_u27) in (if dtb_u_u30 then ((Obj.magic ((B_dEffect_dFs.v_fsIsDirectory dtb_u_u19) dtb_u_u22)) dtb_u_u27) else (let dtb_u_u32 = false in dtb_u_u32)))))))

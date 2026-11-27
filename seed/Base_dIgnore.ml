@@ -3,19 +3,19 @@ type t_IgnoreRule = { f_IgnoreRule_ignoreBase : string; f_IgnoreRule_ignoreNegat
 and t_IgnoreContext = { f_IgnoreContext_ignoreRoot : string; f_IgnoreContext_ignorePrefix : string; f_IgnoreContext_ignoreRules : t_IgnoreRule B_dData_dList.t_List }
 
 # 68 "Vuna/Compiler/Base/Ignore.vuna"
-let v_buildRule = (fun (dtb_u_u1 : string) (dtb_u_u2 : string) (dtb_u_u3 : bool) -> (let dtb_u_u4 = ((B_dData_dString.v_endsWith "/") dtb_u_u2) in (let dtb_u_u5 = (if dtb_u_u4 then (((dtp_substring 0) ((String.length dtb_u_u2) - 1)) dtb_u_u2) else dtb_u_u2) in (let dtb_u_u6 = ((B_dData_dString.v_startsWith "/") dtb_u_u5) in (let dtb_u_u7 = (if dtb_u_u6 then (((dtp_substring 1) ((String.length dtb_u_u5) - 1)) dtb_u_u5) else dtb_u_u5) in (let dtb_u_u8 = (if dtb_u_u6 then true else ((B_dData_dString.v_contains "/") dtb_u_u7)) in { f_IgnoreRule_ignoreBase = dtb_u_u1; f_IgnoreRule_ignoreNegate = dtb_u_u3; f_IgnoreRule_ignoreDirOnly = dtb_u_u4; f_IgnoreRule_ignoreAnchored = dtb_u_u8; f_IgnoreRule_ignoreSegs = ((B_dData_dString.v_split "/") dtb_u_u7) }))))))
+let v_buildRule = (fun (base : string) (body : string) (negate : bool) -> (let dirOnly = ((B_dData_dString.v_endsWith "/") body) in (let body1 = (if dirOnly then (((dtp_substring 0) ((String.length body) - 1)) body) else body) in (let leadingSlash = ((B_dData_dString.v_startsWith "/") body1) in (let body2 = (if leadingSlash then (((dtp_substring 1) ((String.length body1) - 1)) body1) else body1) in (let anchored = (if leadingSlash then true else ((B_dData_dString.v_contains "/") body2)) in { f_IgnoreRule_ignoreBase = base; f_IgnoreRule_ignoreNegate = negate; f_IgnoreRule_ignoreDirOnly = dirOnly; f_IgnoreRule_ignoreAnchored = anchored; f_IgnoreRule_ignoreSegs = ((B_dData_dString.v_split "/") body2) }))))))
 
 # 53 "Vuna/Compiler/Base/Ignore.vuna"
-let v_parseGitignoreLine = (fun (dtb_u_u9 : string) (dtb_u_u10 : string) -> (let dtb_u_u11 = (B_dData_dString.v_trimRight dtb_u_u10) in (if (if (dtb_u_u11 = "") then true else ((B_dData_dString.v_startsWith "#") dtb_u_u11)) then B_dData_dMaybe.C_Maybe_Nothing else (if ((B_dData_dString.v_startsWith "\\#") dtb_u_u11) then (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule dtb_u_u9) (((dtp_substring 1) ((String.length dtb_u_u11) - 1)) dtb_u_u11)) false))) else (if ((B_dData_dString.v_startsWith "!") dtb_u_u11) then (let dtb_u_u12 = (((dtp_substring 1) ((String.length dtb_u_u11) - 1)) dtb_u_u11) in (if (dtb_u_u12 = "") then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule dtb_u_u9) dtb_u_u12) true))))) else (if ((B_dData_dString.v_startsWith "\\!") dtb_u_u11) then (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule dtb_u_u9) (((dtp_substring 1) ((String.length dtb_u_u11) - 1)) dtb_u_u11)) false))) else (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule dtb_u_u9) dtb_u_u11) false)))))))))
+let v_parseGitignoreLine = (fun (base : string) (raw : string) -> (let line = (B_dData_dString.v_trimRight raw) in (if (if (line = "") then true else ((B_dData_dString.v_startsWith "#") line)) then B_dData_dMaybe.C_Maybe_Nothing else (if ((B_dData_dString.v_startsWith "\\#") line) then (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule base) (((dtp_substring 1) ((String.length line) - 1)) line)) false))) else (if ((B_dData_dString.v_startsWith "!") line) then (let body = (((dtp_substring 1) ((String.length line) - 1)) line) in (if (body = "") then B_dData_dMaybe.C_Maybe_Nothing else (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule base) body) true))))) else (if ((B_dData_dString.v_startsWith "\\!") line) then (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule base) (((dtp_substring 1) ((String.length line) - 1)) line)) false))) else (B_dData_dMaybe.C_Maybe_Just ((((v_buildRule base) line) false)))))))))
 
 # 49 "Vuna/Compiler/Base/Ignore.vuna"
-let v_parseGitignore = (fun (dtb_u_u13 : string) (dtb_u_u14 : string) -> ((B_dData_dList.v_mapMaybe (v_parseGitignoreLine dtb_u_u13)) (B_dData_dString.v_lines dtb_u_u14)))
+let v_parseGitignore = (fun (base : string) (text : string) -> ((B_dData_dList.v_mapMaybe (v_parseGitignoreLine base)) (B_dData_dString.v_lines text)))
 
 # 97 "Vuna/Compiler/Base/Ignore.vuna"
-let v_trimTrailingSlash = (fun (dtb_u_u15 : string) -> (if (if ((String.length dtb_u_u15) > 1) then ((B_dData_dString.v_endsWith "/") dtb_u_u15) else false) then (((dtp_substring 0) ((String.length dtb_u_u15) - 1)) dtb_u_u15) else dtb_u_u15))
+let v_trimTrailingSlash = (fun (path : string) -> (if (if ((String.length path) > 1) then ((B_dData_dString.v_endsWith "/") path) else false) then (((dtp_substring 0) ((String.length path) - 1)) path) else path))
 
 # 102 "Vuna/Compiler/Base/Ignore.vuna"
-let rec v_ancestorChain = (fun (dtb_u_u16 : int) (dtb_u_u17 : string) (dtb_u_u18 : string) -> (if (dtb_u_u16 <= 0) then (B_dData_dList.C_List__x58__x58_ (dtb_u_u18, B_dData_dList.C_List_Nil)) else (if (dtb_u_u18 = dtb_u_u17) then (B_dData_dList.C_List__x58__x58_ (dtb_u_u18, B_dData_dList.C_List_Nil)) else (let dtb_u_u19 = (Base_dSource.v_parentOfPath dtb_u_u18) in (if (dtb_u_u19 = dtb_u_u18) then (B_dData_dList.C_List__x58__x58_ (dtb_u_u18, B_dData_dList.C_List_Nil)) else ((B_dData_dList.v_append (((v_ancestorChain (dtb_u_u16 - 1)) dtb_u_u17) dtb_u_u19)) (B_dData_dList.C_List__x58__x58_ (dtb_u_u18, B_dData_dList.C_List_Nil))))))))
+let rec v_ancestorChain = (fun (fuel : int) (stop : string) (dir : string) -> (if (fuel <= 0) then (B_dData_dList.C_List__x58__x58_ (dir, B_dData_dList.C_List_Nil)) else (if (dir = stop) then (B_dData_dList.C_List__x58__x58_ (dir, B_dData_dList.C_List_Nil)) else (let parent = (Base_dSource.v_parentOfPath dir) in (if (parent = dir) then (B_dData_dList.C_List__x58__x58_ (dir, B_dData_dList.C_List_Nil)) else ((B_dData_dList.v_append (((v_ancestorChain (fuel - 1)) stop) parent)) (B_dData_dList.C_List__x58__x58_ (dir, B_dData_dList.C_List_Nil))))))))
 
 # 125 "Vuna/Compiler/Base/Ignore.vuna"
 let rec v_findGitRoot = (fun (dtb_u_u20 : string) (dtb_u_u23 : int) (dtb_u_u24 : string) -> (if (dtb_u_u23 <= 0) then (let dtb_u_u26 = B_dData_dMaybe.C_Maybe_Nothing in (Obj.repr ((fun (dtb_u_u27 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u26)))) else (Obj.repr ((fun (dtb_u_u32 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u35 = (((B_dEffect_dFs.v_fsFileExists_u_udirect dtb_u_u20) (dtb_u_u24 ^ "/.git")) dtb_u_u32) in (if dtb_u_u35 then (let dtb_u_u37 = (B_dData_dMaybe.C_Maybe_Just (dtb_u_u24)) in dtb_u_u37) else (let dtb_u_u39 = (Base_dSource.v_parentOfPath dtb_u_u24) in (if (dtb_u_u39 = dtb_u_u24) then (let dtb_u_u41 = B_dData_dMaybe.C_Maybe_Nothing in dtb_u_u41) else ((Obj.magic (((v_findGitRoot dtb_u_u20) (dtb_u_u23 - 1)) dtb_u_u39)) dtb_u_u32))))))))))
@@ -29,7 +29,7 @@ let v_loadIgnoreFile = (fun (dtb_u_u43 : string) (dtb_u_u46 : string) (dtb_u_u47
 let v_loadIgnoreFile_u_udirect = (fun (nFs : string) (dir : string) (base : string) (ctx : t_IgnoreContext) _u_ueffTok -> (let dtb_u_u49 = (dir ^ "/.gitignore") in (let dtb_u_u57 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) dtb_u_u49) _u_ueffTok) in (if dtb_u_u57 then (let dtb_u_u65 = (((B_dEffect_dFs.v_fsIsDirectory_u_udirect nFs) dtb_u_u49) _u_ueffTok) in (if dtb_u_u65 then (let dtb_u_u67 = ctx in dtb_u_u67) else (let dtb_u_u76 = (((B_dEffect_dFs.v_fsReadFile_u_udirect nFs) dtb_u_u49) _u_ueffTok) in (let dtb_u_u78 = { f_IgnoreContext_ignoreRoot = (ctx).f_IgnoreContext_ignoreRoot; f_IgnoreContext_ignorePrefix = (ctx).f_IgnoreContext_ignorePrefix; f_IgnoreContext_ignoreRules = ((B_dData_dList.v_append (ctx).f_IgnoreContext_ignoreRules) ((v_parseGitignore base) dtb_u_u76)) } in dtb_u_u78)))) else (let dtb_u_u81 = ctx in dtb_u_u81)))))
 
 # 159 "Vuna/Compiler/Base/Ignore.vuna"
-let v_relUnder = (fun (dtb_u_u83 : string) (dtb_u_u84 : string) -> (if (dtb_u_u83 = dtb_u_u84) then "" else (if (dtb_u_u83 = ".") then (if ((B_dData_dString.v_startsWith "./") dtb_u_u84) then (((dtp_substring 2) ((String.length dtb_u_u84) - 2)) dtb_u_u84) else dtb_u_u84) else (if ((B_dData_dString.v_startsWith (dtb_u_u83 ^ "/")) dtb_u_u84) then (((dtp_substring ((String.length dtb_u_u83) + 1)) (((String.length dtb_u_u84) - (String.length dtb_u_u83)) - 1)) dtb_u_u84) else dtb_u_u84))))
+let v_relUnder = (fun (base : string) (dir : string) -> (if (base = dir) then "" else (if (base = ".") then (if ((B_dData_dString.v_startsWith "./") dir) then (((dtp_substring 2) ((String.length dir) - 2)) dir) else dir) else (if ((B_dData_dString.v_startsWith (base ^ "/")) dir) then (((dtp_substring ((String.length base) + 1)) (((String.length dir) - (String.length base)) - 1)) dir) else dir))))
 
 # 114 "Vuna/Compiler/Base/Ignore.vuna"
 let rec v_loadChain = (fun (dtb_u_u85 : string) (dtb_u_u88 : string B_dData_dList.t_List) (dtb_u_u89 : string) (dtb_u_u90 : t_IgnoreContext) -> (match dtb_u_u88 with
@@ -59,127 +59,127 @@ let v_ignoreContextAt_u_udirect = (fun (nFs : string) (scanRoot : string) _u_uef
 ) in (let dtb_u_u120 = (((v_ancestorChain 512) dtb_u_u119) scanRoot) in ((Obj.magic ((((v_loadChain nFs) dtb_u_u120) dtb_u_u119) { f_IgnoreContext_ignoreRoot = dtb_u_u119; f_IgnoreContext_ignorePrefix = ((v_relUnder dtb_u_u119) scanRoot); f_IgnoreContext_ignoreRules = B_dData_dList.C_List_Nil })) _u_ueffTok)))))
 
 # 80 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreContextEff = (fun (dtb_u_u122 : string) (dtb_u_u125 : string) -> ((v_ignoreContextAt dtb_u_u122) (v_trimTrailingSlash dtb_u_u125)))
+let v_ignoreContextEff = (fun (nFs : string) (root : string) -> ((v_ignoreContextAt nFs) (v_trimTrailingSlash root)))
 
 # 80 "Vuna/Compiler/Base/Ignore.vuna"
 let v_ignoreContextEff_u_udirect = (fun (nFs : string) (root : string) _u_ueffTok -> ((Obj.magic ((v_ignoreContextAt nFs) (v_trimTrailingSlash root))) _u_ueffTok))
 
 # 171 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignorePathOf = (fun (dtb_u_u126 : t_IgnoreContext) (dtb_u_u127 : string) -> (if ((dtb_u_u126).f_IgnoreContext_ignorePrefix = "") then dtb_u_u127 else (String.concat "" [(dtb_u_u126).f_IgnoreContext_ignorePrefix; "/"; dtb_u_u127])))
+let v_ignorePathOf = (fun (ctx : t_IgnoreContext) (rel : string) -> (if ((ctx).f_IgnoreContext_ignorePrefix = "") then rel else (String.concat "" [(ctx).f_IgnoreContext_ignorePrefix; "/"; rel])))
 
 # 195 "Vuna/Compiler/Base/Ignore.vuna"
-let v_stripBase = (fun (dtb_u_u128 : string) (dtb_u_u129 : string) -> (if (dtb_u_u128 = "") then (B_dData_dMaybe.C_Maybe_Just (dtb_u_u129)) else (if (dtb_u_u129 = dtb_u_u128) then (B_dData_dMaybe.C_Maybe_Just ("")) else (if ((B_dData_dString.v_startsWith (dtb_u_u128 ^ "/")) dtb_u_u129) then (B_dData_dMaybe.C_Maybe_Just ((((dtp_substring ((String.length dtb_u_u128) + 1)) (((String.length dtb_u_u129) - (String.length dtb_u_u128)) - 1)) dtb_u_u129))) else B_dData_dMaybe.C_Maybe_Nothing))))
+let v_stripBase = (fun (base : string) (path : string) -> (if (base = "") then (B_dData_dMaybe.C_Maybe_Just (path)) else (if (path = base) then (B_dData_dMaybe.C_Maybe_Just ("")) else (if ((B_dData_dString.v_startsWith (base ^ "/")) path) then (B_dData_dMaybe.C_Maybe_Just ((((dtp_substring ((String.length base) + 1)) (((String.length path) - (String.length base)) - 1)) path))) else B_dData_dMaybe.C_Maybe_Nothing))))
 
 # 225 "Vuna/Compiler/Base/Ignore.vuna"
-let rec v_matchSegmentChars = (fun (dtb_u_u130 : int) (dtb_u_u131 : int B_dData_dList.t_List) (dtb_u_u132 : int B_dData_dList.t_List) -> (if (dtb_u_u130 <= 0) then false else (((v_matchSegmentGo (dtb_u_u130 - 1)) dtb_u_u131) dtb_u_u132)))
+let rec v_matchSegmentChars = (fun (fuel : int) (pat : int B_dData_dList.t_List) (seg : int B_dData_dList.t_List) -> (if (fuel <= 0) then false else (((v_matchSegmentGo (fuel - 1)) pat) seg)))
 # 229 "Vuna/Compiler/Base/Ignore.vuna"
-and v_matchSegmentGo = (fun (dtb_u_u133 : int) (dtb_u_u134 : int B_dData_dList.t_List) (dtb_u_u135 : int B_dData_dList.t_List) -> (match dtb_u_u134 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u136, dtb_u_u137) -> (if (dtb_u_u136 = 42) then (((v_matchSegmentStar (dtb_u_u133 - 1)) dtb_u_u137) dtb_u_u135) else (if (dtb_u_u136 = 63) then (match dtb_u_u135 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u138, dtb_u_u139) -> (((v_matchSegmentChars (dtb_u_u133 - 1)) dtb_u_u137) dtb_u_u139)
+and v_matchSegmentGo = (fun (mc0 : int) (mc1 : int B_dData_dList.t_List) (mc2 : int B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__15, dtb__16) -> (if (dtb__15 = 42) then (((v_matchSegmentStar (mc0 - 1)) dtb__16) mc2) else (if (dtb__15 = 63) then (match mc2 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (((v_matchSegmentChars (mc0 - 1)) dtb__16) dtb__18)
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
-) else (match dtb_u_u135 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u140, dtb_u_u141) -> (if (dtb_u_u136 = dtb_u_u140) then (((v_matchSegmentChars (dtb_u_u133 - 1)) dtb_u_u137) dtb_u_u141) else false)
+) else (match mc2 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (if (dtb__15 = dtb__19) then (((v_matchSegmentChars (mc0 - 1)) dtb__16) dtb__20) else false)
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 )))
-  | B_dData_dList.C_List_Nil -> (match dtb_u_u135 with
+  | B_dData_dList.C_List_Nil -> (match mc2 with
   | B_dData_dList.C_List_Nil -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 # 243 "Vuna/Compiler/Base/Ignore.vuna"
-and v_matchSegmentStar = (fun (dtb_u_u142 : int) (dtb_u_u143 : int B_dData_dList.t_List) (dtb_u_u144 : int B_dData_dList.t_List) -> (if (dtb_u_u142 <= 0) then false else (if (((v_matchSegmentChars dtb_u_u142) dtb_u_u143) dtb_u_u144) then true else (match dtb_u_u144 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u145, dtb_u_u146) -> (((v_matchSegmentStar (dtb_u_u142 - 1)) dtb_u_u143) dtb_u_u146)
+and v_matchSegmentStar = (fun (fuel : int) (rest : int B_dData_dList.t_List) (seg : int B_dData_dList.t_List) -> (if (fuel <= 0) then false else (if (((v_matchSegmentChars fuel) rest) seg) then true else (match seg with
+  | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (((v_matchSegmentStar (fuel - 1)) rest) dtb__22)
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 220 "Vuna/Compiler/Base/Ignore.vuna"
-let v_matchSegment = (fun (dtb_u_u147 : string) (dtb_u_u148 : string) -> (((v_matchSegmentChars ((((String.length dtb_u_u147) + 1) * ((String.length dtb_u_u148) + 1)) + 2)) (B_dData_dList.dtp_unpack dtb_u_u147)) (B_dData_dList.dtp_unpack dtb_u_u148)))
+let v_matchSegment = (fun (pat : string) (seg : string) -> (((v_matchSegmentChars ((((String.length pat) + 1) * ((String.length seg) + 1)) + 2)) (B_dData_dList.dtp_unpack pat)) (B_dData_dList.dtp_unpack seg)))
 
 # 207 "Vuna/Compiler/Base/Ignore.vuna"
-let rec v_matchSegments = (fun (dtb_u_u149 : string B_dData_dList.t_List) (dtb_u_u150 : string B_dData_dList.t_List) -> (match dtb_u_u149 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u151, dtb_u_u152) -> (if (dtb_u_u151 = "**") then ((v_matchAnySegments dtb_u_u152) dtb_u_u150) else (match dtb_u_u150 with
+let rec v_matchSegments = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__23, dtb__24) -> (if (dtb__23 = "**") then ((v_matchAnySegments dtb__24) mc1) else (match mc1 with
   | B_dData_dList.C_List_Nil -> false
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u153, dtb_u_u154) -> (if ((v_matchSegment dtb_u_u151) dtb_u_u153) then ((v_matchSegments dtb_u_u152) dtb_u_u154) else false)
+  | B_dData_dList.C_List__x58__x58_ (dtb__25, dtb__26) -> (if ((v_matchSegment dtb__23) dtb__25) then ((v_matchSegments dtb__24) dtb__26) else false)
   | _ -> failwith "DT: impossible branch"
 ))
-  | B_dData_dList.C_List_Nil -> (match dtb_u_u150 with
+  | B_dData_dList.C_List_Nil -> (match mc1 with
   | B_dData_dList.C_List_Nil -> true
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
 ))
 # 215 "Vuna/Compiler/Base/Ignore.vuna"
-and v_matchAnySegments = (fun (dtb_u_u155 : string B_dData_dList.t_List) (dtb_u_u156 : string B_dData_dList.t_List) -> (match dtb_u_u156 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u157, dtb_u_u158) -> (if ((v_matchSegments dtb_u_u155) (B_dData_dList.C_List__x58__x58_ (dtb_u_u157, dtb_u_u158))) then true else ((v_matchAnySegments dtb_u_u155) dtb_u_u158))
-  | B_dData_dList.C_List_Nil -> ((v_matchSegments dtb_u_u155) B_dData_dList.C_List_Nil)
+and v_matchAnySegments = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28) -> (if ((v_matchSegments mc0) (B_dData_dList.C_List__x58__x58_ (dtb__27, dtb__28))) then true else ((v_matchAnySegments mc0) dtb__28))
+  | B_dData_dList.C_List_Nil -> ((v_matchSegments mc0) B_dData_dList.C_List_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 185 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ruleMatches = (fun (dtb_u_u159 : t_IgnoreRule) (dtb_u_u160 : string) (dtb_u_u161 : bool) -> (if (if (dtb_u_u159).f_IgnoreRule_ignoreDirOnly then (B_dData_dBool.v_not dtb_u_u161) else false) then false else (match ((v_stripBase (dtb_u_u159).f_IgnoreRule_ignoreBase) dtb_u_u160) with
+let v_ruleMatches = (fun (rule : t_IgnoreRule) (path : string) (isDir : bool) -> (if (if (rule).f_IgnoreRule_ignoreDirOnly then (B_dData_dBool.v_not isDir) else false) then false else (match ((v_stripBase (rule).f_IgnoreRule_ignoreBase) path) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u162) -> (if (dtb_u_u162 = "") then false else (if (dtb_u_u159).f_IgnoreRule_ignoreAnchored then ((v_matchSegments (dtb_u_u159).f_IgnoreRule_ignoreSegs) ((B_dData_dString.v_split "/") dtb_u_u162)) else ((v_matchSegments (dtb_u_u159).f_IgnoreRule_ignoreSegs) (B_dData_dList.C_List__x58__x58_ ((Base_dSource.v_baseName dtb_u_u162), B_dData_dList.C_List_Nil)))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__29) -> (if (dtb__29 = "") then false else (if (rule).f_IgnoreRule_ignoreAnchored then ((v_matchSegments (rule).f_IgnoreRule_ignoreSegs) ((B_dData_dString.v_split "/") dtb__29)) else ((v_matchSegments (rule).f_IgnoreRule_ignoreSegs) (B_dData_dList.C_List__x58__x58_ ((Base_dSource.v_baseName dtb__29), B_dData_dList.C_List_Nil)))))
   | _ -> failwith "DT: impossible branch"
 )))
 
 # 179 "Vuna/Compiler/Base/Ignore.vuna"
-let rec v_lastMatch = (fun (dtb_u_u163 : t_IgnoreRule B_dData_dList.t_List) (dtb_u_u164 : string) (dtb_u_u165 : bool) (dtb_u_u166 : bool) -> (match dtb_u_u163 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u167, dtb_u_u168) -> ((((v_lastMatch dtb_u_u168) dtb_u_u164) dtb_u_u165) (if (((v_ruleMatches dtb_u_u167) dtb_u_u164) dtb_u_u165) then (B_dData_dBool.v_not (dtb_u_u167).f_IgnoreRule_ignoreNegate) else dtb_u_u166))
-  | B_dData_dList.C_List_Nil -> dtb_u_u166
+let rec v_lastMatch = (fun (mc0 : t_IgnoreRule B_dData_dList.t_List) (mc1 : string) (mc2 : bool) (mc3 : bool) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__30, dtb__31) -> ((((v_lastMatch dtb__31) mc1) mc2) (if (((v_ruleMatches dtb__30) mc1) mc2) then (B_dData_dBool.v_not (dtb__30).f_IgnoreRule_ignoreNegate) else mc3))
+  | B_dData_dList.C_List_Nil -> mc3
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 175 "Vuna/Compiler/Base/Ignore.vuna"
-let v_isIgnored = (fun (dtb_u_u169 : t_IgnoreContext) (dtb_u_u170 : string) (dtb_u_u171 : bool) -> ((((v_lastMatch (dtb_u_u169).f_IgnoreContext_ignoreRules) ((v_ignorePathOf dtb_u_u169) dtb_u_u170)) dtb_u_u171) false))
+let v_isIgnored = (fun (ctx : t_IgnoreContext) (rel : string) (isDir : bool) -> ((((v_lastMatch (ctx).f_IgnoreContext_ignoreRules) ((v_ignorePathOf ctx) rel)) isDir) false))
 
 # 28 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreBase = (fun (dtb_u_u172 : t_IgnoreRule) -> (match dtb_u_u172 with
-  | { f_IgnoreRule_ignoreBase = dtb_u_u173; f_IgnoreRule_ignoreNegate = dtb_u_u174; f_IgnoreRule_ignoreDirOnly = dtb_u_u175; f_IgnoreRule_ignoreAnchored = dtb_u_u176; f_IgnoreRule_ignoreSegs = dtb_u_u177 } -> dtb_u_u173
+let v_ignoreBase = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__32; f_IgnoreRule_ignoreNegate = dtb__33; f_IgnoreRule_ignoreDirOnly = dtb__34; f_IgnoreRule_ignoreAnchored = dtb__35; f_IgnoreRule_ignoreSegs = dtb__36 } -> dtb__32
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 30 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreNegate = (fun (dtb_u_u178 : t_IgnoreRule) -> (match dtb_u_u178 with
-  | { f_IgnoreRule_ignoreBase = dtb_u_u179; f_IgnoreRule_ignoreNegate = dtb_u_u180; f_IgnoreRule_ignoreDirOnly = dtb_u_u181; f_IgnoreRule_ignoreAnchored = dtb_u_u182; f_IgnoreRule_ignoreSegs = dtb_u_u183 } -> dtb_u_u180
+let v_ignoreNegate = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__37; f_IgnoreRule_ignoreNegate = dtb__38; f_IgnoreRule_ignoreDirOnly = dtb__39; f_IgnoreRule_ignoreAnchored = dtb__40; f_IgnoreRule_ignoreSegs = dtb__41 } -> dtb__38
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 32 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreDirOnly = (fun (dtb_u_u184 : t_IgnoreRule) -> (match dtb_u_u184 with
-  | { f_IgnoreRule_ignoreBase = dtb_u_u185; f_IgnoreRule_ignoreNegate = dtb_u_u186; f_IgnoreRule_ignoreDirOnly = dtb_u_u187; f_IgnoreRule_ignoreAnchored = dtb_u_u188; f_IgnoreRule_ignoreSegs = dtb_u_u189 } -> dtb_u_u187
+let v_ignoreDirOnly = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__42; f_IgnoreRule_ignoreNegate = dtb__43; f_IgnoreRule_ignoreDirOnly = dtb__44; f_IgnoreRule_ignoreAnchored = dtb__45; f_IgnoreRule_ignoreSegs = dtb__46 } -> dtb__44
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 34 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreAnchored = (fun (dtb_u_u190 : t_IgnoreRule) -> (match dtb_u_u190 with
-  | { f_IgnoreRule_ignoreBase = dtb_u_u191; f_IgnoreRule_ignoreNegate = dtb_u_u192; f_IgnoreRule_ignoreDirOnly = dtb_u_u193; f_IgnoreRule_ignoreAnchored = dtb_u_u194; f_IgnoreRule_ignoreSegs = dtb_u_u195 } -> dtb_u_u194
+let v_ignoreAnchored = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__47; f_IgnoreRule_ignoreNegate = dtb__48; f_IgnoreRule_ignoreDirOnly = dtb__49; f_IgnoreRule_ignoreAnchored = dtb__50; f_IgnoreRule_ignoreSegs = dtb__51 } -> dtb__50
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 36 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreSegs = (fun (dtb_u_u196 : t_IgnoreRule) -> (match dtb_u_u196 with
-  | { f_IgnoreRule_ignoreBase = dtb_u_u197; f_IgnoreRule_ignoreNegate = dtb_u_u198; f_IgnoreRule_ignoreDirOnly = dtb_u_u199; f_IgnoreRule_ignoreAnchored = dtb_u_u200; f_IgnoreRule_ignoreSegs = dtb_u_u201 } -> dtb_u_u201
+let v_ignoreSegs = (fun (p : t_IgnoreRule) -> (match p with
+  | { f_IgnoreRule_ignoreBase = dtb__52; f_IgnoreRule_ignoreNegate = dtb__53; f_IgnoreRule_ignoreDirOnly = dtb__54; f_IgnoreRule_ignoreAnchored = dtb__55; f_IgnoreRule_ignoreSegs = dtb__56 } -> dtb__56
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 41 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreRoot = (fun (dtb_u_u202 : t_IgnoreContext) -> (match dtb_u_u202 with
-  | { f_IgnoreContext_ignoreRoot = dtb_u_u203; f_IgnoreContext_ignorePrefix = dtb_u_u204; f_IgnoreContext_ignoreRules = dtb_u_u205 } -> dtb_u_u203
+let v_ignoreRoot = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__57; f_IgnoreContext_ignorePrefix = dtb__58; f_IgnoreContext_ignoreRules = dtb__59 } -> dtb__57
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 43 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignorePrefix = (fun (dtb_u_u206 : t_IgnoreContext) -> (match dtb_u_u206 with
-  | { f_IgnoreContext_ignoreRoot = dtb_u_u207; f_IgnoreContext_ignorePrefix = dtb_u_u208; f_IgnoreContext_ignoreRules = dtb_u_u209 } -> dtb_u_u208
+let v_ignorePrefix = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__60; f_IgnoreContext_ignorePrefix = dtb__61; f_IgnoreContext_ignoreRules = dtb__62 } -> dtb__61
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 45 "Vuna/Compiler/Base/Ignore.vuna"
-let v_ignoreRules = (fun (dtb_u_u210 : t_IgnoreContext) -> (match dtb_u_u210 with
-  | { f_IgnoreContext_ignoreRoot = dtb_u_u211; f_IgnoreContext_ignorePrefix = dtb_u_u212; f_IgnoreContext_ignoreRules = dtb_u_u213 } -> dtb_u_u213
+let v_ignoreRules = (fun (p : t_IgnoreContext) -> (match p with
+  | { f_IgnoreContext_ignoreRoot = dtb__63; f_IgnoreContext_ignorePrefix = dtb__64; f_IgnoreContext_ignoreRules = dtb__65 } -> dtb__65
   | _ -> failwith "DT: impossible branch"
 ))

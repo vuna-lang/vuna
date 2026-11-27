@@ -2,19 +2,19 @@ open Vuna_runtime
 type t_ClockOp = C_ClockOp_Now | C_ClockOp_SleepMicros of (int)
 
 # 19 "Base/Effect/Clock.vuna"
-let v_clockNow = (fun (dtb_u_u1 : string) -> (((((B_dEffect_dCore.v_sendCoreId "clock") dtb_u_u1) 363073373) (dtp_effectId dtb_u_u1)) C_ClockOp_Now))
+let v_clockNow = (fun (n : string) -> (((((B_dEffect_dCore.v_sendCoreId "clock") n) 363073373) (dtp_effectId n)) C_ClockOp_Now))
 
 # 19 "Base/Effect/Clock.vuna"
 let v_clockNow_u_udirect = (fun (n : string) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "clock") n) 363073373) (dtp_effectId n)) C_ClockOp_Now)) _u_ueffTok))
 
 # 23 "Base/Effect/Clock.vuna"
-let v_clockSleepMicros = (fun (dtb_u_u4 : string) (dtb_u_u7 : int) -> (((((B_dEffect_dCore.v_sendCoreId "clock") dtb_u_u4) 363073373) (dtp_effectId dtb_u_u4)) (C_ClockOp_SleepMicros (dtb_u_u7))))
+let v_clockSleepMicros = (fun (n : string) (us : int) -> (((((B_dEffect_dCore.v_sendCoreId "clock") n) 363073373) (dtp_effectId n)) (C_ClockOp_SleepMicros (us))))
 
 # 23 "Base/Effect/Clock.vuna"
 let v_clockSleepMicros_u_udirect = (fun (n : string) (us : int) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "clock") n) 363073373) (dtp_effectId n)) (C_ClockOp_SleepMicros (us)))) _u_ueffTok))
 
 # 27 "Base/Effect/Clock.vuna"
-let v_handleClock = (fun (dtb_u_u13 : string) dtb_u_u15 dtb_u_u16 dtb_u_u17 -> (((((((B_dEffect_dCore.v_handleCoreId "clock") dtb_u_u13) 363073373) (dtp_effectId dtb_u_u13)) dtb_u_u15) (Obj.magic dtb_u_u16)) dtb_u_u17))
+let v_handleClock = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_handleCoreId "clock") n) 363073373) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 27 "Base/Effect/Clock.vuna"
 let v_handleClock_u_udirect = (fun (n : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreId "clock") n) 363073373) (dtp_effectId n)) ret) (Obj.magic opH)) comp)) _u_ueffTok))
@@ -40,13 +40,13 @@ let v_handleClockHostHost = (fun (dtb_u_u41 : string) dtb_u_u42 -> (((((((B_dEff
 let v_handleClockHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "clock") n) 363073373) (dtp_effectId n)) (fun dtb_u_u43 -> (let dtb_u_u45 = dtb_u_u43 in (Obj.repr ((fun (dtb_u_u46 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u45)))))) v_clockOpHIOHost) comp)) _u_ueffTok))
 
 # 53 "Base/Effect/Clock.vuna"
-let v_runClockHost = (fun dtb_u_u49 -> (B_dEffect_dCore.v_joinEff ((v_handleClockHostHost "default") dtb_u_u49)))
+let v_runClockHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleClockHostHost "default") comp)))
 
 # 53 "Base/Effect/Clock.vuna"
 let v_runClockHost_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic (B_dEffect_dCore.v_joinEff ((v_handleClockHostHost "default") comp))) _u_ueffTok))
 
 # 57 "Base/Effect/Clock.vuna"
-let v_runClockEff = (fun dtb_u_u51 -> (B_dEffect_dHost.v_hostSync (v_runClockHost dtb_u_u51)))
+let v_runClockEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runClockHost comp)))
 
 # 57 "Base/Effect/Clock.vuna"
 let v_runClockEff_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic (B_dEffect_dHost.v_hostSync (v_runClockHost comp))) _u_ueffTok))
