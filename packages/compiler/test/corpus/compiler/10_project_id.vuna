@@ -1,0 +1,19 @@
+-- 项目身份（`projectIdAddrOf`）：词法等价的目录写法必须落到同一个 id。
+-- roots 按 id 分目录（`store/roots/<id>/`），两套写法换出两个 id 就会把同一项目的
+-- 保护集合拆成两份。规范化口径只有 `Pkg.normalizeDir` 一处，这里锁住它的可观察结果：
+-- `..` / `.` / 重复 `/` / 尾 `/` 都不改变 id，不同目录仍然不同 id。
+import Prelude
+import Vuna.Compiler.Loader.Addr as Addr
+
+sameProject : String -> String -> Bool
+sameProject a b = Addr.projectIdAddrOf a == Addr.projectIdAddrOf b
+
+main : Int
+main =
+  (if sameProject "/p/a/b/../c/" "/p/a/c" then 1 else 0)
+    + (if sameProject "/p/a/./c" "/p/a/c" then 1 else 0)
+    + (if sameProject "//p//a//c" "/p/a/c" then 1 else 0)
+    + (if sameProject "/p/a/b/.." "/p/a" then 1 else 0)
+    + (if sameProject "p/a/../c" "p/c" then 1 else 0)
+    + (if sameProject "a/b/../c/" "a/c" then 1 else 0)
+    + (if Addr.projectIdAddrOf "/p/a/c" == Addr.projectIdAddrOf "/p/a/d" then 0 else 1)
