@@ -781,7 +781,15 @@ mHandlers fuel e =
       IrNatCase s fr z su ca => IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su) (mHandlersAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListH (fuel - 1) xs)
       IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (mHandlers (fuel - 1) prim)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mHandlersAlts : Int -> List IrAlt -> List IrAlt
 mHandlersAlts fuel alts =
@@ -828,7 +836,14 @@ mSyms fuel e =
       IrNatCase sc fr z su ca => IrNatCase (mSyms (fuel - 1) sc) fr (mSymsAltMM (fuel - 1) z) (mSymsAltMM (fuel - 1) su) (mSymsAltMM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListS (fuel - 1) xs)
       IrEffThunk f c u a pr => IrEffThunk f c u a (mSyms (fuel - 1) pr)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mListS : Int -> List Ir -> List Ir
 mListS fuel xs =
@@ -1062,7 +1077,15 @@ collectHandlerGlobals t fuel e =
       IrNatCase s _ z su ca => append (collectHandlerGlobals t (fuel - 1) s) (append (collectHandlerGlobalsAltM t (fuel - 1) z) (append (collectHandlerGlobalsAltM t (fuel - 1) su) (collectHandlerGlobalsAltM t (fuel - 1) ca)))
       IrConcatMany xs => collectHandlerGlobalsList t (fuel - 1) xs
       IrEffThunk _ _ _ _ pr => collectHandlerGlobals t (fuel - 1) pr
-      _ => []
+      IrVar _ => []
+      IrGlobal _ => []
+      IrRt _ => []
+      IrInt _ => []
+      IrStr _ => []
+      IrBool _ => []
+      IrFloatLit _ => []
+      IrEffBind _ _ _ => []
+      IrTail _ => []
 
 collectHandlerGlobalsList : HandlerTables -> Int -> List Ir -> List String
 collectHandlerGlobalsList t fuel xs =
@@ -1162,7 +1185,15 @@ mScopedCalls fuel rs e =
       IrNatCase sc fr z su ca => IrNatCase (mScopedCalls (fuel - 1) rs sc) fr (mScopedAltM (fuel - 1) rs z) (mScopedAltM (fuel - 1) rs su) (mScopedAltM (fuel - 1) rs ca)
       IrConcatMany xs => IrConcatMany (mScopedList (fuel - 1) rs xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mScopedCalls (fuel - 1) rs prim)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mScopedList : Int -> IrBinder -> List Ir -> List Ir
 mScopedList fuel rs xs =
@@ -1313,7 +1344,15 @@ mApplys fuel e =
       IrNatCase sc fr z su ca => IrNatCase (mApplys (fuel - 1) sc) fr (mApplysAltM (fuel - 1) z) (mApplysAltM (fuel - 1) su) (mApplysAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mApplysList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mApplys (fuel - 1) prim)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mApplysList : Int -> List Ir -> List Ir
 mApplysList fuel xs =
@@ -1379,7 +1418,15 @@ mMarked fuel e =
       IrNatCase sc fr z su ca => IrNatCase (mMarked (fuel - 1) sc) fr (mMarkedAltM (fuel - 1) z) (mMarkedAltM (fuel - 1) su) (mMarkedAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mMarkedList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mMarked (fuel - 1) prim)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mMarkedList : Int -> List Ir -> List Ir
 mMarkedList fuel xs =
@@ -1512,7 +1559,15 @@ mSteps fuel e =
       IrNatCase sc fr z su ca => IrNatCase (mSteps (fuel - 1) sc) fr (mStepsAltM (fuel - 1) z) (mStepsAltM (fuel - 1) su) (mStepsAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mStepsList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mSteps (fuel - 1) prim)
-      _ => e
+      IrVar _ => e
+      IrGlobal _ => e
+      IrRt _ => e
+      IrInt _ => e
+      IrStr _ => e
+      IrBool _ => e
+      IrFloatLit _ => e
+      IrEffBind _ _ _ => e
+      IrTail _ => e
 
 mStepsList : Int -> List Ir -> List Ir
 mStepsList fuel xs =
