@@ -114,7 +114,8 @@ span / 计数 / 采样栈写成 **Chrome Trace Event JSONL**；关闭时每个�
   `.imports`（未用 import 判定内部的两次名字收集与逐 import 检查）；
 - `ph:"X"` 后端优化链：`vuna.pass.ir.*` / `native.*` / `wasm.*`（IR 5 步、native 16 次
   执行与 wasm 5 步逐步计时；同名多轮用 `native.inline` / `native.inline.again` 区分）。名字与顺序的唯一
-  真源是 `Vuna.Ir.Passes.allPassNames`，`vuna dev obs validate` 按 `vuna.pass.` 前缀放行；
+  真源是 `Vuna.Ir.Passes.allPassNames`；`Vuna.Obs.Types.vunaEventVocabulary` 把
+  `passEventName` 并进词汇表，表外 `vuna.pass.*` 会被 `vuna dev obs validate` 拒绝；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"X"` + `args.def`（level ≥ 3）：`vuna.elab.term.core`（逐表达式节点，`args.def` 是
   形态名 `EVar` / `EApp` / …）；一次 check 是 3.4×10^5 级，放 level 2 会把 trace 撑大一个量级；

@@ -9,6 +9,7 @@
 module Vuna.Obs.Types where
 
 import Vuna.Compiler.Base.Common
+import Vuna.Ir.Passes as Passes
 import Vuna.Json
 
 -- | 规范事件格式版本：trace 首行元数据的 `args.schema` 必须逐字等于它。
@@ -220,8 +221,12 @@ sampleOf ev =
 -- 词汇表（文档 §3.3；唯一一份）
 -- ---------------------------------------------------------------
 -- | 文档 §3.3 的固定事件名。`vuna.*` 前缀的名字必须在此表内（`vuna.mark.*` 前缀额外放行）。
+-- pass 名字的唯一真源是 `Vuna.Ir.Passes.allPassNames`；这里只把它并进词汇表。
 export vunaEventVocabulary : List String
-vunaEventVocabulary =
+vunaEventVocabulary = append baseVunaEventVocabulary (map Passes.passEventName Passes.allPassNames)
+
+baseVunaEventVocabulary : List String
+baseVunaEventVocabulary =
   [
     "vuna.obs.schema",
     "vuna.load",
@@ -343,8 +348,6 @@ isKnownVunaEventName name =
   if not (startsWith "vuna." name) then
     True
   else if startsWith "vuna.mark." name then
-    True
-  else if startsWith "vuna.pass." name then
     True
   else if startsWith "vuna.tool.iface.miss." name then True else memName name vunaEventVocabulary
 
