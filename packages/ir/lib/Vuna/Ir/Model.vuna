@@ -264,7 +264,13 @@ irResultTyFuel fuel ir =
           Nothing => irResultTyFuel (fuel - 1) el
       IrCase _ resultTy _ _ => resultTy
       IrConcatMany _ => Just IrTyStr
-      _ => Nothing
+      IrGlobal _ => Nothing
+      IrCtor _ _ _ _ => Nothing
+      IrRt _ => Nothing
+      IrRtApp _ _ => Nothing
+      IrNatCase _ _ _ _ _ => Nothing
+      IrEffThunk _ _ _ _ _ => Nothing
+      IrEffBind _ _ _ => Nothing
 
 -- lambda 链的运行时函数类型：只含非擦除 binder；binder 类型未记录时域落
 -- `IrTyOpaque`（体类型才是调用点的结果，域不可命名不影响 `IrApp` 的结果类型）。

@@ -408,7 +408,13 @@ irStringsOf (IrNatCase scrut _ z s c) =
     (append (irStringsOfAltMaybe z) (append (irStringsOfAltMaybe s) (irStringsOfAltMaybe c)))
 irStringsOf (IrConcatMany parts) = concatMap irStringsOf parts
 irStringsOf (IrEffThunk _ _ _ _ prim) = irStringsOf prim
-irStringsOf _ = []
+irStringsOf (IrVar _) = []
+irStringsOf (IrGlobal _) = []
+irStringsOf (IrRt _) = []
+irStringsOf (IrInt _) = []
+irStringsOf (IrBool _) = []
+irStringsOf (IrFloatLit _) = []
+irStringsOf (IrEffBind _ _ _) = []
 
 irStringsOfField : (String, Ir) -> List String
 irStringsOfField p = irStringsOf (secondOf p)
@@ -443,7 +449,13 @@ irFloatLitsOf (IrNatCase scrut _ z s c) =
     (append (floatsOfAltMaybe z) (append (floatsOfAltMaybe s) (floatsOfAltMaybe c)))
 irFloatLitsOf (IrConcatMany parts) = concatMap irFloatLitsOf parts
 irFloatLitsOf (IrEffThunk _ _ _ _ prim) = irFloatLitsOf prim
-irFloatLitsOf _ = []
+irFloatLitsOf (IrVar _) = []
+irFloatLitsOf (IrGlobal _) = []
+irFloatLitsOf (IrRt _) = []
+irFloatLitsOf (IrInt _) = []
+irFloatLitsOf (IrStr _) = []
+irFloatLitsOf (IrBool _) = []
+irFloatLitsOf (IrEffBind _ _ _) = []
 
 floatsOfField : (String, Ir) -> List String
 floatsOfField p = irFloatLitsOf (secondOf p)
@@ -484,7 +496,13 @@ irGlobalsOf (IrNatCase sc _ z su c) =
 irGlobalsOf (IrConcatMany xs) = concatMap irGlobalsOf xs
 irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
 irGlobalsOf (IrTail inner) = irGlobalsOf inner
-irGlobalsOf _ = []
+irGlobalsOf (IrVar _) = []
+irGlobalsOf (IrRt _) = []
+irGlobalsOf (IrInt _) = []
+irGlobalsOf (IrStr _) = []
+irGlobalsOf (IrBool _) = []
+irGlobalsOf (IrFloatLit _) = []
+irGlobalsOf (IrEffBind _ _ _) = []
 
 globalsOfField : (String, Ir) -> List String
 globalsOfField p = irGlobalsOf (secondOf p)
