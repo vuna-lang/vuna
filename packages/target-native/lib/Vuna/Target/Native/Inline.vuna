@@ -38,13 +38,16 @@ record Inl where
   inlUsed : Int
   inlCount : Int
   inlRec : List String
+  -- 每次内联给「会复制多次的实参」分配新 binder id（从 10000 起，避开
+  -- Synthetic 的 100/200/500 段）；复用被调函数的 binder 会让两个内联点互相覆盖。
+  inlNext : Int
   inlOut : List IrDef
 
 -- | 程序级内联：返回（可能去掉死定义前的）定义表与「是否发生过内联」。
 export inlineDefs : List String -> List IrDef -> (List IrDef, Bool)
 inlineDefs recNames defs =
   let
-    st = foldl (\s, d => inlineOne defs s d) (Inl 0 0 recNames []) defs
+    st = foldl (\s, d => inlineOne defs s d) (Inl 0 0 recNames 10000 []) defs
   in (reverse st.inlOut, st.inlCount > 0)
 
 inlineOne : List IrDef -> Inl -> IrDef -> Inl
@@ -83,9 +86,11 @@ rw fuel defs ir st =
               pb = rw (fuel - 1) defs inner st
               inner1 = firstOf pb
             in if length (runtimeBindersOf bs) == length args && scalarOnly inner1 && irSize inner1 <= scalarInlineSize then
-              let
-                reps = inlineReps (runtimeBindersOf bs) args inner1
-              in rw (fuel - 1) defs (wrapInlineLets (secondOf reps) (inlineBody (firstOf reps) inner1)) (secondOf pb)
+              case inlineReps st.inlNext (runtimeBindersOf bs) args inner1 of
+                (subs, lets, next2) =>
+                  let
+                    st2 = { (secondOf pb) | inlNext = next2 }
+                  in rw (fuel - 1) defs (wrapInlineLets lets (inlineBody subs inner1)) st2
             else
               rwApp (fuel - 1) defs (IrLam bs rt inner1) args (secondOf pb)
           IrGlobal name =>
@@ -315,11 +320,12 @@ tryInline defs name args st =
                   else if hasLam inner then
                     Nothing
                   else
-                    let
-                      reps = inlineReps rbs args inner
-                      body2 = Tail.stripTail (wrapInlineLets (secondOf reps) (inlineBody (firstOf reps) inner))
-                      st2 = { st | inlUsed = st.inlUsed + 1, inlCount = st.inlCount + 1 }
-                    in Just (body2, st2)
+                    case inlineReps st.inlNext rbs args inner of
+                      (subs, lets, next2) =>
+                        let
+                          body2 = Tail.stripTail (wrapInlineLets lets (inlineBody subs inner))
+                          st2 = { st | inlUsed = st.inlUsed + 1, inlCount = st.inlCount + 1, inlNext = next2 }
+                        in Just (body2, st2)
                 _ => Nothing
 
 -- | 体里带 lambda 的定义不内联：把闭包体拖进调用者，既复制代码也放大调用者的帧
@@ -511,16 +517,24 @@ trivialArg _ = False
 
 -- | 平凡或只出现一次的实参直接替换；会复制多次的非平凡实参改成一条 `let`，
 --   保证内联不重复求值（也让寄存器压力不随使用次数翻倍）。
-inlineReps : List IrBinder -> List Ir -> Ir -> (List (Int, Ir), List (IrBinder, Ir))
-inlineReps [] _ _ = ([], [])
-inlineReps _ [] _ = ([], [])
-inlineReps (b :: brest) (a :: arest) inner =
+--
+-- `let` 用**新的** binder：被调函数的 binder id 在多个内联点复用会让下游
+-- （CSE / native 槽分配）把两个值当成同一个，第二个实参覆盖第一个。
+inlineReps : Int -> List IrBinder -> List Ir -> Ir -> (List (Int, Ir), List (IrBinder, Ir), Int)
+inlineReps next [] _ _ = ([], [], next)
+inlineReps next _ [] _ = ([], [], next)
+inlineReps next (b :: brest) (a :: arest) inner =
   let
-    rest = inlineReps brest arest inner
+    rest = inlineReps next brest arest inner
+    subs = firstOf rest
+    lets = firstOf (secondOf rest)
+    next2 = secondOf (secondOf rest)
   in if trivialArg a || countBinderUses b.irBinderId inner <= 1 then
-    ((b.irBinderId, a) :: firstOf rest, secondOf rest)
+    ((b.irBinderId, a) :: subs, lets, next2)
   else
-    (firstOf rest, (b, a) :: secondOf rest)
+    let
+      fresh = mkIrBinder (Synthetic.backendBinderId next2) ("inline" ++ strFromInt next2)
+    in ((b.irBinderId, IrVar fresh) :: subs, (fresh, a) :: lets, next2 + 1)
 
 wrapInlineLets : List (IrBinder, Ir) -> Ir -> Ir
 wrapInlineLets [] body = body

@@ -93,3 +93,11 @@ exit: 0
 run: "$TMPDIR/argvrec-out/bin/argv" 2>&1
 out-equals: 12
 
+
+# N) 同一函数在同一个表达式里内联两次：两次内联的形参 binder 必须各自新鲜，
+#    否则第二次实参会覆盖第一次（#196）。回归：`bound (eval a) * bound (eval b)`。
+run: sh -c 'd="$TMPDIR/inline2"; mkdir -p "$d/app"; printf "[package]\nname = \"inline2\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "data Expr : Type where" "  Lit : Int -> Expr" "  Add : Expr -> Expr -> Expr" "  Mul : Expr -> Expr -> Expr" "  Max : Expr -> Expr -> Expr" "  Min : Expr -> Expr -> Expr" "" "bound : Int -> Int" "bound x = x - x / 1000003 * 1000003" "" "eval : Expr -> Int" "eval (Lit n) = n" "eval (Add a b) = 0" "eval (Mul a b) = bound (eval a) * bound (eval b)" "eval (Max a b) = 0" "eval (Min a b) = 0" "" "main : Int" "main = eval (Mul (Lit 3) (Lit 4))" > "$d/app/Main.vuna"; timeout 120 "$VUNA" build --target native --out "$TMPDIR/inline2-out" "$d"'
+exit: 0
+run: "$TMPDIR/inline2-out/bin/inline2"
+exit: 0
+out-equals: 12
