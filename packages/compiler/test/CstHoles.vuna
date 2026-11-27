@@ -1,0 +1,59 @@
+-- CST 洞子树的索引口径：`nodeIndex` 走节点投影（含模板洞），`nodeChildren` 仍是字节投影。
+import Base
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Parser
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("cst holes failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "hole-ids-indexed" holeIdsIndexed,
+    Pair "byte-children-exclude-holes" byteChildrenExcludeHoles
+  ]
+
+-- 模板洞里的表达式节点 id 是负数（独立 token 子流）；`nodeIndex` 必须能查到它。
+holeIdsIndexed : Bool
+holeIdsIndexed =
+  case parseSourceDetailed "<holes>" source of
+    ErrC _ => False
+    OkC p =>
+      let
+        ids = map firstOf (HashMap.toList (nodeIndex p.parsedCst))
+      in length (filter (\i => i < 0) ids) > 0
+
+-- 字节投影不重复下降洞子树：存在节点的 `nodeChildrenAll` 比 `nodeChildren` 长。
+byteChildrenExcludeHoles : Bool
+byteChildrenExcludeHoles =
+  case parseSourceDetailed "<holes>" source of
+    ErrC _ => False
+    OkC p => anyHole p.parsedCst
+
+anyHole : CstNode -> Bool
+anyHole node =
+  case node of
+    CstLeaf _ => False
+    CstBranch _ _ _ surface _ _ =>
+      if length (nodeChildrenAll node) > length (nodeChildren node) then
+        True
+      else
+        anyHoleList (nodeChildrenAll node)
+
+anyHoleList : List CstNode -> Bool
+anyHoleList [] = False
+anyHoleList (n :: rest) = anyHole n || anyHoleList rest
+
+source : String
+source = "x = \"\"\"\${(a + b) * c}\"\"\"\n"
