@@ -109,7 +109,7 @@ stack_top_open() {
      | select(.pullRequest.state == "OPEN" and .pullRequest.isDraft == false)] as $open
     | if ($open | length) == 0 then empty
       else ($open | max_by(.position).pullRequest | [.number, .id, .headRefOid] | @tsv)
-      end'
+      end' <<<"$1"
 }
 
 # stack 可以 arm：有 open 层、都不是 draft、没有 hold 标签（checks 可以还没绿）。
