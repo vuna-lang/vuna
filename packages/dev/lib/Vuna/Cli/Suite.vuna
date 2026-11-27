@@ -14,6 +14,7 @@ import Vuna.Cli.Parse
 import Vuna.Compiler.Base.Common
 import Vuna.Test.Suite
 import Vuna.Test.Run
+import Base.Trait.Functor
 import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
 import Base.Effect.Args as EffArgs
@@ -54,17 +55,37 @@ suiteAll parsed =
           OkC driver => runSuites parsed driver.suiteSuites
 
 -- | 内部：依次跑清单里的 suite；任一失败整体非 0，其余仍跑完。
+--
+-- 每个 suite 独立分桶（见 `Vuna.Test.Run.applyShard`），但桶下标按 suite 序号轮转：
+-- 各 suite 的 LPT 都把**最重的 case 放进 bin 0**，不轮转的话所有 suite 的 bin 0 会堆进
+-- 同一片（实测最重的两个 case —— `105f1b` 55.5s 与 `54b_repl_v2_gaps` 45s —— 就是这样
+-- 撞在一起的）。轮转后每片仍然每个 suite 拿一桶（不重不漏），只是重 case 被摊开。
 runSuites : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> Eff r Int
-runSuites parsed [] = pure 0
-runSuites parsed (path :: rest) =
+runSuites parsed paths = runSuitesGo parsed paths 0
+
+-- | 内部：`runSuites` 的累加器；`k` 是本 suite 在清单里的序号（桶下标轮转量）。
+runSuitesGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> Int -> Eff r Int
+runSuitesGo parsed [] _ = pure 0
+runSuitesGo parsed (path :: rest) k =
   do
-    rc <- suiteRun parsed path
-    more <- runSuites parsed rest
+    rc <- suiteRunShifted parsed path k
+    more <- runSuitesGo parsed rest (k + 1)
     pure (if rc /= 0 then rc else more)
+
+-- | 内部：桶下标轮转——`(i + k) mod n`（`parseShardText` 已保证 `0 <= i < n`、`n >= 1`）。
+shiftShard : Int -> (Int, Int) -> (Int, Int)
+shiftShard k (i, n) =
+  let
+    s = i + k
+  in (s - s / n * n, n)
 
 -- | 内部：校验 `--jobs` / `--timeout` / `--worker` / `--shard`，再解析 suite 文件并运行。
 suiteRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Eff r Int
-suiteRun parsed suitePath =
+suiteRun parsed suitePath = suiteRunShifted parsed suitePath 0
+
+-- | 内部：同 `suiteRun`，额外把桶下标按 `k` 轮转（`--all` 用）。
+suiteRunShifted : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Int -> Eff r Int
+suiteRunShifted parsed suitePath k =
   case suiteJobsOf parsed of
     ErrC e => toolError (diagText e)
     OkC jobs =>
@@ -76,8 +97,10 @@ suiteRun parsed suitePath =
             OkC worker =>
               case suiteShardOf parsed of
                 ErrC e => toolError (diagText e)
-                OkC shard =>
-                  do
+                OkC rawShard =>
+                  let
+                    shard = fmap (shiftShard k) rawShard
+                  in do
                     loaded <- parseSuiteFile suitePath
                     case loaded of
                       ErrC e => toolError (diagText e)

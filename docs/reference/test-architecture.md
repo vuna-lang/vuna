@@ -156,6 +156,9 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 - gate 拆 4 个、e2e 拆 8 个 matrix shard（`--shard i/N`，同一个 `nix-suite` cache 前缀）：
   每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。e2e 用 8 片是因为
   单片 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 runner 比片内加并发有效。
+- `--all` + `--shard i/N` 时桶下标按 suite 序号轮转（`(i + k) mod N`）：每个 suite 的 LPT
+  都把最重的 case 放进自己的 bin 0，不轮转的话各 suite 的 bin 0 会堆进同一片（实测
+  `105f1b` 55.5s 与 `54b_repl_v2_gaps` 45s 就是这样撞在一起的）。轮转后每片仍每 suite 一桶。
 - 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
 - 全局 token 池替代每 check 内部 `--jobs auto`；单次 `build.sh` 固定 1 线程
   （`VUNA_BUILD_JOBS`），并行度由 worker 数提供。
