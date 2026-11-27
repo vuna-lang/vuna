@@ -1,0 +1,28 @@
+-- 记录更新直接作函数实参（不需要先 `let`）：`f { r | x = v }` 里的 `{ r | ... }`
+-- 是更新实参，不是记录字面量。覆盖非参数化 record、参数化 record 与多实参位置。
+record Point where
+  x : Int
+  y : Int
+
+record Box a where
+  value : a
+  tag : Int
+
+addAt : Point -> Int -> Int
+addAt p k = p.x + p.y + k
+
+pass : (Box Int -> Box Int) -> Box Int -> Int
+pass f b = (f b).tag + b.tag
+
+idB : Box Int -> Box Int
+idB b = b
+
+p : Point
+p = Point { x = 1, y = 2 }
+
+b : Box Int
+b = Box { value = 3, tag = 4 }
+
+-- 17（10 + 2 + 5）+ 80（40 + 40）
+main : Int
+main = addAt { p | x = 10 } 5 + pass idB { b | tag = 40 }
