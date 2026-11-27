@@ -36,6 +36,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
+import Vuna.Compiler.Loader.Closure
 import Vuna.Compiler.Loader.Flatten as Flatten
 import Vuna.Json
 import Vuna.Lint.Config
@@ -316,25 +317,8 @@ ownNeededOf tool needed =
 -- `ifaceModsEff`（接口身份计算在包级是一次秒级固定开销）。
 -- | 内部：从起始名字沿接口的 `miDepHashes` 传递展开出的模块名闭包。
 closureNamesOf : List ModuleIface -> List String -> List String
-closureNamesOf ifaces starts = closureGo 8192 ifaces starts []
-
--- | 内部：`closureNamesOf` 的展开循环；`fuel` 是防御病态依赖图的步数预算。
-closureGo : Int -> List ModuleIface -> List String -> List String -> List String
-closureGo fuel _ [] acc = acc
-closureGo fuel ifaces (n :: rest) acc =
-  if fuel <= 0 then
-    acc
-  else if memName n acc then
-    closureGo (fuel - 1) ifaces rest acc
-  else
-    case findIface n ifaces of
-      Nothing => closureGo (fuel - 1) ifaces rest (n :: acc)
-      Just mi => closureGo (fuel - 1) ifaces (append (map firstOf (miDepHashesOf mi)) rest) (n :: acc)
-
--- | 内部：按模块名查接口（线性扫描）。
-findIface : String -> List ModuleIface -> Maybe ModuleIface
-findIface n [] = Nothing
-findIface n (mi :: rest) = if miNameOf mi == n then Just mi else findIface n rest
+closureNamesOf ifaces starts =
+  reachableFrom miNameOf (\mi => map firstOf (miDepHashesOf mi)) starts ifaces
 
 -- | 内部：闭包展开的起始名字，即 buffer 的直接 import 名单（本模块自身不需要）。
 startNamesOf : List Import -> List String

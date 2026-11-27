@@ -71,6 +71,7 @@ modules = [
   "Vuna.Compiler.Frontend.Reserved",
   "Vuna.Compiler.Frontend.Toml",
   "Vuna.Compiler.Loader.Addr",
+  "Vuna.Compiler.Loader.Closure",
   "Vuna.Compiler.Loader.Expand",
   "Vuna.Compiler.Loader.Fingerprint",
   "Vuna.Compiler.Loader.Fixity",
