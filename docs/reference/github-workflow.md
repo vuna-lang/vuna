@@ -103,7 +103,7 @@ gh api "repos/vuna-lang/vuna/issues?issue_field_values=priority:High" --jq '.[].
 ### 关系（原生）
 
 - sub-issue：`gh issue edit <child> --parent <epic>`；批量用 `--add-sub-issue`
-- blocked by：`gh issue edit <n> --add-blocked-by <m>`
+- blocked by / blocking：`gh issue edit <n> --add-blocked-by <m>`、`--add-blocking <m>`
 - relates to：`nix/tools/issue.sh relate <n> <m>`
 - duplicate：`gh issue close <n> --reason duplicate --duplicate-of <m>`
 
