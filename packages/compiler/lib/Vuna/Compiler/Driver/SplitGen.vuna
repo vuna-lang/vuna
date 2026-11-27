@@ -25,7 +25,6 @@ import Vuna.Target.Ocaml.Assembly
 import Vuna.Target.Ocaml.Decl
 import Vuna.Compiler.Lowering.Program
 import Vuna.Ir.Model
-import Vuna.Compiler.Core.Term
 import Vuna.Ir.Direct as Direct
 import Vuna.Target.Ocaml.Term
 import Vuna.Compiler.Elab.Driver
@@ -176,19 +175,8 @@ checkSplitAcyclic files =
 -- ---------------------------------------------------------------
 -- Eff 返回函数的 arity（token ABI 的双发射）
 -- ---------------------------------------------------------------
-effTyHead : Term -> Bool
-effTyHead (TGlobal g) = g == irEffTypeName
-effTyHead (TApp f _ _) = effTyHead f
-effTyHead (TRecord g _) = g == irEffTypeName
-effTyHead _ = False
-
-effArityPeel : Int -> Term -> Maybe Int
-effArityPeel n (TPi _ _ rig _ cod) = effArityPeel (if rigIsErased rig then n else n + 1) cod
-effArityPeel n t = if effTyHead t then Just n else Nothing
-
-effArityOfTy : Term -> Maybe Int
-effArityOfTy ty = effArityPeel 0 ty
-
+-- 判据本身在 `Lowering.Ty.effArityOfTy`：它要读 Core 的 `TPi` 形状，而 SplitGen 属
+-- Driver 层、不得消费 Core（`nix/checks/lib/ir-boundary.sh` 规则 4）。这里只做归属表。
 effArityTblOf : LwEnv -> List DtDef -> HashMap String Int
 effArityTblOf env [] = HashMap.fromList []
 effArityTblOf env (d :: rest) =

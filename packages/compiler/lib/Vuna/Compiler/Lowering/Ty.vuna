@@ -470,6 +470,27 @@ countRuntimeArgs [] = 0
 countRuntimeArgs ((_, rig) :: rest) =
   if rigIsErased rig then countRuntimeArgs rest else 1 + countRuntimeArgs rest
 
+-- ---------------------------------------------------------------
+-- Eff 返回类型的 arity（`Ir.Direct` 的 `__direct` 双发射判据）
+-- ---------------------------------------------------------------
+--
+-- 剥掉 `TPi` 前缀层、只数非擦除 binder，并要求最终的头是 Eff 族
+-- （`TGlobal` / `TRecord` 或其应用）。不是 Eff 返回则 `Nothing`。
+-- 判据读的是 Core 的项形状，所以只能在 Lowering 里；Driver 层（`SplitGen`）只消费
+-- 这个结果做归属表（`nix/checks/lib/ir-boundary.sh` 规则 4）。
+effArityHeadTy : Term -> Bool
+effArityHeadTy (TGlobal g) = g == irEffTypeName
+effArityHeadTy (TApp f _ _) = effArityHeadTy f
+effArityHeadTy (TRecord g _) = g == irEffTypeName
+effArityHeadTy _ = False
+
+effArityPeelTy : Int -> Term -> Maybe Int
+effArityPeelTy n (TPi _ _ rig _ cod) = effArityPeelTy (if rigIsErased rig then n else n + 1) cod
+effArityPeelTy n t = if effArityHeadTy t then Just n else Nothing
+
+export effArityOfTy : Term -> Maybe Int
+effArityOfTy ty = effArityPeelTy 0 ty
+
 peelIrFuns : Int -> Maybe IrTy -> Maybe IrTy
 peelIrFuns n Nothing = Nothing
 peelIrFuns n (Just ty) =
