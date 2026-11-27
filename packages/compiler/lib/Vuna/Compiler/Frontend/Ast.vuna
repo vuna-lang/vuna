@@ -537,7 +537,12 @@ declCtorArity name (d :: rest) =
         Nothing => declCtorArity name rest
     DRecord dname params fields derivings viaField repr lin sp =>
       if name == dname then Just (natToInt (length fields)) else declCtorArity name rest
-    _ => declCtorArity name rest
+    DAxiom name ty sp => declCtorArity name rest
+    DExtern name cName ty sp => declCtorArity name rest
+    DSig name ctx ty sp => declCtorArity name rest
+    DFun name pats body sp => declCtorArity name rest
+    DTrait tname params supers methods sp => declCtorArity name rest
+    DInstance ctxE head methods sp => declCtorArity name rest
 
 export declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
@@ -560,13 +565,21 @@ declAllNames (DData dname params kind ctors derivings viaField repr lin _) =
   dname :: map ctorName ctors
 declAllNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
 declAllNames (DTrait tname params supers methods _) = tname :: map traitMethodName methods
-declAllNames d = declNames d
+declAllNames (DFun name pats body _) = [name]
+declAllNames (DAxiom name ty _) = [name]
+declAllNames (DExtern name cName ty _) = [name]
+declAllNames (DSig name ctx ty _) = [name]
+declAllNames (DInstance ctxE head methods _) = []
 
 _declCtors : Decl -> List String
 _declCtors (DData dname params kind ctors derivings viaField repr lin _) = map ctorName ctors
 _declCtors (DRecord dname params fields derivings viaField repr lin _) = [dname]
 _declCtors (DTrait tname params supers methods _) = map traitMethodName methods
-_declCtors _ = []
+_declCtors (DFun name pats body _) = []
+_declCtors (DAxiom name ty _) = []
+_declCtors (DExtern name cName ty _) = []
+_declCtors (DSig name ctx ty _) = []
+_declCtors (DInstance ctxE head methods _) = []
 
 export ctorsOf : List Decl -> List String
 ctorsOf decls = concatMap _declCtors decls
@@ -575,7 +588,11 @@ export declTypeNames : Decl -> List String
 declTypeNames (DData name params kind ctors derivings viaField repr lin _) = [name]
 declTypeNames (DRecord name params fields derivings viaField repr lin _) = [name]
 declTypeNames (DTrait name params supers methods _) = [name]
-declTypeNames _ = []
+declTypeNames (DFun name pats body _) = []
+declTypeNames (DAxiom name ty _) = []
+declTypeNames (DExtern name cName ty _) = []
+declTypeNames (DSig name ctx ty _) = []
+declTypeNames (DInstance ctxE head methods _) = []
 
 export typeNamesOf : List Decl -> List String
 typeNamesOf decls = concatMap declTypeNames decls
