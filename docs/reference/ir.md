@@ -24,6 +24,9 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
   （运行时模板与内联内建展开是显式的 `ORaw`），wasm / native 各自有自己的模型。
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
+  其中 trait 投影调用 `p dict a…` 在字典是程序级已知值、且字段是 `Eff` 的 thunk builder
+  （`Monad.>>=` / `Applicative.pure` 等）时直接展开成字段应用（β/ι 等价，行多态安全）：
+  bind/pure 因此在 IR 里是可见语法树，后端可以消掉每个动作的包装闭包。
 - **ANF（wasm 前置）**：`Ir.Anf` 把每条非简单表达式绑定到 `let`，binder 用单调
   `next` 编号（不是路径深度）；它保持求值顺序与作用域，给效应 thunk 的 CPS/Step 变换提供
   一阶输入。wasm 在 codegen 前跑一次 ANF。

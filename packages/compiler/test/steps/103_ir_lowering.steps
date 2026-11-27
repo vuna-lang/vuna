@@ -57,3 +57,13 @@ run: sh -c '"$VUNA" dev ir dump --only ir.no.such.pass "$TMPDIR/irtail" 2>&1 | g
 exit: 0
 run: sh -c '"$VUNA" dev ir dump --after machine --only ir.cps "$TMPDIR/irtail" > /dev/null 2>&1; test $? -eq 2'
 exit: 0
+
+# do 链的字典投影内联：`Monad.>>=` / `Applicative.pure` 在 lowering 里是
+# `TApp (TGlobal p) dict …`，已知字典的投影直接展开到 call site（#187 第一步），
+# 这样 Eff 的 bind/pure 才是后端看得见的语法树。
+run: sh -c 'd="$TMPDIR/effdict"; mkdir -p "$d/app"; printf "[package]\nname = \"effdict\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "import Base.Effect.Core as Eff" "" "twice : Eff [] Int" "twice = do" "  x <- pure 1" "  y <- pure (x + 1)" "  pure (y + 1)" "" "main : Int" "main = runPure twice" > "$d/app/Main.vuna"; "$VUNA" dev ir dump "$d" > "$TMPDIR/effdict.ir"'
+exit: 0
+run: sh -c '! grep "def twice" "$TMPDIR/effdict.ir" | grep -q "g:Base.Trait.Monad.>>="'
+exit: 0
+run: sh -c '! grep "def twice" "$TMPDIR/effdict.ir" | grep -q "g:Base.Trait.Applicative.pure"'
+exit: 0
