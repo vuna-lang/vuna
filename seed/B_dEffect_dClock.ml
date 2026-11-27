@@ -12,13 +12,13 @@ let v_handleClock = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_h
 
 # 35 "Base/Effect/Clock.vuna"
 let v_clockOpHIOHost = (fun (op : t_ClockOp) k -> (match op with
-  | C_ClockOp_Now -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> (dtp_timeUs ())))) (fun t -> ((Obj.magic k) t)))
-  | C_ClockOp_SleepMicros (dtb__0) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_sleep dtio_0)) dtb__0)) (fun _u -> ((Obj.magic k) 0)))
+  | C_ClockOp_Now -> (((fun e k -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__0 = Obj.obj (e) in (let dtb__1 = Obj.obj ((k (dtb__0 u))) in (dtb__1 u)))))) (Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> (dtp_timeUs ())))) (fun t -> ((Obj.magic k) t)))
+  | C_ClockOp_SleepMicros (dtb__2) -> (((fun e k -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__3 = Obj.obj (e) in (let dtb__4 = Obj.obj ((k (dtb__3 u))) in (dtb__4 u)))))) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_sleep dtio_0)) dtb__2)) (fun _u -> ((Obj.magic k) 0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 48 "Base/Effect/Clock.vuna"
-let v_handleClockHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "clock") n) 363073373) (dtp_effectId n)) (fun a -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) a))) v_clockOpHIOHost) comp))
+let v_handleClockHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "clock") n) 363073373) (dtp_effectId n)) (fun a -> (let x = a in Obj.repr ((fun (_u : B_dEffect_dCore.t_EffUnit) -> x))))) v_clockOpHIOHost) comp))
 
 # 53 "Base/Effect/Clock.vuna"
 let v_runClockHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleClockHostHost "default") comp)))

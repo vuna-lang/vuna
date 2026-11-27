@@ -12,7 +12,7 @@ let v_obsMark = (fun (name : string) -> (dtp_obs_mark name))
 let v_obsSpan = (fun (name : string) (cat : string) f -> (((dtp_obs_span name) cat) f))
 
 # 41 "Vuna/Compiler/Base/Obs.vuna"
-let v_obsSpanEff = (fun (name : string) (cat : string) action -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((dtp_obs_span_begin name) cat))) (fun tok -> ((B_dEffect_dCore.v_finally action) ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (dtp_obs_span_end tok))))))
+let v_obsSpanEff = (fun (name : string) (cat : string) action -> (((fun e k -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__0 = Obj.obj (e) in (let dtb__1 = Obj.obj ((k (dtb__0 u))) in (dtb__1 u)))))) (let x = ((dtp_obs_span_begin name) cat) in Obj.repr ((fun (_u : B_dEffect_dCore.t_EffUnit) -> x)))) (fun tok -> ((B_dEffect_dCore.v_finally action) (let x = (dtp_obs_span_end tok) in Obj.repr ((fun (_u : B_dEffect_dCore.t_EffUnit) -> x)))))))
 
 # 48 "Vuna/Compiler/Base/Obs.vuna"
 let v_obsSampleStart = (fun (mode : string) (intervalUs : int) -> ((dtp_obs_sample_start mode) intervalUs))

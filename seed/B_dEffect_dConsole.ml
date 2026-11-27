@@ -19,13 +19,13 @@ let v_consoleOpHIOHost = (fun (op : t_ConsoleOp) k -> (match op with
 
 # 45 "Base/Effect/Console.vuna"
 let v_consoleOpHILib = (fun (op : t_ConsoleOp) k -> (match op with
-  | C_ConsoleOp_Print (dtb__2) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (((B_dTrait_dFunctor.v_fmap B_dEffect_dCore.v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) bi_natFromInt) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_print dtio_0)) dtb__2))) (fun r -> ((Obj.magic k) r)))
-  | C_ConsoleOp_EPrint (dtb__3) -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_eprint dtio_0)) dtb__3)) (fun r -> ((Obj.magic k) r)))
+  | C_ConsoleOp_Print (dtb__2) -> (((fun e k -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__3 = Obj.obj (e) in (let dtb__4 = Obj.obj ((k (dtb__3 u))) in (dtb__4 u)))))) (((fun f e -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__5 = Obj.obj (e) in (f (dtb__5 u)))))) bi_natFromInt) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_print dtio_0)) dtb__2))) (fun r -> ((Obj.magic k) r)))
+  | C_ConsoleOp_EPrint (dtb__6) -> (((fun e k -> Obj.repr ((fun (u : B_dEffect_dCore.t_EffUnit) -> (let dtb__7 = Obj.obj (e) in (let dtb__8 = Obj.obj ((k (dtb__7 u))) in (dtb__8 u)))))) ((fun dtio_0 -> Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> dtp_eprint dtio_0)) dtb__6)) (fun r -> ((Obj.magic k) r)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 58 "Base/Effect/Console.vuna"
-let v_handleConsoleHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "console") n) 775068458) (dtp_effectId n)) (fun a -> ((B_dTrait_dApplicative.v_pure B_dEffect_dCore.v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) a))) v_consoleOpHILib) comp))
+let v_handleConsoleHostHost = (fun (n : string) comp -> (((((((B_dEffect_dCore.v_handleCoreAtId "console") n) 775068458) (dtp_effectId n)) (fun a -> (let x = a in Obj.repr ((fun (_u : B_dEffect_dCore.t_EffUnit) -> x))))) v_consoleOpHILib) comp))
 
 # 64 "Base/Effect/Console.vuna"
 let v_runConsoleHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleConsoleHostHost "default") comp)))
