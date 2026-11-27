@@ -24,8 +24,10 @@ JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
 [ "$JOBS" -gt 0 ] 2>/dev/null || JOBS=1
 
 # 分层：VUNA_TEST_TIERS 是空格分隔的 tier 名（gate = fast integration，e2e = e2e）。
-# 空值 = 全量（本地调试）。e2e 先串行预热 packages/base、packages/compiler、全部包：23 s，换 e2e 长
-# case（44g 等）共享预热好的 base/compiler 产物，不各自冷跑；总 wall 不变、单 case 显著下降。
+# 空值 = 全量（本地调试）。e2e 先串行预热 packages/base 与 packages/compiler，换 e2e 长
+# case 共享预热好的依赖接口，不各自冷跑。
+# 不预热仓库根：`check .` 只为 44g 一个 case 服务（它自己会 `check .`），却让每一片都付
+# 一遍整个工作树的精化（runner 实测 35–50 s）。留给 44g 在自己的 lane 里付，与其它 case 并行。
 # e2e 顺带跑 `tools` tier：这些 case 与 e2e 共享同一批预热产物，一起交给 LPT
 # 才能按耗时摊开（单独跑时只有两个 case，分片后必然压在 1–2 片上）。
 now_s() { date +%s; }
@@ -34,7 +36,6 @@ case " $VUNA_TEST_TIERS " in
   *" e2e "*)
     "$VUNA" check "$VUNA_BASE"
     "$VUNA" check packages/compiler
-    "$VUNA" check .
     ;;
 esac
 phase_t1=$(now_s)
