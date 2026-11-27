@@ -307,11 +307,18 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、宿主原语桥接等）在
-`Target.Ocaml.Term.dtRuntime` / `dtRuntimeWith`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` /
-`readlink`）——原语语义见 [primitives.md](primitives.md)。`dtRuntimeWith` 按程序级旗标
-（`IrShared`（`Ir.Model`）的 `irSharedUsesFloat` / `irSharedUsesTrace` / `irSharedUsesObs`）**按需追加**
-运行时段：不引用浮点 / tracing / 观测的程序，产物里根本没有那些代码（因此关闭口径下
-产物逐字节不变）。观测段（`Target.Ocaml.Term.dtObsRuntime`，约 390 行 OCaml）提供 `dtp_obs_*`：
+`Target.Ocaml.Term.dtRuntime` / `dtRuntimeWith`；宿主原语段（`dtHostRuntime`）是唯一引用
+Unix（`Unix.stat` / `gettimeofday` / `readlink`）的块，`build.sh` 按文本里是否出现 `Unix.`
+决定链不链接 `unix.cmxa`——原语语义见 [primitives.md](primitives.md)。`dtRuntimeWith` 按程序级
+旗标（`IrShared`（`Ir.Model`）的 `irSharedUsesFloat` / `irSharedUsesTrace` / `irSharedUsesObs` /
+`irSharedUsesHost` / `irSharedUsesSched` / `irSharedUsesEff`）**按需追加**运行时段：不引用
+浮点 / tracing / 观测 / 宿主 / 调度器 / 效应机器的程序，产物里根本没有那些代码（因此关闭口径下
+产物逐字节不变）。字符串 / 数组 / 字节缓冲 helper（`dtStrRuntime` / `dtArrRuntime` /
+`dtBufRuntime`）另按**剪枝后保留单元**的文本里是否引用对应 helper 名决定：纯数值程序的
+`Vuna_runtime.ml` 不带 `bi_str*` / `dt_show_string` / `dtp_array*` / `dtp_mbuf*`，因此
+`String` / `Bytes` / `List` / `Array` / `Char` 整串 stdlib 模块都不进产物启动路径。
+异常报告器（`dtReporterRuntimeWith`）用字符 / 字节原语实现位置表扫描与帧名解析，同样不引用
+这些模块。观测段（`Target.Ocaml.Term.dtObsRuntime`，约 390 行 OCaml）提供 `dtp_obs_*`：
 级别读取、span、计数、日志、CPU 采样（`ITIMER_PROF` + `SIGPROF`）、内存采样
 （`Gc.Memprof`）与 `at_exit` flush；规范见 [observability.md](observability.md) §3/§6。
 

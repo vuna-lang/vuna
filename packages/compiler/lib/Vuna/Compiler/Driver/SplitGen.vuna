@@ -16,6 +16,7 @@ module Vuna.Compiler.Driver.SplitGen where
 import Vuna.Compiler.Base.Common
 import Base.Effect.Types as EffTypes
 import Base.Container.HashMap as HashMap
+import Base.Data.String as String
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.Split
@@ -313,6 +314,30 @@ splitLocPath roots contextDir path = locationPathUnder roots contextDir path
 -- roots 是模块根目录（`PackageContext.contextRoots` 的 rootDir），contextDir 是包目录
 -- （`PackageContext.contextDir`）；生成位置表用它把 span 路径归一。
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
+-- | 已保留单元的文本是否引用某个 runtime helper（按标识符子串判定）。
+helperInText : String -> List String -> Bool
+helperInText name [] = False
+helperInText name (t :: rest) = String.contains name t || helperInText name rest
+
+helperInTexts : List String -> List String -> Bool
+helperInTexts [] texts = False
+helperInTexts (n :: rest) texts = helperInText n texts || helperInTexts rest texts
+
+-- | runtime 的数据 helper 按**已保留单元**的引用追加（剪枝在装配末尾完成）；
+-- 纯数值程序因此不带字符串 / 数组 / 字节缓冲 helper。
+dtRuntimeFor : IrShared -> Bool -> List String -> String
+dtRuntimeFor shared entryIsAction keptTexts =
+  dtRuntimeWith
+    shared.irSharedUsesFloat
+    shared.irSharedUsesTrace
+    shared.irSharedUsesObs
+    shared.irSharedUsesHost
+    (shared.irSharedUsesSched || entryIsAction)
+    (shared.irSharedUsesEff || entryIsAction)
+    (helperInTexts dtStrHelperNames keptTexts)
+    (helperInTexts dtArrHelperNames keptTexts)
+    (helperInTexts dtBufHelperNames keptTexts)
+
 -- | 入口是否是动作（`Eff r a`）。调度器 runtime 的装配用它。
 entryIsActionM : Maybe IrEntry -> Bool
 entryIsActionM Nothing = False
@@ -347,18 +372,7 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
             -- 位置表：Lowering 已算好本程序的运行时定义行；增量路径复用模块的额外行在这里合并
             -- （`extraDefLocs` 来自接口的 `miDefLocs`，落盘前统一排序，全量/增量一致）。
             locRows = append shared.irSharedDefLocs extraDefLocs
-            locTbl = dtDefLocTable (splitLocPath roots contextDir) unitOfLocName locRows
             _ = log! "info" "cg-deflocs-done"
-            runtimeText =
-              dtRuntimeWith
-                shared.irSharedUsesFloat
-                shared.irSharedUsesTrace
-                shared.irSharedUsesObs
-                shared.irSharedUsesHost
-                (shared.irSharedUsesSched || entryIsAction)
-                (shared.irSharedUsesEff || entryIsAction)
-            deflocsText = dtDefLocsUnit locTbl
-            _ = log! "info" "cg-runtimeText-done"
           in splitProgramFiles
             env
             modules
@@ -368,11 +382,12 @@ generateDtSplitProgram modules entryDecls prog printResult roots contextDir extr
             allDatas
             meta
             (splitLocPath roots contextDir)
-            runtimeText
-            deflocsText
+            shared
+            entryIsAction
+            locRows
 
-splitProgramFiles : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
-splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText deflocsText =
+splitProgramFiles : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> IrShared -> Bool -> List (String, String, Int) -> Eff r (Check (List SplitFile))
+splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta normPath shared entryIsAction locRows =
   case checkProgramOf env of
     ErrC e => pure (ErrC e)
     OkC _ =>
@@ -385,11 +400,12 @@ splitProgramFiles env modules entryDecls printResult runtimeDefs allDatas meta n
         allDatas
         meta
         normPath
-        runtimeText
-        deflocsText
+        shared
+        entryIsAction
+        locRows
 
-splitProgramChecked : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
-splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText deflocsText =
+splitProgramChecked : {r : Row} -> LwEnv -> List (String, List Decl) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> IrShared -> Bool -> List (String, String, Int) -> Eff r (Check (List SplitFile))
+splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta normPath shared entryIsAction locRows =
   case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
     ErrC e => pure (ErrC e)
     OkC _ =>
@@ -408,11 +424,12 @@ splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta
                 defPairs
                 dataPairs
                 normPath
-                runtimeText
-                deflocsText
+                shared
+                entryIsAction
+                locRows
 
-splitWithOwners : {r : Row} -> LwEnv -> List (String, List Decl) -> Bool -> List DtData -> List DtDef -> List (String, String) -> List (String, String) -> (String -> String) -> String -> String -> Eff r (Check (List SplitFile))
-splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText deflocsText =
+splitWithOwners : {r : Row} -> LwEnv -> List (String, List Decl) -> Bool -> List DtData -> List DtDef -> List (String, String) -> List (String, String) -> (String -> String) -> IrShared -> Bool -> List (String, String, Int) -> Eff r (Check (List SplitFile))
+splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs normPath shared entryIsAction locRows =
   let
     defOwnerT = ownerTblOf defPairs
     dataOwnerT = ownerTblOf dataPairs
@@ -448,7 +465,16 @@ splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs norm
                   let
                     -- 只落盘入口可达的单元：不可达模块既不编译也不链接，产物的代码页
                     -- 与模块初始化都只支付真正用到的部分。
-                    files = pruneSplitFiles [runtimeUnit, deflocsUnit, splitUnitOfFile mainFile] (SplitFile "${runtimeUnit}.ml" runtimeText [] :: SplitFile "${deflocsUnit}.ml" deflocsText [runtimeUnit] :: append moduleFiles [mainFile])
+                    runtimeFile0 = SplitFile "${runtimeUnit}.ml" "" []
+                    deflocsFile = SplitFile "${deflocsUnit}.ml" "" [runtimeUnit]
+                    files0 = pruneSplitFiles [runtimeUnit, deflocsUnit, splitUnitOfFile mainFile] (runtimeFile0 :: deflocsFile :: append moduleFiles [mainFile])
+                    keptUnits = map splitUnitOfFile files0
+                    keptTexts = map splitText (filter (\f => not (splitUnitOfFile f == runtimeUnit || splitUnitOfFile f == deflocsUnit)) files0)
+                    runtimeText = dtRuntimeFor shared entryIsAction keptTexts
+                    -- 位置表只保留已落盘单元的定义：被剪掉的模块不会出现在回溯里。
+                    keptLocRows = filter (\row => memName (unitOfLocName (firstOf row)) keptUnits) locRows
+                    deflocsText = dtDefLocsUnit (dtDefLocTable normPath unitOfLocName keptLocRows)
+                    files = map (\f => if splitUnitOfFile f == runtimeUnit then SplitFile (splitName f) runtimeText (splitDeps f) else if splitUnitOfFile f == deflocsUnit then SplitFile (splitName f) deflocsText (splitDeps f) else f) files0
                   in case checkSplitNames files of
                     ErrC e => ErrC e
                     OkC _ =>

@@ -60,3 +60,19 @@ exit: 0
 read: $TMPDIR/split-01_workspace/build.sh
 out-contains: each_unit parallel
 out-contains: wait "$p"
+# 启动地板：runtime 的字符串 / 数组 / 字节缓冲 helper 按保留单元的引用追加（#188）。
+# 纯数值程序的 Vuna_runtime.ml 不带它们（否则 String/Bytes/List/Array 整串 stdlib 模块
+# 都进产物启动路径）；`main : String` 的入口展示仍要 `dt_show_string`。
+run: sh -c 'd="$TMPDIR/rtmin"; mkdir -p "$d/app"; printf "[package]\nname = \"rtmin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d" "$TMPDIR/rtmin-out"'
+exit: 0
+run: sh -c '! grep -q "bi_strLength\|dtp_arraySet\|dtp_mbufNew" "$TMPDIR/rtmin-out/Vuna_runtime.ml"'
+exit: 0
+run: grep -q "dt_report_exn" "$TMPDIR/rtmin-out/Vuna_runtime.ml"
+exit: 0
+run: sh -c 'd="$TMPDIR/rtstr"; mkdir -p "$d/app"; printf "[package]\nname = \"rtstr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d" "$TMPDIR/rtstr-out"; grep -q "dt_show_string" "$TMPDIR/rtstr-out/Vuna_runtime.ml"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/rtmin-out" && mkdir -p bin && sh build.sh bin/prog'
+exit: 0
+run: "$TMPDIR/rtmin-out/bin/prog"
+exit: 0
+out-equals: 42
