@@ -26,6 +26,8 @@ JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
 # 分层：VUNA_TEST_TIERS 是空格分隔的 tier 名（gate = fast integration，e2e = e2e）。
 # 空值 = 全量（本地调试）。e2e 先串行预热 packages/base、packages/compiler、全部包：23 s，换 e2e 长
 # case（44g 等）共享预热好的 base/compiler 产物，不各自冷跑；总 wall 不变、单 case 显著下降。
+now_s() { date +%s; }
+phase_t0=$(now_s)
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
     "$VUNA" check "$VUNA_BASE"
@@ -33,6 +35,7 @@ case " $VUNA_TEST_TIERS " in
     "$VUNA" check .
     ;;
 esac
+phase_t1=$(now_s)
 TIER_ARGS=""
 for tier in ${VUNA_TEST_TIERS:-}; do
   TIER_ARGS="$TIER_ARGS --tier $tier"
@@ -73,6 +76,7 @@ fi
 rc=0
 # shellcheck disable=SC2086
 "$VUNA" dev suite --all --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS || rc=1
+phase_t2=$(now_s)
 
 # 包内单测（`vuna test <pkg>`：顶层 test/*.vuna）；http/web 的行为面不在 suite corpus 里。
 # 切片按 VUNA_TEST_UNIT_PKGS 只跑相关包；未设置时跑全部。
@@ -100,6 +104,9 @@ case " $VUNA_TEST_TIERS " in
     "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS || rc=1
     ;;
 esac
+phase_t3=$(now_s)
+# 分段耗时：分片的 wall 由「预热 + 主 suite + tools」组成，只有主 suite 参与 LPT 平衡。
+echo "=== suite-timing warmup=$((phase_t1 - phase_t0))s cases=$((phase_t2 - phase_t1))s tools=$((phase_t3 - phase_t2))s"
 
 # 调度权重：把本轮实测耗时表打进构建日志。runner 的机器特征与开发机差数倍，
 # `test/suite/costs.baseline` 的 LPT 权重只能按 runner 上的读数重录。
