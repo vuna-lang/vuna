@@ -487,11 +487,6 @@ case "$cmd" in
           skipped=$((skipped + 1))
           continue
         fi
-        if ! stack_armed "$s"; then
-          echo "sweep: stack #$stack 跳过（未 arm stack auto-merge）"
-          skipped=$((skipped + 1))
-          continue
-        fi
         top=$(stack_top_open "$s")
         top_pr=$(cut -f1 <<<"$top")
         if [ "$dry_run" = "true" ]; then

@@ -133,6 +133,8 @@ jobs:
             fi
 
             if [ "$stack_armed" != "true" ]; then
+              # GitHub 在只想 rebase 的仓库上可能先按默认 squash 校验 includeStack 并拒绝；
+              # 这里只尽力 arm，整条入队始终由 sweep 的 REST merge-async 负责。
               if [ "$queue_enabled" = "true" ]; then
                 # shellcheck disable=SC2016
                 if gh api graphql -f id="$stack_top_id" -F includeStack=true -f query='
@@ -142,6 +144,8 @@ jobs:
                     }
                   }' >/dev/null; then
                   echo "automerge: stack #$stack_number 已 arm（top #$stack_top_pr）"
+                else
+                  echo "automerge: stack #$stack_number 的 includeStack arm 被拒绝；由 sweep 入队" >&2
                 fi
               else
                 # shellcheck disable=SC2016
@@ -152,6 +156,8 @@ jobs:
                     }){clientMutationId}
                   }' >/dev/null; then
                   echo "automerge: stack #$stack_number 已 arm（top #$stack_top_pr）"
+                else
+                  echo "automerge: stack #$stack_number 的 includeStack arm 被拒绝；由 sweep 入队" >&2
                 fi
               fi
             fi
