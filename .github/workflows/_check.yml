@@ -145,6 +145,8 @@ jobs:
             nix log "$p" 2>/dev/null |
               sed -n -e '/=== suite-timing/p' -e '/=== suite-costs begin/,/=== suite-costs end/p' || true
           done
+          # 紧挨 save 再读一次根：区分「链接没建上」与「链接建上了但 gc 不认」。
+          echo "=== gcroots vuna-ci（save 前）: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-')"
 
       # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
       - name: Drop builder lock files
