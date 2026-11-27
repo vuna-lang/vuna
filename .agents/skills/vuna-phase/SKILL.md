@@ -34,8 +34,8 @@ description: 把大任务拆成 phase、用 GitHub stacked PR + 合并队列推�
 | 规划 | orchestrator | ledger 里有 phase、branch、base、文件边界、验收命令 |
 | 开发 | phase agent（占 dev 槽） | 改动在指定 worktree 内，验证命令跑过并记录 |
 | 代码冻结 | orchestrator | 提交整理完、push、PR 打开、base 正确；入队由 checks 变绿后 sweep 完成（不依赖 arm） |
-| 队列 | GitHub | stack 作为一个 merge group 进入队列 |
-| 合并 | GitHub | bottom → top 原子落 `main` |
+| 队列 | GitHub | 各层作为独立 entry 入队（REST merge-async）；队列可能把 bottom 与前序 PR 合组，其余层被 eject 后 retarget |
+| 合并 | GitHub | bottom → top 逐层落 `main`；下层合并后上层 retarget 并由 sweep 重新入队（不承诺原子） |
 | 级联 rebase | orchestrator | `gh stack sync` 后各层重新线性、PR base 正确 |
 
 **下一 phase 在上一 phase「代码冻结」后开工，不等 merged。** 冻结意味着该层的代码不再变；
@@ -148,7 +148,8 @@ phase <N>：<一句话目标>
 - [ ] `git status --short` 只有预期改动，没有 `result*` / `.output` / `_scratch/` / 生成物。
 - [ ] 无 `fixup!` / `squash!` / `WIP`，无 merge commit；提交按逻辑整理过。
 - [ ] `nix run .#vuna -- fmt --check <改动路径>`、`check .`、相关 suite 通过；没跑的要写明。
-- [ ] 只动了 ledger 里列出的文件边界；`seed/` 只允许**最低层**的独立 `chore(seed)`。
+- [ ] 只动了 ledger 里列出的文件边界；`seed/` 只允许在真正改变 codegen 的层，独立
+      `chore(seed)`；每层都要独立自洽，不能把 rotation 推到后续层。
 - [ ] 报告含 SHA 与验证清单；orchestrator 已审过 diff。
 - [ ] 冻结动作完成：push、PR 打开、base 正确、已 arm；绿后由 sweep 入队 top。
 
@@ -161,7 +162,7 @@ phase <N>：<一句话目标>
 | 某层要撤掉 | `gh stack modify` 的 drop / fold，或关掉该层 PR 后 `gh stack unstack` 重建；**保留 worktree** 直到改动找回。 |
 | 队列把某层移出 | 上层会被一起移出。修根因后由 sweep 重新入队，不要逐层重试。 |
 | stack 超过 3 层 | 停止加层；从 `main` 另起一条 stack 或独立 PR，把后续 phase 移过去。 |
-| seed 冲突 / 上层碰了 `seed/` | 撤回上层的 seed 改动；rotation 只在最低层做，全局同时只允许一次。 |
+| seed 冲突 / 下层带了 rotation | 每层独立满足「当前 seed 编译当前源码」；rotation 跟随改变 codegen 的层，不推到后续层。冲突时回到该层重跑 rotation。 |
 | 整个 phase 放弃 | 从 top 往下关 PR；`gh stack unstack --local` 只清本地追踪；worktree 保留到确认无未保存改动，再 teardown。 |
 
 ## 不要做的事

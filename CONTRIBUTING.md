@@ -146,7 +146,8 @@ gh stack link <pr1> <pr2>
 - 合并后用 `gh stack sync` 级联；冲突用 `gh stack rebase` 解决，不要手写
   `git rebase --onto`。整条 stack 完成后再 `gh stack sync --prune` / `gh stack unstack`
   并清理 worktree。
-- seed rotation 只在最低层，独立 `chore(seed): ...`；上层 PR 不改 `seed/`。
+- seed rotation 跟随真正改变 codegen 的层，独立 `chore(seed): ...`；每层都要独立满足
+  「当前 seed 编译当前源码」，不把 rotation 推到后续层；上层不改 codegen 就不碰 `seed/`。
 - CI 对每层都跑完整检查，层数直接放大总耗时；3 层是上限，不是目标。
 
 完整机制见 [docs/reference/github-workflow.md](docs/reference/github-workflow.md)

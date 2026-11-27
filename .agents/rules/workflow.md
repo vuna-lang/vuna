@@ -136,8 +136,8 @@ git -C <MAIN_ROOT> pull --ff-only
   `gh stack push` → 每层 `gh pr create --base <parent>` → `gh stack link <pr...>`。只
   enqueue top（sweep 自动），不逐层入队；合并后 `gh stack sync` 级联，不手写 `rebase --onto`。
 - `Closes #N` 只放 bottom，上层用 `Refs #N` 或 `no-issue`。
-- **seed**：rotation 只放最低层并独立成 `chore(seed): ...`；上层 PR 不碰 `seed/`，全局同时
-  只允许一次 rotation。
+- **seed**：rotation 跟随真正改变 codegen 的层，独立成 `chore(seed): ...`；每层都要独立满足
+  「当前 seed 编译当前源码」，不能推到后续层；不改 codegen 的层不碰 `seed/`。
 - 整条 stack 合并完再 `gh stack sync --prune` / `gh stack unstack`，然后 teardown 各 worktree。
 
 ## 不要做的事
