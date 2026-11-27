@@ -104,13 +104,19 @@ jobs:
       # 所有要跑 vuna 的组先把工具链并行建：默认 `--max-jobs 1` 会把 vuna-seed / 编译器 /
       # 各插件串行编两分钟（链：seed 15s → compiler 30s → toolchain 34s → dev 28s）。
       # 这些包彼此独立、单包单线程，4 并发摊开建；cache 命中时只是一次求值 + 确认已存在。
+      #
+      # 建完登记成 GC root：save 前的 `nix store gc --max` 只保「根闭包」，而工具链与
+      # `vuna-store`（插件构建要读的包状态）都是**构建输入**、不在任何输出闭包里——不登记
+      # 就会被当垃圾删掉（`pr` 组把上限降到 3G 的那一轮就这么丢了工具链，下个 PR 重编 112s）。
       - name: 预热工具链
         if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-') || inputs.group == 'pr' || inputs.group == 'units'
         run: |
-          nix build --max-jobs 4 --cores 1 --no-link \
-            .#vuna .#vuna-seed .#vuna-compiler .#vuna-cli .#vuna-toolchain \
-            .#vuna-dev .#vuna-web-cli .#vuna-plugin-web \
-            .#vuna-target-native .#vuna-target-wasm
+          for p in $(nix build --max-jobs 4 --cores 1 --no-link --print-out-paths \
+              .#vuna .#vuna-seed .#vuna-compiler .#vuna-cli .#vuna-toolchain \
+              .#vuna-dev .#vuna-web-cli .#vuna-plugin-web \
+              .#vuna-target-native .#vuna-target-wasm .#vuna-store); do
+            sudo ln -sfn "$p" "/nix/var/nix/gcroots/vuna-ci-$(basename "$p")"
+          done
 
       - name: ${{ inputs.group }}
         env:
