@@ -383,6 +383,114 @@ bindersOfParamsHint env outer hints id (p :: rest) =
     tail = bindersOfParamsHint env (b :: outer) restHints (id + 1) rest
   in (b :: firstOf tail, secondOf tail)
 
+-- ---------------------------------------------------------------
+-- 已知字典的 trait 投影内联（Eff 的 thunk builder）
+-- ---------------------------------------------------------------
+-- `Monad.>>=` / `Applicative.pure` 等投影在 lowering 里是 `TApp (TGlobal p) dict …`：
+-- 字典 `dict` 是程序级的 `TGlobal`，体是 `\tele => \ctx => TCon MkDict fields`。
+-- 把字段直接应用到方法实参，`>>=` 的 `MkEff`/`case` 就变成 caller 里可见的语法树，
+-- 供 OCaml 侧的 Eff 融合（`Ir.Direct`）消掉每个 bind/pure 的闭包。
+peelLams : Term -> Term
+peelLams (TLam _ _ _ _ body) = peelLams body
+peelLams t = t
+
+stripEraseHead : Term -> Term
+stripEraseHead (TApp (TGlobal g) x _) =
+  if g == primEraseName then stripEraseHead x else TApp (TGlobal g) x Rig1
+stripEraseHead t = t
+
+conHeadOf : Term -> Maybe String
+conHeadOf (TCon c _) = Just c
+conHeadOf (TApp f _ _) = conHeadOf f
+conHeadOf _ = Nothing
+
+appHeadVarIdx : Term -> Maybe (String, Int)
+appHeadVarIdx (TVar name idx _) = Just (name, idx)
+appHeadVarIdx (TApp f a _) =
+  case f of
+    TGlobal g => if g == primEraseName then appHeadVarIdx a else Nothing
+    _ => appHeadVarIdx f
+appHeadVarIdx _ = Nothing
+
+-- | 投影体选中第几个字段（分支 binder 顺序即字段顺序；de Bruijn 下标反向）。
+projFieldOf : Maybe Term -> Maybe (String, Int)
+projFieldOf Nothing = Nothing
+projFieldOf (Just body) =
+  case peelLams body of
+    TCase _ [alt] =>
+      case appHeadVarIdx (caseAltBody alt) of
+        Just (_, idx) =>
+          let
+            n = List.length alt.caseAltBinders
+            k = n - 1 - idx
+          in if idx >= 0 && idx < n then Just (alt.caseAltName, k) else Nothing
+        Nothing => Nothing
+    _ => Nothing
+
+nthTerm : Int -> List Term -> Maybe Term
+nthTerm k xs =
+  if k < 0 then
+    Nothing
+  else
+    case xs of
+      [] => Nothing
+      x :: rest => if k == 0 then Just x else nthTerm (k - 1) rest
+
+foldAppTerm : Term -> List (Term, Rig) -> Term
+foldAppTerm f [] = f
+foldAppTerm f (p :: rest) = foldAppTerm (TApp f (firstOf p) (secondOf p)) rest
+
+isEffBuilder : Term -> Bool
+isEffBuilder field =
+  case conHeadOf (peelLams (stripEraseHead field)) of
+    Just c => c == irEffMkCtor
+    Nothing => False
+
+dictFieldOf : LwEnv -> String -> String -> Int -> Maybe Term
+dictFieldOf env defName ctor k =
+  case lwDefBodyOf defName env of
+    Nothing => Nothing
+    Just body =>
+      case stripEraseHead (peelLams body) of
+        TCon c fields =>
+          if c == ctor then
+            case nthTerm k (map firstOf fields) of
+              Just f => if isEffBuilder f then Just f else Nothing
+              Nothing => Nothing
+          else
+            Nothing
+        _ => Nothing
+
+runtimeArg : (Term, Rig) -> Bool
+runtimeArg p = not (rigIsErased (secondOf p))
+
+-- | 字典项剥掉擦除的类型实参后指向的程序级字典名。
+dictNameOf : Term -> Maybe String
+dictNameOf (TGlobal d) = Just d
+dictNameOf (TApp f _ r) = if rigIsErased r then dictNameOf f else Nothing
+dictNameOf _ = Nothing
+
+-- | 投影调用 `p dict a…` → 字典字段应用（只在字段是 `Eff` thunk builder 时触发）。
+effFieldAppIn : LwEnv -> Term -> Maybe Term
+effFieldAppIn env t =
+  case flattenAppSpine t of
+    (head, args0) =>
+      case head of
+        TGlobal pName =>
+          case projFieldOf (lwDefBodyOf pName env) of
+            Just (ctor, k) =>
+              case filter runtimeArg args0 of
+                (d, _) :: rest =>
+                  case dictNameOf d of
+                    Just dictName =>
+                      case dictFieldOf env dictName ctor k of
+                        Just field => Just (foldAppTerm field rest)
+                        Nothing => Nothing
+                    Nothing => Nothing
+                [] => Nothing
+            Nothing => Nothing
+        _ => Nothing
+
 -- 应用：先按构造子折叠（多维变体构造子是 tupled 的），再试内建内联 / `++` 展平 / 普通应用。
 lowerAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Ir, LwSt)
 lowerAppFuel fuel env st binders f a rig =
@@ -394,17 +502,20 @@ lowerAppFuel fuel env st binders f a rig =
     case flattenConApp (TApp f a rig) of
       Just (c, args) => lowerConAppFuel (fuel - 1) env st binders c args
       Nothing =>
-        case flattenConcatChainIn (TApp f a rig) of
-          Just parts =>
-            if listLength parts >= 3 then
-              Vuna.Compiler.Base.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (
-                  \p =>
-                    case p of
-                      (texts, st2) => OkC (IrConcatMany texts, st2)
-                )
-            else
-              lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
-          Nothing => lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
+        case effFieldAppIn env (TApp f a rig) of
+          Just fieldApp => lowerTermFuel (fuel - 1) env st binders fieldApp
+          Nothing =>
+            case flattenConcatChainIn (TApp f a rig) of
+              Just parts =>
+                if listLength parts >= 3 then
+                  Vuna.Compiler.Base.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (
+                      \p =>
+                        case p of
+                          (texts, st2) => OkC (IrConcatMany texts, st2)
+                    )
+                else
+                  lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
+              Nothing => lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
 
 lowerPlainAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Check (Ir, LwSt)
 lowerPlainAppFuel fuel env st binders t =
