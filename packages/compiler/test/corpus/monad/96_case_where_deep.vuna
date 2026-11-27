@@ -1,0 +1,12 @@
+-- case 之后深层 `where`：`where` 属于外层函数子句，出现在比分支列更深处不是
+-- 分支缩进错误。
+f : Int -> Int
+f x = case x of
+        0 => k
+        n => n
+         where
+           k : Int
+           k = 7
+
+main : String
+main = strFromInt (f 0 + f 3)

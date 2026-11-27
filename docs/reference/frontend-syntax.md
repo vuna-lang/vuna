@@ -65,6 +65,13 @@
 | 关键字 | 硬关键字表见 `Frontend.Lexer.isKeyword`；`alias` / `boxed` / `export` 是软关键字（只在声明位置特定上下文生效） | `Frontend.Lexer` |
 | 私有构造子约定 | `_` 紧邻大写字母的标识符在模式里按构造子解析（`_C`）；单独 `_` 仍是通配，`_x` 是变量 | `Frontend.Parser.Support` |
 
+- **`case` 分支块的收尾**：分支之后比分支列更深的 token，只有「不属于表达式之后的收尾」
+  时才是缩进错误（`PS_UnexpectedIndentAfterCaseAlt`）。收尾 token 按语法角色判定：
+  闭括号（`tokBracketStep` 结构化判定，含 `}`）、`,` / `;`、以及 `then` / `else` / `in` /
+  `of` / `where`。因此 `case` 结果嵌在记录字面量、括号、外层 `if` / `let` / `where` 里时，
+  外层收尾不必与分支列对齐；分支体自身的续行（运算符 / 实参）由 `parseExpr` 消费。
+  入口：`Frontend.Parser.Support.badCaseIndent`。
+
 ## 2. 表达式
 
 | 形式 | 例子 | 降级 / 语义落点 | 入口 |
