@@ -451,8 +451,8 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | `@vuna@prim_eff_exit` / `@vuna@host@exitOp` | 立即退出进程（执行即退出、**不返回**） | `exitWith` |
 | `@vuna@prim_eff_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 0（真实睡眠，非忙等） | `clockSleepMicros` |
 | `effTimeUs` | `Unix.gettimeofday` 换算微秒（可见内建，唯一例外） | `clockNow` |
-| `@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn` | 在给定目录执行 `sh` 命令并返回退出码，执行后恢复原 cwd | `processRunIn` |
-| `@vuna@prim_eff_spawn` / `wait` | 异步启动子进程（argv 列表，继承 stdio）返回 pid；等待返回退出码（signal/stopped 归 1） | `processSpawn` / `processWait` |
+| `@vuna@prim_eff_runIn` / `@vuna@host@tryRunIn` | 在给定目录执行 `sh` 命令并返回退出码（被信号终止给 255，同 `Sys.command`）；cwd 只切在子进程里（父进程 cwd 不动），目录不存在给状态槽 1、存在但不可进入给 2，都不 spawn、不打印。子进程登记在进程表里，父进程收到 TERM / HUP / QUIT 时先收掉子进程再按原信号退出，收到 INT 时把 INT 转发给子进程 | `processRunIn` |
+| `@vuna@prim_eff_spawn` / `wait` | 异步启动子进程（argv 列表，继承 stdio）返回 pid；等待返回退出码（signal/stopped 归 1）；同样登记在进程表里，随父进程的终止信号一起收掉 | `processSpawn` / `processWait` |
 | `@vuna@host@tryNet*`（含 `Within`） | 失败写状态槽（1 = 对端关闭、2 = refused、3/7 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、8 = bad-handle、其它 = io）；`recv` 对端关闭是 `Nothing` | `net*`；base 抛 `NetErrorOp` |
 | `@vuna@prim_mrefNew` / `read` / `write` | `ref` / `!` / `:=`（命名可变单元，原地读写） | `Base.Effect.MutRef`（句柄由精化器合成） |
 | `@vuna@prim_eff_hostStatus` | 宿主 try 变体的失败码状态槽（0 = 成功；OCaml 用 Domain.DLS） | 仅 base 的 handler 读取 |
