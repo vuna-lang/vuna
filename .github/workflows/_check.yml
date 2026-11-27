@@ -124,7 +124,7 @@ jobs:
           for p in .ci/result*; do
             [ -e "$p" ] || continue
             nix log "$p" 2>/dev/null |
-              sed -n '/=== suite-costs begin/,/=== suite-costs end/p' || true
+              sed -n -e '/=== suite-timing/p' -e '/=== suite-costs begin/,/=== suite-costs end/p' || true
           done
 
       # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
