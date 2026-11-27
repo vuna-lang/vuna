@@ -1,15 +1,19 @@
 name: gates
 
 # PR 的细粒度门禁：detect 按 type + pkg/area 计算检查子集。
-# `gates / run` 是 required check，只跑计划里**非 suite** 的部分；计划含 gate / e2e 时
-# 由 `suite` 矩阵按 shard 并行（与 ci.yml 的 main 基线同一批 check）。
+# `gates / run` 是 required check：PR 上只跑计划里**非 suite** 的部分（计划含 gate / e2e 时
+# 由 `suite` 矩阵按 shard 并行）；merge_group 上固定跑完整 gate-shard-0..3 + units，
+# 再跑同一份 area 计划的非 suite 部分，验证的是这批 PR 合入后的 main 状态。
 # detect 失败时 precondition 让 `gates / run` 保持失败，不会因为 job 被跳过而卡在 Expected。
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
-  group: gates-${{ github.event.pull_request.number }}
+  # PR 按编号分组；merge_group 的临时 ref 没有 PR 编号，按组 head 分组。
+  group: gates-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}
   cancel-in-progress: true
 
 permissions:
@@ -41,17 +45,36 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          TITLE: ${{ github.event.pull_request.title }}
-          BODY: ${{ github.event.pull_request.body }}
-          BASE: ${{ github.event.pull_request.base.ref }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number || '' }}
+          BASE: ${{ github.event.pull_request.base.ref || '' }}
+          MERGE_BASE_SHA: ${{ github.event.merge_group.base_sha || '' }}
+          MERGE_HEAD_SHA: ${{ github.event.merge_group.head_sha || '' }}
+          MERGE_HEAD_REF: ${{ github.event.merge_group.head_ref || '' }}
         run: |
           set -euo pipefail
 
-          git fetch --no-tags origin "$BASE"
-          files=$(git diff --name-only "origin/$BASE...HEAD")
+          # merge_group 没有 pull_request 字段：从 head_ref（gh-readonly-queue/main/pr-N-…）
+          # 取组头 PR，diff 覆盖整组 PR；PR 事件仍按 origin/<base>...HEAD 取。
+          if [ "$EVENT" = "merge_group" ]; then
+            PR=$(printf '%s\n' "$MERGE_HEAD_REF" | sed -nE 's#.*/pr-([0-9]+)(-.*)?$#\1#p')
+            if [ -z "$PR" ]; then
+              echo "::error::无法从 merge_group.head_ref 解析 PR 号：$MERGE_HEAD_REF"
+              exit 1
+            fi
+            files=$(git diff --name-only "$MERGE_BASE_SHA...$MERGE_HEAD_SHA")
+            range="$MERGE_BASE_SHA...$MERGE_HEAD_SHA"
+          else
+            git fetch --no-tags origin "$BASE"
+            files=$(git diff --name-only "origin/$BASE...HEAD")
+            range="origin/$BASE...HEAD"
+          fi
+
+          pr_json=$(gh pr view "$PR" --repo "$REPO" --json title,body,labels)
+          TITLE=$(jq -r '.title // ""' <<<"$pr_json")
+          BODY=$(jq -r '.body // ""' <<<"$pr_json")
+          current_labels=$(jq -r '.labels[].name' <<<"$pr_json")
           path_labels=$(printf '%s\n' "$files" | nix/tools/pr-labels.sh)
-          current_labels=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')
 
           issue_number=$(printf '%s\n' "$BODY" |
             grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?|refs?|references?)[[:space:]]+#[0-9]+' |
@@ -101,48 +124,66 @@ jobs:
           {
             echo "## gates plan"
             echo
+            echo "- event: \`$EVENT\`"
             echo "- PR: #$PR"
+            echo "- diff: \`$range\`"
             echo "- type: \`$type_label\`"
             echo "- labels: \`$labels\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # 计划由 pr-gates.nix 唯一计算：让 HCL 只消费 JSON，不复制选择规则。
+      # PR 计划由 pr-gates.nix 唯一计算：让 HCL 只消费 JSON，不复制选择规则。
       # 计划含完整 gate / e2e 时，它们换成对应 shard 组（gate-shard-* / e2e-shard-*），
       # 每个 shard 是独立 matrix job（独立 runner），尾部长杆按耗时摊开。
+      # merge_group 上不按标签选 suite：固定跑 main 等价的完整 gate + units。
       - name: plan
         id: plan
         env:
           LABELS: ${{ steps.labels.outputs.labels }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          read -r -a labels <<< "$LABELS"
-          matrix=$(nix run .#ci -- plan-json "${labels[@]}" | jq -c '
-            def shard($g): [range(0; 4) | "\($g)-shard-\(.)"];
-            .refs as $r
-            | {group: (
-                (if ($r | index("check:vuna-tests-gate")) then shard("gate") else [] end)
-                + (if ($r | index("check:vuna-tests-e2e")) then shard("e2e") else [] end)
-              )}')
-          suite=$(printf '%s' "$matrix" | jq '(.group | length) > 0')
-          {
-            echo ""
-            echo "## suite shards"
-            echo
-            if [ "$suite" = "true" ]; then
-              printf '%s' "$matrix" | jq -r '.group[]' | sed 's/^/- /'
-            else
-              echo "（计划里没有完整 gate / e2e）"
+          if [ "$EVENT" = "merge_group" ]; then
+            matrix='{"group":["gate-shard-0","gate-shard-1","gate-shard-2","gate-shard-3","units"]}'
+            suite=true
+            {
+              echo ""
+              echo "## suite shards (merge group)"
+              echo
+              echo "合并组固定跑 main 等价的完整 suite："
+              echo "- gate-shard-0 … gate-shard-3"
+              echo "- units"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            read -r -a labels <<< "$LABELS"
+            matrix=$(nix run .#ci -- plan-json "${labels[@]}" | jq -c '
+              def shard($g): [range(0; 4) | "\($g)-shard-\(.)"];
+              .refs as $r
+              | {group: (
+                  (if ($r | index("check:vuna-tests-gate")) then shard("gate") else [] end)
+                  + (if ($r | index("check:vuna-tests-e2e")) then shard("e2e") else [] end)
+                )}')
+            suite=$(printf '%s' "$matrix" | jq '(.group | length) > 0')
+            {
+              echo ""
+              echo "## suite shards"
+              echo
+              if [ "$suite" = "true" ]; then
+                printf '%s' "$matrix" | jq -r '.group[]' | sed 's/^/- /'
+              else
+                echo "（计划里没有完整 gate / e2e）"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+            # 空 matrix 不进 `strategy`：计划里没有 suite 时矩阵给一个 `none` 占位，
+            # `suite` job 由下面的 `if` 跳过。
+            if [ "$suite" != "true" ]; then
+              matrix='{"group":["none"]}'
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          # 空 matrix 不进 `strategy`：计划里没有 suite 时矩阵给一个 `none` 占位，
-          # `suite` job 由下面的 `if` 跳过。
-          if [ "$suite" != "true" ]; then
-            matrix='{"group":["none"]}'
           fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "suite=$suite" >> "$GITHUB_OUTPUT"
 
   # 计划里的 gate / e2e 换成 shard 组并行；没有 suite 时整个 job 跳过（不占 runner）。
+  # merge_group 上固定跑 gate-shard-0..3 + units，作为合并队列的完整验证。
   suite:
     needs: detect
     if: needs.detect.outputs.suite == 'true'
@@ -153,11 +194,12 @@ jobs:
     with:
       group: ${{ matrix.group }}
       cache-key: suite
-      timeout: 45
+      timeout: 60
       jobs: 1
       cache-size: 2G
 
-  # 必需的汇总检查：跑计划里剩下的部分，并把 suite shard 的结论一并收进来。
+  # 必需的汇总检查：跑 area 计划里剩下的部分，并把 suite 的结论一并收进来。
+  # PR 上是轻量切片；merge_group 上是完整 gate-shard + units + area，即合并后的 main 基线。
   # `!cancelled()`：needs 失败也照常跑（用 precondition 报结论），但 concurrency
   # 取消这次运行时不留下一个失败 check。
   gates:

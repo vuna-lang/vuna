@@ -2,15 +2,15 @@ name: ci
 
 # PR 的固定必需检查是 `pr`（fmt + lint + 自检）；增量检查由 gates.yml 按 type + area
 # 选择（area → `vuna-tests-*` 切片；计划里的完整 gate / e2e 换成 gate-shard-* /
-# e2e-shard-* 由 `suite` matrix 并行，见 nix/checks/slices.nix）。main push 额外跑完整
-# `gate`（fast+integration）；定时 / 手动再跑 `e2e` 与 `deep` / `browser`。完整 suite
-# 在 CI 里按 case 耗时拆成 4 个 shard matrix job 并行；包内单测是独立 job。
+# e2e-shard-* 由 `suite` matrix 并行，见 nix/checks/slices.nix）。`merge_group` 上本文件
+# 只跑 `pr`；完整 suite 由 gates.yml 在合并组 head 上跑，作为合并队列的 required check。
+# main push 仍跑完整 `gate`（fast+integration）作为合并后兜底；定时 / 手动再跑 `e2e`
+# 与 `deep` / `browser`。完整 suite 在 CI 里按 case 耗时拆成 4 个 shard matrix job 并行；
+# 包内单测是独立 job。
 #
-# 注意：GitHub 不为 `GITHUB_TOKEN` 执行的推送创建工作流运行。auto-merge 的合并归
-# `github-actions[bot]`，因此不会触发 main push 的 `gate`（人工 / break-glass 推送会）。
-# 需要覆盖自动合并时，给仓库配置 `AUTOMERGE_TOKEN`（automerge.yml 已优先使用它；
-# 创建步骤见 docs/reference/github-workflow.md「自动合并」）；
-# 在此之前 main 的完整基线由定时任务承担（gate 4 片 + e2e 4 片 + units 并行）。
+# 注意：合并由 GitHub 队列执行，不再由 automerge 直接 merge；main push 的 `gate` 保留为
+# 合并后兜底。`AUTOMERGE_TOKEN` 仍用于 automerge 的入队身份（创建步骤见
+# docs/reference/github-workflow.md「合并队列」）。
 #
 # `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
 # 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。
@@ -19,14 +19,18 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "0 19 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # PR 上只保留最新一次 push；main 上不互相取消——否则后一次 push 会把前一次还没
-  # 跑完的门禁直接砍掉，长任务永远等不到结论。
+  # merge_group 的 ref 是队列临时分支；与 main push / PR 分开分组，避免临时分支的 push
+  # 事件（如果将来放宽 push 过滤器）取消正在跑的 merge_group 检查。
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  # PR 上只保留最新一次 push；main / merge_group 上不互相取消——否则后一次 push 会把
+  # 前一次还没跑完的门禁直接砍掉，长任务永远等不到结论。
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # cache action 的 purge 需要 actions: write；_check.yml 的权限上限由这里决定。
@@ -36,7 +40,7 @@ permissions:
 
 jobs:
   pr:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group'
     uses: ./.github/workflows/_check.yml
     with:
       group: pr
