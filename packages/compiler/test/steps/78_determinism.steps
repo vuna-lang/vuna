@@ -1,12 +1,13 @@
-# store-isolated: 断言对象库行为，使用 case 私有 store。
-# 78) 哈希格式门禁：同源、不同绝对目录、不同 store ⇒ 对象地址集合、split 产物逐字节一致。
+# store-isolated: 断言对象库 / 包状态目录行为，使用 case 私有 store 与状态目录。
+# 78) 哈希格式门禁：同源、不同绝对目录、不同 store ⇒ 接口地址集合、split 产物逐字节一致。
 #     绝对路径不是身份（iface 载荷里的 siPath 允许不同，地址/产物不允许）。
+#     接口按地址平铺在 `$VUNA_PKG_STATE/iface/`，所以「地址集合」比的是那里的文件名。
 #     编译器身份也不是路径/mtime：同源同 `build-id` 的两个二进制地址一致。
-run: sh -c 'S="$TMPDIR/det"; rm -rf "$S"; for d in a b; do mkdir -p "$S/$d/lib" "$S/$d/app"; printf "[package]\nname = \"det\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/$d/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/$d/app/Main.vuna"; VUNA_STORE="$S/store-$d" "$VUNA" check "$S/$d" >/dev/null 2>&1 || exit 1; VUNA_STORE="$S/store-$d" "$VUNA" build --no-compile --out "$S/out-$d" "$S/$d" >/dev/null 2>&1 || exit 2; done'
+run: sh -c 'S="$TMPDIR/det"; rm -rf "$S"; for d in a b; do mkdir -p "$S/$d/lib" "$S/$d/app"; printf "[package]\nname = \"det\"\n[export]\nmodules = [\"M\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/$d/vuna.toml"; printf "module M where\n\nexport one : Int\none = 1\n" > "$S/$d/lib/M.vuna"; printf "import M\n\nmain : Int\nmain = one\n" > "$S/$d/app/Main.vuna"; VUNA_STORE="$S/store-$d" VUNA_PKG_STATE="$S/state-$d" "$VUNA" check "$S/$d" >/dev/null 2>&1 || exit 1; VUNA_STORE="$S/store-$d" VUNA_PKG_STATE="$S/state-$d" "$VUNA" build --no-compile --out "$S/out-$d" "$S/$d" >/dev/null 2>&1 || exit 2; done'
 exit: 0
 
-# 对象地址集合一致（只比相对路径，不比含绝对路径的载荷）。
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-a/objects" -type f | sed "s|$S/store-a/||" | sort > "$S/addr-a"; find "$S/store-b/objects" -type f | sed "s|$S/store-b/||" | sort > "$S/addr-b"; diff -u "$S/addr-a" "$S/addr-b"'
+# 接口地址集合一致（只比文件名，不比含绝对路径的载荷）。
+run: sh -c 'S="$TMPDIR/det"; find "$S/state-a/iface" -type f | sed "s|$S/state-a/iface/||" | sort > "$S/addr-a"; find "$S/state-b/iface" -type f | sed "s|$S/state-b/iface/||" | sort > "$S/addr-b"; test -s "$S/addr-a"; diff -u "$S/addr-a" "$S/addr-b"'
 exit: 0
 # 生成源码逐字节一致（build.sh 里的相对路径也已归一）。
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-b"'
@@ -14,20 +15,20 @@ exit: 0
 # 环境矩阵：TZ / LANG / LC_ALL / HOME / TMPDIR 不同，地址与产物仍逐字节一致。
 # 跨机器不可在单 runner 实测；金标摘要（64_infra 的 pkg-golden）+ 这条环境矩阵
 # 共同锁「规范编码不读环境」。
-run: sh -c 'S="$TMPDIR/det"; mkdir -p "$S/home-a" "$S/home-b" "$S/tmp-a" "$S/tmp-b"; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" "$VUNA" check "$S/a" >/dev/null 2>&1 || exit 1; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" "$VUNA" build --no-compile --out "$S/out-a2" "$S/a" >/dev/null 2>&1 || exit 2; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" "$VUNA" check "$S/b" >/dev/null 2>&1 || exit 3; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" "$VUNA" build --no-compile --out "$S/out-b2" "$S/b" >/dev/null 2>&1 || exit 4'
+run: sh -c 'S="$TMPDIR/det"; mkdir -p "$S/home-a" "$S/home-b" "$S/tmp-a" "$S/tmp-b"; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" VUNA_PKG_STATE="$S/state-a2" "$VUNA" check "$S/a" >/dev/null 2>&1 || exit 1; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" VUNA_PKG_STATE="$S/state-a2" "$VUNA" build --no-compile --out "$S/out-a2" "$S/a" >/dev/null 2>&1 || exit 2; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" VUNA_PKG_STATE="$S/state-b2" "$VUNA" check "$S/b" >/dev/null 2>&1 || exit 3; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" VUNA_PKG_STATE="$S/state-b2" "$VUNA" build --no-compile --out "$S/out-b2" "$S/b" >/dev/null 2>&1 || exit 4'
 exit: 0
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/objects" -type f | sed "s|$S/store-a2/||" | sort > "$S/addr-a2"; find "$S/store-b2/objects" -type f | sed "s|$S/store-b2/||" | sort > "$S/addr-b2"; diff -u "$S/addr-a2" "$S/addr-b2"'
+run: sh -c 'S="$TMPDIR/det"; find "$S/state-a2/iface" -type f | sed "s|$S/state-a2/iface/||" | sort > "$S/addr-a2"; find "$S/state-b2/iface" -type f | sed "s|$S/state-b2/iface/||" | sort > "$S/addr-b2"; test -s "$S/addr-a2"; diff -u "$S/addr-a2" "$S/addr-b2"'
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a2" "$S/out-b2"'
 exit: 0
 
 # 编译器身份：取可执行文件旁 `build-id`（源码闭包）与 `cache-tag`（二进制）的内容，
-# 不取路径/mtime。同一安装布局复制到别的目录、并改 mtime ⇒ 对象地址与产物仍逐字节一致。
+# 不取路径/mtime。同一安装布局复制到别的目录、并改 mtime ⇒ 接口地址与产物仍逐字节一致。
 # 拷贝要连插件一起：发现只看 `<exeDir>`（不扫 PATH），`check` / `build` 由 `vuna-compiler` 提供。
 # 身份文件缺失时会回退到 build-id / stat 兜底，这一档就是那种退化的哨兵。
-run: sh -c 'H=$(dirname "$(dirname "$VUNA")"); test -f "$H/build-id" || { echo "missing $H/build-id"; exit 3; }; test -f "$H/cache-tag" || { echo "missing $H/cache-tag"; exit 3; }; test -f "$H/bin/vuna-compiler" || { echo "missing $H/bin/vuna-compiler"; exit 3; }; S="$TMPDIR/det"; rm -rf "$S/x"; mkdir -p "$S/x/bin"; cp "$VUNA" "$S/x/bin/vuna"; cp "$H/bin/vuna-compiler" "$S/x/bin/vuna-compiler"; cp "$H/build-id" "$S/x/build-id"; cp "$H/cache-tag" "$S/x/cache-tag"; touch -d "2020-01-01" "$S/x/bin/vuna" "$S/x/bin/vuna-compiler"; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" check "$S/a" >/dev/null 2>&1 || exit 1; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" "$S/x/bin/vuna" build --no-compile --out "$S/out-x" "$S/a" >/dev/null 2>&1 || exit 2'
+run: sh -c 'H=$(dirname "$(dirname "$VUNA")"); test -f "$H/build-id" || { echo "missing $H/build-id"; exit 3; }; test -f "$H/cache-tag" || { echo "missing $H/cache-tag"; exit 3; }; test -f "$H/bin/vuna-compiler" || { echo "missing $H/bin/vuna-compiler"; exit 3; }; S="$TMPDIR/det"; rm -rf "$S/x"; mkdir -p "$S/x/bin"; cp "$VUNA" "$S/x/bin/vuna"; cp "$H/bin/vuna-compiler" "$S/x/bin/vuna-compiler"; cp "$H/build-id" "$S/x/build-id"; cp "$H/cache-tag" "$S/x/cache-tag"; touch -d "2020-01-01" "$S/x/bin/vuna" "$S/x/bin/vuna-compiler"; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" VUNA_PKG_STATE="$S/state-x" "$S/x/bin/vuna" check "$S/a" >/dev/null 2>&1 || exit 1; VUNA_BASE="$VUNA_BASE" VUNA_STORE="$S/store-x" VUNA_PKG_STATE="$S/state-x" "$S/x/bin/vuna" build --no-compile --out "$S/out-x" "$S/a" >/dev/null 2>&1 || exit 2'
 exit: 0
-run: sh -c 'S="$TMPDIR/det"; find "$S/store-x/objects" -type f | sed "s|$S/store-x/||" | sort > "$S/addr-x"; diff -u "$S/addr-a" "$S/addr-x"'
+run: sh -c 'S="$TMPDIR/det"; find "$S/state-x/iface" -type f | sed "s|$S/state-x/iface/||" | sort > "$S/addr-x"; diff -u "$S/addr-a" "$S/addr-x"'
 exit: 0
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-x"'
 exit: 0
@@ -37,7 +38,7 @@ exit: 0
 run: sh -c 'set -eu; S="$TMPDIR/det"; H=$(dirname "$(dirname "$VUNA")"); own=$(cat "$H/build-id"); mkdir -p "$S/idpkg/lib/Vuna/Compiler/Loader" "$S/idpkg/app"; printf "[package]\nname = \"idpkg\"\n[export]\nmodules = [\"Vuna.Compiler.Loader.Fingerprint\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/idpkg/vuna.toml"; printf "module Vuna.Compiler.Loader.Fingerprint where\n\nexport marker : Int\nmarker = 1\n" > "$S/idpkg/lib/Vuna/Compiler/Loader/Fingerprint.vuna"; printf "main : Int\nmain = 1\n" > "$S/idpkg/app/Main.vuna"; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id1" "$S/idpkg" >/dev/null 2>&1; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id2" "$S/idpkg" >/dev/null 2>&1; a=$(cat "$S/id1/build-id"); b=$(cat "$S/id2/build-id"); test "$a" = "$b"; test "$a" != "$own"; VUNA_STORE="$S/store-x" "$VUNA" build --no-compile --out "$S/idp" "$S/a" >/dev/null 2>&1; test "$(cat "$S/idp/build-id")" = "$own"'
 exit: 0
 
-# 排障钩子 `VUNA_CACHE_TAG` 覆盖缓存身份：同源、不同 tag ⇒ 对象地址集合不同
+# 排障钩子 `VUNA_CACHE_TAG` 覆盖缓存身份：同源、不同 tag ⇒ 接口地址集合不同
 # （check 判定与 `pkgEnv`/iface 地址都按该身份定址）。
-run: sh -c 'set -eu; S="$TMPDIR/det"; VUNA_CACHE_TAG=k1 VUNA_STORE="$S/store-k1" "$VUNA" check "$S/a" >/dev/null 2>&1; VUNA_CACHE_TAG=k2 VUNA_STORE="$S/store-k2" "$VUNA" check "$S/a" >/dev/null 2>&1; find "$S/store-k1/objects" -type f | sed "s|$S/store-k1/||" | sort > "$S/k1"; find "$S/store-k2/objects" -type f | sed "s|$S/store-k2/||" | sort > "$S/k2"; if diff -q "$S/k1" "$S/k2" >/dev/null; then echo "VUNA_CACHE_TAG 未改变对象地址"; exit 1; fi'
+run: sh -c 'set -eu; S="$TMPDIR/det"; VUNA_CACHE_TAG=k1 VUNA_STORE="$S/store-k1" VUNA_PKG_STATE="$S/state-k1" "$VUNA" check "$S/a" >/dev/null 2>&1; VUNA_CACHE_TAG=k2 VUNA_STORE="$S/store-k2" VUNA_PKG_STATE="$S/state-k2" "$VUNA" check "$S/a" >/dev/null 2>&1; find "$S/state-k1/iface" -type f | sed "s|$S/state-k1/iface/||" | sort > "$S/k1"; find "$S/state-k2/iface" -type f | sed "s|$S/state-k2/iface/||" | sort > "$S/k2"; test -s "$S/k1"; if diff -q "$S/k1" "$S/k2" >/dev/null; then echo "VUNA_CACHE_TAG 未改变接口地址"; exit 1; fi'
 exit: 0

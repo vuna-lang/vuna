@@ -1,13 +1,19 @@
-# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 44o) 对象库不落树内文件：接口只写 `$VUNA_STORE/objects/`，包目录里不出现
-#      `.output/iface` / `*.iface` / `.vuna-iface`。
+# store-isolated: 断言缓存/包状态目录行为，使用 case 私有 store 与状态目录。
+# 44o) 接口不落树内可见产物路径（`.output/iface` / `*.iface` / `.vuna-iface`）：
+#      默认落在包内 `.vuna/iface`（`VUNA_PKG_STATE` 可整体重定向），共享 store 里不再有
+#      `objects/module-iface`（那只留给遗留清理）。
 run: sh -c 'rm -rf "$TMPDIR/44o-pkg" "$TMPDIR/44o-store" "$TMPDIR/44o-cache"; cp -R $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_iface_audit "$TMPDIR/44o-pkg"'
 run: sh -c 'for mf in "$TMPDIR/44o-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'
-run: sh -c 'VUNA_STORE="$TMPDIR/44o-store" TMPDIR="$TMPDIR/44o-cache" "$VUNA" check "$TMPDIR/44o-pkg/dep"'
+# 不设 `VUNA_PKG_STATE`：状态落在包目录自己的 `.vuna`。
+run: sh -c 'env -u VUNA_PKG_STATE VUNA_STORE="$TMPDIR/44o-store" TMPDIR="$TMPDIR/44o-cache" "$VUNA" check "$TMPDIR/44o-pkg/dep"'
 exit: 0
 run: sh -c 'find "$TMPDIR/44o-pkg" -name "*.iface" -o -name ".vuna-iface" | wc -l | tr -d " "'
 out-equals: 0
 run: sh -c 'test ! -d "$TMPDIR/44o-pkg/dep/.output/iface"; echo ok'
 out-equals: ok
-run: sh -c 'test -d "$TMPDIR/44o-store/objects/module-iface"'
-exit: 0
+# 默认状态目录在包内：接口按地址平铺在 `.vuna/iface`。
+run: sh -c 'test -d "$TMPDIR/44o-pkg/dep/.vuna/iface"; echo state-ok'
+out-equals: state-ok
+# 共享 store 不再承接接口对象。
+run: sh -c 'test ! -d "$TMPDIR/44o-store/objects/module-iface"; echo store-clean'
+out-equals: store-clean
