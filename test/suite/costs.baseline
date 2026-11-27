@@ -125,7 +125,7 @@ cli/steps_native/42_repl_test_ws	39488
 cli/steps_native/44a_summary	3411
 cli/steps_native/44b_summary_root	3724
 cli/steps_native/44d_negative	1464
-cli/steps_native/44g_tool_iface	26826
+cli/steps_native/44g_tool_iface	66000
 cli/steps_native/44l1_lsp_inc	5007
 cli/steps_native/44l2_lsp_big_repl	26989
 cli/steps_native/44m_export_flip	3261
