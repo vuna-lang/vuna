@@ -80,9 +80,12 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Loader.Fingerprint` | 编译器身份的唯一来源：**身份属于编译器闭包**——本包模块含 `Vuna.Compiler.Loader.Fingerprint` 时按源闭包 + 依赖身份定址（`compilerIdOf`，`build-id` 由构建写入产物目录），其余包继承构建它的编译器身份；运行时读 `VUNA_COMPILER_TAG` → 可执行文件旁 `build-id` → 路径+大小+mtime 兜底。iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用；缓存键另用 `cacheTagEff`（`$out/cache-tag` = 二进制 sha256，回退 `build-id`），同源不同 seed 的二进制不共享缓存 | `compilerIdOf`、`compilerTagEff`、`compilerFingerprintEff`、`buildIdFileName`、`textHashOf` |
 | `Loader.Layers` | `[layers]` 的执行者：模块属于所有匹配的层前缀，import 合法 ⇔ 对每个匹配层目标落在自身子树或 `closure(uses)` 的层子树；只看直接 import 边，依赖包恒放行 | `checkProjectLayers`、`labelOf` |
 
-Loader 的引用收集（`Flatten.declRefNames`）与宏展开（`Expand`）已走 `Frontend.AstWalk`：
-结构下降只有一张构造子表，`Flatten` 只保留「哪些节点载荷是引用名」的折叠钩子。引用收集
-现在也覆盖 `TraitParam.traitParamKind`（与 `Index.Scan.refsInParamKinds` 同口径）。
+Loader 的引用收集（`Flatten.declRefNames`）、宏展开（`Expand`）与中缀重排（`Fixity`）已走
+`Frontend.AstWalk`：结构下降只有一张构造子表，各 pass 只保留自己的钩子（引用名、宏头、
+section / 链）。`Flatten` 的引用收集也覆盖 `TraitParam.traitParamKind`（与
+`Index.Scan.refsInParamKinds` 同口径）。`Fixity` 的非局部重写（优先级攀爬、section 立即
+应用）保留了显式 fuel：通用 `mapExprPat` / `mapPat` 让 SCT 看不到构造子下降，上界只防
+实现 bug，耗尽报 `IC_FuelExhausted`。
 
 ### Core（类型论、求值、相等、Core 编码）
 
