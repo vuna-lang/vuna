@@ -41,8 +41,8 @@ commands =
       ["dev", "ir", "dump"]
       GDev
       "检查 + lowering 后打印确定性 IR"
-      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml] [--out FILE] DIR"
-      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml" "在 lowering 的哪一步之后打印（缺省 raw）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
+      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml|ir.<pass>] [--out FILE] DIR"
+      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml|ir.<pass>" "在 lowering 的哪一步之后打印（缺省 raw；ir.* 为机器链中间步骤）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
       [],
     subCmd
       ["dev", "ir", "decode"]

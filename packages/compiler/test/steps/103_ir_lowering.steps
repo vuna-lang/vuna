@@ -34,3 +34,11 @@ exit: 0
 run: sh -c 'grep "def rtTail/1" "$TMPDIR/irtail.ir" | grep -q "(tail (rtapp strLength"'
 exit: 0
 run: sh -c '"$VUNA" dev ir dump --after machine "$TMPDIR/irtail" > "$TMPDIR/irtail2.ir"; cmp "$TMPDIR/irtail.ir" "$TMPDIR/irtail2.ir"'
+
+# 机器链中间步骤：`ir.tail.annotate` 与 `machine` 是同一整链输出；中间步骤可见且更早。
+run: sh -c '"$VUNA" dev ir dump --after ir.tail.annotate "$TMPDIR/irtail" > "$TMPDIR/irtail-pass.ir"; cmp "$TMPDIR/irtail.ir" "$TMPDIR/irtail-pass.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after ir.machine.handlers "$TMPDIR/irtail" > "$TMPDIR/irtail-mid.ir"; test -s "$TMPDIR/irtail-mid.ir"; ! cmp -s "$TMPDIR/irtail.ir" "$TMPDIR/irtail-mid.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after ir.no.such.pass "$TMPDIR/irtail" 2>&1 | grep -q "unknown pass"'
+exit: 0

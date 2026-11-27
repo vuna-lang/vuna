@@ -56,7 +56,17 @@ dumpAfter "anf2" program = dumpAnf 2 program
 dumpAfter "ocaml" program = dumpOcaml program
 dumpAfter "repr" program = dumpRepr "raw" program
 dumpAfter "repr-cps" program = dumpReprCps program
-dumpAfter _ program = OkC (renderProgram program)
+dumpAfter name program =
+  if startsWith "ir." name then dumpIrPass name program else OkC (renderProgram program)
+
+-- IR 机器链的中间步骤：`--after ir.machine.handlers` 等，名字来自 `Ir.Passes`。
+dumpIrPass : String -> IrProgram -> Check String
+dumpIrPass name program =
+  let
+    defs = concatMap irGroupDefs program.irProgUnit.irUnitGroups
+  in case cpsMachineAfter name defs of
+    Err msg => OkC ("MACHINE ERROR: " ++ msg)
+    Ok ds => OkC (renderDefs ds)
 
 -- | 槽/值 kind 分布：lowering 之后（`raw`）与 native 实际输入的 CPS 之后（`cps`）。
 dumpRepr : String -> IrProgram -> Check String

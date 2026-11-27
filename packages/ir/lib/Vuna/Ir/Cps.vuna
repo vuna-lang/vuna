@@ -1645,24 +1645,49 @@ mStepsDef (IrDef n ar deps sigTy body r g sp) =
   in IrDef n ar deps2 sigTy body2 r g sp
 mStepsDef d = d
 
-export cpsDefsMachine : List IrDef -> Result (List IrDef)
-cpsDefsMachine defs =
-  case Passes.passSpan Passes.irCps (\_ => cpsDefs defs) of
+-- | 机器链的分段：每一步是「前一步输出 → 结果」，顺序与 span 名字的唯一真源。
+cpsMachineStages : List IrDef -> List (PassSpec, List IrDef -> Result (List IrDef))
+cpsMachineStages defs =
+  let
+    -- handler clause 的分类读 **CPS 前** 的定义：`handleCore … opH` 的调用形状与
+    -- 签名只有直接风格里才有，机器 pass 会改写这些体；读 CPS 输出等于让分类依赖
+    -- 改写的偶然结果。
+    handlerNames = collectHandleOpsDefs 100000 defs
+  in [
+    (Passes.irCps, \_ => cpsDefs defs),
+    (Passes.irMachineHandlers, \ds => Ok (mDefs handlerNames (cpsFuelOfDefs ds) ds)),
+    (Passes.irMachineMark, \ds => Ok (map mMarkedDef ds)),
+    (Passes.irMachineApply, \ds => Ok (map mApplysDef ds)),
+    (Passes.irMachineSteps, \ds => Ok (map mStepsDef ds)),
+    (Passes.irTailAnnotate, annotateDefs)
+  ]
+
+runMachineStages : Maybe String -> List (PassSpec, List IrDef -> Result (List IrDef)) -> List IrDef -> Result (List IrDef)
+runMachineStages stop [] ds = Ok ds
+runMachineStages stop ((spec, step) :: rest) ds =
+  case Passes.passSpan spec (\_ => step ds) of
     Err msg => Err msg
-    Ok ds =>
-      let
-        -- handler clause 的分类读 **CPS 前** 的定义：`handleCore … opH` 的调用形状与
-        -- 签名只有直接风格里才有，机器 pass 会改写这些体；读 CPS 输出等于让分类依赖
-        -- 改写的偶然结果。
-        handlerNames = collectHandleOpsDefs 100000 defs
-        handlers =
-          Passes.passSpan Passes.irMachineHandlers (\_ => mDefs handlerNames (cpsFuelOfDefs ds) ds)
-        marked = Passes.passSpan Passes.irMachineMark (\_ => map mMarkedDef handlers)
-        applied = Passes.passSpan Passes.irMachineApply (\_ => map mApplysDef marked)
-        stepped = Passes.passSpan Passes.irMachineSteps (\_ => map mStepsDef applied)
-      in case Passes.passSpan Passes.irTailAnnotate (\_ => annotateDefs stepped) of
-        Err msg => Err msg
-        Ok annotated => Ok annotated
+    Ok next =>
+      case stop of
+        Just name => if name == spec.psName then Ok next else runMachineStages stop rest next
+        Nothing => runMachineStages stop rest next
+
+export cpsDefsMachine : List IrDef -> Result (List IrDef)
+cpsDefsMachine defs = runMachineStages Nothing (cpsMachineStages defs) defs
+
+passNameOf : PassSpec -> String
+passNameOf spec = spec.psName
+
+-- | 跑到指定 pass 之后（`vuna dev ir dump --after ir.<pass>` 用）。
+export cpsMachineAfter : String -> List IrDef -> Result (List IrDef)
+cpsMachineAfter name defs =
+  let
+    stages = cpsMachineStages defs
+    names = map (\p => passNameOf (firstOf p)) stages
+  in if memName name names then
+    runMachineStages (Just name) stages defs
+  else
+    Err "unknown pass: ${name}"
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit
