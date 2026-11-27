@@ -1,0 +1,23 @@
+-- 库 handler 的 answer 是函数（`handleState`：`b = s -> Pair a s`）：`ret` 与 `opH`
+-- 各多出一个「等待 state」的参数，resume 发生在 `MkHandle` 返回之后。三端共享期望。
+import Base.Effect.Core as Eff
+import Base.Effect.State as EffState
+import Base.Data.Pair as Pair
+
+prog : Eff [StateOp Int@counter] Int
+prog = do
+  x <- get "counter" Int
+  _ <- put "counter" Int (x + 1)
+  get "counter" Int
+
+ret : Int -> Int -> Pair Int Int
+ret a s = Pair a s
+
+opH : (i : Type) -> (o : StateOp Int i) -> (Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH i op k s = case op of
+  Get => k s s
+  Put x => k 0 x
+
+main : Int
+main = case runPure (handleState "counter" Int ret opH prog) 3 of
+  Pair a s => a + s

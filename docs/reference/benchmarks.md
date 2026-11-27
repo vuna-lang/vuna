@@ -352,7 +352,8 @@ native 领先。差异来源与 native 的既有缺口一致：native 无寄存�
 
 另有 `startup`（`repeat=20` 的进程/运行时初始化地板）与 `traits`（约束多态的字典派发）。
 手写 OCaml 对照在同名 `.ml`（`Effect.Deep` 或直接内联）。`handleState` 这种 answer 是
-函数的库 handler 仍不可用（gh#38），没有进基准。
+函数的库 handler 已可在三端运行（`effect_common/108_eff_answer_fn`、`pure_cross/97_eff_state_answer_fn`），
+但开销是每个 `perform` 一次额外的机器快照 + 前缀驱动，暂时没有进基准。
 
 三端同窗口（HEAD `cf17a85`，`--target all --runs 5 --warmup 2`，node 24.21.0，loadavg ≈1.3；
 ratio 相对手写 OCaml；wasm 括号里是减掉 `meta.node_startup_ms` = 22 ms 的 net）：
