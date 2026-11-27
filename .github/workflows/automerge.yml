@@ -1,7 +1,8 @@
 name: automerge
 
-# 门禁全绿的 PR 自动 rebase merge。非 draft、同仓库分支、没有 hold 标签时
-# 打开 GitHub auto-merge；draft / hold 时关闭。冲突、失败、取消的检查都不会触发合并。
+# 门禁全绿的 PR 自动进入合并队列。非 draft、同仓库分支、没有 hold 标签时打开
+# auto-merge；draft / hold 时先从队列移除再关闭 auto-merge。队列的合并由 GitHub 执行，
+# 不在本 workflow 里直接 merge。
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, synchronize]
@@ -20,20 +21,41 @@ jobs:
     steps:
       - name: enable or disable auto-merge
         env:
-          # 用 PAT 执行合并时，main 的 push 事件会触发 ci.yml 的 gate；GITHUB_TOKEN
-          # 合并归 github-actions[bot]，GitHub 不为其推送创建工作流运行。
+          # 用 PAT 执行入队时，后续的 push 事件仍按仓库设置触发；GITHUB_TOKEN 归
+          # github-actions[bot]，GitHub 不为其推送创建工作流运行。
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          # shellcheck disable=SC2016
           set -euo pipefail
 
           pr_json=$(gh pr view "$PR" --repo "$REPO" \
-            --json isDraft,labels,headRepository,autoMergeRequest)
+            --json id,isDraft,labels,headRepository,autoMergeRequest)
+          pr_id=$(jq -r '.id' <<<"$pr_json")
           is_draft=$(jq -r '.isDraft' <<<"$pr_json")
           head_repo=$(jq -r '.headRepository.nameWithOwner // empty' <<<"$pr_json")
           labels=$(jq -r '.labels[].name' <<<"$pr_json")
           auto=$(jq -r '.autoMergeRequest // empty' <<<"$pr_json")
+
+          # 队列状态只能走 GraphQL：gh pr view 没有 isInMergeQueue 字段。
+          in_queue=false
+          queue_enabled=false
+          # shellcheck disable=SC2016
+          if queue_json=$(gh api graphql \
+            -f owner="${REPO%/*}" -f name="${REPO#*/}" -F number="$PR" \
+            -f query='
+              query($owner:String!,$name:String!,$number:Int!){
+                repository(owner:$owner,name:$name){
+                  pullRequest(number:$number){
+                    isInMergeQueue
+                    isMergeQueueEnabled
+                  }
+                }
+              }' 2>/dev/null); then
+            in_queue=$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$queue_json")
+            queue_enabled=$(jq -r '.data.repository.pullRequest.isMergeQueueEnabled // false' <<<"$queue_json")
+          fi
 
           hold=""
           if printf '%s\n' "$labels" | grep -Eq '^(blocked|needs-info|wontfix)$'; then
@@ -41,12 +63,30 @@ jobs:
           fi
 
           if [ "$is_draft" = "true" ] || [ -n "$hold" ] || [ "$head_repo" != "$REPO" ]; then
+            # 只 disable auto-merge 不会把已经在队列里的 PR 拿掉；hold 必须显式 dequeue。
+            if [ "$in_queue" = "true" ]; then
+              # shellcheck disable=SC2016
+              if ! gh api graphql \
+                -f query='mutation($id:ID!){dequeuePullRequest(input:{id:$id}){clientMutationId}}' \
+                -f id="$pr_id" >/dev/null; then
+                echo "automerge: 无法把 PR #$PR 移出队列" >&2
+              fi
+            fi
             if [ -n "$auto" ]; then
               gh pr merge "$PR" --repo "$REPO" --disable-auto || true
             fi
             exit 0
           fi
 
+          if [ "$in_queue" = "true" ]; then
+            exit 0
+          fi
+
           if [ -z "$auto" ]; then
-            gh pr merge "$PR" --repo "$REPO" --auto --rebase
+            if [ "$queue_enabled" = "true" ]; then
+              # 队列自己决定 merge 方法（ruleset 里是 REBASE），arm 时不需要指定策略。
+              gh pr merge "$PR" --repo "$REPO" --auto
+            else
+              gh pr merge "$PR" --repo "$REPO" --auto --rebase
+            fi
           fi
