@@ -1,0 +1,70 @@
+-- 依赖路径归一化只有一个口径：`[dependencies]` 的 path 在解析时就是 lexical 规范形，
+-- `resolveManifestPath` 与 `Pkg.joinPath` 拼接同一套规则。`./`、`a/../b`、尾 `/` 等不同
+-- 拼写必须落到同一个字符串——缓存键 / 身份 / 循环检测都按字符串比较。
+import Prelude
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Manifest
+
+bit : Bool -> Int
+bit b = if b then 1 else 0
+
+-- 单依赖 manifest 的解析结果：path 简写 → 模型里的路径文本。
+depPathOf : String -> String -> Maybe String
+depPathOf filePath spell =
+  let
+    source = "[package]\nname = \"r\"\n\n[dependencies]\ndep = \"${spell}\"\n"
+  in case parseManifest filePath source of
+    ErrC _ => Nothing
+    OkC manifest =>
+      case manifest.manifestDependencies of
+        [dep] =>
+          case depSourceOf dep of
+            DepPath p => Just p
+            _ => Nothing
+        _ => Nothing
+
+depPathIs : String -> String -> Bool
+depPathIs spell expected = depPathOf "pkg/vuna.toml" spell == Just expected
+
+parseAt : String -> Maybe Manifest
+parseAt filePath =
+  case parseManifest filePath "[package]\nname = \"r\"\n" of
+    ErrC _ => Nothing
+    OkC manifest => Just manifest
+
+resolvedIs : String -> String -> String -> Bool
+resolvedIs filePath rel expected =
+  case parseAt filePath of
+    Nothing => False
+    Just manifest => resolveManifestPath manifest rel == expected
+
+resolvedMatchesJoin : String -> Bool
+resolvedMatchesJoin rel =
+  case parseAt "pkg/vuna.toml" of
+    Nothing => False
+    Just manifest => resolveManifestPath manifest rel == joinPath "pkg" rel
+
+normalizeIsIdempotent : String -> Bool
+normalizeIsIdempotent path = normalizePath (normalizePath path) == normalizePath path
+
+main : Int
+main =
+  bit (depPathIs "./x" "x")
+    + bit (depPathIs "x/" "x")
+    + bit (depPathIs "a/../b" "b")
+    + bit (depPathIs "./a//b/" "a/b")
+    + bit (depPathIs "../x" "../x")
+    + bit (depPathIs "/abs/./x" "/abs/x")
+    + bit (depPathIs "" "")
+    + bit (resolvedMatchesJoin "./x")
+    + bit (resolvedMatchesJoin "a/../b")
+    + bit (resolvedMatchesJoin "../c")
+    + bit (resolvedMatchesJoin "dir/")
+    + bit (resolvedMatchesJoin "/a/./b")
+    + bit (resolvedIs "deep/pkg/vuna.toml" "./x" "deep/pkg/x")
+    + bit (resolvedIs "deep/pkg/vuna.toml" "../../y" "y")
+    + bit (normalizeIsIdempotent "a/./b/../c/")
+    + bit (normalizeIsIdempotent "/a//b/../")
+    + bit (normalizeIsIdempotent ".")
+    + bit (normalizeIsIdempotent "")
+    + bit (joinPath "pkg" "/a/../b" == "/b") + bit (resolvedIs "pkg/vuna.toml" "/a/../b" "/b")

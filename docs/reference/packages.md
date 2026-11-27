@@ -200,8 +200,9 @@ modules = ["My.Lib", "My.Lib.Internal"]
 命名空间门面，不包原语。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
-规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），
-文件 I/O 由调用方负责。
+规范化，不做 realpath）。路径在解析时就归一到唯一字符串（`./x`、`x/`、`a/../b` 与 `x` /
+`b` 同形），因此缓存键 / 身份按字符串比较也不会因拼写分叉。manifest 只被解析与校验
+（`Vuna.Compiler.Frontend.Manifest`），文件 I/O 由调用方负责。
 
 ## 层约束（`[layers]`）
 
