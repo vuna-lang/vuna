@@ -71,8 +71,11 @@ gh issue close <n> --reason duplicate --duplicate-of <m>
 ## 3. 领取与开工
 
 - 只处理被 assign、被提及或用户明确交给你的 issue；不要自动扫全部 backlog。
-- 领取：`gh issue edit <n> --add-assignee @me`（GitHub 会把 Backlog 推到 Todo），再
-  `nix/tools/issue.sh status <n> in-progress`。
+- **领取 = assign + In progress，两步都做完再开工**：
+  `gh issue edit <n> --add-assignee @me`（Backlog → Todo），紧接着
+  `nix/tools/issue.sh status <n> in-progress`。只 assign 不改状态时，其他 agent 仍会在
+  `status:todo` 里看到它并重复认领；状态更新是认领动作的一部分，不是开工后的可选步骤。
+- 领取后用 `nix/tools/issue.sh show <n>` 确认 `status=In progress`；不对就补一次。
 - 分支命名：`<type>/<n>-<slug>`，例如 `fix/123-elab-zonk`。
 - 能用 GitHub 的关联分支时：
 
@@ -106,6 +109,7 @@ gh issue view <n> --comments
 ## 不要做的事
 
 - 不查重就新建 issue。
+- 只 `--add-assignee` 就开工，把 issue 留在 Todo（会被其他 session 当成可领取）。
 - 给一句话 idea 直接设 Todo 或开工。
 - 在 issue 关闭后继续用它跟踪新工作；新工作另开 issue 并链接旧 issue。
 - 在正文写 `Parent:` / `Blocked by:` / `Related:` 行，或用 `status:*` / `priority:*` 标签。

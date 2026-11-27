@@ -47,6 +47,9 @@ nix/tools/issue.sh show <n>
 gh issue list --search 'status:todo'        # 按状态筛选
 ```
 
+认领 = assign + In progress；只 assign 会让 issue 留在 Todo，被其他 agent session 当成
+可领取。领取后先用 `issue.sh show <n>` 确认 `status=In progress` 再开工。
+
 `milestone` 只做分组，不再表示「已排期」；排期看 assignee 或 Todo。
 
 ## backlog 的两类入口
