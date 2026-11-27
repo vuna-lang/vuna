@@ -407,7 +407,8 @@ stmtScanGo decide stmtCol depth prevLine ((PTok tok p) :: rest) =
             Nothing => stmtScanGo decide stmtCol depth (posLine p) rest
 
 -- 括号层数的一步：开括号 +1、闭括号 -1（不会低于 0），其它 token 不是括号。
-tokBracketStep : Tok -> Int -> Maybe Int
+-- `Nothing` = 这个 token 不改变层数（调用方保持原深度）。
+export tokBracketStep : Tok -> Int -> Maybe Int
 tokBracketStep (TSym "(") d = Just (d + 1)
 tokBracketStep (TSym "[") d = Just (d + 1)
 tokBracketStep (TSym "{") d = Just (d + 1)

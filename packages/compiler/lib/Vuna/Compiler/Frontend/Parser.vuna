@@ -26,6 +26,16 @@ ps1 st e a0 = psErr1At (tokSpan st) e a0
 psAt : PState -> {n : Nat} -> PsDiag n -> Vec.Vec n String -> Check a
 psAt st e args = psErrAt (tokSpan st) e args
 
+-- 恢复期诊断的**值**出口：`ps0` / `ps1` 直接短路成 `ErrC`，恢复路径要把同一形状的
+-- 诊断并进已收集的列表，所以单独构造（位置口径与 `ps0` 一致：当前 token 的 span）。
+psDiagAt : PState -> {n : Nat} -> PsDiag n -> Vec.Vec n String -> Diagnostic
+psDiagAt st e args = withLabel (Label (Just (tokSpan st)) "" LabelPrimary Nothing) (psMsg e args)
+
+-- 解析收尾处仍有剩余 token 的诊断（与 `ps0 st ExpectedEndOfInput` 同一形状；恢复期
+-- 需要它的值版本）。
+endOfInputDiag : PState -> Diagnostic
+endOfInputDiag st = psDiagAt st ExpectedEndOfInput []
+
 -- | 一次词法的全部产物：AST + 注释表 + 词法 token 流。
 --
 -- trivia token 流（`CstToken`）不在这里组装：只有需要注释归属/原文的工具（fmt / LSP）
@@ -235,7 +245,12 @@ parseSourceFile recover st =
                               case rest of
                                 (st3, errs) =>
                                   case p of
-                                    DeclAcc fixities decls exports opacity => if isEof st3 then OkC ((SourceFile hdr imports fixities decls exports reexports opacity, st3), errs) else ps0 st3 ExpectedEndOfInput
+                                    -- 收尾 token 不是 EOF 也是语法错误，但已收集的诊断必须一起交回：
+                                    -- 并进同一批，不要用单条首错覆盖它们。
+                                    DeclAcc fixities decls exports opacity =>
+                                      let
+                                        sf = SourceFile hdr imports fixities decls exports reexports opacity
+                                      in if isEof st3 then OkC ((sf, st3), errs) else if recover then OkC ((sf, st3), append errs [endOfInputDiag st3]) else ps0 st3 ExpectedEndOfInput
                           )
           )
     )
@@ -446,22 +461,29 @@ record DeclBlock where
   dbOpen : Maybe String
   dbClauses : List (List Pat, Span)
   dbFirst : HashMap String Span
+  -- | 上一条声明解析失败：它与前后声明的关系不可判，恢复后的第一条声明不判子句规则
+  -- （那是解析失败的级联），块状态照常更新，后续声明继续按规则判。
+  dbResume : Bool
 
 emptyDeclBlock : DeclBlock
-emptyDeclBlock = DeclBlock Nothing [] (HashMap.fromList [])
+emptyDeclBlock = DeclBlock Nothing [] (HashMap.fromList []) False
+
+-- 恢复点：跳到下一个声明边界后，先把「边界不可判」标上。
+dbMarkResume : DeclBlock -> DeclBlock
+dbMarkResume b = { b | dbResume = True }
 
 dbClose : DeclBlock -> DeclBlock
-dbClose b = DeclBlock Nothing [] b.dbFirst
+dbClose b = DeclBlock Nothing [] b.dbFirst b.dbResume
 
 -- 开新块：`dbFirst` 只记**第一次**出现的位置（后置诊断的 label 指它）。
 dbOpenAt : String -> Span -> DeclBlock -> DeclBlock
 dbOpenAt n sp b =
   let
     first2 = if HashMap.member n b.dbFirst then b.dbFirst else HashMap.insert n sp b.dbFirst
-  in DeclBlock (Just n) [] first2
+  in DeclBlock (Just n) [] first2 b.dbResume
 
 dbAddClause : DeclBlock -> List Pat -> Span -> DeclBlock
-dbAddClause b pats sp = DeclBlock b.dbOpen ((::) (pats, sp) b.dbClauses) b.dbFirst
+dbAddClause b pats sp = DeclBlock b.dbOpen ((::) (pats, sp) b.dbClauses) b.dbFirst b.dbResume
 
 anyNullary : List (List Pat, Span) -> Bool
 anyNullary [] = False
@@ -520,16 +542,24 @@ blockSig b n sp =
     Nothing => (reopenDiag b n sp, dbOpenAt n sp b)
 
 -- `Nothing` = 这条声明不破坏规则；`Just d` = 规则错误（调用方按 recover 决定致命 / 累积）。
+--
+-- 恢复后的第一条声明只更新块状态、不报规则错：解析失败吞掉了它前面那条声明的名字，
+-- 与谁相邻 / 是否重复在语法上已经不可判（该报的是那条解析错，不是级联）。
 blockStep : DeclBlock -> ParsedDecl -> (Maybe Diagnostic, DeclBlock)
-blockStep b (ParsedDecl (Just _) _ _ _) = (Nothing, dbClose b)
-blockStep b (ParsedDecl Nothing _ (Just _) _) = (Nothing, dbClose b)
-blockStep b (ParsedDecl Nothing _ Nothing (Just _)) = (Nothing, dbClose b)
-blockStep b (ParsedDecl Nothing (Just (DFun n pats _ r)) Nothing Nothing) =
+blockStep b pd =
+  case blockStepRaw b pd of
+    (verdict, b2) => (if b.dbResume then Nothing else verdict, { b2 | dbResume = False })
+
+blockStepRaw : DeclBlock -> ParsedDecl -> (Maybe Diagnostic, DeclBlock)
+blockStepRaw b (ParsedDecl (Just _) _ _ _) = (Nothing, dbClose b)
+blockStepRaw b (ParsedDecl Nothing _ (Just _) _) = (Nothing, dbClose b)
+blockStepRaw b (ParsedDecl Nothing _ Nothing (Just _)) = (Nothing, dbClose b)
+blockStepRaw b (ParsedDecl Nothing (Just (DFun n pats _ r)) Nothing Nothing) =
   blockFun b n pats (nodeRefSpan r)
-blockStep b (ParsedDecl Nothing (Just (DSig n _ _ r)) Nothing Nothing) =
+blockStepRaw b (ParsedDecl Nothing (Just (DSig n _ _ r)) Nothing Nothing) =
   blockSig b n (nodeRefSpan r)
-blockStep b (ParsedDecl Nothing (Just _) Nothing Nothing) = (Nothing, dbClose b)
-blockStep b (ParsedDecl Nothing Nothing Nothing Nothing) = (Nothing, b)
+blockStepRaw b (ParsedDecl Nothing (Just _) Nothing Nothing) = (Nothing, dbClose b)
+blockStepRaw b (ParsedDecl Nothing Nothing Nothing Nothing) = (Nothing, b)
 
 -- `infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
@@ -549,7 +579,7 @@ parseDecls recover fuel st blockCol acc blocks =
               if recover then
                 let
                   st2 = recoverDecl st blockCol
-                in Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) st2 blockCol acc (dbClose blocks)) (
+                in Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) st2 blockCol acc (dbMarkResume (dbClose blocks))) (
                     \p, rest =>
                       case rest of
                         (st3, errs) => OkC (p, st3, (::) e errs)
@@ -573,8 +603,23 @@ parseDecls recover fuel st blockCol acc blocks =
                   else
                     ErrC e
                 Nothing => parseDecls recover (fuel - 1) st1 blockCol acc2 (secondOf verdict)
+        else if recover then
+          Vuna.Compiler.Base.Common.step (parseDecls True (fuel - 1) (recoverDecl st blockCol) blockCol acc (dbMarkResume (dbClose blocks))) (
+              \p, rest =>
+                case rest of
+                  -- 块首列之外的 token：报告缩进错误。恢复期不短路整份文件——跨过它继续收集
+                  -- 后面的声明错误；否则这里会丢掉此前已收集的诊断。
+                  (st3, errs) => OkC (p, st3, (::) (declColumnDiag st blockCol) errs)
+            )
         else
           ps1 st (ExpectedDeclAtColumn (strFromInt blockCol)) (strFromInt blockCol)
+
+-- 「此处没有声明」的恢复期诊断（位置 = 当前 token；与 `ps1` 同一码与字段）。
+declColumnDiag : PState -> Int -> Diagnostic
+declColumnDiag st blockCol =
+  let
+    col = strFromInt blockCol
+  in psDiagAt st (ExpectedDeclAtColumn col) [col]
 
 addParsedDecl : ParsedDecl -> DeclAcc -> DeclAcc
 addParsedDecl (ParsedDecl mfix mdecl mexp mop) (DeclAcc fixities decls exports opacity) =
@@ -601,22 +646,48 @@ reverseDeclAcc : DeclAcc -> DeclAcc
 reverseDeclAcc (DeclAcc fixities decls exports opacity) =
   DeclAcc (reverse fixities) (reverse decls) (reverse exports) (reverse opacity)
 
--- 解析恢复：跳过一个坏声明，停在下一个「与块首同列」的 token（无则到 EOF）。
+-- 解析恢复：跳过一个坏声明，停在下一个「可以开始声明」的 token（无则到 EOF）。
+--
+-- 声明起点必须同时满足：括号深度 0、与块首同列、不是闭括号。深度从**声明起点**开始
+-- 计（顶层声明入口必在深度 0），所以多行括号表达式里与块首同列的 token 不会造出假声明；
+-- 闭括号本身属于前一个没闭合的括号，也要跨过。
 recoverDecl : PState -> Int -> PState
 recoverDecl st blockCol =
   let
-    rest = skipToDeclLine st.toksOf blockCol
+    rest = skipPastDeclStart st.toksOf blockCol
     skipped = length st.toksOf - length rest
   in { st | toksOf = rest, toksLeft = length rest, tokIndex = st.tokIndex + skipped }
 
-skipToDeclLine : List PTok -> Int -> List PTok
-skipToDeclLine [] blockCol = []
-skipToDeclLine (_ :: rest) blockCol = skipFrom rest blockCol
+skipPastDeclStart : List PTok -> Int -> List PTok
+skipPastDeclStart [] blockCol = []
+skipPastDeclStart (_ :: rest) blockCol = skipToDeclLine rest blockCol 0
 
-skipFrom : List PTok -> Int -> List PTok
-skipFrom [] blockCol = []
-skipFrom (t :: rest) blockCol =
-  if posCol t.ptokPos == blockCol then (::) t rest else skipToDeclLine rest blockCol
+-- `depth` = 已经跨过的括号层数（开括号加一、闭括号减一，不低于 0）。
+skipToDeclLine : List PTok -> Int -> Int -> List PTok
+skipToDeclLine [] blockCol depth = []
+skipToDeclLine (t :: rest) blockCol depth =
+  if declStartsAt depth t blockCol then
+    (::) t rest
+  else
+    skipToDeclLine rest blockCol (declDepthAfter depth t)
+
+-- 顶层块首列的声明起点：括号深度 0、不是闭括号、与块首同列。
+declStartsAt : Int -> PTok -> Int -> Bool
+declStartsAt depth (PTok tok p) blockCol =
+  depth == 0 && posCol p == blockCol && not (closesBracket tok)
+
+closesBracket : Tok -> Bool
+closesBracket (TSym ")") = True
+closesBracket (TSym "]") = True
+closesBracket (TSym "}") = True
+closesBracket _ = False
+
+-- 括号层数的一步（非括号 token 不改变深度）。
+declDepthAfter : Int -> PTok -> Int
+declDepthAfter depth (PTok tok _) =
+  case tokBracketStep tok depth of
+    Just d2 => d2
+    Nothing => depth
 
 -- 一条顶层声明：fixity / 带修饰符的声明 / 普通 Decl。
 parseFixityOrDecl : PState -> Int -> Check (ParsedDecl, PState)
