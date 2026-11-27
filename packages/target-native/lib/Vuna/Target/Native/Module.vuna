@@ -25,6 +25,7 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
+import Base.Container.HashMap as HashMap
 import Vuna.Ir.Model
 import Vuna.Ir.Kinds as Kinds
 import Vuna.Ir.Passes
@@ -570,6 +571,74 @@ isCafDef d =
 cafNamesOf : String -> List IrDef -> List String
 cafNamesOf mainName defs =
   concatMap (\d => if isCafDef d && irDefName d /= mainName then [irDefName d] else []) defs
+
+-- | CAF 初始化顺序：按「体里可达的其它 CAF」拓扑排序，被依赖者在前。
+--   原始定义的 SCC 序只在定义表内部成立；特化克隆追加在表尾，可能引用同一轮
+--   生成的克隆，按表顺序求值会读到还没写入的槽（0）。
+cafOrderOf : String -> List IrDef -> List String
+cafOrderOf mainName defs =
+  let
+    names = cafNamesOf mainName defs
+    tbl = HashMap.fromList (map (\d => (irDefName d, d)) defs)
+    deps = map (\n => (n, cafDepsOf (cafBudget defs) tbl names n)) names
+  in cafOrderRounds (1 + cafCount deps) deps []
+
+-- | 闭包预算：每个定义最多处理一次，每条体引用最多入队一次。
+cafBudget : List IrDef -> Int
+cafBudget defs =
+  8 + cafCount defs + foldl (\acc, d => acc + cafCount (refsOfBody (irDefBody d))) 0 defs
+
+cafCount : List a -> Int
+cafCount [] = 0
+cafCount (_ :: rest) = 1 + cafCount rest
+
+-- | 一个 CAF 体里可达的其它 CAF（体引用闭包；`irDefDeps` 含已擦除引用，不跟）。
+cafDepsOf : Int -> HashMap String IrDef -> List String -> String -> List String
+cafDepsOf fuel tbl names name =
+  filter
+    (\m => m /= name && memName m names)
+    (map firstOf (HashMap.toList (cafReach fuel tbl [name] (HashMap.fromList []))))
+
+cafReach : Int -> HashMap String IrDef -> List String -> HashMap String Bool -> HashMap String Bool
+cafReach fuel tbl work seen =
+  if fuel <= 0 then
+    seen
+  else
+    case work of
+      [] => seen
+      n :: rest =>
+        if HashMap.member n seen then
+          cafReach (fuel - 1) tbl rest seen
+        else
+          let
+            seen1 = HashMap.insert n True seen
+          in case HashMap.lookup n tbl of
+            Nothing => cafReach (fuel - 1) tbl rest seen1
+            Just d => cafReach (fuel - 1) tbl (append (refsOfBody (irDefBody d)) rest) seen1
+
+refsOfBody : Maybe Ir -> List String
+refsOfBody Nothing = []
+refsOfBody (Just b) = irGlobalsOf b
+
+-- | 每轮取依赖已放置的 CAF；整轮无进展（依赖成环）时按定义表顺序收尾。
+cafOrderRounds : Int -> List (String, List String) -> List String -> List String
+cafOrderRounds fuel deps placed =
+  if fuel <= 0 then
+    append placed (map firstOf deps)
+  else
+    case deps of
+      [] => placed
+      _ =>
+        let
+          ready = filter (\p => depsPlaced (secondOf p) placed) deps
+          rest = filter (\p => not (depsPlaced (secondOf p) placed)) deps
+        in case ready of
+          [] => append placed (map firstOf deps)
+          _ => cafOrderRounds (fuel - 1) rest (append placed (map firstOf ready))
+
+depsPlaced : List String -> List String -> Bool
+depsPlaced [] _ = True
+depsPlaced (d :: rest) placed = memName d placed && depsPlaced rest placed
 
 -- | 把「顶层函数 / 运行时符号」求值成闭包对象：`[code][arity]`（无捕获）。
 --   无捕获闭包是只读静态对象，引用点只 `lea`，不分配堆。
@@ -3999,7 +4068,7 @@ startFunc printResult kind mainName runMainM handlers cafs needs =
     markHost h = [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]
     handlerPart = concatMap markHost handlers
     -- 零参顶层定义在入口求值一次：值写回各自的 `.bss` 槽（`IrGlobal` 引用只读槽）。
-    -- 依赖顺序由 `cpsOrdered` 的 SCC 序保证（被依赖的定义在前）。
+    -- 依赖顺序由 `cafOrderOf` 的拓扑序保证（体里可达的其它 CAF 在前）。
     cafInit =
       concatMap
         (\n => [ICall (nativeFuncLabel n), IMov (OpRip (nativeCafCellLabel n)) (OpReg Rax)])
@@ -4384,7 +4453,7 @@ build program printResult =
                               _ => ["rt_print_int"]
                           renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
                           needs = initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds)
-                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafNamesOf mainName cpsOrdered) needs
+                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
                           -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
                           -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
                           liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
