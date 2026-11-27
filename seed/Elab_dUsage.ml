@@ -166,7 +166,7 @@ let v_resetUseSpans = (fun (ec : Elab_dTypes.t_Ec) -> ((Elab_dTypes.v_ecPutUseSp
 let v_recordUseSpan = (fun (ec : Elab_dTypes.t_Ec) (name : string) (sp : Base_dSource.t_Span) -> ((Elab_dTypes.v_ecPutUseSpans ec) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = name; B_dData_dPair.f_Pair_second = sp }, (Elab_dTypes.v_ecUseSpans ec)))))
 
 # 432 "Vuna/Compiler/Elab/Usage.vuna"
-let v_usesOf = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (B_dData_dList.v_reverse ((B_dData_dList.v_map B_dData_dPair.v_secondOf) ((B_dData_dList.v_filter (fun (p : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair) -> ((B_dData_dPair.v_firstOf p) = name))) (Elab_dTypes.v_ecUseSpans ec)))))
+let v_usesOf = (fun (ec : Elab_dTypes.t_Ec) (name : string) -> (B_dData_dList.v_reverse ((B_dData_dList.v_map B_dData_dPair.v_secondOf) ((B_dData_dList.v_filter (fun (p : (string, Base_dSource.t_Span) B_dData_dPair.t_Pair) -> ((B_dData_dPair.v_firstOf (Obj.magic p)) = name))) (Elab_dTypes.v_ecUseSpans ec)))))
 
 # 440 "Vuna/Compiler/Elab/Usage.vuna"
 let rec v_withUseSpans = (fun (mc0 : Base_dSource.t_Span B_dData_dList.t_List) (mc1 : Base_dDiag.t_Diagnostic) -> (match mc0 with

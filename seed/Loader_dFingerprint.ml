@@ -9,7 +9,7 @@ let v_buildIdSchema = "vuna-compiler-id 1"
 let v_sourceFrag = (fun (p : (string, int) B_dData_dPair.t_Pair) -> (String.concat "" [(B_dData_dPair.v_firstOf p); "="; (string_of_int (B_dData_dPair.v_secondOf p))]))
 
 # 48 "Vuna/Compiler/Loader/Fingerprint.vuna"
-let v_compilerIdOf = (fun (own : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (depsDigest : string) -> (Loader_dAddr.v_addrOf (B_dData_dList.C_List__x58__x58_ (v_buildIdSchema, (B_dData_dList.C_List__x58__x58_ (depsDigest, ((B_dData_dList.v_map v_sourceFrag) ((B_dData_dSort.v_sortBy (fun (a : (string, int) B_dData_dPair.t_Pair) (b : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf a)) (B_dData_dPair.v_firstOf b)))) own))))))))
+let v_compilerIdOf = (fun (own : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (depsDigest : string) -> (Loader_dAddr.v_addrOf (B_dData_dList.C_List__x58__x58_ (v_buildIdSchema, (B_dData_dList.C_List__x58__x58_ (depsDigest, ((B_dData_dList.v_map v_sourceFrag) ((B_dData_dSort.v_sortBy (fun (a : (string, int) B_dData_dPair.t_Pair) (b : (string, int) B_dData_dPair.t_Pair) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (B_dData_dPair.v_firstOf (Obj.magic a))) (B_dData_dPair.v_firstOf (Obj.magic b))))) own))))))))
 
 # 60 "Vuna/Compiler/Loader/Fingerprint.vuna"
 let v_textHashOf = (fun (s : string) -> (Base_dHash.v_contentKey s))

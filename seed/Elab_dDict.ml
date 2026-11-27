@@ -528,19 +528,19 @@ let v_dictTermOfValueAt = (fun (ec : Elab_dTypes.t_Ec) (depth : int) (v : Core_d
 let rec v_substDictTermGo = (fun (mc0 : Elab_dTypes.t_Ec) (mc1 : int) (mc2 : Core_dTerm.t_Term) -> (match mc2 with
   | Core_dTerm.C_Term_TIf (dtb__161, dtb__162, dtb__163) -> (Core_dTerm.C_Term_TIf ((((v_substDictTermGo mc0) mc1) dtb__161), (((v_substDictTermGo mc0) mc1) dtb__162), (((v_substDictTermGo mc0) mc1) dtb__163)))
   | Core_dTerm.C_Term_TCase (dtb__164, dtb__165) -> (Core_dTerm.C_Term_TCase ((((v_substDictTermGo mc0) mc1) dtb__164), ((B_dData_dList.v_map (fun (alt : Core_dTerm.t_CaseAlt) -> (((v_substDictTermAlt mc0) mc1) alt))) dtb__165)))
-  | Core_dTerm.C_Term_TRecord (dtb__166, dtb__167) -> (Core_dTerm.C_Term_TRecord (dtb__166, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__167)))
-  | Core_dTerm.C_Term_TMk (dtb__168, dtb__169) -> (Core_dTerm.C_Term_TMk (dtb__168, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__169)))
-  | Core_dTerm.C_Term_TCon (dtb__170, dtb__171) -> (Core_dTerm.C_Term_TCon (dtb__170, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__171)))
+  | Core_dTerm.C_Term_TRecord (dtb__166, dtb__167) -> (Core_dTerm.C_Term_TRecord (dtb__166, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__167)))
+  | Core_dTerm.C_Term_TMk (dtb__168, dtb__169) -> (Core_dTerm.C_Term_TMk (dtb__168, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__169)))
+  | Core_dTerm.C_Term_TCon (dtb__170, dtb__171) -> (Core_dTerm.C_Term_TCon (dtb__170, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substDictTermGo mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__171)))
   | Core_dTerm.C_Term_TApp (dtb__172, dtb__173, dtb__174) -> (Core_dTerm.C_Term_TApp ((((v_substDictTermGo mc0) mc1) dtb__172), (((v_substDictTermGo mc0) mc1) dtb__173), dtb__174))
   | Core_dTerm.C_Term_TLam (dtb__175, dtb__176, dtb__177, dtb__178, dtb__179) -> (let slot2 = (let nd_uscrut8 = dtb__177 in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__180) -> (match dtb__180 with
   | { B_dData_dPair.f_Pair_first = dtb__181; B_dData_dPair.f_Pair_second = dtb__182 } -> (match dtb__182 with
   | { B_dData_dPair.f_Pair_first = dtb__183; B_dData_dPair.f_Pair_second = dtb__184 } -> (let bt2 = (match dtb__183 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__186) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substDictTermGo mc0) mc1) dtb__186)))
   | _ -> failwith "DT: impossible branch"
 ) in (let rt2 = (match dtb__184 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__185) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substDictTermGo mc0) (mc1 + 1)) dtb__185)))
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__181; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))

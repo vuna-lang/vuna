@@ -653,7 +653,7 @@ let[@tail_mod_cons] rec v_dedupInts = (fun (mc0 : int B_dData_dList.t_List) -> (
 
 # 720 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_posEntryPairs = (fun (mc0 : (string, int B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc0 with
-  | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> ((B_dData_dList.v_map (fun (i : int) -> { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = i })) (v_dedupInts dtb__263))
+  | { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = dtb__263 } -> ((B_dData_dList.v_map (fun (i : int) -> { B_dData_dPair.f_Pair_first = dtb__262; B_dData_dPair.f_Pair_second = (Obj.magic i) })) (v_dedupInts dtb__263))
   | _ -> failwith "DT: impossible branch"
 ))
 

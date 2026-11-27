@@ -475,9 +475,9 @@ let v_checkUniquePackageNames = (fun (packages : t_Package B_dData_dList.t_List)
 
 # 397 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_loadPackage = (fun (dtb_u_u640 : string) (dtb_u_u641 : string) (dtb_u_u645 : string) -> ((B_dContainer_dMutRef.v_withMutRef v_emptyPackageMemo) (fun (dtb_u_u646 : (string, t_Package) B_dContainer_dHashMap.t_HashMap B_dContainer_dMutRef.t_MutRef) -> (Obj.repr ((fun (dtb_u_u651 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u654 = ((((((((v_loadPackageWalk_u_udirect dtb_u_u640) dtb_u_u641) dtb_u_u646) v_pkgFuelBound) B_dData_dList.C_List_Nil) B_dData_dMaybe.C_Maybe_Nothing) dtb_u_u645) dtb_u_u651) in (let dtb_u_u656 = (match dtb_u_u654 with
-  | Base_dDiag.C_Check_ErrC (dtb_u_u658) -> (Base_dDiag.C_Check_ErrC (dtb_u_u658))
+  | Base_dDiag.C_Check_ErrC (dtb_u_u658) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb_u_u658)))
   | Base_dDiag.C_Check_OkC (dtb_u_u659) -> (match (v_checkUniquePackageNames (B_dData_dList.C_List__x58__x58_ (dtb_u_u659, B_dData_dList.C_List_Nil))) with
-  | Base_dDiag.C_Check_ErrC (dtb_u_u660) -> (Base_dDiag.C_Check_ErrC (dtb_u_u660))
+  | Base_dDiag.C_Check_ErrC (dtb_u_u660) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb_u_u660)))
   | Base_dDiag.C_Check_OkC (dtb_u_u661) -> (Base_dDiag.C_Check_OkC (dtb_u_u659))
   | _ -> failwith "DT: impossible branch"
 )
@@ -486,9 +486,9 @@ let v_loadPackage = (fun (dtb_u_u640 : string) (dtb_u_u641 : string) (dtb_u_u645
 
 # 397 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_loadPackage_u_udirect = (fun (nFs : string) (nEnv : string) (dir : string) _u_ueffTok -> ((Obj.magic ((B_dContainer_dMutRef.v_withMutRef v_emptyPackageMemo) (fun (dtb_u_u646 : (string, t_Package) B_dContainer_dHashMap.t_HashMap B_dContainer_dMutRef.t_MutRef) -> (Obj.repr ((fun (dtb_u_u651 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u654 = ((((((((v_loadPackageWalk_u_udirect nFs) nEnv) dtb_u_u646) v_pkgFuelBound) B_dData_dList.C_List_Nil) B_dData_dMaybe.C_Maybe_Nothing) dir) dtb_u_u651) in (let dtb_u_u656 = (match dtb_u_u654 with
-  | Base_dDiag.C_Check_ErrC (dtb_u_u658) -> (Base_dDiag.C_Check_ErrC (dtb_u_u658))
+  | Base_dDiag.C_Check_ErrC (dtb_u_u658) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb_u_u658)))
   | Base_dDiag.C_Check_OkC (dtb_u_u659) -> (match (v_checkUniquePackageNames (B_dData_dList.C_List__x58__x58_ (dtb_u_u659, B_dData_dList.C_List_Nil))) with
-  | Base_dDiag.C_Check_ErrC (dtb_u_u660) -> (Base_dDiag.C_Check_ErrC (dtb_u_u660))
+  | Base_dDiag.C_Check_ErrC (dtb_u_u660) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb_u_u660)))
   | Base_dDiag.C_Check_OkC (dtb_u_u661) -> (Base_dDiag.C_Check_OkC (dtb_u_u659))
   | _ -> failwith "DT: impossible branch"
 )

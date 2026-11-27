@@ -92,11 +92,11 @@ let rec v_fromList = (fun _uctx0 _uctx1 mc0 -> (match mc0 with
 ))
 
 # 129 "Base/Container/HashMap.vuna"
-let v_ofNames = (fun (xs : string B_dData_dList.t_List) -> ((((v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = n; B_dData_dPair.f_Pair_second = true })) xs)) (((v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
+let v_ofNames = (fun (xs : string B_dData_dList.t_List) -> ((((v_insertAll B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (n : string) -> { B_dData_dPair.f_Pair_first = (Obj.magic n); B_dData_dPair.f_Pair_second = true })) xs)) (((v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
 # 133 "Base/Container/HashMap.vuna"
 let v_toList = (fun mc0 -> (match mc0 with
-  | { f_HashMap_hashMapBuckets = dtb__35; f_HashMap_hashMapCount = dtb__36 } -> ((B_dData_dList.v_concatMap (fun outer -> ((B_dData_dList.v_concatMap (fun inner -> inner)) (B_dContainer_dArray.v_toList outer)))) (B_dContainer_dArray.v_toList dtb__35))
+  | { f_HashMap_hashMapBuckets = dtb__35; f_HashMap_hashMapCount = dtb__36 } -> ((B_dData_dList.v_concatMap (fun outer -> ((B_dData_dList.v_concatMap (fun inner -> (Obj.magic inner))) (B_dContainer_dArray.v_toList (Obj.magic outer))))) (B_dContainer_dArray.v_toList dtb__35))
   | _ -> failwith "DT: impossible branch"
 ))
 

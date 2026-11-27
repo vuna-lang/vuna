@@ -136,7 +136,7 @@ let v_encLabel = (fun (l : Base_dDiag.t_Label) (acc : string B_dData_dList.t_Lis
 
 # 193 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_decLabel = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decMaybe v_decSpan) (fuel - 1)) c)) (fun (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (b1 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (text : string) (b2 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b2)) (fun (stag : int) (b3 : Base_dBytes.t_Cur) -> (match (v_styleOfTag stag) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__5) -> ((v_thenPair (((Base_dBytes.v_decMaybe v_decSpan) (fuel - 1)) b3)) (fun (prov : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (b4 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dDiag.f_Label_labelSpan = msp; Base_dDiag.f_Label_labelText = text; Base_dDiag.f_Label_labelStyle = dtb__5; Base_dDiag.f_Label_labelProvenance = prov }; B_dData_dPair.f_Pair_second = b4 }))))
   | _ -> failwith "DT: impossible branch"
 ))))))))
@@ -152,7 +152,7 @@ let v_encSuggestion = (fun (s : Base_dDiag.t_Suggestion) (acc : string B_dData_d
 
 # 223 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_decSuggestion = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) c)) (fun (title : string) (b1 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b1)) (fun (atag : int) (b2 : Base_dBytes.t_Cur) -> (match (v_applicabilityOfTag atag) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__6) -> ((v_thenPair (((Base_dBytes.v_decList v_decEdit) (fuel - 1)) b2)) (fun (es : Base_dDiag.t_DiagEdit B_dData_dList.t_List) (b3 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dDiag.f_Suggestion_suggestionTitle = title; Base_dDiag.f_Suggestion_suggestionApplicability = dtb__6; Base_dDiag.f_Suggestion_suggestionEdits = es }; B_dData_dPair.f_Pair_second = b3 }))))
   | _ -> failwith "DT: impossible branch"
 ))))))
@@ -205,14 +205,14 @@ let v_encIce = (fun (mc0 : Base_dDiag.t_IceInfo) (mc1 : string B_dData_dList.t_L
 
 # 309 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_decIce = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) c)) (fun (pt : int) (b1 : Base_dBytes.t_Cur) -> (match (v_phaseOfTag pt) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__26) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (fn : string) (b2 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b2)) (fun (inv : string) (b3 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b3)) (fun (fp : string) (b4 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b4)) (fun (hint : string) (b5 : Base_dBytes.t_Cur) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dDiag.f_IceInfo_icePhase = dtb__26; Base_dDiag.f_IceInfo_iceFunction = fn; Base_dDiag.f_IceInfo_iceInvariant = inv; Base_dDiag.f_IceInfo_iceFingerprint = fp; Base_dDiag.f_IceInfo_iceHint = hint }; B_dData_dPair.f_Pair_second = b5 }))))))))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 318 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_decTrace = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) c)) (fun (pt : int) (b1 : Base_dBytes.t_Cur) -> (match (v_phaseOfTag pt) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b1)) (fun (text : string) (b2 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decMaybe v_decSpan) (fuel - 1)) b2)) (fun (msp : Base_dSource.t_Span B_dData_dMaybe.t_Maybe) (b3 : Base_dBytes.t_Cur) -> ((v_thenPair ((v_decCount (fuel - 1)) b3)) (fun (n : int) (b4 : Base_dBytes.t_Cur) -> (if (n = 0) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dDiag.f_TraceFrame_tracePhase = dtb__27; Base_dDiag.f_TraceFrame_traceText = text; Base_dDiag.f_TraceFrame_traceSpan = msp; Base_dDiag.f_TraceFrame_traceChildren = B_dData_dList.C_List_Nil }; B_dData_dPair.f_Pair_second = b4 })) else B_dData_dMaybe.C_Maybe_Nothing)))))))
   | _ -> failwith "DT: impossible branch"
 ))))
@@ -236,15 +236,15 @@ let v_mtAbsent = (fun (mc0 : int B_dData_dMaybe.t_Maybe) -> (match mc0 with
 
 # 345 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let rec v_decDiag = (fun (fuel : int) (c : Base_dBytes.t_Cur) -> (if (fuel <= 0) then B_dData_dMaybe.C_Maybe_Nothing else ((v_thenPair ((Base_dBytes.v_decInt (fuel - 1)) c)) (fun (id : int) (b1 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b1)) (fun (st : int) (b2 : Base_dBytes.t_Cur) -> (match (v_sevOfTag st) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__34) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b2)) (fun (pt : int) (b3 : Base_dBytes.t_Cur) -> (match (v_phaseOfTag pt) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__35) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b3)) (fun (ct : int) (b4 : Base_dBytes.t_Cur) -> (match (v_catOfTag ct) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__36) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b4)) (fun (code : string) (b5 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decStr (fuel - 1)) b5)) (fun (msg : string) (b6 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decList v_decLabel) (fuel - 1)) b6)) (fun (labels : Base_dDiag.t_Label B_dData_dList.t_List) (b7 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decList v_decField) (fuel - 1)) b7)) (fun (fields : Base_dDiag.t_DiagField B_dData_dList.t_List) (b8 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decList v_decTrace) (fuel - 1)) b8)) (fun (trace : Base_dDiag.t_TraceFrame B_dData_dList.t_List) (b9 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decList Base_dBytes.v_decStr) (fuel - 1)) b9)) (fun (notes : string B_dData_dList.t_List) (b10 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decList v_decSuggestion) (fuel - 1)) b10)) (fun (sugs : Base_dDiag.t_Suggestion B_dData_dList.t_List) (b11 : Base_dBytes.t_Cur) -> ((v_thenPair ((v_decOrigin (fuel - 1)) b11)) (fun (origin : Base_dDiag.t_Origin) (b12 : Base_dBytes.t_Cur) -> ((v_thenPair ((v_decDiagList (fuel - 1)) b12)) (fun (kids : Base_dDiag.t_Diagnostic B_dData_dList.t_List) (b13 : Base_dBytes.t_Cur) -> ((v_thenPair ((Base_dBytes.v_decBool (fuel - 1)) b13)) (fun (internal : bool) (b14 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decMaybe v_decIce) (fuel - 1)) b14)) (fun (ice : Base_dDiag.t_IceInfo B_dData_dMaybe.t_Maybe) (b15 : Base_dBytes.t_Cur) -> ((v_thenPair (((Base_dBytes.v_decMaybe Base_dBytes.v_decTag) (fuel - 1)) b15)) (fun (mtag : int B_dData_dMaybe.t_Maybe) (b16 : Base_dBytes.t_Cur) -> (match (v_mtAbsent mtag) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__37) -> ((v_thenPair ((Base_dBytes.v_decTag (fuel - 1)) b16)) (fun (stab : int) (b17 : Base_dBytes.t_Cur) -> (match (v_stabilityOfTag stab) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__38) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = { Base_dDiag.f_Diagnostic_diagId = id; Base_dDiag.f_Diagnostic_diagSeverity = dtb__34; Base_dDiag.f_Diagnostic_diagPhase = dtb__35; Base_dDiag.f_Diagnostic_diagCategory = dtb__36; Base_dDiag.f_Diagnostic_diagCode = code; Base_dDiag.f_Diagnostic_diagMessage = msg; Base_dDiag.f_Diagnostic_diagLabels = labels; Base_dDiag.f_Diagnostic_diagFields = fields; Base_dDiag.f_Diagnostic_diagTrace = trace; Base_dDiag.f_Diagnostic_diagNotes = notes; Base_dDiag.f_Diagnostic_diagSuggestions = sugs; Base_dDiag.f_Diagnostic_diagOrigin = origin; Base_dDiag.f_Diagnostic_diagChildren = kids; Base_dDiag.f_Diagnostic_diagInternal = internal; Base_dDiag.f_Diagnostic_diagIce = ice; Base_dDiag.f_Diagnostic_diagAbsent = dtb__37; Base_dDiag.f_Diagnostic_diagStability = dtb__38 }; B_dData_dPair.f_Pair_second = b17 }))
   | _ -> failwith "DT: impossible branch"
 )))

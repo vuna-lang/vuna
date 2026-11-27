@@ -28,7 +28,7 @@ let v_fsErrorText = (fun (mc0 : t_FsError) -> (match mc0 with
 let v_isDotEntry = (fun (name : string) -> (if (name = ".") then true else (name = "..")))
 
 # 116 "Base/Effect/Fs.vuna"
-let v_sortEntries = (fun (xs : string B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) a) b))) ((B_dData_dList.v_filter (fun (name : string) -> (B_dData_dBool.v_not (v_isDotEntry name)))) xs)))
+let v_sortEntries = (fun (xs : string B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (Obj.magic a)) (Obj.magic b)))) ((B_dData_dList.v_filter (fun (name : string) -> (B_dData_dBool.v_not (v_isDotEntry name)))) xs)))
 
 # 120 "Base/Effect/Fs.vuna"
 let v_fsReadFile = (fun (n : string) (p : string) -> (((((B_dEffect_dCore.v_sendCoreId "fs") n) 371381598) (dtp_effectId n)) (C_FsOp_ReadFile (p))))
@@ -200,10 +200,10 @@ let v_fsOpHIOHost_u_udirect = (fun (op : t_FsOp) k _u_ueffTok -> (match op with
 ))
 
 # 313 "Base/Effect/Fs.vuna"
-let v_handleFsHostHost = (fun (dtb_u_u395 : string) dtb_u_u396 -> (((((((B_dEffect_dCore.v_handleCoreAtId "fs") dtb_u_u395) 371381598) (dtp_effectId dtb_u_u395)) (fun dtb_u_u397 -> (let dtb_u_u399 = dtb_u_u397 in (Obj.repr ((fun (dtb_u_u400 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u399)))))) v_fsOpHIOHost) dtb_u_u396))
+let v_handleFsHostHost = (fun (dtb_u_u395 : string) dtb_u_u396 -> (((((((B_dEffect_dCore.v_handleCoreAtId "fs") dtb_u_u395) 371381598) (dtp_effectId dtb_u_u395)) (fun dtb_u_u397 -> (let dtb_u_u399 = (Obj.magic dtb_u_u397) in (Obj.repr ((fun (dtb_u_u400 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u399)))))) v_fsOpHIOHost) dtb_u_u396))
 
 # 313 "Base/Effect/Fs.vuna"
-let v_handleFsHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "fs") n) 371381598) (dtp_effectId n)) (fun dtb_u_u397 -> (let dtb_u_u399 = dtb_u_u397 in (Obj.repr ((fun (dtb_u_u400 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u399)))))) v_fsOpHIOHost) comp)) _u_ueffTok))
+let v_handleFsHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "fs") n) 371381598) (dtp_effectId n)) (fun dtb_u_u397 -> (let dtb_u_u399 = (Obj.magic dtb_u_u397) in (Obj.repr ((fun (dtb_u_u400 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u399)))))) v_fsOpHIOHost) comp)) _u_ueffTok))
 
 # 319 "Base/Effect/Fs.vuna"
 let v_runFsHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleFsHostHost "default") comp)))

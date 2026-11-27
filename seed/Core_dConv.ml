@@ -361,17 +361,17 @@ let[@tail_mod_cons] rec v_spineLevels = (fun (mc0 : (string, int) B_dData_dPair.
 let rec v_absPatternBody = (fun (mc0 : int) (mc1 : int) (mc2 : int) (mc3 : int) (mc4 : int B_dData_dList.t_List) (mc5 : Core_dTerm.t_Term) -> (match mc5 with
   | Core_dTerm.C_Term_TIf (dtb__177, dtb__178, dtb__179) -> (Core_dTerm.C_Term_TIf (((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__177), ((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__178), ((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__179)))
   | Core_dTerm.C_Term_TCase (dtb__180, dtb__181) -> (Core_dTerm.C_Term_TCase (((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__180), ((B_dData_dList.v_map (fun (alt : Core_dTerm.t_CaseAlt) -> { Core_dTerm.f_CaseAlt_caseAltName = (Core_dTerm.v_caseAltName alt); Core_dTerm.f_CaseAlt_caseAltBinders = (Core_dTerm.v_caseAltBinders alt); Core_dTerm.f_CaseAlt_caseAltBody = ((((((v_absPatternBody mc0) mc1) mc2) (mc3 + (B_dData_dList.v_length (Core_dTerm.v_caseAltBinders alt)))) mc4) (Core_dTerm.v_caseAltBody alt)) })) dtb__181)))
-  | Core_dTerm.C_Term_TCon (dtb__182, dtb__183) -> (Core_dTerm.C_Term_TCon (dtb__182, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__183)))
+  | Core_dTerm.C_Term_TCon (dtb__182, dtb__183) -> (Core_dTerm.C_Term_TCon (dtb__182, ((B_dData_dList.v_map (fun (p : (Core_dTerm.t_Term, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = ((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__183)))
   | Core_dTerm.C_Term_TApp (dtb__184, dtb__185, dtb__186) -> (Core_dTerm.C_Term_TApp (((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__184), ((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__185), dtb__186))
   | Core_dTerm.C_Term_TLam (dtb__187, dtb__188, dtb__189, dtb__190, dtb__191) -> (let slot2 = (let nd_uscrut11 = dtb__189 in (match nd_uscrut11 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__192) -> (match dtb__192 with
   | { B_dData_dPair.f_Pair_first = dtb__193; B_dData_dPair.f_Pair_second = dtb__194 } -> (match dtb__194 with
   | { B_dData_dPair.f_Pair_first = dtb__195; B_dData_dPair.f_Pair_second = dtb__196 } -> (let bt2 = (match dtb__195 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__198) -> (B_dData_dMaybe.C_Maybe_Just (((((((v_absPatternBody mc0) mc1) mc2) mc3) mc4) dtb__198)))
   | _ -> failwith "DT: impossible branch"
 ) in (let rt2 = (match dtb__196 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__197) -> (B_dData_dMaybe.C_Maybe_Just (((((((v_absPatternBody mc0) mc1) mc2) (mc3 + 1)) mc4) dtb__197)))
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__193; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))

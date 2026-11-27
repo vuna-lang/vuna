@@ -26,10 +26,10 @@ let v_exitOpHIOHost_u_udirect = (fun (op : t_ExitOp) k _u_ueffTok -> (match op w
 ))
 
 # 36 "Base/Effect/Exit.vuna"
-let v_handleExitHostHost = (fun (dtb_u_u30 : string) dtb_u_u31 -> (((((((B_dEffect_dCore.v_handleCoreAtId "exit") dtb_u_u30) 233642629) (dtp_effectId dtb_u_u30)) (fun dtb_u_u32 -> (let dtb_u_u34 = dtb_u_u32 in (Obj.repr ((fun (dtb_u_u35 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u34)))))) v_exitOpHIOHost) dtb_u_u31))
+let v_handleExitHostHost = (fun (dtb_u_u30 : string) dtb_u_u31 -> (((((((B_dEffect_dCore.v_handleCoreAtId "exit") dtb_u_u30) 233642629) (dtp_effectId dtb_u_u30)) (fun dtb_u_u32 -> (let dtb_u_u34 = (Obj.magic dtb_u_u32) in (Obj.repr ((fun (dtb_u_u35 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u34)))))) v_exitOpHIOHost) dtb_u_u31))
 
 # 36 "Base/Effect/Exit.vuna"
-let v_handleExitHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "exit") n) 233642629) (dtp_effectId n)) (fun dtb_u_u32 -> (let dtb_u_u34 = dtb_u_u32 in (Obj.repr ((fun (dtb_u_u35 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u34)))))) v_exitOpHIOHost) comp)) _u_ueffTok))
+let v_handleExitHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "exit") n) 233642629) (dtp_effectId n)) (fun dtb_u_u32 -> (let dtb_u_u34 = (Obj.magic dtb_u_u32) in (Obj.repr ((fun (dtb_u_u35 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u34)))))) v_exitOpHIOHost) comp)) _u_ueffTok))
 
 # 40 "Base/Effect/Exit.vuna"
 let v_runExitHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleExitHostHost "default") comp)))

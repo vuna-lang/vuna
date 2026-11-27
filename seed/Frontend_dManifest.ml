@@ -402,7 +402,7 @@ let v_collectDependencies = (fun (path : string) (entries : Frontend_dToml.t_Tom
   | Base_dDiag.C_Check_ErrC (dtb__119) -> (Base_dDiag.C_Check_ErrC (dtb__119))
   | Base_dDiag.C_Check_OkC (dtb__120) -> (match (((v_buildTables path) dtb__120) B_dData_dList.C_List_Nil) with
   | Base_dDiag.C_Check_ErrC (dtb__121) -> (Base_dDiag.C_Check_ErrC (dtb__121))
-  | Base_dDiag.C_Check_OkC (dtb__122) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (p : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> { f_Dependency_depAlias = (B_dData_dPair.v_firstOf p); f_Dependency_depSource = (v_pathSource (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf p))); f_Dependency_depHash = B_dData_dMaybe.C_Maybe_Nothing; f_Dependency_depIdentity = B_dData_dMaybe.C_Maybe_Nothing })) dtb__118)) dtb__122)))
+  | Base_dDiag.C_Check_OkC (dtb__122) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (p : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> { f_Dependency_depAlias = (B_dData_dPair.v_firstOf (Obj.magic p)); f_Dependency_depSource = (v_pathSource (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf (Obj.magic p)))); f_Dependency_depHash = B_dData_dMaybe.C_Maybe_Nothing; f_Dependency_depIdentity = B_dData_dMaybe.C_Maybe_Nothing })) dtb__118)) dtb__122)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

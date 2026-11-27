@@ -289,7 +289,7 @@ let v_findExportTypeIn = (fun (idx : (string, t_ExportEntry B_dData_dList.t_List
 let rec v_modulesExportingValueFrom = (fun (mc0 : (string) -> (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap Base_dDiag.t_Check) (mc1 : string B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__86, dtb__87) -> ((Base_dCommon.v_bind (mc0 dtb__86)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match ((v_findExportValuesIn idx) mc2) with
   | B_dData_dList.C_List_Nil -> (((v_modulesExportingValueFrom mc0) dtb__87) mc2)
-  | dtb__88 -> ((Base_dCommon.v_bind (((v_modulesExportingValueFrom mc0) dtb__87) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__86; B_dData_dPair.f_Pair_second = e })) dtb__88)) more)))))
+  | dtb__88 -> ((Base_dCommon.v_bind (((v_modulesExportingValueFrom mc0) dtb__87) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__86; B_dData_dPair.f_Pair_second = (Obj.magic e) })) dtb__88)) more)))))
 )))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
@@ -297,7 +297,7 @@ let rec v_modulesExportingValueFrom = (fun (mc0 : (string) -> (string, t_ExportE
 
 # 529 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_modulesExportingCtorFrom = (fun (mc0 : (string) -> (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap Base_dDiag.t_Check) (mc1 : string B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__89, dtb__90) -> ((Base_dCommon.v_bind (mc0 dtb__89)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (let found = ((v_findExportCtorsIn idx) mc2) in ((Base_dCommon.v_bind (((v_modulesExportingCtorFrom mc0) dtb__90) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__89; B_dData_dPair.f_Pair_second = e })) found)) more))))))))
+  | B_dData_dList.C_List__x58__x58_ (dtb__89, dtb__90) -> ((Base_dCommon.v_bind (mc0 dtb__89)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (let found = ((v_findExportCtorsIn idx) mc2) in ((Base_dCommon.v_bind (((v_modulesExportingCtorFrom mc0) dtb__90) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__89; B_dData_dPair.f_Pair_second = (Obj.magic e) })) found)) more))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
@@ -306,7 +306,7 @@ let rec v_modulesExportingCtorFrom = (fun (mc0 : (string) -> (string, t_ExportEn
 let rec v_modulesExportingTypeFrom = (fun (mc0 : (string) -> (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap Base_dDiag.t_Check) (mc1 : string B_dData_dList.t_List) (mc2 : string) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__91, dtb__92) -> ((Base_dCommon.v_bind (mc0 dtb__91)) (fun (idx : (string, t_ExportEntry B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) -> (match ((v_findExportTypesIn idx) mc2) with
   | B_dData_dList.C_List_Nil -> (((v_modulesExportingTypeFrom mc0) dtb__92) mc2)
-  | dtb__93 -> ((Base_dCommon.v_bind (((v_modulesExportingTypeFrom mc0) dtb__92) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__91; B_dData_dPair.f_Pair_second = e })) dtb__93)) more)))))
+  | dtb__93 -> ((Base_dCommon.v_bind (((v_modulesExportingTypeFrom mc0) dtb__92) mc2)) (fun (more : (string, t_ExportEntry) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC (((B_dData_dList.v_append ((B_dData_dList.v_map (fun (e : t_ExportEntry) -> { B_dData_dPair.f_Pair_first = dtb__91; B_dData_dPair.f_Pair_second = (Obj.magic e) })) dtb__93)) more)))))
 )))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"

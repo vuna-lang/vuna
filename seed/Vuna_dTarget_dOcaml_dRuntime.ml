@@ -26,4 +26,4 @@ let v_rtTextExtra = (fun (p : (string, string) B_dData_dPair.t_Pair) -> (match (
 ))
 
 # 260 "Vuna/Target/Ocaml/Runtime.vuna"
-let v_rtTextExtras = ((B_dData_dList.v_map (fun (p : (string, string) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf p))) ((B_dData_dList.v_filter v_rtTextExtra) v_ocamlRtTextTable))
+let v_rtTextExtras = ((B_dData_dList.v_map (fun (p : (string, string) B_dData_dPair.t_Pair) -> (B_dData_dPair.v_firstOf (Obj.magic p)))) ((B_dData_dList.v_filter v_rtTextExtra) v_ocamlRtTextTable))

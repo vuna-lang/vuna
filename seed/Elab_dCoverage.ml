@@ -92,7 +92,7 @@ let rec v_lookupEntry = (fun (mc0 : string) (mc1 : (string, int) B_dData_dPair.t
 ))
 
 # 135 "Vuna/Compiler/Elab/Coverage.vuna"
-let v_ctorFamily = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (cname : string) -> (let nd_uscrut2 = ((B_dData_dList.v_filter (fun (e : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (((B_dTrait_dEq.v__x47__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt)) ((v_lookupEntry cname) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf e)))) B_dData_dMaybe.C_Maybe_Nothing))) table) in (match nd_uscrut2 with
+let v_ctorFamily = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (cname : string) -> (let nd_uscrut2 = ((B_dData_dList.v_filter (fun (e : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (((B_dTrait_dEq.v__x47__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dInt.v_Eq_u018fc178ff3df1b4_uInt)) ((v_lookupEntry cname) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (Obj.magic e))))) B_dData_dMaybe.C_Maybe_Nothing))) table) in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__31, dtb__32) -> (match dtb__32 with
   | B_dData_dList.C_List_Nil -> (if (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__31)) then (C_CtorFamily_CtorFamilyJudgeable ((B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__31)))) else (C_CtorFamily_CtorFamilyIndexed ((B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__31)))))
   | _ -> C_CtorFamily_CtorFamilyUnknown
@@ -130,7 +130,7 @@ let rec v_anyShortCtor = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string
 ))
 
 # 161 "Vuna/Compiler/Elab/Coverage.vuna"
-let v_familyOfShortCtors = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (shorts : string B_dData_dList.t_List) -> (let nd_uscrut2 = ((B_dData_dList.v_filter (fun (e : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> ((v_anyShortCtor shorts) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf e))))) table) in (match nd_uscrut2 with
+let v_familyOfShortCtors = (fun (table : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dList.t_List) (shorts : string B_dData_dList.t_List) -> (let nd_uscrut2 = ((B_dData_dList.v_filter (fun (e : (string, (bool, (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> ((v_anyShortCtor shorts) (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (Obj.magic e)))))) table) in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__41, dtb__42) -> (match dtb__42 with
   | B_dData_dList.C_List_Nil -> (if (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf dtb__41)) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__41)))) else B_dData_dMaybe.C_Maybe_Nothing)
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
@@ -156,7 +156,7 @@ let v_sentinelCtorIn = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_
 )))
 
 # 189 "Vuna/Compiler/Elab/Coverage.vuna"
-let v_orderedCtors = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (heads : string B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads)))) ctors)) ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf e)) heads))) ctors)))
+let v_orderedCtors = (fun (ctors : (string, int) B_dData_dPair.t_Pair B_dData_dList.t_List) (heads : string B_dData_dList.t_List) -> ((B_dData_dList.v_append ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf (Obj.magic e))) heads)))) ctors)) ((B_dData_dList.v_filter (fun (e : (string, int) B_dData_dPair.t_Pair) -> ((B_dData_dList.v_memName (B_dData_dPair.v_firstOf (Obj.magic e))) heads))) ctors)))
 
 # 195 "Vuna/Compiler/Elab/Coverage.vuna"
 let[@tail_mod_cons] rec v_takePats = (fun (n : int) (xs : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (if (n <= 0) then B_dData_dList.C_List_Nil else (match xs with

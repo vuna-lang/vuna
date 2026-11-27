@@ -756,7 +756,7 @@ and v_lowerLamFuel = (fun (fuel : int) (env : Lowering_dEnv.t_LwEnv) (st : t_LwS
 )))
 # 261 "Vuna/Compiler/Lowering/Program.vuna"
 and v_lowerLamChainFuel = (fun (fuel : int) (env : Lowering_dEnv.t_LwEnv) (st : t_LwSt) (binders : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (hints : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) (params : t_LamParam B_dData_dList.t_List) (inner : Core_dTerm.t_Term) (resultTy : Core_dTerm.t_Term B_dData_dMaybe.t_Maybe) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-lower") else (let pb = (((((v_bindersOfParamsHint env) binders) hints) (st).f_LwSt_lwBinder) params) in (let bs = (B_dData_dPair.v_firstOf pb) in (let stIds = { f_LwSt_lwNext = (st).f_LwSt_lwNext; f_LwSt_lwBinder = (B_dData_dPair.v_secondOf pb) } in (let envB = ((B_dData_dList.v_append (B_dData_dList.v_reverse bs)) binders) in (let resultIr = (match resultTy with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__296) -> (match (((Lowering_dTy.v_annotTyOf env) envB) dtb__296) with
   | B_dData_dMaybe.C_Maybe_Just (dtb__297) -> (B_dData_dMaybe.C_Maybe_Just (dtb__297))
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_effResultTyOf dtb__296)

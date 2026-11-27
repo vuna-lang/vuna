@@ -78,10 +78,10 @@ let v_processOpHIOWith_u_udirect = (fun (op : t_ProcessOp) k _u_ueffTok -> (matc
 ))
 
 # 115 "Base/Effect/Process.vuna"
-let v_handleProcessHostWith = (fun (dtb_u_u102 : string) dtb_u_u103 -> (((((((B_dEffect_dCore.v_handleCoreAtId "process") dtb_u_u102) 485051770) (dtp_effectId dtb_u_u102)) (fun dtb_u_u104 -> (let dtb_u_u106 = dtb_u_u104 in (Obj.repr ((fun (dtb_u_u107 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u106)))))) v_processOpHIOWith) dtb_u_u103))
+let v_handleProcessHostWith = (fun (dtb_u_u102 : string) dtb_u_u103 -> (((((((B_dEffect_dCore.v_handleCoreAtId "process") dtb_u_u102) 485051770) (dtp_effectId dtb_u_u102)) (fun dtb_u_u104 -> (let dtb_u_u106 = (Obj.magic dtb_u_u104) in (Obj.repr ((fun (dtb_u_u107 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u106)))))) v_processOpHIOWith) dtb_u_u103))
 
 # 115 "Base/Effect/Process.vuna"
-let v_handleProcessHostWith_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun dtb_u_u104 -> (let dtb_u_u106 = dtb_u_u104 in (Obj.repr ((fun (dtb_u_u107 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u106)))))) v_processOpHIOWith) comp)) _u_ueffTok))
+let v_handleProcessHostWith_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun dtb_u_u104 -> (let dtb_u_u106 = (Obj.magic dtb_u_u104) in (Obj.repr ((fun (dtb_u_u107 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u106)))))) v_processOpHIOWith) comp)) _u_ueffTok))
 
 # 123 "Base/Effect/Process.vuna"
 let v_processHostStatus = (B_dEffect_dHost.v_hostSync (Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> (dtp_hostStatus ()))))
@@ -107,10 +107,10 @@ let v_processOpHIOWithHost_u_udirect = (fun (op : t_ProcessOp) k _u_ueffTok -> (
 ))
 
 # 152 "Base/Effect/Process.vuna"
-let v_handleProcessHostWithHost = (fun (dtb_u_u176 : string) dtb_u_u177 -> (((((((B_dEffect_dCore.v_handleCoreAtId "process") dtb_u_u176) 485051770) (dtp_effectId dtb_u_u176)) (fun dtb_u_u178 -> (let dtb_u_u180 = dtb_u_u178 in (Obj.repr ((fun (dtb_u_u181 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u180)))))) v_processOpHIOWithHost) dtb_u_u177))
+let v_handleProcessHostWithHost = (fun (dtb_u_u176 : string) dtb_u_u177 -> (((((((B_dEffect_dCore.v_handleCoreAtId "process") dtb_u_u176) 485051770) (dtp_effectId dtb_u_u176)) (fun dtb_u_u178 -> (let dtb_u_u180 = (Obj.magic dtb_u_u178) in (Obj.repr ((fun (dtb_u_u181 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u180)))))) v_processOpHIOWithHost) dtb_u_u177))
 
 # 152 "Base/Effect/Process.vuna"
-let v_handleProcessHostWithHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun dtb_u_u178 -> (let dtb_u_u180 = dtb_u_u178 in (Obj.repr ((fun (dtb_u_u181 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u180)))))) v_processOpHIOWithHost) comp)) _u_ueffTok))
+let v_handleProcessHostWithHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "process") n) 485051770) (dtp_effectId n)) (fun dtb_u_u178 -> (let dtb_u_u180 = (Obj.magic dtb_u_u178) in (Obj.repr ((fun (dtb_u_u181 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u180)))))) v_processOpHIOWithHost) comp)) _u_ueffTok))
 
 # 157 "Base/Effect/Process.vuna"
 let v_runProcessHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleProcessHostWithHost "default") comp)))
