@@ -309,6 +309,7 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   「漏写构造子」变成可见 finding。默认关闭，遍历类代码用
   `--select closed-adt-catch-all` 或 `[lint] preset = "all"` 启用。
 - **不做自动修复**：每个缺失分支应写什么体无法安全生成。
+- **结构遍历**：走 `Frontend.AstWalk`（`foldExpr` / `foldDecl`），因此覆盖 trait 参数 kind、record update 字段与模板洞；**family 范围仍限同文件**。
 - **已知边界**：只覆盖 `case` 分支形态；函数多子句的反射兜底（`f _ = …`）尚未覆盖。
   行级抑制 `-- vuna-lint: disable-next-line closed-adt-catch-all` 按兜底分支所在行生效。
 
