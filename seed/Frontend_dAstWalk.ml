@@ -453,7 +453,7 @@ let[@tail_mod_cons] rec v_sameScope = (fun (mc0 : string B_dData_dList.t_List) (
 
 # 516 "Vuna/Compiler/Frontend/AstWalk.vuna"
 let rec v_patBinders = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
-  | Frontend_dAst.C_Pat_PRecord (dtb__401, dtb__402, dtb__403) -> ((B_dData_dList.v_concatMap (fun (field : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patBinders (B_dData_dPair.v_secondOf field)))) dtb__402)
+  | Frontend_dAst.C_Pat_PRecord (dtb__401, dtb__402, dtb__403) -> ((B_dData_dList.v_concatMap (fun (field : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patBinders (B_dData_dPair.v_secondOf (Obj.magic field))))) dtb__402)
   | Frontend_dAst.C_Pat_PStr (dtb__404, dtb__405) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PInt (dtb__406, dtb__407) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PCon (dtb__408, dtb__409, dtb__410) -> ((B_dData_dList.v_concatMap v_patBinders) dtb__409)

@@ -323,7 +323,7 @@ let v_lamTyOf = (fun (mc0 : t_Term B_dData_dMaybe.t_Maybe) (mc1 : t_Term B_dData
 
 # 651 "Vuna/Compiler/Core/Term.vuna"
 let v_markLamLinear = (fun (slot : (t_LamMark, (t_Term B_dData_dMaybe.t_Maybe, t_Term B_dData_dMaybe.t_Maybe) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair B_dData_dMaybe.t_Maybe) -> (let tys = (match (v_lamSlotTys slot) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = B_dData_dMaybe.C_Maybe_Nothing }
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic { B_dData_dPair.f_Pair_first = B_dData_dMaybe.C_Maybe_Nothing; B_dData_dPair.f_Pair_second = B_dData_dMaybe.C_Maybe_Nothing })
   | B_dData_dMaybe.C_Maybe_Just (dtb__57) -> dtb__57
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = C_LamMark_LamLinearClosure; B_dData_dPair.f_Pair_second = tys }))))
@@ -352,11 +352,11 @@ let rec v_shift = (fun (mc0 : int) (mc1 : int) (mc2 : t_Term) -> (match mc2 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__91) -> (match dtb__91 with
   | { B_dData_dPair.f_Pair_first = dtb__92; B_dData_dPair.f_Pair_second = dtb__93 } -> (match dtb__93 with
   | { B_dData_dPair.f_Pair_first = dtb__94; B_dData_dPair.f_Pair_second = dtb__95 } -> (let bt2 = (match dtb__94 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__97) -> (B_dData_dMaybe.C_Maybe_Just ((((v_shift mc0) mc1) dtb__97)))
   | _ -> failwith "DT: impossible branch"
 ) in (let rt2 = (match dtb__95 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__96) -> (B_dData_dMaybe.C_Maybe_Just ((((v_shift (mc0 + 1)) mc1) dtb__96)))
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__92; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))
@@ -799,9 +799,9 @@ let rec v_termGlobalNames = (fun (mc0 : t_Term) -> (match mc0 with
   | C_Term_TCase (dtb__479, dtb__480) -> ((B_dData_dList.v_append (v_termGlobalNames dtb__479)) ((B_dData_dList.v_concatMap (fun (a : t_CaseAlt) -> (v_termGlobalNames (v_caseAltBody a)))) dtb__480))
   | C_Term_TRecUpd (dtb__481, dtb__482, dtb__483, dtb__484, dtb__485) -> ((B_dData_dList.v_append (v_termGlobalNames dtb__481)) (v_termGlobalNames dtb__485))
   | C_Term_TProj (dtb__486, dtb__487, dtb__488, dtb__489, dtb__490) -> (v_termGlobalNames dtb__486)
-  | C_Term_TRecord (dtb__491, dtb__492) -> (B_dData_dList.C_List__x58__x58_ (dtb__491, ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf p)))) dtb__492)))
-  | C_Term_TMk (dtb__493, dtb__494) -> ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf p)))) dtb__494)
-  | C_Term_TCon (dtb__495, dtb__496) -> ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf p)))) dtb__496)
+  | C_Term_TRecord (dtb__491, dtb__492) -> (B_dData_dList.C_List__x58__x58_ (dtb__491, ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf (Obj.magic p))))) dtb__492)))
+  | C_Term_TMk (dtb__493, dtb__494) -> ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf (Obj.magic p))))) dtb__494)
+  | C_Term_TCon (dtb__495, dtb__496) -> ((B_dData_dList.v_concatMap (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> (v_termGlobalNames (B_dData_dPair.v_firstOf (Obj.magic p))))) dtb__496)
   | C_Term_TApp (dtb__497, dtb__498, dtb__499) -> ((B_dData_dList.v_append (v_termGlobalNames dtb__497)) (v_termGlobalNames dtb__498))
   | C_Term_TLam (dtb__500, dtb__501, dtb__502, dtb__503, dtb__504) -> (v_termGlobalNames dtb__504)
   | C_Term_TPi (dtb__505, dtb__506, dtb__507, dtb__508, dtb__509) -> ((B_dData_dList.v_append (v_termGlobalNames dtb__508)) (v_termGlobalNames dtb__509))
@@ -931,19 +931,19 @@ let rec v_substVarAt = (fun (mc0 : int) (mc1 : t_Term) (mc2 : t_Term) -> (match 
   | C_Term_TCase (dtb__636, dtb__637) -> (C_Term_TCase ((((v_substVarAt mc0) mc1) dtb__636), ((B_dData_dList.v_map ((v_substAltAt mc0) mc1)) dtb__637)))
   | C_Term_TRecUpd (dtb__638, dtb__639, dtb__640, dtb__641, dtb__642) -> (C_Term_TRecUpd ((((v_substVarAt mc0) mc1) dtb__638), dtb__639, dtb__640, dtb__641, (((v_substVarAt (mc0 + (B_dData_dList.v_length dtb__640))) mc1) dtb__642)))
   | C_Term_TProj (dtb__643, dtb__644, dtb__645, dtb__646, dtb__647) -> (C_Term_TProj ((((v_substVarAt mc0) mc1) dtb__643), dtb__644, dtb__645, dtb__646, dtb__647))
-  | C_Term_TRecord (dtb__648, dtb__649) -> (C_Term_TRecord (dtb__648, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__649)))
-  | C_Term_TMk (dtb__650, dtb__651) -> (C_Term_TMk (dtb__650, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__651)))
-  | C_Term_TCon (dtb__652, dtb__653) -> (C_Term_TCon (dtb__652, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf p)); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__653)))
+  | C_Term_TRecord (dtb__648, dtb__649) -> (C_Term_TRecord (dtb__648, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__649)))
+  | C_Term_TMk (dtb__650, dtb__651) -> (C_Term_TMk (dtb__650, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__651)))
+  | C_Term_TCon (dtb__652, dtb__653) -> (C_Term_TCon (dtb__652, ((B_dData_dList.v_map (fun (p : (t_Term, t_Rig) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = (((v_substVarAt mc0) mc1) (B_dData_dPair.v_firstOf (Obj.magic p))); B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf (Obj.magic p)) })) dtb__653)))
   | C_Term_TApp (dtb__654, dtb__655, dtb__656) -> (C_Term_TApp ((((v_substVarAt mc0) mc1) dtb__654), (((v_substVarAt mc0) mc1) dtb__655), dtb__656))
   | C_Term_TLam (dtb__657, dtb__658, dtb__659, dtb__660, dtb__661) -> (let slot2 = (let nd_uscrut8 = dtb__659 in (match nd_uscrut8 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__662) -> (match dtb__662 with
   | { B_dData_dPair.f_Pair_first = dtb__663; B_dData_dPair.f_Pair_second = dtb__664 } -> (match dtb__664 with
   | { B_dData_dPair.f_Pair_first = dtb__665; B_dData_dPair.f_Pair_second = dtb__666 } -> (let bt2 = (match dtb__665 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__668) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substVarAt mc0) mc1) dtb__668)))
   | _ -> failwith "DT: impossible branch"
 ) in (let rt2 = (match dtb__666 with
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic B_dData_dMaybe.C_Maybe_Nothing)
   | B_dData_dMaybe.C_Maybe_Just (dtb__667) -> (B_dData_dMaybe.C_Maybe_Just ((((v_substVarAt (mc0 + 1)) mc1) dtb__667)))
   | _ -> failwith "DT: impossible branch"
 ) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__663; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = bt2; B_dData_dPair.f_Pair_second = rt2 } }))))

@@ -41,10 +41,10 @@ let v_consoleOpHILib_u_udirect = (fun (op : t_ConsoleOp) k _u_ueffTok -> (match 
 ))
 
 # 58 "Base/Effect/Console.vuna"
-let v_handleConsoleHostHost = (fun (dtb_u_u55 : string) dtb_u_u56 -> (((((((B_dEffect_dCore.v_handleCoreAtId "console") dtb_u_u55) 775068458) (dtp_effectId dtb_u_u55)) (fun dtb_u_u57 -> (let dtb_u_u59 = dtb_u_u57 in (Obj.repr ((fun (dtb_u_u60 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u59)))))) v_consoleOpHILib) dtb_u_u56))
+let v_handleConsoleHostHost = (fun (dtb_u_u55 : string) dtb_u_u56 -> (((((((B_dEffect_dCore.v_handleCoreAtId "console") dtb_u_u55) 775068458) (dtp_effectId dtb_u_u55)) (fun dtb_u_u57 -> (let dtb_u_u59 = (Obj.magic dtb_u_u57) in (Obj.repr ((fun (dtb_u_u60 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u59)))))) v_consoleOpHILib) dtb_u_u56))
 
 # 58 "Base/Effect/Console.vuna"
-let v_handleConsoleHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "console") n) 775068458) (dtp_effectId n)) (fun dtb_u_u57 -> (let dtb_u_u59 = dtb_u_u57 in (Obj.repr ((fun (dtb_u_u60 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u59)))))) v_consoleOpHILib) comp)) _u_ueffTok))
+let v_handleConsoleHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "console") n) 775068458) (dtp_effectId n)) (fun dtb_u_u57 -> (let dtb_u_u59 = (Obj.magic dtb_u_u57) in (Obj.repr ((fun (dtb_u_u60 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u59)))))) v_consoleOpHILib) comp)) _u_ueffTok))
 
 # 64 "Base/Effect/Console.vuna"
 let v_runConsoleHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleConsoleHostHost "default") comp)))

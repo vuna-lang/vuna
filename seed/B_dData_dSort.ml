@@ -88,4 +88,4 @@ let rec v_msort = (fun le (fuel : int) xs -> (if (fuel <= 0) then xs else (let n
 let v_sortBy = (fun le xs -> (if ((v_sortedBy le) xs) then xs else (if ((v_shortList 16) xs) then ((v_insertionSortBy le) xs) else (((v_msort le) (v_lenInt xs)) xs))))
 
 # 87 "Base/Data/Sort.vuna"
-let v_mergeSort = (fun _uctx0 xs -> ((v_sortBy (fun x y -> (((B_dTrait_dOrd.v__x60__x61_ _uctx0) x) y))) xs))
+let v_mergeSort = (fun _uctx0 xs -> ((v_sortBy (fun x y -> (((B_dTrait_dOrd.v__x60__x61_ _uctx0) (Obj.magic x)) (Obj.magic y)))) xs))

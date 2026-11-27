@@ -48,10 +48,10 @@ let v_envOpHIOHost_u_udirect = (fun (op : t_EnvOp) k _u_ueffTok -> (match op wit
 ))
 
 # 68 "Base/Effect/Env.vuna"
-let v_handleEnvHostHost = (fun (dtb_u_u67 : string) dtb_u_u68 -> (((((((B_dEffect_dCore.v_handleCoreAtId "env") dtb_u_u67) 948865972) (dtp_effectId dtb_u_u67)) (fun dtb_u_u69 -> (let dtb_u_u71 = dtb_u_u69 in (Obj.repr ((fun (dtb_u_u72 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u71)))))) v_envOpHIOHost) dtb_u_u68))
+let v_handleEnvHostHost = (fun (dtb_u_u67 : string) dtb_u_u68 -> (((((((B_dEffect_dCore.v_handleCoreAtId "env") dtb_u_u67) 948865972) (dtp_effectId dtb_u_u67)) (fun dtb_u_u69 -> (let dtb_u_u71 = (Obj.magic dtb_u_u69) in (Obj.repr ((fun (dtb_u_u72 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u71)))))) v_envOpHIOHost) dtb_u_u68))
 
 # 68 "Base/Effect/Env.vuna"
-let v_handleEnvHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "env") n) 948865972) (dtp_effectId n)) (fun dtb_u_u69 -> (let dtb_u_u71 = dtb_u_u69 in (Obj.repr ((fun (dtb_u_u72 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u71)))))) v_envOpHIOHost) comp)) _u_ueffTok))
+let v_handleEnvHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "env") n) 948865972) (dtp_effectId n)) (fun dtb_u_u69 -> (let dtb_u_u71 = (Obj.magic dtb_u_u69) in (Obj.repr ((fun (dtb_u_u72 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u71)))))) v_envOpHIOHost) comp)) _u_ueffTok))
 
 # 72 "Base/Effect/Env.vuna"
 let v_runEnvHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleEnvHostHost "default") comp)))

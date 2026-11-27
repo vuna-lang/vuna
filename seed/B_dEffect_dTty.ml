@@ -26,10 +26,10 @@ let v_ttyOpHIOHost_u_udirect = (fun (op : t_TtyOp) k _u_ueffTok -> (match op wit
 ))
 
 # 41 "Base/Effect/Tty.vuna"
-let v_handleTtyHostHost = (fun (dtb_u_u28 : string) dtb_u_u29 -> (((((((B_dEffect_dCore.v_handleCoreAtId "tty") dtb_u_u28) 808136164) (dtp_effectId dtb_u_u28)) (fun dtb_u_u30 -> (let dtb_u_u32 = dtb_u_u30 in (Obj.repr ((fun (dtb_u_u33 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u32)))))) v_ttyOpHIOHost) dtb_u_u29))
+let v_handleTtyHostHost = (fun (dtb_u_u28 : string) dtb_u_u29 -> (((((((B_dEffect_dCore.v_handleCoreAtId "tty") dtb_u_u28) 808136164) (dtp_effectId dtb_u_u28)) (fun dtb_u_u30 -> (let dtb_u_u32 = (Obj.magic dtb_u_u30) in (Obj.repr ((fun (dtb_u_u33 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u32)))))) v_ttyOpHIOHost) dtb_u_u29))
 
 # 41 "Base/Effect/Tty.vuna"
-let v_handleTtyHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "tty") n) 808136164) (dtp_effectId n)) (fun dtb_u_u30 -> (let dtb_u_u32 = dtb_u_u30 in (Obj.repr ((fun (dtb_u_u33 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u32)))))) v_ttyOpHIOHost) comp)) _u_ueffTok))
+let v_handleTtyHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "tty") n) 808136164) (dtp_effectId n)) (fun dtb_u_u30 -> (let dtb_u_u32 = (Obj.magic dtb_u_u30) in (Obj.repr ((fun (dtb_u_u33 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u32)))))) v_ttyOpHIOHost) comp)) _u_ueffTok))
 
 # 45 "Base/Effect/Tty.vuna"
 let v_runTtyHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleTtyHostHost "default") comp)))

@@ -18,7 +18,7 @@ let v_clauseBodyOf = (fun (c : Frontend_dAst.t_LocalClause) -> (c).Frontend_dAst
 # 45 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_exprMaxAppArityF = (fun (fuel : int) (pname : string) (e : Frontend_dAst.t_Expr) -> (if (fuel <= 0) then 0 else (let nd_uscrut3 = e in (match nd_uscrut3 with
   | Frontend_dAst.C_Expr_ERecUpdate (dtb__2, dtb__3, dtb__4) -> (((v_exprMaxAppArityF (fuel - 1)) pname) dtb__2)
-  | Frontend_dAst.C_Expr_ERecord (dtb__5, dtb__6, dtb__7) -> (v_maxIntList ((B_dData_dList.v_map (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprMaxAppArityF (fuel - 1)) pname) (B_dData_dPair.v_secondOf q)))) dtb__6))
+  | Frontend_dAst.C_Expr_ERecord (dtb__5, dtb__6, dtb__7) -> (v_maxIntList ((B_dData_dList.v_map (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprMaxAppArityF (fuel - 1)) pname) (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__6))
   | Frontend_dAst.C_Expr_EField (dtb__8, dtb__9, dtb__10) -> (((v_exprMaxAppArityF (fuel - 1)) pname) dtb__8)
   | Frontend_dAst.C_Expr_ECase (dtb__11, dtb__12, dtb__13) -> (v_maxIntList (B_dData_dList.C_List__x58__x58_ ((((v_exprMaxAppArityF (fuel - 1)) pname) dtb__11), ((B_dData_dList.v_concatMap (fun (a : Frontend_dAst.t_Alt) -> (B_dData_dList.C_List__x58__x58_ ((((v_exprMaxAppArityF (fuel - 1)) pname) (v_altBodyOf a)), B_dData_dList.C_List_Nil)))) dtb__12))))
   | Frontend_dAst.C_Expr_ELet (dtb__14, dtb__15, dtb__16, dtb__17) -> (v_maxIntList (B_dData_dList.C_List__x58__x58_ ((((v_exprMaxAppArityF (fuel - 1)) pname) dtb__15), (((v_exprMaxAppArityBindsF (fuel - 1)) pname) dtb__14))))
@@ -59,7 +59,7 @@ and v_exprMaxAppAritySigF = (fun (mc0 : int) (mc1 : string) (mc2 : Frontend_dAst
 let v_exprMaxAppArity = (fun (pname : string) (e : Frontend_dAst.t_Expr) -> (((v_exprMaxAppArityF ((Frontend_dAstQuery.v_exprBudget 64) e)) pname) e))
 
 # 30 "Vuna/Compiler/Elab/Sig.vuna"
-let v_methodMaxAppArity = (fun (pname : string) (methods : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (v_maxIntList ((B_dData_dList.v_map (fun (m : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_exprMaxAppArity pname) (B_dData_dPair.v_secondOf m)))) methods)))
+let v_methodMaxAppArity = (fun (pname : string) (methods : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (v_maxIntList ((B_dData_dList.v_map (fun (m : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_exprMaxAppArity pname) (B_dData_dPair.v_secondOf (Obj.magic m))))) methods)))
 
 # 21 "Vuna/Compiler/Elab/Sig.vuna"
 let v_classParamKindOf = (fun (pname : string) (methods : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair B_dData_dList.t_List) -> ((v_arityFun ((v_methodMaxAppArity pname) methods)) (Core_dTerm.C_Term_TType (Core_dTerm.v_levelZero))))
@@ -177,7 +177,7 @@ let rec v_exprLowerVarsF = (fun (fuel : int) (e : Frontend_dAst.t_Expr) -> (if (
   | Frontend_dAst.C_Expr_ELet (dtb__104, dtb__105, dtb__106, dtb__107) -> ((B_dData_dList.v_append ((v_exprLowerVarsBindsF (fuel - 1)) dtb__104)) ((v_exprLowerVarsF (fuel - 1)) dtb__105))
   | Frontend_dAst.C_Expr_ECase (dtb__108, dtb__109, dtb__110) -> ((B_dData_dList.v_append ((v_exprLowerVarsF (fuel - 1)) dtb__108)) ((B_dData_dList.v_concatMap (fun (a : Frontend_dAst.t_Alt) -> ((v_exprLowerVarsF (fuel - 1)) (v_altBodyOf a)))) dtb__109))
   | Frontend_dAst.C_Expr_EField (dtb__111, dtb__112, dtb__113) -> ((v_exprLowerVarsF (fuel - 1)) dtb__111)
-  | Frontend_dAst.C_Expr_ERecord (dtb__114, dtb__115, dtb__116) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_exprLowerVarsF (fuel - 1)) (B_dData_dPair.v_secondOf q)))) dtb__115)
+  | Frontend_dAst.C_Expr_ERecord (dtb__114, dtb__115, dtb__116) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> ((v_exprLowerVarsF (fuel - 1)) (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__115)
   | Frontend_dAst.C_Expr_ERecUpdate (dtb__117, dtb__118, dtb__119) -> ((v_exprLowerVarsF (fuel - 1)) dtb__117)
   | _ -> B_dData_dList.C_List_Nil
 )))
@@ -297,7 +297,7 @@ let v_zipArgKinds = (fun (mc0 : Frontend_dAst.t_Expr B_dData_dList.t_List B_dDat
 # 284 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_argParamKindsF = (fun (fuel : int) (tbl : (string, Frontend_dAst.t_Expr B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (e : Frontend_dAst.t_Expr) -> (if (fuel <= 0) then B_dData_dList.C_List_Nil else (let nd_uscrut3 = e in (match nd_uscrut3 with
   | Frontend_dAst.C_Expr_ERecUpdate (dtb__172, dtb__173, dtb__174) -> (((v_argParamKindsF (fuel - 1)) tbl) dtb__172)
-  | Frontend_dAst.C_Expr_ERecord (dtb__175, dtb__176, dtb__177) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_argParamKindsF (fuel - 1)) tbl) (B_dData_dPair.v_secondOf q)))) dtb__176)
+  | Frontend_dAst.C_Expr_ERecord (dtb__175, dtb__176, dtb__177) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_argParamKindsF (fuel - 1)) tbl) (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__176)
   | Frontend_dAst.C_Expr_EField (dtb__178, dtb__179, dtb__180) -> (((v_argParamKindsF (fuel - 1)) tbl) dtb__178)
   | Frontend_dAst.C_Expr_EIf (dtb__181, dtb__182, dtb__183, dtb__184) -> ((B_dData_dList.v_append (((v_argParamKindsF (fuel - 1)) tbl) dtb__181)) ((B_dData_dList.v_append (((v_argParamKindsF (fuel - 1)) tbl) dtb__182)) (((v_argParamKindsF (fuel - 1)) tbl) dtb__183)))
   | Frontend_dAst.C_Expr_ECase (dtb__185, dtb__186, dtb__187) -> ((B_dData_dList.v_append (((v_argParamKindsF (fuel - 1)) tbl) dtb__185)) ((B_dData_dList.v_concatMap (fun (a : Frontend_dAst.t_Alt) -> (((v_argParamKindsF (fuel - 1)) tbl) (v_altBodyOf a)))) dtb__186))

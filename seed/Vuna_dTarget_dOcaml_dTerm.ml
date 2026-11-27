@@ -504,7 +504,7 @@ let v_dtListBridge = (fun (mc0 : Vuna_dIr_dModel.t_IrListFam B_dData_dMaybe.t_Ma
 ))
 
 # 2536 "Vuna/Target/Ocaml/Term.vuna"
-let v_sortLocRows = (fun (rows : string B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) a) b))) rows))
+let v_sortLocRows = (fun (rows : string B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy (fun (a : string) (b : string) -> (((B_dTrait_dOrd.v__x60__x61_ B_dData_dString.v_Ord_u5afb3bbeddafcb50_uString) (Obj.magic a)) (Obj.magic b)))) rows))
 
 # 2539 "Vuna/Target/Ocaml/Term.vuna"
 let v_locRowOf = (fun (norm : (string) -> string) (unitOf : (string) -> string) (row : (string, (string, int) B_dData_dPair.t_Pair) B_dData_dPair.t_Pair) -> (let name = (B_dData_dPair.v_firstOf row) in (let file = (B_dData_dPair.v_firstOf (B_dData_dPair.v_secondOf row)) in (let line = (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf row)) in (String.concat "" [(unitOf name); "."; (Vuna_dTarget_dOcaml_dDecl.v_valueName name); "\n"; name; "\n"; (norm file); ":"; (string_of_int line); "\n"])))))
@@ -991,7 +991,7 @@ let v_genGroup = (fun (st : t_GenSt) (group : Vuna_dIr_dModel.t_IrGroup) -> ((Ba
   | { B_dData_dPair.f_Pair_first = dtb__409; B_dData_dPair.f_Pair_second = dtb__410 } -> (let nd_uscrut7 = (Vuna_dIr_dModel.v_irGroupDefs group) in (match nd_uscrut7 with
   | B_dData_dList.C_List__x58__x58_ (dtb__411, dtb__412) -> (match dtb__412 with
   | B_dData_dList.C_List_Nil -> (match (Vuna_dIr_dModel.v_irDefExtern dtb__411) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__413) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((Vuna_dTarget_dOcaml_dRender.v_joinWith "\n") ((B_dData_dList.v_map (fun (p : (Vuna_dIr_dModel.t_IrDef, Vuna_dTarget_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (v_renderDefOf (B_dData_dPair.v_secondOf p)))) dtb__409)); B_dData_dPair.f_Pair_second = dtb__410 }))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__413) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = ((Vuna_dTarget_dOcaml_dRender.v_joinWith "\n") ((B_dData_dList.v_map (fun (p : (Vuna_dIr_dModel.t_IrDef, Vuna_dTarget_dOcaml_dModel.t_ODef) B_dData_dPair.t_Pair) -> (v_renderDefOf (B_dData_dPair.v_secondOf (Obj.magic p))))) dtb__409)); B_dData_dPair.f_Pair_second = dtb__410 }))
   | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_bindGroupOf dtb__410) group) dtb__409); B_dData_dPair.f_Pair_second = dtb__410 }))
   | _ -> failwith "DT: impossible branch"
 )
@@ -1028,7 +1028,7 @@ let v_hookText = (fun (showText : string) (body : string) (printResult : bool) -
 # 3248 "Vuna/Target/Ocaml/Term.vuna"
 let v_genEntryHook = (fun (st : t_GenSt) (entry : Vuna_dIr_dModel.t_IrEntry) (printResult : bool) -> ((Base_dCommon.v_bind ((v_genIr st) (Vuna_dIr_dModel.v_irEntryShowOf entry))) (fun (sp : (Vuna_dTarget_dOcaml_dModel.t_OTerm, t_GenSt) B_dData_dPair.t_Pair) -> (match sp with
   | { B_dData_dPair.f_Pair_first = dtb__422; B_dData_dPair.f_Pair_second = dtb__423 } -> (if (Vuna_dIr_dModel.v_irEntryIsActionOf entry) then (match (Vuna_dIr_dModel.v_irEntryRunMainOf entry) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.v_icInternal "action entry has no runMain")
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Obj.magic (Base_dDiag.v_icInternal "action entry has no runMain"))
   | B_dData_dMaybe.C_Maybe_Just (dtb__424) -> (let mainP = ((v_genValueRef dtb__423) (Vuna_dIr_dModel.v_irEntryMainOf entry)) in (let st2 = (B_dData_dPair.v_secondOf mainP) in (let runP = ((v_genValueRef st2) dtb__424) in (let st3 = (B_dData_dPair.v_secondOf runP) in (match (((v_foldHandlers st3) (B_dData_dPair.v_firstOf mainP)) (Vuna_dIr_dModel.v_irEntryHandlersOf entry)) with
   | { B_dData_dPair.f_Pair_first = dtb__425; B_dData_dPair.f_Pair_second = dtb__426 } -> (let body = (String.concat "" ["dtp_sched_main (fun () -> "; (B_dData_dPair.v_firstOf runP); " "; dtb__425; ")"]) in (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (((v_hookText (Vuna_dTarget_dOcaml_dRender.v_renderTerm dtb__422)) body) printResult); B_dData_dPair.f_Pair_second = (dtb__426).f_GenSt_gsDeps })))
   | _ -> failwith "DT: impossible branch"

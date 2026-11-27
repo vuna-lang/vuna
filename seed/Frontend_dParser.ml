@@ -931,7 +931,7 @@ let rec v_patBinderBindings = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 wit
   | Frontend_dAst.C_Pat_PStr (dtb__293, dtb__294) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PInt (dtb__295, dtb__296) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PWild (dtb__297) -> B_dData_dList.C_List_Nil
-  | Frontend_dAst.C_Pat_PRecord (dtb__298, dtb__299, dtb__300) -> ((B_dData_dList.v_concatMap (fun (f : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patBinderBindings (B_dData_dPair.v_secondOf f)))) dtb__299)
+  | Frontend_dAst.C_Pat_PRecord (dtb__298, dtb__299, dtb__300) -> ((B_dData_dList.v_concatMap (fun (f : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patBinderBindings (B_dData_dPair.v_secondOf (Obj.magic f))))) dtb__299)
   | Frontend_dAst.C_Pat_PCon (dtb__301, dtb__302, dtb__303) -> ((B_dData_dList.v_concatMap v_patBinderBindings) dtb__302)
   | Frontend_dAst.C_Pat_PAs (dtb__304, dtb__305, dtb__306) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__304; B_dData_dPair.f_Pair_second = (Frontend_dAst.v_nodeRefSpan dtb__306) }, (v_patBinderBindings dtb__305)))
   | Frontend_dAst.C_Pat_PVar (dtb__307, dtb__308) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__307; B_dData_dPair.f_Pair_second = (Frontend_dAst.v_nodeRefSpan dtb__308) }, B_dData_dList.C_List_Nil))
@@ -1240,7 +1240,7 @@ and v_parseCase = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState) (b
 # 2375 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseCaseAlts = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState) (blockCol : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "parser") else (if (Frontend_dParser_dSupport.v_isEof st) then ((v_ps0 st) Base_dDiagnostics_dFrontend.C_PsDiag_CaseNeedsAlternative) else (match (Frontend_dParser_dSupport.v_peekPos st) with
   | { Base_dSource.f_Pos_posLine = dtb__404; Base_dSource.f_Pos_posCol = dtb__405; Base_dSource.f_Pos_posOffset = dtb__406; Base_dSource.f_Pos_posEndOffset = dtb__407 } -> (if (dtb__405 <= blockCol) then ((v_ps0 st) Base_dDiagnostics_dFrontend.C_PsDiag_CaseAltNotIndented) else ((Base_dCommon.v_step (((v_parseAltList (fuel - 1)) st) dtb__405)) (fun (alts : Frontend_dAst.t_Alt B_dData_dList.t_List) (st2 : Frontend_dParser_dSupport.t_PState) -> (if ((Frontend_dParser_dSupport.v_badCaseIndent st2) dtb__405) then ((v_ps0 st2) Base_dDiagnostics_dFrontend.C_PsDiag_UnexpectedIndentAfterCaseAlt) else (match alts with
-  | B_dData_dList.C_List_Nil -> ((v_ps0 st2) Base_dDiagnostics_dFrontend.C_PsDiag_CaseNeedsAlternative)
+  | B_dData_dList.C_List_Nil -> (Obj.magic ((v_ps0 st2) Base_dDiagnostics_dFrontend.C_PsDiag_CaseNeedsAlternative))
   | _ -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = alts; B_dData_dPair.f_Pair_second = st2 }))
 )))))
   | _ -> failwith "DT: impossible branch"
@@ -1258,7 +1258,7 @@ and v_parseAltBody = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState)
 and v_parsePerform = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState) (blockCol : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw st) "perform")) (fun (st1 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseApplication (fuel - 1)) st1) blockCol)) (fun (operand : Frontend_dAst.t_Expr) (st2 : Frontend_dParser_dSupport.t_PState) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = (Frontend_dAst.C_Expr_EApp ((Frontend_dAst.C_Expr_EVar ((Frontend_dReserved.v_reservedText Frontend_dReserved.C_Reserved_RsPerform), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf st) st2)))), (B_dData_dList.C_List__x58__x58_ (operand, B_dData_dList.C_List_Nil)), (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf st) st2)))); B_dData_dPair.f_Pair_second = st2 }))))))))
 # 2458 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandle = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState) (blockCol : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectKw st) "handle")) (fun (st1 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseHandleComp (fuel - 1)) st1) blockCol)) (fun (comp : Frontend_dAst.t_Expr) (st2 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((Frontend_dParser_dSupport.v_expectSym st2) "{")) (fun (st3 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_step (((v_parseHandleBody (fuel - 1)) st3) blockCol)) (fun (blk : t_HandleBlock) (st4 : Frontend_dParser_dSupport.t_PState) -> (match (((v_handleExpr comp) blk) (Frontend_dAst.v_detachedNodeRef ((Frontend_dParser_dSupport.v_spanOf st) st4))) with
-  | Base_dDiag.C_Check_ErrC (dtb__412) -> (Base_dDiag.C_Check_ErrC (dtb__412))
+  | Base_dDiag.C_Check_ErrC (dtb__412) -> (Obj.magic (Base_dDiag.C_Check_ErrC (dtb__412)))
   | Base_dDiag.C_Check_OkC (dtb__413) -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = dtb__413; B_dData_dPair.f_Pair_second = st4 }))
   | _ -> failwith "DT: impossible branch"
 )))))))))))
@@ -1313,7 +1313,7 @@ and v_parseHandleOpClause = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_
 # 2573 "Vuna/Compiler/Frontend/Parser.vuna"
 and v_parseHandleOpClauseBody = (fun (fuel : int) (st : Frontend_dParser_dSupport.t_PState) (clauseCol : int) (nid : int) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "parser") else ((Base_dCommon.v_step (((v_parsePatternSingle (Frontend_dParser_dSupport.v_stateFuel st)) st) clauseCol)) (fun (pat : Frontend_dAst.t_Pat) (st1 : Frontend_dParser_dSupport.t_PState) -> ((Base_dCommon.v_bind ((v_checkBindersAt st) (B_dData_dList.C_List__x58__x58_ (pat, B_dData_dList.C_List_Nil)))) (fun (_u : Frontend_dAst.t_Pat B_dData_dList.t_List) -> (match pat with
   | Frontend_dAst.C_Pat_PCon (dtb__438, dtb__439, dtb__440) -> (match (B_dData_dList.v_reverse dtb__439) with
-  | B_dData_dList.C_List_Nil -> ((Base_dDiagnostics_dFrontend.v_psErr0At (Frontend_dAst.v_nodeRefSpan dtb__440)) Base_dDiagnostics_dFrontend.C_PsDiag_HandleClauseNeedsCtor)
+  | B_dData_dList.C_List_Nil -> (Obj.magic ((Base_dDiagnostics_dFrontend.v_psErr0At (Frontend_dAst.v_nodeRefSpan dtb__440)) Base_dDiagnostics_dFrontend.C_PsDiag_HandleClauseNeedsCtor))
   | B_dData_dList.C_List__x58__x58_ (dtb__441, dtb__442) -> (match dtb__441 with
   | Frontend_dAst.C_Pat_PVar (dtb__443, dtb__444) -> (((((((((v_handleOpTail (fuel - 1)) st) st1) clauseCol) dtb__438) (B_dData_dList.v_reverse dtb__442)) dtb__440) nid) dtb__443)
   | Frontend_dAst.C_Pat_PWild (dtb__445) -> (((((((((v_handleOpTail (fuel - 1)) st) st1) clauseCol) dtb__438) (B_dData_dList.v_reverse dtb__442)) dtb__440) nid) "_")

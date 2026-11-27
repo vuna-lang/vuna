@@ -2,7 +2,7 @@ open Vuna_runtime
 type t_UnboxedCand = { f_UnboxedCand_unboxedCandName : string; f_UnboxedCand_unboxedCandCtor : Elab_dTypes.t_DtCtor; f_UnboxedCand_unboxedCandIndex : int }
 
 # 26 "Vuna/Compiler/Elab/Representation.vuna"
-let v_ctorKeepFlags = (fun (c : Elab_dTypes.t_DtCtor) -> ((B_dData_dList.v_map (fun (b : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased (B_dData_dPair.v_secondOf b))))) (Elab_dTypes.v_dtCtorTelescope c)))
+let v_ctorKeepFlags = (fun (c : Elab_dTypes.t_DtCtor) -> ((B_dData_dList.v_map (fun (b : (string, Core_dTerm.t_Rig) B_dData_dPair.t_Pair) -> (B_dData_dBool.v_not (Core_dTerm.v_rigIsErased (B_dData_dPair.v_secondOf (Obj.magic b)))))) (Elab_dTypes.v_dtCtorTelescope c)))
 
 # 34 "Vuna/Compiler/Elab/Representation.vuna"
 let[@tail_mod_cons] rec v_keptIndicesGo = (fun (mc0 : bool B_dData_dList.t_List) (mc1 : int) -> (match mc0 with

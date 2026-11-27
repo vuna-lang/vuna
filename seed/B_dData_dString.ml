@@ -36,7 +36,7 @@ let v_join = (fun (sep : string) (xs : string B_dData_dList.t_List) -> (B_dData_
 # 76 "Base/Data/String.vuna"
 let v_unlines = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List_Nil -> ""
-  | _ -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map (fun (x : string) -> (((B_dTrait_dInterp.v_interp B_dTrait_dInterp.v_Interp_uc9feaa570847b590_uString) x) ^ "\n"))) mc0))
+  | _ -> (B_dData_dList.dtp_concatMany ((B_dData_dList.v_map (fun (x : string) -> (((B_dTrait_dInterp.v_interp B_dTrait_dInterp.v_Interp_uc9feaa570847b590_uString) (Obj.magic x)) ^ "\n"))) mc0))
 ))
 
 # 146 "Base/Data/String.vuna"

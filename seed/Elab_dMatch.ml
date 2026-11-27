@@ -356,7 +356,7 @@ let rec v_stripFirstCol = (fun (mc0 : (Frontend_dAst.t_Pat B_dData_dList.t_List,
 
 # 537 "Vuna/Compiler/Elab/Match.vuna"
 let rec v_patNamesOf = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
-  | Frontend_dAst.C_Pat_PRecord (dtb__147, dtb__148, dtb__149) -> ((B_dData_dList.v_concatMap (fun (f : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patNamesOf (B_dData_dPair.v_secondOf f)))) dtb__148)
+  | Frontend_dAst.C_Pat_PRecord (dtb__147, dtb__148, dtb__149) -> ((B_dData_dList.v_concatMap (fun (f : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patNamesOf (B_dData_dPair.v_secondOf (Obj.magic f))))) dtb__148)
   | Frontend_dAst.C_Pat_PStr (dtb__150, dtb__151) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PInt (dtb__152, dtb__153) -> B_dData_dList.C_List_Nil
   | Frontend_dAst.C_Pat_PCon (dtb__154, dtb__155, dtb__156) -> ((B_dData_dList.v_concatMap v_patNamesOf) dtb__155)

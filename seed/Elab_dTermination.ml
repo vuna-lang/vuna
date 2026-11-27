@@ -4,7 +4,7 @@ type t_FailCandidate = { f_FailCandidate_fcRank : int; f_FailCandidate_fcPos : i
 # 16 "Vuna/Compiler/Elab/Termination.vuna"
 let rec v_patNames = (fun (mc0 : Frontend_dAst.t_Pat) -> (match mc0 with
   | Frontend_dAst.C_Pat_PWild (dtb__0) -> B_dData_dList.C_List_Nil
-  | Frontend_dAst.C_Pat_PRecord (dtb__1, dtb__2, dtb__3) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patNames (B_dData_dPair.v_secondOf q)))) dtb__2)
+  | Frontend_dAst.C_Pat_PRecord (dtb__1, dtb__2, dtb__3) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Pat) B_dData_dPair.t_Pair) -> (v_patNames (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__2)
   | Frontend_dAst.C_Pat_PCon (dtb__4, dtb__5, dtb__6) -> ((B_dData_dList.v_concatMap v_patNames) dtb__5)
   | Frontend_dAst.C_Pat_PAs (dtb__7, dtb__8, dtb__9) -> (B_dData_dList.C_List__x58__x58_ (dtb__7, (v_patNames dtb__8)))
   | Frontend_dAst.C_Pat_PVar (dtb__10, dtb__11) -> (B_dData_dList.C_List__x58__x58_ (dtb__10, B_dData_dList.C_List_Nil))
@@ -66,8 +66,8 @@ and v_exprRefsBF = (fun (fuel : int) (bound : string B_dData_dList.t_List) (e : 
   | Frontend_dAst.C_Expr_ECase (dtb__52, dtb__53, dtb__54) -> ((B_dData_dList.v_append (((v_exprRefsBF (fuel - 1)) bound) dtb__52)) ((B_dData_dList.v_concatMap (fun (alt : Frontend_dAst.t_Alt) -> (((v_exprRefsBF (fuel - 1)) ((B_dData_dList.v_append (v_patNames (v_altPatOf alt))) bound)) (v_altBodyOf alt)))) dtb__53))
   | Frontend_dAst.C_Expr_EIf (dtb__55, dtb__56, dtb__57, dtb__58) -> ((B_dData_dList.v_append (((v_exprRefsBF (fuel - 1)) bound) dtb__55)) ((B_dData_dList.v_append (((v_exprRefsBF (fuel - 1)) bound) dtb__56)) (((v_exprRefsBF (fuel - 1)) bound) dtb__57)))
   | Frontend_dAst.C_Expr_EField (dtb__59, dtb__60, dtb__61) -> (((v_exprRefsBF (fuel - 1)) bound) dtb__59)
-  | Frontend_dAst.C_Expr_ERecord (dtb__62, dtb__63, dtb__64) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprRefsBF (fuel - 1)) bound) (B_dData_dPair.v_secondOf q)))) dtb__63)
-  | Frontend_dAst.C_Expr_ERecUpdate (dtb__65, dtb__66, dtb__67) -> ((B_dData_dList.v_append (((v_exprRefsBF (fuel - 1)) bound) dtb__65)) ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprRefsBF (fuel - 1)) bound) (B_dData_dPair.v_secondOf q)))) dtb__66))
+  | Frontend_dAst.C_Expr_ERecord (dtb__62, dtb__63, dtb__64) -> ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprRefsBF (fuel - 1)) bound) (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__63)
+  | Frontend_dAst.C_Expr_ERecUpdate (dtb__65, dtb__66, dtb__67) -> ((B_dData_dList.v_append (((v_exprRefsBF (fuel - 1)) bound) dtb__65)) ((B_dData_dList.v_concatMap (fun (q : (string, Frontend_dAst.t_Expr) B_dData_dPair.t_Pair) -> (((v_exprRefsBF (fuel - 1)) bound) (B_dData_dPair.v_secondOf (Obj.magic q))))) dtb__66))
   | Frontend_dAst.C_Expr_EDo (dtb__68, dtb__69) -> (((v_refsOfStmtsF (fuel - 1)) bound) dtb__68)
   | _ -> B_dData_dList.C_List_Nil
 )))
@@ -207,7 +207,7 @@ let v_graphFuel = (fun (g : (string, string B_dData_dList.t_List) B_dData_dPair.
 # 191 "Vuna/Compiler/Elab/Termination.vuna"
 let rec v_dfsPost = (fun (steps : (string, bool) B_dData_dPair.t_Pair B_dData_dList.t_List) (fuel : int) (g : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (visited : (string, bool) B_dContainer_dHashMap.t_HashMap) (post : string B_dData_dList.t_List) -> (if (fuel <= 0) then { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = post } else (let nd_uscrut5 = steps in (match nd_uscrut5 with
   | B_dData_dList.C_List__x58__x58_ (dtb__110, dtb__111) -> (match dtb__110 with
-  | { B_dData_dPair.f_Pair_first = dtb__112; B_dData_dPair.f_Pair_second = dtb__113 } -> (if dtb__113 then (((((v_dfsPost dtb__111) (fuel - 1)) g) visited) (B_dData_dList.C_List__x58__x58_ (dtb__112, post))) else (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__112) visited) then (((((v_dfsPost dtb__111) (fuel - 1)) g) visited) post) else (((((v_dfsPost ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (m : string) -> { B_dData_dPair.f_Pair_first = m; B_dData_dPair.f_Pair_second = false })) ((v_adjOf dtb__112) g))) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__112; B_dData_dPair.f_Pair_second = true }, dtb__111)))) (fuel - 1)) g) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__112) true) visited)) post)))
+  | { B_dData_dPair.f_Pair_first = dtb__112; B_dData_dPair.f_Pair_second = dtb__113 } -> (if dtb__113 then (((((v_dfsPost dtb__111) (fuel - 1)) g) visited) (B_dData_dList.C_List__x58__x58_ (dtb__112, post))) else (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__112) visited) then (((((v_dfsPost dtb__111) (fuel - 1)) g) visited) post) else (((((v_dfsPost ((B_dData_dList.v_append ((B_dData_dList.v_map (fun (m : string) -> { B_dData_dPair.f_Pair_first = (Obj.magic m); B_dData_dPair.f_Pair_second = false })) ((v_adjOf dtb__112) g))) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__112; B_dData_dPair.f_Pair_second = true }, dtb__111)))) (fuel - 1)) g) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__112) true) visited)) post)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = visited; B_dData_dPair.f_Pair_second = post }
