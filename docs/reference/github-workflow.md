@@ -384,6 +384,8 @@ nix/tools/merge-queue.sh status
   **Rebase stack** 时先级联（`gh stack rebase`），不要单独重试该层。
 - stack 入队后只落了前几层：队列按组推进，剩余层留在后续组；某层被 eject 时上方一起移除，
   修根因后从 top 重新 arm + enqueue。
+- `gh stack link` 报 “has auto-merge enabled”：先对每层 `merge-queue.sh disarm <pr>`；或把 PR
+  先开成 draft，`link` 完再 `ready_for_review`，让 automerge 按 stack 整条 arm。
 - `gh stack` 不存在：`gh extension install github/gh-stack`；`gh stack` 与 `gh pr merge` 的
   行为不同，合 stack 不要用后者。
 - `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
