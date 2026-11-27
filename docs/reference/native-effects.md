@@ -225,7 +225,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 | 命名效应模块 | 12 个（`packages/base/lib/Base/Eff*.vuna` + `Eff/Reader.vuna`）：标签是 op 族应用 |
 | `Eff [` 闭行 | `packages/base/lib` 与 `test` 的行字面量写成 `Named n <Op> :: …` / `[<Op>@name]` |
 | `rowRem`/`Member (` | `packages/base/lib` 约 50 处按行条目（`Named n <Op>` 或裸标签）写 |
-| 测试夹具 | `dt_base/11–45,74–82`、`corpus/effect/*`、`corpus/pure_cross/07_eff_main`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
+| 测试夹具 | `dt_base/11–45,74–82`、`corpus/effect/*`、`effect_common/108_eff_answer_fn`、`pure_cross/97_eff_state_answer_fn`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
 | 文档 | `effects.md`、`effects-layers.md`、`stdlib.md`、`language.md`、`type-system.md`、`label:debt` 的 issue、本文 |
 
 ## 8. 测试与验收
@@ -328,6 +328,11 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   与该模式相邻的后续 `::` 分支会触发 `TC_RedundantCtorBranch`（无位置信息 `:0:0`，
   覆盖检查判定与 codegen 解糖不一致）。因此模式里不写 `Nil`/`[]` 结尾；用上面的长度判别
   形态同时规避两者。
+- **延迟 answer 的 one-shot**：answer 是函数时（`handleState` 的 `s -> Pair a s`）答案函数
+  逃逸到 `MkHandle` 之外；机器层的 one-shot 由续延槽 epoch 在单个 `MSt` 内保证，逃逸后
+  两次应用会各自从 `MkSeed` 快照重跑（线性 `Cont` 仍在用量检查阶段拒绝）。库 handler 的
+  `opH` 必须把 resumption 之后的多余参数写成 `k ... extra` 形状（夹具见
+  `effect_common/108_eff_answer_fn`、`pure_cross/97_eff_state_answer_fn`）。
 
 ## 10. 实例名可选
 
@@ -381,8 +386,11 @@ native 与 wasm 都跑 `Base.Effect.Core` 的库机器（`Control` 循环 + hand
 `prim_effectHandleId` 只在 lowering 的派发 pass 之后作为机器步骤的构造入口，
 不再由后端各自实现续延。
 
-旧栈拷贝实现（`Native.Runtime` 的 `rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段）已删除；
-延迟 answer 的 handler 边界见 gh#37。
+旧栈拷贝实现（`Native.Runtime` 的 `rt_eff_*`、`rt_handlers`、捕获缓冲与迁移栈段）已删除。
+延迟 answer 的 handler（`opH` / `ret` 返回函数）与普通 handler 走同一套帧：clause 的
+answer 参数收进内层 lambda，答案函数被应用时由 `runDetached` + `MkSeed` 快照重驱续延；
+三端共享夹具 `effect_common/108_eff_answer_fn` 与 `pure_cross/97_eff_state_answer_fn`
+（`handleState` 的 `s -> Pair a s`）覆盖。
 
 wasm 后端与 native 一样用 base 的显式效应机器实现 handler（见 [effect-machine.md](effect-machine.md)）；
 效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的

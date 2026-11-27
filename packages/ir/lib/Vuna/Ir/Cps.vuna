@@ -85,6 +85,10 @@ runEffName = "Base.Effect.Core.runEff"
 runMainName : String
 runMainName = "Base.Effect.Core.runMain"
 
+-- | 延迟 answer 的恢复入口（`MkSeed` 快照重新驱动续延）。
+runDetachedName : String
+runDetachedName = "Base.Effect.Core.runDetached"
+
 handleScopedName : String
 handleScopedName = "Base.Effect.Core.handleScoped"
 
@@ -565,6 +569,41 @@ mIsResumeAppGo r (e@(IrApp _ _ _)) =
         [] => False
 mIsResumeAppGo r _ = False
 
+-- | 把 resumption 应用脊拆成「resume 调用（`k v` 或 `prim_erase k v`）」与
+-- 「answer 参数」：answer 是函数时（`b = s -> …`），`k v a1 … an` 里 `a1 … an`
+-- 属于答案函数，不是续延的实参。
+mResumeSplit : IrBinder -> Ir -> Maybe (Ir, List Ir)
+mResumeSplit r e0 =
+  let
+    e = mStripErase e0
+    p = flattenApp e
+    h = firstOf p
+    args = secondOf p
+  in case h of
+    IrRt "prim_erase" =>
+      case args of
+        x0 :: rest =>
+          if mIsVarOf r x0 then
+            case rest of
+              v :: extras => Just (applyAll h [x0, v], extras)
+              [] => Nothing
+          else
+            Nothing
+        [] => Nothing
+    _ =>
+      if mIsVarOf r h then
+        case args of
+          v :: extras => Just (applyAll h [v], extras)
+          [] => Nothing
+      else
+        Nothing
+
+mIsVarOf : IrBinder -> Ir -> Bool
+mIsVarOf r x =
+  case mEraseHead x of
+    IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
+    _ => False
+
 mFreshV : Int -> IrBinder
 mFreshV n = mkBinderAt (cpsSynthId 5 n 0) ("__mchV" ++ strFromInt n)
 
@@ -735,6 +774,101 @@ mHandlerLam fuel bs body =
         (append bs [kd, rs])
         Nothing
         (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) body))
+
+-- | 把 clause 的运行时参数分成协议前缀（op + resumption）与 answer 参数。
+-- answer 是函数时（`b = s -> Pair a s`），resumption 之后多出来的运行时参数属于答案
+-- 函数；机器只按 `(op, k, kDone, runScoped)` 调用 clause，answer 参数留给另一层 lambda。
+-- 第 2 个运行时参数之后的擦除 binder 不是 answer 参数，留在外层 lambda。
+splitClauseParams : Int -> List IrBinder -> List IrBinder -> Maybe (List IrBinder, List IrBinder, IrBinder)
+splitClauseParams seen acc [] = Nothing
+splitClauseParams seen acc (b :: rest) =
+  if binderErased b then
+    splitClauseParams seen (b :: acc) rest
+  else if seen <= 0 then
+    splitClauseParams 1 (b :: acc) rest
+  else
+    let
+      prefix = reverse (b :: acc)
+      answerParams = runtimeBinders rest
+      erasedTail = filter (\x => binderErased x) rest
+    in case answerParams of
+      [] => Just (append prefix rest, [], b)
+      _ => Just (append prefix erasedTail, answerParams, b)
+
+-- | 延迟 answer 的 clause 体是**直接风格**：它返回答案函数，答案函数被调用时
+-- 外层机器已经返回。resumption `k v a1 … an`（`a1 … an` 是答案函数的实参）
+-- 改成 `runDetached (k v (MkRestCont (\r -> kd (r a1 … an))))`：用 `MkSeed`
+-- 里记录的机器快照重新驱动续延，段答案先应用到答案参数，再交回机器。
+mDetachedExpr : Int -> IrBinder -> Ir -> Ir -> Ir
+mDetachedExpr fuel r kd e =
+  if fuel <= 0 then
+    e
+  else
+    case mResumeSplit r e of
+      Just (call, extras) =>
+        case extras of
+          [] => e
+          _ =>
+            let
+              rv = mFreshV fuel
+              answerCont = IrLam [rv] (Just IrTyOpaque) (IrApp (Just (IrTyOpaque, IrTyOpaque)) kd (applyAll (IrVar rv) extras))
+              rest = IrCtor "Base.Effect.Core.Rest" "Base.Effect.Core.Rest.MkRestCont" Nothing [answerCont]
+              resumed = IrApp (Just (IrTyOpaque, IrTyOpaque)) call rest
+            in IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrGlobal runDetachedName) resumed
+      Nothing =>
+        case e of
+          IrCtor fam ctor tyArgs args => IrCtor fam ctor tyArgs (mDetList (fuel - 1) r kd args)
+          IrRecord fam resTy fields => IrRecord fam resTy (mDetFields (fuel - 1) r kd fields)
+          IrProj base fam field resTy => IrProj (mDetachedExpr (fuel - 1) r kd base) fam field resTy
+          IrRecUpd base fam fields resTy => IrRecUpd (mDetachedExpr (fuel - 1) r kd base) fam (mDetFields (fuel - 1) r kd fields) resTy
+          IrRtApp sym args => IrRtApp sym (mDetList (fuel - 1) r kd args)
+          IrCast cFrom cTo inner => IrCast cFrom cTo (mDetachedExpr (fuel - 1) r kd inner)
+          IrLet binders scrut inner => IrLet binders (mDetachedExpr (fuel - 1) r kd scrut) (mDetachedExpr (fuel - 1) r kd inner)
+          IrLam binders rt inner => IrLam binders rt (mDetachedExpr (fuel - 1) r kd inner)
+          IrApp appTy f a => IrApp appTy (mDetachedExpr (fuel - 1) r kd f) (mDetachedExpr (fuel - 1) r kd a)
+          IrTail inner => IrTail (mDetachedExpr (fuel - 1) r kd inner)
+          IrIf c t el => IrIf (mDetachedExpr (fuel - 1) r kd c) (mDetachedExpr (fuel - 1) r kd t) (mDetachedExpr (fuel - 1) r kd el)
+          IrCase caseTy resTy scrut alts => IrCase caseTy resTy (mDetachedExpr (fuel - 1) r kd scrut) (mDetAlts (fuel - 1) r kd alts)
+          IrNatCase scrut fr z su ca => IrNatCase (mDetachedExpr (fuel - 1) r kd scrut) fr (mDetAltM (fuel - 1) r kd z) (mDetAltM (fuel - 1) r kd su) (mDetAltM (fuel - 1) r kd ca)
+          IrConcatMany parts => IrConcatMany (mDetList (fuel - 1) r kd parts)
+          IrEffThunk fam ctor unitTy arity prim => IrEffThunk fam ctor unitTy arity (mDetachedExpr (fuel - 1) r kd prim)
+          _ => e
+
+mDetList : Int -> IrBinder -> Ir -> List Ir -> List Ir
+mDetList fuel r kd xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => mDetachedExpr (fuel - 1) r kd x :: mDetList (fuel - 1) r kd rest
+
+mDetFields : Int -> IrBinder -> Ir -> List (String, Ir) -> List (String, Ir)
+mDetFields fuel r kd fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => (firstOf p, mDetachedExpr (fuel - 1) r kd (secondOf p)) :: mDetFields (fuel - 1) r kd rest
+
+mDetAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
+mDetAlts fuel r kd alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (mDetachedExpr (fuel - 1) r kd a.irAltBody) :: mDetAlts (fuel - 1) r kd rest
+
+mDetAltM : Int -> IrBinder -> Ir -> Maybe IrAlt -> Maybe IrAlt
+mDetAltM fuel r kd m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mDetachedExpr (fuel - 1) r kd a.irAltBody))
 
 mListH : Int -> List Ir -> List Ir
 mListH fuel xs =
@@ -1256,8 +1390,9 @@ mHandlerFun fuel body =
   else
     case body of
       IrLam bs _ inner =>
-        case runtimeBinders bs of
-          _ :: r :: _ =>
+        case splitClauseParams 0 [] bs of
+          Nothing => body
+          Just (prefix, extra, r) =>
             let
               -- opH / 全局 clause 的续延：resume 落在函数尾位置时就是段边界，用尾标记让
               -- `mCps` 发 `MkRestTail`（否则循环型 opH 每次 perform 都压一层 ctx/槽，
@@ -1265,9 +1400,21 @@ mHandlerFun fuel body =
               -- resume 仍走 `MkRestCont`——标记只沿尾位置传播。
               kd = mFreshTailK fuel
               rs = mFreshR fuel
-            in IrLam (append bs [kd, rs]) (Just IrTyOpaque) (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
-          _ => body
+            in case extra of
+              [] => IrLam (append prefix [kd, rs]) (Just IrTyOpaque) (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
+              _ =>
+                let
+                  -- answer 是函数：clause 返回 `b`（尾部参数属于答案），机器调用它时
+                  -- 立刻拿到答案函数并弹帧；答案函数被外部应用时由 `runDetached` 恢复。
+                  answer = IrLam extra (Just IrTyOpaque) (mScopedCalls (fuel - 1) rs (mDetachedExpr (fuel - 1) r (IrVar kd) inner))
+                in IrLam (append prefix [kd, rs]) (Just IrTyOpaque) (IrApp (Just (IrTyOpaque, IrTyOpaque)) (IrVar kd) answer)
       _ => body
+
+-- | 顶层函数的运行时 arity（擦除 binder 不计）。延迟 answer 的 clause 把 answer 参数
+-- 收进内层 lambda，所以不能再按 `原 arity + 2` 估算。
+lamRuntimeArity : Int -> Ir -> Int
+lamRuntimeArity fallback (IrLam bs _ _) = lenOf (runtimeBinders bs)
+lamRuntimeArity fallback _ = fallback
 
 mDef : List String -> Int -> IrDef -> IrDef
 mDef handlers fuel d =
@@ -1283,17 +1430,18 @@ mDef handlers fuel d =
             case mCleanupDef n body of
               Just b1 => b1
               Nothing => if marked then mHandlerFun (fuel - 1) body else body
-          ar2 = if marked then ar + 2 else ar
+          ar2 = if marked then lamRuntimeArity (ar + 2) h else ar
           -- handler def 的运行时 arity 多出 kDone / runScoped 两个参数，原签名不再匹配；
           -- 其余 def 的签名在 CPS 前后不变，原样保留。
           sigTy1 = if ar2 == ar then sigTy else Nothing
           b = mSyms (fuel - 1) (mHandlers (fuel - 1) h)
+          deps1 = if irMentionsGlobal runDetachedName b then addDepOnce runDetachedName deps else deps
         in if n == runPureName || n == runEffName || n == runMainName then
           case mTrampolineBody n b of
-            Ok b1 => IrDef n ar2 deps sigTy1 b1 r g sp
-            Err _ => IrDef n ar2 deps sigTy1 b r g sp
+            Ok b1 => IrDef n ar2 deps1 sigTy1 b1 r g sp
+            Err _ => IrDef n ar2 deps1 sigTy1 b r g sp
         else
-          IrDef n ar2 deps sigTy1 b r g sp
+          IrDef n ar2 deps1 sigTy1 b r g sp
 
 mDefs : List String -> Int -> List IrDef -> List IrDef
 mDefs handlers fuel ds =
@@ -1611,6 +1759,11 @@ foldAppMap fuel acc xs =
 -- | 机器 pass 注入的运行时全局；`mSteps` 只在本模块产生这条引用，deps 必须跟着体走。
 machineRunGlobal : String
 machineRunGlobal = "Base.Effect.Core.machineRun"
+
+-- | 后端可达性的机器根：机器循环 + 延迟 answer 的恢复入口（`runDetached` 只在
+-- CPS 之后才被引用，可达性在 CPS 之前算，必须显式播种）。
+export machineSeedRoots : List String
+machineSeedRoots = [machineRunGlobal, runDetachedName]
 
 addDepOnce : String -> List String -> List String
 addDepOnce d ds = if memName d ds then ds else append ds [d]

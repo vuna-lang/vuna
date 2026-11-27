@@ -4393,7 +4393,7 @@ build program printResult =
                       Nothing => append [mainName] (irEntryHandlersOf e)
                   seeds0 = if kind == "float" then floatRenderName :: baseSeeds else baseSeeds
                   reach0 = reachableDefs seeds0 defs
-                  seeds = if usesMachineLoop reach0 then "Base.Effect.Core.machineRun" :: seeds0 else seeds0
+                  seeds = if usesMachineLoop reach0 then append machineSeedRoots seeds0 else seeds0
                   ordered = if usesMachineLoop reach0 then reachableDefs seeds defs else reach0
                 in case Passes.passSpan Passes.nativeCps (\_ => cpsDefsMachine ordered) of
                   Err msg => NativeRejected (NativeUnsupported msg)

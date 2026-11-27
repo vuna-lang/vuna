@@ -140,8 +140,7 @@ OCaml 的峰值按**进程树**计（`vuna` 把命令派给 `vuna-toolchain` 子
 
 `92_eff_thread_mutex_cond` 的失败（corpus scope）在编译器侧复现：native 编译该夹具 572 s（无诊断
 585 s）/ 912 MB，OCaml 42 s。它不靠大 live（只有 118 MB），而是 **5,735 次回收 × 平均 39 MB 栈跨度**
-——累计保守扫栈 225 GB。深层递归的编译器阶段每次回收都按 `gh#37）；`handleState` 这类 answer 类型是
-  函数的库 handler 三端不一致（gh#38）。
+——累计保守扫栈 225 GB。深层递归的编译器阶段每次回收都按栈跨度保守扫描，这是 native 自举成本的主体。
 - **多线程**：`clone` + futex 与 STW GC 可用；宿主持有态按线程隔离（状态槽 / cleanup 链在 TCB，
   路径等固定缓冲在每线程 scratch），阻塞的宿主 syscall 也发布停车标记；线程体仍是
   `Eff []`，宿主效应族要在 worker 体内显式装 handler（`runFsHost`，见

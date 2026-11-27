@@ -1,4 +1,5 @@
--- `main : Eff [] a` 入口（行已处理干净的动作）；纯 handler 在入口前把行消掉。
+-- 延迟 answer 的库 handler：`handleState` 的 `ret` / `opH` 返回「等待 state 的函数」，
+-- resume 发生在 `MkHandle` 返回之后（三端共享期望）。
 import Base.Effect.Core as Eff
 import Base.Effect.State as EffState
 import Base.Data.Pair as Pair

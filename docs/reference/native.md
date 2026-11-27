@@ -213,9 +213,10 @@ native 与 wasm 跑同一份**库机器**（`Base.Effect.Core.Control` 循环，
 - **one-shot**：续延槽 → epoch 表（`MSt.msUsed`）拒绝重放；尾 resume 复用 `tailSlot`。
 - 宿主 handler 与用户 handler 走同一套 `MkHandle`，没有「宿主直连」旁路。
 - GC 沿帧保守扫根（[native-runtime.md](native-runtime.md) §1.2）；handler 帧与续延都在堆上，随栈槽与 cleanup 链可达。
-
-延迟 answer（`opH` 返回函数、`resume` 发生在 `MkHandle` 返回之后）仍不支持，见
-gh#37。
+- **延迟 answer**（`opH` 返回函数，如 `handleState` 的 `s -> Pair a s`，`resume` 发生在
+  `MkHandle` 返回之后）：clause 按 `(op, k, kDone, runScoped)` 调用、把 answer 参数收进
+  内层 lambda，机器拿到答案函数后正常弹帧；答案函数被应用时由 `Base.Effect.Core.runDetached`
+  用 `MkSeed` 快照重新驱动续延（见 [effect-machine.md](effect-machine.md) §11）。
 
 ### 3.5 高阶参数特化
 

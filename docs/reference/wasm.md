@@ -482,6 +482,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 - **显式效应机器**（`Ir.Cps` + `Base.Effect.Core.Control`）：其余程序整片走 `@ir@m@*`——续延只返回
   `Control`（`Done`/`Apply`/`Perform`/`Handle`），机器循环单层派发；handler 帧在链上，
   answer 是 `Eff` 时 resume 会把帧装回去。宿主家族、用户 handler、作用域 handler 同一套帧。
+  answer 是函数（`handleState` 的 `s -> Pair a s`）时，clause 只按四参协议被调用、答案
+  函数逃逸后由 `runDetached` + `MkSeed` 快照重驱续延（[effect-machine.md](effect-machine.md) §9.7）。
 - **清理钩子**：`bracket`/`finally` 经 `prim_cleanupPush/Pop` 维护 LIFO，机器在弹帧前
   按帧深度跑（`Base.Effect.Core.dropCleanups`）。
 

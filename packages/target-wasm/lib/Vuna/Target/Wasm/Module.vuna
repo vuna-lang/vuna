@@ -2257,11 +2257,11 @@ build program printResult =
           case irEntryShowOf e of
             IrRt "@ir@showFloat" =>
               reachableDefs
-                (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds)))
+                (append machineSeedRoots (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds)))
                 defs
             _ =>
               reachableDefs
-                (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e] (append runSeeds handlerSeeds)))
+                (append machineSeedRoots (append [irEntryMainOf e] (append runSeeds handlerSeeds)))
                 defs
         listShapeM =
           Layout.irListShapeOf (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
@@ -2271,7 +2271,7 @@ build program printResult =
           case irEntryRunMainOf e of
             Just rm => rm
             Nothing => ""
-        roots = append ["Base.Effect.Core.machineRun", irEntryMainOf e] runSeeds
+        roots = append machineSeedRoots (append [irEntryMainOf e] runSeeds)
         rewrittenAll = Passes.passSpan Passes.wasmHostRewrite (\_ => map (rwDef runName) defs)
         tblAll = HashMap.fromList (map (\d => (irDefName d, d)) rewrittenAll)
         rewritten =
