@@ -607,25 +607,38 @@ export countArrows : Expr -> Int
 countArrows (EApp (EVar "->" _) [x, rest] _) = 1 + countArrows rest
 countArrows _ = 0
 
-export terminatesExpression : PTok -> Bool
-terminatesExpression (PTok (TSym ")") p) = True
-terminatesExpression (PTok (TSym "]") p) = True
-terminatesExpression (PTok (TSym ",") p) = True
-terminatesExpression (PTok (TKw "else") p) = True
-terminatesExpression (PTok (TKw "in") p) = True
-terminatesExpression (PTok (TKw "then") p) = True
-terminatesExpression _ = False
-
+-- | 分支块之后、比分支列更深的 token 是否是缩进错误。
+--
+-- 判据看 token 在语法里的**位置角色**：表达式之后只可能出现「收束外层构造」的 token
+-- （闭括号、分隔符、`then` / `else` / `in` / `of` / `where` 这些收尾关键字）。
+-- 它们不属于 case 分支，出现在更深处是外层写法的正常排版；其余 token（分支体里
+-- 没被消费完的残片、写歪的模式原子、`=` / `=>` 这类语法边界）才是缩进错误。
+-- 闭括号由 `tokBracketStep` 结构化判定，不枚举具体符号，新增括号种类自动覆盖。
+--
+-- 分支体自身的续行（运算符 / 应用实参）比分支列更深是合法的，它们在 `parseExpr`
+-- 里已经被消费，走不到这里。
 export badCaseIndent : PState -> Int -> Bool
 badCaseIndent st altCol =
   if isEof st then
     False
   else
     case peekPos st of
-      Pos line col _ _ =>
-        if col > altCol then
-          case terminatesExpression (peekTok st) of
-            True => False
-            False => True
-        else
-          False
+      Pos line col _ _ => col > altCol && not (followsExpression (peekTok st))
+
+-- 是否属于「表达式之后的收尾 token」：闭括号（深度 1 上下降）、分隔符、收尾关键字。
+followsExpression : PTok -> Bool
+followsExpression (PTok (TSym ",") _) = True
+followsExpression (PTok (TSym ";") _) = True
+followsExpression (PTok (TKw "then") _) = True
+followsExpression (PTok (TKw "else") _) = True
+followsExpression (PTok (TKw "in") _) = True
+followsExpression (PTok (TKw "of") _) = True
+followsExpression (PTok (TKw "where") _) = True
+followsExpression (PTok tok _) = closesAtDepthOne tok
+
+-- 括号深度 1 上看到闭括号 ⇒ 这个 token 关掉的是外层构造。
+closesAtDepthOne : Tok -> Bool
+closesAtDepthOne tok =
+  case tokBracketStep tok 1 of
+    Just d => d == 0
+    Nothing => False

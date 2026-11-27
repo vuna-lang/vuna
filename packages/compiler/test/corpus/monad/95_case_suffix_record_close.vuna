@@ -1,0 +1,29 @@
+-- case 结果上的记录收尾：`}` 在最后一条分支体之后、比分支列更深，它是记录字面量的
+-- 收尾，不是分支缩进错误。
+trait Monad m where
+  (>>=) : m a -> (a -> m b) -> m b
+  pure : a -> m a
+
+data Maybe a : Type where
+  Nothing : Maybe a
+  Just : a -> Maybe a
+
+instance Monad Maybe where
+  (>>=) m f = case m of
+    Nothing => Nothing
+    Just x => f x
+  pure x = Just x
+
+record Box where
+  value : Int
+
+boxed : Maybe Box
+boxed = do
+  pure Box { value = case 1 of
+                      0 => 0
+                      n => n }
+
+main : String
+main = case boxed of
+  Nothing => "Nothing"
+  Just b => strFromInt b.value
