@@ -270,15 +270,17 @@ export dtFileHasModuleHeader : Member nFs FsOp r, Member nEnv EnvOp r, Member nP
 dtFileHasModuleHeader path =
   do
     text <- fsReadFile path
-    parsed <- parseFileWithPath path text
-    pure (
-        case parsed of
-          OkC parsedFile =>
-            case firstOf parsedFile of
-              SourceFile (Just _) _ _ _ _ _ _ => True
-              _ => False
-          _ => False
-      )
+    pure (dtSourceHasModuleHeader path text)
+
+-- | 源码文本是否带 `module` 头（`dtFileHasModuleHeader` 的纯判定；调用方已读文本时用）。
+export dtSourceHasModuleHeader : String -> String -> Bool
+dtSourceHasModuleHeader path text =
+  case parseSource path text of
+    ErrC _ => False
+    OkC parsedFile =>
+      case parsedFile of
+        SourceFile (Just _) _ _ _ _ _ _ => True
+        _ => False
 
 -- | 按库模块检查单个文件（调用方已确认带 `module` 头）。
 export dtCheckModuleFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic))
@@ -1332,7 +1334,7 @@ dtAuxOfCache key (Just c) = if c.auxCacheKey == key then Just c else Nothing
 dtIncrementalChecked : PackageContext -> (List Diagnostic, List Decl, List Module) -> List ModuleIface -> List ModuleIface -> Check CheckedPackage
 dtIncrementalChecked ctx resolved depIfaces cleanIfaces =
   Vuna.Compiler.Base.Common.bind
-    (dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces Nothing True)
+    (dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces Nothing True Nothing)
     (
       \r =>
         case firstOf (secondOf r) of
@@ -1413,17 +1415,26 @@ dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache =
           )
     )
 
-dtIncrementalCheckedCore : PackageContext -> (List Diagnostic, List Decl, List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (List Diagnostic, Maybe CheckedPackage, Maybe AuxCache)
-dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
+dtIncrementalCheckedCore : PackageContext -> (List Diagnostic, List Decl, List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Maybe String -> Check (List Diagnostic, Maybe CheckedPackage, Maybe AuxCache)
+dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage unusedFile =
   Vuna.Compiler.Base.Common.bind (dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache) (
       \s =>
         Vuna.Compiler.Base.Common.bind (dtElabFullWithPrepared s.dsStartEc s.dsStartGlobals s.dsTermAux s.dsPrepared s.dsDecls) (
             \prog =>
               let
-                warns = append s.dsWarns (dtProgWarnings prog)
+                warns = append s.dsWarns (append (dtProgWarnings prog) (incrementalUnusedWarns unusedFile (dtProgDefs prog)))
               in Vuna.Compiler.Base.Common.bind (if needPackage then dtFinishPackageScoped s.dsWarns s.dsDepCps s.dsCleanCps prog (secondOf resolved) s.dsNext else dtFinishScoped s.dsDepCps s.dsCleanCps prog s.dsNext) (\r => OkC (warns, r))
           )
     )
+
+-- | 增量路径的未使用定义告警（与全量入口同一 `warnUnusedDefsIn` 判定）。
+-- `Nothing` = 不扫描（库模块 / 调用方没有入口语义）；`Just file` = 入口语义，只保留
+-- span 落在该文件上的条目——增量结果里可能还有同包其他模块的定义，而全量入口的
+-- 单文件 path 也按文件归属裁剪，两者口径必须一致。
+incrementalUnusedWarns : Maybe String -> List DtDef -> List Diagnostic
+incrementalUnusedWarns Nothing _ = []
+incrementalUnusedWarns (Just file) defs =
+  filter (\d => diagFileOf d == file) (warnUnusedDefsIn defs)
 
 -- 洞查询的增量收尾：不跑 codegen 检查、不组装整包，只取容错精化的 goals。
 dtGoalsIncrementalCore : PackageContext -> (List Diagnostic, List Decl, List Module) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Check (List DtGoalInfo, Maybe AuxCache)
@@ -1521,6 +1532,17 @@ dtCheckScoped allDatas unitDatas defs globals =
 -- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
 export dtCheckSourceIncremental : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff r (Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache))
 dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackage =
+  dtCheckSourceIncrementalWith ctx label source depIfaces cleanIfaces cache needPackage Nothing
+
+-- | 入口语义的单文件增量 check（无 `module` 头的文件）：在增量结果尾部补上
+-- `warnUnusedDefsIn`（同一判定，只保留该文件上的条目）。库模块文件走
+-- `dtCheckSourceIncremental`：导出面未知，报未使用会把导出函数全误报。
+export dtCheckEntrySourceIncremental : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Eff r (Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache))
+dtCheckEntrySourceIncremental ctx label source depIfaces cleanIfaces cache =
+  dtCheckSourceIncrementalWith ctx label source depIfaces cleanIfaces cache False (Just label)
+
+dtCheckSourceIncrementalWith : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Maybe String -> Eff r (Check (Bool, List Diagnostic, Maybe CheckedPackage, Maybe AuxCache))
+dtCheckSourceIncrementalWith ctx label source depIfaces cleanIfaces cache needPackage unusedFile =
   let
     pkgName = contextPackageName ctx
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
@@ -1542,7 +1564,7 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
                   case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
                     ErrC e => ErrC e
                     OkC resolved =>
-                      case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage of
+                      case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage unusedFile of
                         ErrC e => ErrC e
                         OkC r => OkC (True, r)
       )
@@ -1854,7 +1876,7 @@ dtEvalTestEntry ctx entry (Just depIfaces) cleanIfacesM =
               pkgName = contextPackageName ctx
               deps = materializedDeps pkgName (secondOf resolved) depIfaces
               clean = materializedOwn pkgName (secondOf resolved) cleanIfaces
-            in case dtIncrementalCheckedCore ctx resolved deps clean Nothing True of
+            in case dtIncrementalCheckedCore ctx resolved deps clean Nothing True Nothing of
               ErrC e => ErrC e
               OkC (_, Nothing, _) => icInternal "test-entry-package"
               OkC (_, Just checked, _) => testEntryOutcome entry checked.checkedProgram

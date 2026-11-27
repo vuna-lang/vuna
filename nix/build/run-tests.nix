@@ -33,6 +33,10 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   # `--only <owner/family>` 反复跑仍有命中；`VUNA_STORE` 已设置时尊重调用方。
   export VUNA_STORE="''${VUNA_STORE:-$HOME/.vuna/test-store}"
   mkdir -p "$VUNA_STORE"
+  # 进程内会话读包状态目录（`<pkg>/.vuna` 或 `VUNA_PKG_STATE`），父进程自己改不了 env：
+  # 这里定一次，warmup 子进程与父进程的会话读同一份接口，会话才真正命中。
+  export VUNA_PKG_STATE="''${VUNA_PKG_STATE:-$VUNA_STORE/state}"
+  mkdir -p "$VUNA_PKG_STATE"
   cd "$repo"
   # `--all` 读 test/suite.toml 的 driver 清单；清单只维护这一份。
   failed=0

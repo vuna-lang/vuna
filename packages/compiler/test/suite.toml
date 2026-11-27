@@ -234,6 +234,17 @@ compile = false
 check = true
 tags = ["warning", "error"]
 
+# 单文件会话（进程内 `checkFileSessioned`）的告警面：入口语义的会话尾部也要报未使用
+# 定义；`check-session` 要求会话命中，会话不可用判失败（不让全量回退掩盖回归）。
+[family.session_warn]
+areas = ["compiler-frontend", "compiler-core"]
+dir = "corpus/session_warn"
+kind = "check-session"
+interp = false
+compile = false
+check = true
+tags = ["warning", "session"]
+
 [family.run_err]
 areas = ["compiler-frontend", "compiler-core", "ir", "codegen-ocaml"]
 dir = "corpus/run_err"

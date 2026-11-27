@@ -1,0 +1,7 @@
+-- warning：单文件会话（无 module 头 = 入口语义）与全量 `vuna check <file>` 一样
+-- 要报未使用定义（UN_UnusedDefinition）。
+unused : Int
+unused = 1
+
+main : Int
+main = 0

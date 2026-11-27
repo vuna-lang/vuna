@@ -83,8 +83,8 @@ export record Family(..) where
   familyOwner : String
   -- | 夹具目录（`dir` 键，相对 suite 的 test 根，必填）。
   familyDir : String
-  -- | case 种类：`auto` / `golden` / `error` / `check-ok` / `check-error` / `lint` /
-  -- `fix` / `steps`。
+  -- | case 种类：`auto` / `golden` / `error` / `check-ok` / `check-error` /
+  -- `check-session` / `lint` / `fix` / `steps`。
   familyKind : String
   -- | 目录型 family 的入口文件名；设置时每个子目录一个 case。
   familyEntry : Maybe String
@@ -142,6 +142,9 @@ export data CaseKind(..) : Type where
   CError : String -> String -> Bool -> Bool -> Bool -> CaseKind
   -- | check 断言：source wantOk diagPath（wantOk 时 diagPath 为空）。
   CCheck : String -> Bool -> String -> CaseKind
+  -- | 会话 check 断言：source diagPath。诊断必须由进程内会话（`checkFileSessioned`）
+  -- 产出并与 `.diag.json` 一致；会话不可用判失败（不让全量回退掩盖会话面回归）。
+  CSessionCheck : String -> String -> CaseKind
   -- | lint 用例：source expected（findings 的 golden 文本）。
   CLint : String -> String -> CaseKind
   -- | fix 用例：source expected（修复后的源码）。
@@ -483,7 +486,7 @@ buildFamily suite entries name =
                               append
                                 (append (listOr [] flags.familyFlagTags) (matrixTags matrix))
                                 (areaTags areas)
-                          in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then
+                          in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "check-session" || kind == "lint" || kind == "fix" || kind == "steps" then
                             if memName matrix matrixClasses then
                               OkC
                                 (Family name suite.suiteOwner dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix areas)
@@ -492,7 +495,7 @@ buildFamily suite entries name =
                                 (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
                           else
                             err
-                              (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
+                              (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/check-session/lint/fix/steps, got `${kind}`")
 
 -- | 内部：从 entries 收集 family 名（保持首次出现顺序）。
 familyNames : List TomlEntry -> List String
@@ -793,8 +796,8 @@ oneFile family dir name =
     pure []
 
 -- | 内部：按 `kind` 选 case 形态——lint 用 `<base>.out`，fix 用 `<base>.expected`，
--- check-error 用 `<base>.diag.json`；check-ok 无期望文件；其余走 `parseWant` + `wantCase`
--- （`steps` 由 `discoverStepsFamily` 处理，不走这里）。
+-- check-error / check-session 用 `<base>.diag.json`；check-ok 无期望文件；其余走
+-- `parseWant` + `wantCase`（`steps` 由 `discoverStepsFamily` 处理，不走这里）。
 fileCase : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (Check Case)
 fileCase family source base rel =
   let
@@ -820,6 +823,11 @@ fileCase family source base rel =
       expected <- expectPath base
       exists <- pathExistsFile expected
       if exists then pure (OkC (Case id family.familyTags (CCheck source False expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
+  else if family.familyKind == "check-session" then
+    do
+      expected <- expectPath base
+      exists <- pathExistsFile expected
+      if exists then pure (OkC (Case id family.familyTags (CSessionCheck source expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
   else
     do
       want <- parseWant base

@@ -178,6 +178,7 @@ end:
 | `golden` / `error` | 与 auto 同一推导路径（kind 只剩语义提示） |
 | `check-ok` | 只跑 `vuna check`，必须 exit 0 |
 | `check-error` | check 必须 fail（片段） |
+| `check-session` | 单文件会话（`InProc.checkFileSessioned`）的诊断 vs `.diag.json`；会话不可用即失败 |
 | `CLint` | `vuna lint` 输出 vs `.out` + 期望退出码 |
 | `CFix` | `vuna lint --fix` 后内容 vs `.expected`，并验证幂等 |
 | `CRuntime` | compile+build+run：片段（可选）+ 退出码（`.run.err`/`.run.exit`） |
@@ -319,7 +320,7 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 
 ### 进程内断言（fixture 用例零子进程）
 
-**fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）不 spawn `vuna`**：
+**fixture 用例（`CGolden` / `CError` / `CCheck` / `CSessionCheck` / `CLint` / `CFix`）不 spawn `vuna`**：
 runner 直接调用编译器 / 工具链的导出函数，断言它们的**返回值**。
 
 | 用例 | 进程内调用 | 断言 |
@@ -330,6 +331,7 @@ runner 直接调用编译器 / 工具链的导出函数，断言它们的**返�
 | 负例 check | 同上 | `ErrC`（或 `OkC` 里的 error 级条目）→ 投影成 `.diag.json` 的键序列 |
 | 负例 compile | `Compile.compileToDir` | 同上；额外断言输出目录未创建 |
 | 包目录负例 | `Compile.checkPackage release True pkg` | 同上（`wantWarnings=True` 直接拿 warning） |
+| 会话 check | `InProc.checkFileSessioned`（会话优先） | 诊断 == `.diag.json`；会话未命中即失败（全量回退会掩盖会话面回归） |
 | lint | `Lint.Rules.lintSourceWith`（fixities 经 `FixityEnv.fixitiesForFile`） | `renderFinding` 文本 == `.out` |
 | fix | `Lint.Fix.fixLoop` | 新源码 == `.expected`；再跑一遍验收敛（幂等） |
 
@@ -359,9 +361,16 @@ steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 `nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。按主题拆开的 steps 文件共用
 原组名（第 4 列），只增加调度粒度、不扩大 process-bound 面。
 
-已知边界：增量会话的 `dtIncrementalCheckedCore` 只汇总 loader + `dtProgWarnings`，
-**不跑**全量尾部的 `warnUnusedDefsIn`；所以负例的 check 一律走全量（`InProc.checkFile`），
-只有正例才用会话。
+**诊断面与全量一致**：增量会话（`dtCheckSourceIncremental`）汇总 loader + `dtProgWarnings`；
+无 `module` 头的入口语义文件由 `dtCheckEntrySourceIncremental` 在尾部补上
+`warnUnusedDefsIn`（只看本次精化且 span 落在该文件上的定义），带头的库模块不报未使用定义
+（导出面未知）。负例的 check 仍一律走全量（`InProc.checkFile`）：错误诊断与 `.deny` 语义
+在全量收尾处产生。
+
+**会话必须真正命中**：父进程读包状态目录（`<pkg>/.vuna` 或 `VUNA_PKG_STATE`）里的接口，
+warmup 子进程写的是同一份目录——`nix/build/run-tests.nix` 与
+`nix/checks/vuna-tests.sh` 因此都为整个 suite 导出 `VUNA_PKG_STATE`；否则每格进程内 check
+都会静默回退全量。`check-session` 用例把「命中会话」本身也作为断言。
 ### 增量构建桶（跨 run 持久）
 
 golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key>`），桶放在

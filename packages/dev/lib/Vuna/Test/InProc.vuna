@@ -157,19 +157,31 @@ pathExistsFileEff path =
 -- | 会话优先的 check：增量会话（依赖接口 + termAux 缓存）命中就用样本，返回
 -- `Nothing` 时在同一进程内退回全量 `checkFile`，绝不 spawn 子进程。
 --
--- 正例专用：增量路径（`dtCheckSourceIncremental`）只汇总 loader + `dtProgWarnings`，
--- 不跑全量路径尾部的 `warnUnusedDefsIn`；负例夹具要断言「未使用定义 / 遮蔽」这类
--- warning，必须走全量 `checkFile`。
-export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> String -> String -> Eff r (Check (List Diagnostic))
-checkFileSessioned sess base source =
+-- 诊断口径与全量 `checkFile` 一致：无 `module` 头的文件走入口语义（含尾部的未使用
+-- 定义扫描），带头的库模块不报未使用定义（导出面未知）。
+--
+-- `checkFileSessionedTracked` 额外报告是否命中会话：回归用例要求覆盖会话面时用它，
+-- 因为全量回退会给出同样诊断、把「会话漏报」的回归掩盖掉。
+export checkFileSessionedTracked : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> String -> String -> Eff r (Bool, Check (List Diagnostic))
+checkFileSessionedTracked sess base source =
   do
     probed <- sessionCheckSample sess base source
     case probed of
-      Nothing => checkFile source
+      Nothing =>
+        do
+          full <- checkFile source
+          pure (False, full)
       Just sample =>
         case sample.csErr of
-          Just e => pure (ErrC e)
-          Nothing => pure (OkC sample.csDiags)
+          Just e => pure (True, ErrC e)
+          Nothing => pure (True, OkC sample.csDiags)
+
+-- | 会话优先的 check（只看诊断，见 `checkFileSessionedTracked`）。
+export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member MutOp r => MutRef Session -> String -> String -> Eff r (Check (List Diagnostic))
+checkFileSessioned sess base source =
+  do
+    tracked <- checkFileSessionedTracked sess base source
+    pure (secondOf tracked)
 
 -- | 会话优先的 interp：增量会话命中就用求值展示文本，返回 `Nothing` 时退回全量
 -- `interpFile`。

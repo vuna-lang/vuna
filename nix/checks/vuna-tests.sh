@@ -17,6 +17,10 @@ export VUNA_BASE VUNA_OBS_PKG VUNA_SEED
 # 但不写进源码树，也不依赖宿主 ~/.vuna/store。
 VUNA_STORE=$(mktemp -d "${TMPDIR:-/tmp}/vuna-test-store.XXXXXX")
 export VUNA_STORE
+# 进程内会话读包状态目录（`<pkg>/.vuna` 或 `VUNA_PKG_STATE`），父进程自己改不了 env：
+# warmup 子进程把接口写进这里，父进程的会话才读得到（否则每格 check 都静默回退全量）。
+export VUNA_PKG_STATE="$VUNA_STORE/state"
+mkdir -p "$VUNA_PKG_STATE"
 
 # 全局并发预算：Nix 给本 derivation 的 cores（或显式 VUNA_TEST_JOBS）；
 # 不用 --jobs auto，否则 nix flake check 里会重复吃满所有核。
