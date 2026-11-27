@@ -107,7 +107,10 @@ jobs:
       #
       # 建完登记成 GC root：save 前的 `nix store gc --max` 只保「根闭包」，而工具链与
       # `vuna-store`（插件构建要读的包状态）都是**构建输入**、不在任何输出闭包里——不登记
-      # 就会被当垃圾删掉（`pr` 组把上限降到 3G 的那一轮就这么丢了工具链，下个 PR 重编 112s）。
+      # 就会被当垃圾删掉。
+      #
+      # 分片组还要把本片 check 的整个**构建闭包**登记成根：这样 gc 只会掉上一次缓存里
+      # 残留的垃圾（实测 store 4.66G，而本片真正需要 ~2.2G），缓存与 restore 都能小一半。
       - name: 预热工具链
         if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-') || inputs.group == 'pr' || inputs.group == 'units'
         run: |
@@ -117,8 +120,22 @@ jobs:
               .#vuna-target-native .#vuna-target-wasm .#vuna-store); do
             sudo ln -sfn "$p" "/nix/var/nix/gcroots/vuna-ci-$(basename "$p")"
           done
-          # 读数：根是否真的登记上了（上一次实测 gc 仍删掉了工具链，登记成功与否要能看见）。
+          # 读数：根是否真的登记上了（登记成功与否要能看见）。
           echo "=== gcroots vuna-ci: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-')"
+
+      # 分片组把 check 的构建闭包也登记成根：`--include-outputs` 里还没建出来的输出会被
+      # 过滤掉（此时只有 check 输出缺失），其余 ~1900 个路径就是这一片真正会用的全部内容。
+      - name: 登记分片构建闭包
+        if: startsWith(inputs.group, 'gate-shard-') || startsWith(inputs.group, 'e2e-shard-')
+        run: |
+          sys=$(nix eval --impure --raw --expr builtins.currentSystem)
+          drv=$(nix eval --raw ".#checks.$sys.vuna-tests-${{ inputs.group }}.drvPath")
+          # 一次 sudo 建完（~1900 个路径，逐条 sudo 要半分钟）。
+          closure=$(nix-store -qR --include-outputs "$drv" | while read -r q; do [ -e "$q" ] && printf '%s\n' "$q"; done)
+          sudo mkdir -p /nix/var/nix/gcroots/vuna-ci-closure
+          # shellcheck disable=SC2086
+          sudo ln -sfn $closure /nix/var/nix/gcroots/vuna-ci-closure/
+          echo "=== gcroots closure: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-closure/')"
 
       - name: ${{ inputs.group }}
         env:

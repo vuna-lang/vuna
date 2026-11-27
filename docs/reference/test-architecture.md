@@ -147,10 +147,12 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 - `cache-size` 必须是「整数 + 单位」：`1.5G` 这类小数不被 cache action 解析，等价于没设
   上限（日志 `Not collecting garbage because none of "gc-max-store-size" ... are specified`），
   store 只涨不落——`pr` 组曾因此涨到 8.5G、restore 91s。
-- 上限必须盖住**整个 store**（含构建输入），不能按「真实闭包」估：gc 只保根闭包，
-  工具链是构建输入，上限一触发就把它删掉（`pr` 组 3G 上限那轮实测删了
-  `vuna-toolchain` / `vuna-dev` / `vuna-store`，下个 PR 重编 112s）。预热步虽然把工具链
-  登记进 `/nix/var/nix/gcroots/`，实测没有兜住这一轮 gc——所以口径仍按「不触发 gc」取上限。
+- 上限怎么取取决于「根登记了什么」：gc 只保根闭包，而工具链是构建输入。两条口径：
+  - 分片组：预热步把**本片 check 的整个构建闭包**（`nix-store -qR --include-outputs`，
+    实测 ~1965 条 / ~2.0G）登记进 `/nix/var/nix/gcroots/`，上限取 3G ⇒ gc 只掉缓存里
+    残留的垃圾（store 4.66G → ~2.2G），cache 与 restore 各小一半；
+  - 不登记构建闭包的组（`pr` / `units`）：上限必须盖住整个 store，否则 gc 会把
+    `vuna-toolchain` / `vuna-dev` / `vuna-store` 当垃圾删掉（实测重编 112s）。
 - gate 拆 4 个、e2e 拆 8 个 matrix shard（`--shard i/N`，同一个 `nix-suite` cache 前缀）：
   每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。e2e 用 8 片是因为
   单片 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 runner 比片内加并发有效。
