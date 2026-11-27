@@ -122,7 +122,7 @@ fi
 set_issue_status() {
   local number="$1" wanted="$2" state
   state=$(gh api "repos/$repo/issues/$number" --jq .state)
-  [ "$state" = "OPEN" ] || return 0
+  [ "$state" = "open" ] || return 0
   "$issue_tool" --repo "$repo" status "$number" "$wanted" >/dev/null
 }
 

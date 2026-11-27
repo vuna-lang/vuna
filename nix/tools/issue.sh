@@ -100,7 +100,7 @@ advance_parent() {
   parent=$(gh issue view "$n" --repo "$repo" --json parent --jq '.parent.number // empty')
   [ -n "$parent" ] || return 0
   meta=$(gh api "repos/$repo/issues/$parent" --jq '{state, status: .status.name}')
-  [ "$(jq -r .state <<<"$meta")" = "OPEN" ] || return 0
+  [ "$(jq -r .state <<<"$meta")" = "open" ] || return 0
   case "$(jq -r .status <<<"$meta")" in
     Backlog | Todo | "") ;;
     *) return 0 ;;
@@ -159,7 +159,7 @@ cmd_status() {
 
   case "$want" in
     Backlog | Todo | "In progress" | "In review")
-      [ "$state" = "OPEN" ] || die "#$n 已关闭；设为 $want 会重新打开"
+      [ "$state" = "open" ] || die "#$n 已关闭；设为 $want 会重新打开"
       ;;
   esac
 
