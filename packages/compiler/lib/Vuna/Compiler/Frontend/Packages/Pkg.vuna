@@ -4,7 +4,8 @@ module Vuna.Compiler.Frontend.Packages.Pkg where
 -- 每个包 = 带 vuna.toml 的目录。workspace 根有两种形态：根包（根 vuna.toml 同时含
 -- [workspace] 与 [package]）与虚拟根（只有 [workspace]，没有 [package]）。
 -- 本模块用内建 fsReadFile / fsFileExists 读盘，不做 realpath：路径只做 lexical
--- 规范化（合并 "//"、消去 "."、".."），循环检测与去重用规范化后的目录字符串。
+-- 规范化（`Base.Source.normalizePath` / `joinPath`，与 manifest 侧同一口径），
+-- 循环检测与去重用规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
 --
 -- 每个源文件只有唯一**包上下文**（`PackageContext`）= 最近的 vuna.toml 包
@@ -93,63 +94,16 @@ export packageImplicitPrelude : Package -> Bool
 packageImplicitPrelude package = package.packageManifest.manifestImplicitPrelude
 
 -- ---------------------------------------------------------------- 路径工具
-splitSlashChars : List Int -> List String -> List Int -> List String
-splitSlashChars [] acc seg = reverse (strPack (reverse seg) :: acc)
-splitSlashChars (c :: rest) acc seg =
-  if c == 47 then
-    splitSlashChars rest (strPack (reverse seg) :: acc) []
-  else
-    splitSlashChars rest acc (c :: seg)
-
-splitOnSlash : String -> List String
-splitOnSlash path = splitSlashChars (strUnpack path) [] []
-
--- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
--- `..` 分支内联在同一个对 `segments` 的结构递归里（每个分支都只递归到 rest），
--- 终止性可直接证明。
-normalizeAcc : Bool -> List String -> List String -> List String
-normalizeAcc absolute [] acc = acc
-normalizeAcc absolute (seg :: rest) acc =
-  case seg of
-    "" => normalizeAcc absolute rest acc
-    "." => normalizeAcc absolute rest acc
-    ".." =>
-      case acc of
-        [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
-        prev :: prevRest =>
-          if prev == ".." then
-            normalizeAcc absolute rest (".." :: acc)
-          else
-            normalizeAcc absolute rest prevRest
-    _ => normalizeAcc absolute rest (seg :: acc)
-
--- | 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
--- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
-export normalizeDir : String -> String
-normalizeDir path =
-  if startsWith "/" path then
-    case normalizeAcc True (splitOnSlash path) [] of
-      [] => "/"
-      segments => "/${joinSlashes (reverse segments)}"
-  else
-    case normalizeAcc False (splitOnSlash path) [] of
-      [] => "."
-      segments => joinSlashes (reverse segments)
-
--- | 相对路径按当前工作目录归一为绝对路径（向上找 manifest 前必须先绝对化，
+-- 相对路径按当前工作目录归一为绝对路径（向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 export absolutePath : Member nEnv EnvOp r => String -> Eff r String
 absolutePath path =
   if startsWith "/" path then
-    pure (normalizeDir path)
+    pure (normalizePath path)
   else
     do
       cwd <- envGetCwd
-      pure (normalizeDir "${cwd}/${path}")
-
--- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
-export joinPath : String -> String -> String
-joinPath base rel = if startsWith "/" rel then normalizeDir rel else normalizeDir "${base}/${rel}"
+      pure (normalizePath "${cwd}/${path}")
 
 joinPathsText : List String -> String
 joinPathsText [] = ""
@@ -174,7 +128,7 @@ loadManifestAt path =
                   OkC validated => OkC validated
           )
     else
-      pure (pkgPath1 path (MissingManifest (normalizeDir (manifestDir path))) (normalizeDir (manifestDir path)))
+      pure (pkgPath1 path (MissingManifest (normalizePath (manifestDir path))) (normalizePath (manifestDir path)))
 
 manifestNameString : Manifest -> String
 manifestNameString manifest =
@@ -338,7 +292,7 @@ loadOneDependency memo fuel stack baseDir dep =
     DepUrl url => loadStoreDependency memo fuel stack dep
 
 -- 依赖图展开的 memo：同一个目录（diamond 依赖 / 多个父包共享）只读一次 `vuna.toml`。
--- 键是 `normalizeDir` 后的目录；循环检测在查 memo **之前**（同一目录在不同 stack 下
+-- 键是 `normalizePath` 后的目录；循环检测在查 memo **之前**（同一目录在不同 stack 下
 -- 仍要能判环），memo 只存成功结果。
 emptyPackageMemo : HashMap String Package
 emptyPackageMemo = HashMap.fromList []
@@ -361,7 +315,7 @@ loadPackageWalk memo fuel stack depName dir =
     pure (icFuel "pkg")
   else
     let
-      normalized = normalizeDir dir
+      normalized = normalizePath dir
     in if memStackDir normalized stack then
       pure (pkgInvalid (cycleMessage normalized depName stack))
     else
@@ -499,7 +453,7 @@ workspaceAllPackages workspace =
 export loadWorkspace : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Workspace)
 loadWorkspace rootBaseDir =
   let
-    base = normalizeDir rootBaseDir
+    base = normalizePath rootBaseDir
   in do
     manifestR <- loadManifestAt "${base}/vuna.toml"
     case manifestR of
@@ -630,12 +584,12 @@ findManifestUpMaybeStep fuel dir parent =
 -- 从 startDir 向上找第一个含 vuna.toml 的目录（找不到 → Nothing）。
 -- 上界证明：每上溯一层消耗 2 步（findManifestUpMaybe + Step），
 -- 层数 k 满足 2*(k-1) ≤ strLength start——absolute 路径每层至少占「/x」两字符，
--- 且 normalizeDir 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
+-- 且 normalizePath 已去掉空段/`.`/`..`，所以 2*k ≤ strLength start + 2；
 -- 取 2*strLength start + 4 严格覆盖（含末层 parent==dir 的收尾）。
 export findManifestDirMaybe : Member nFs FsOp r => String -> Eff r (Maybe String)
 findManifestDirMaybe startDir =
   let
-    start = normalizeDir startDir
+    start = normalizePath startDir
   in findManifestUpMaybe (2 * strLength start + 4) start
 
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
@@ -647,7 +601,7 @@ findManifestDir startDir =
     pure (
         case found of
           Just dir => OkC dir
-          Nothing => pkgNoLoc (NoManifestUpward (normalizeDir startDir)) [normalizeDir startDir]
+          Nothing => pkgNoLoc (NoManifestUpward (normalizePath startDir)) [normalizePath startDir]
       )
 
 -- ---------------------------------------------------------------- base 定位

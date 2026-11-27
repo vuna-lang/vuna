@@ -204,6 +204,51 @@ dropPastSlash [] = []
 dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
 
 -- ---------------------------------------------------------------
+-- 目录路径归一（包 / manifest 侧的唯一口径）
+-- ---------------------------------------------------------------
+
+-- 把段列表按 lexical 规则折叠；acc 为反向累积的已处理段。
+-- `..` 分支内联在同一个对 `segments` 的结构递归里（每个分支都只递归到 rest），
+-- 终止性可直接证明。
+normalizeSegments : Bool -> List String -> List String -> List String
+normalizeSegments absolute [] acc = acc
+normalizeSegments absolute (seg :: rest) acc =
+  case seg of
+    "" => normalizeSegments absolute rest acc
+    "." => normalizeSegments absolute rest acc
+    ".." =>
+      case acc of
+        [] =>
+          if absolute then
+            normalizeSegments absolute rest []
+          else
+            normalizeSegments absolute rest [".."]
+        prev :: prevRest =>
+          if prev == ".." then
+            normalizeSegments absolute rest (".." :: acc)
+          else
+            normalizeSegments absolute rest prevRest
+    _ => normalizeSegments absolute rest (seg :: acc)
+
+-- | 目录字符串 lexical 规范化（不解析符号链接）：合并 `//`、消去 `.` 与 `..`、
+-- 去掉尾 `/`。"a/./b/../c/" -> "a/c"；相对路径空结果归一为 "."，绝对路径为 "/"。
+-- 依赖路径、workspace 成员、包目录与 manifest 目录的拼接都走这一条。
+export normalizePath : String -> String
+normalizePath path =
+  if startsWith "/" path then
+    case normalizeSegments True (splitOnChar 47 path) [] of
+      [] => "/"
+      segments => "/${joinSlashes (reverse segments)}"
+  else
+    case normalizeSegments False (splitOnChar 47 path) [] of
+      [] => "."
+      segments => joinSlashes (reverse segments)
+
+-- | 路径拼接 + 归一：`rel` 是绝对路径时忽略 `base`。
+export joinPath : String -> String -> String
+joinPath base rel = if startsWith "/" rel then normalizePath rel else normalizePath "${base}/${rel}"
+
+-- ---------------------------------------------------------------
 -- 位置路径归一（生成产物里的 `#line` 与位置表共用）
 -- ---------------------------------------------------------------
 

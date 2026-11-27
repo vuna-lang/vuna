@@ -25,6 +25,8 @@ import Base.Container.Queue as Queue
 import Base.Effect.Fs as EffFs
 
 -- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
+-- `DepPath` 的路径是 lexical 规范形（`Base.Source.normalizePath`）：`./x`、`x/`、
+-- `a/../b` 与 `x` / `b` 在模型里就是同一个字符串，缓存键与身份按字符串比较也不会分叉。
 export data DependencySource(..) : Type where
   DepPath : String -> DependencySource
   DepGit : String -> String -> DependencySource
@@ -380,6 +382,9 @@ collectStrings path ((TomlEntry section key value line) :: rest) acc =
     collectStrings path rest acc
 
 -- 由累积状态构造依赖：源互斥 + git 需要 rev。
+pathSource : String -> DependencySource
+pathSource p = DepPath (if p == "" then "" else normalizePath p)
+
 buildDependency : String -> DepAcc -> Check Dependency
 buildDependency path acc =
   case acc.depAccPath of
@@ -391,7 +396,7 @@ buildDependency path acc =
             Just _ =>
               pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
             Nothing =>
-              OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash acc.depAccIdentity)
+              OkC (Dependency acc.depAccAlias (pathSource p) acc.depAccHash acc.depAccIdentity)
     Nothing =>
       case acc.depAccGit of
         Just url =>
@@ -434,7 +439,7 @@ collectDependencies path entries =
             ErrC e => ErrC e
             OkC tableDeps =>
               OkC
-                (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing Nothing) strings) tableDeps)
+                (append (map (\p => Dependency (firstOf p) (pathSource (firstOf (secondOf p))) Nothing Nothing) strings) tableDeps)
 
 -- ---------------------------------------------------------------- 依赖校验
 isHexChar : Int -> Bool
@@ -643,12 +648,9 @@ dirFromRev (c :: rest) = if c == 47 then dirResult (strPack (reverse rest)) else
 dirResult : String -> String
 dirResult dir = if dir == "" then "/" else dir
 
--- 依赖路径的相对解析基础：manifest 目录 + 相对路径。
+-- 依赖路径的相对解析基础：manifest 目录 + 相对路径（与 `Pkg.joinPath` 同一归一化口径）。
 export resolveManifestPath : Manifest -> String -> String
-resolveManifestPath manifest rel =
-  let
-    dir = manifestDir manifest.manifestPath
-  in if startsWith "/" rel then rel else if dir == "." then rel else "${dir}/${rel}"
+resolveManifestPath manifest rel = joinPath (manifestDir manifest.manifestPath) rel
 
 -- | `[diagnostics].lang`：只接受 en/zh。
 validateDiagLang : String -> Maybe String -> Check Int
