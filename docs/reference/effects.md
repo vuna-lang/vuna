@@ -132,8 +132,14 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`m : Type -> Type` 这类普通类型构造子
   参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
 - 数据族的**索引值实参**（`Vec (Succ n) a` 的 `Succ n`）是擦除后的索引，不参与判定；
-- 已知边界：精化期未解的元变量按可表示处理（可能漏 cast）；trait 自动生成的 λ
-  （方法投影 / 实例 tele）不在插入点覆盖范围内（gh#39）。
+- 元变量：判据逐节点规范化（只解元变量、不做 delta），**已解**的元变量按它的解判定；
+  **仍未解**的元变量在表达式位置按保守方向算不可表示（多插的 cast 对语义透明），
+  在声明位置（data / 字典字段表示）按可表示处理——那里的判据必须与 codegen 同源，
+  codegen 看不到精化期解表。
+
+`Elab.Meta.isOpaqueRuntimeTyIn`（表达式位置）与 `isOpaqueRuntimeTyDecl`（声明位置）是这两侧
+的入口，`Lowering.Env.ctorOpaqueFlagsOf` 与后者同源。trait 自动生成的 λ（方法投影）里的字典
+字段使用点由 `Elab.Trait.projectionDefsOpaque` 按同一判据补 cast。
 
 **注意这不是 QTT 能解决的**：续延是**真的运行时函数**（要被 handler 以真实值调用），
 `resIdx i o` 是类型级、按擦除纪律 0 用量、在 OCaml 里不可命名；QTT 只把 0/1/ω 用量写精确，
@@ -173,9 +179,13 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
    `Lowering.Env` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
    `Obj.t` 字段 ↔ `prim_erase` / `Obj.magic` 两侧缺一就会在 `ocamlopt` 处错配。
+   表达式位置用 `isOpaqueRuntimeTyIn`（未解元变量取保守方向），声明位置的字段表示用
+   `isOpaqueRuntimeTyDecl`（未解元变量按可表示，与 codegen 同视角）；只在 cast 插入点
+   才取保守方向，多插的 cast 不会改变表示。
 7. **cast 对语义透明**：`prim_erase` 求值期归约为实参本身（`OpIdentity` +
    `applyValueFuel` 的恒等消去），对定义性相等 / 正规化 / 核心求值不可见；用量检查里
-   cast 应用记 `Rig1`，不放大线性值的使用。
+   cast 应用记 `Rig1`，不放大线性值的使用；终止性分析的输入翻译
+   （`Elab.Termination.ElabInput`）同样看穿 cast，否则递归实参被包一层就不再是严格子项。
 
 ## 8. 运行时效应核心
 
@@ -479,7 +489,7 @@ withMutRefPure : a -> (MutRef a -> Eff (MutOp :: Nil) b) -> b
 | 缺口 | 内容 | 入口 |
 | --- | --- | --- |
 | 线性 / 依赖 multiplicity | 多射续延不做；通用线性箭头与依赖 multiplicity 未做（线性值经 ω 形参通用函数被拒，库 API 需显式 `(1 x : …)`） | gh#97 |
-| 表示轴残留 | handler 续延域的 `resIdx i o` 用不透明值 + 恒等 cast 编译；精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖 | gh#39 |
+| 表示轴残留 | handler 续延域的 `resIdx i o` 用不透明值 + 恒等 cast 编译；判据对**仍未解**的元变量只能按保守方向插 cast（声明位置保持 codegen 视角） | gh#39 |
 | 信任入口 | `runEff` 内部入口接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | gh#99 |
 | 并行工具层 | 静态分块的长尾、无动态任务队列 / Channel / 取消 token | gh#101 |
 | 调度器库面 | 单线程 fiber 调度器（`Base.EffSched` / `EffMutex` / `EffChannel`）已作为死代码删除；`prim_sched*` 与文档清理见 gh#100。多线程走 `Base.Thread` | gh#100 |

@@ -21,6 +21,7 @@ module Vuna.Compiler.Elab.Termination.ElabInput where
 
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
@@ -267,11 +268,11 @@ convExpr cc t =
 convGo : ConvCtx -> Term -> List Expr -> Expr
 convGo cc t acc =
   case t of
-    TApp fn arg rig =>
-      case rig of
-        Rig0 => convGo cc fn acc
-        -- 从外到内下降、前插累积：到叶子时正好是书写顺序。
-        _ => convGo cc fn (convExpr cc arg :: acc)
+    -- 表现层 cast（`prim_erase`）在分析视角下是恒等：擦除依赖类型的使用点会插一层，
+    -- 若当作普通调用，递归调用的实参就不再是严格子项（`representIr (prim_erase x)`）。
+    -- 与 conv / 求值 / 用量检查同一口径：看穿 cast，只保留被包的实参。
+    TApp (TGlobal g) arg _ => if g == primEraseName then convGo cc arg acc else convGoApp cc t acc
+    TApp _ _ _ => convGoApp cc t acc
     TLam name lamRig _ _ body =>
       case acc of
         a :: rest =>
@@ -289,6 +290,14 @@ convGo cc t acc =
           else
             ELam [(name, spanEmpty)] (convGo cc body []) (detachedNodeRef cc.ccSpan)
     _ => convLeaf cc t acc
+
+-- 普通应用：擦除实参直接丢弃，其余从外到内下降、前插累积（到叶子时正好是书写顺序）。
+convGoApp : ConvCtx -> Term -> List Expr -> Expr
+convGoApp cc (TApp fn arg rig) acc =
+  case rig of
+    Rig0 => convGo cc fn acc
+    _ => convGo cc fn (convExpr cc arg :: acc)
+convGoApp cc t acc = convLeaf cc t acc
 
 convLeaf : ConvCtx -> Term -> List Expr -> Expr
 convLeaf cc t acc =

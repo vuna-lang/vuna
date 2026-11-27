@@ -930,12 +930,17 @@ isUniverseValue (VType _) = True
 isUniverseValue _ = False
 
 -- 通用结构遍历：
+--   * `forceV` 把每个节点规范化到 WHNF（只解元变量、不做 delta）：已解元变量必须替换成
+--     解，否则「终解成类型族」的形状会被当成可表示而漏 cast；
+--   * `metaOpaque` 是**强制后仍未解**的元变量落在哪一侧：表达式位置取保守方向 `True`
+--     （未解按不可表示插 cast，cast 对语义透明）；声明位置取 `False`，与 codegen 的
+--     字段表示（不看精化期解表）保持同一视角；
 --   * `depth` 是已进入的 Pi binder 数；`lvl < depth` 的 NVar 由 `outerNVar` 判定
 --     （表达式位置查 ctx；声明位置查已判定的 telescope 类型族参数集）；
 --   * 类型内部的 Pi binder 若其 kind 是类型族参数，把它的 level 记进 `famLevels`。
-export valueOpaqueScoped : (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
-valueOpaqueScoped outerNVar headOpaque depth famLevels v =
-  valueOpaqueGo 128 outerNVar headOpaque depth famLevels v
+export valueOpaqueScoped : (Value -> Value) -> Bool -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
+valueOpaqueScoped forceV metaOpaque outerNVar headOpaque depth famLevels v =
+  valueOpaqueGo 128 forceV metaOpaque outerNVar headOpaque depth famLevels v
 
 -- | 类型里是否出现**隐式 Pi**：这种值（类方法）在 OCaml 记录里没有单一类型，
 -- 只能按不透明字段（`Obj.t`）+ 使用点 cast 表示。判定只看形状，不看取值。
@@ -951,36 +956,35 @@ valueHasImplicitPiFuel fuel v =
       VPi nm implicit rig dom clo => implicit || valueHasImplicitPiFuel (fuel - 1) (applyClosure clo (VNeutral (NVar nm 0 [])))
       _ => False
 
-valueOpaqueGo : Int -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
-valueOpaqueGo fuel outerNVar headOpaque depth famLevels v =
+valueOpaqueGo : Int -> (Value -> Value) -> Bool -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
+valueOpaqueGo fuel forceV metaOpaque outerNVar headOpaque depth famLevels v =
   if fuel <= 0 then
     True
   else
-    case v of
+    case forceV v of
       VType _ => False
-      -- 已知边界：精化期未解 meta 视为可表示（否则隐式实参实例化会触发大量 cast）；
-      -- 最终解成类型族时可能漏 cast（规避 debt D27）。
-      VMeta _ _ => False
+      -- 强制后仍未解：表达式位置按保守方向算不可表示，声明位置按可表示处理。
+      VMeta _ _ => metaOpaque
       VNeutral n =>
         case n of
           NVar name lvl sp => if lvl < depth then outerNVar lvl else if memLevel lvl famLevels then True else False
-          NGlobal g sp => headOpaque g || valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp
+          NGlobal g sp => headOpaque g || valueOpaqueTypeSpine fuel forceV metaOpaque outerNVar headOpaque depth famLevels sp
       VPi name implicit rig dom clo =>
         let
-          fam2 = if isFamilyKindValue dom then (::) depth famLevels else famLevels
-        in valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels dom || valueOpaqueGo (fuel - 1) outerNVar headOpaque (depth + 1) fam2 (applyClosure clo (VNeutral (NVar name depth [])))
+          fam2 = if isFamilyKindValue (forceV dom) then (::) depth famLevels else famLevels
+        in valueOpaqueGo (fuel - 1) forceV metaOpaque outerNVar headOpaque depth famLevels dom || valueOpaqueGo (fuel - 1) forceV metaOpaque outerNVar headOpaque (depth + 1) fam2 (applyClosure clo (VNeutral (NVar name depth [])))
       -- 类型族展开后卡住的形态（VCase/VIf 悬挂在中性值上）、以及不可能出现在类型位置
       -- 的构造子/字面量：都不可命名。
       _ => True
 
-valueOpaqueTypeSpine : Int -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> List Value -> Bool
-valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp =
+valueOpaqueTypeSpine : Int -> (Value -> Value) -> Bool -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> List Value -> Bool
+valueOpaqueTypeSpine fuel forceV metaOpaque outerNVar headOpaque depth famLevels sp =
   if fuel <= 0 then
     True
   else
     case sp of
       [] => False
-      v :: rest => isTypeishValue v && valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels v || valueOpaqueTypeSpine (fuel - 1) outerNVar headOpaque depth famLevels rest
+      v :: rest => isTypeishValue v && valueOpaqueGo (fuel - 1) forceV metaOpaque outerNVar headOpaque depth famLevels v || valueOpaqueTypeSpine (fuel - 1) forceV metaOpaque outerNVar headOpaque depth famLevels rest
 
 -- 类型实参 vs 索引值实参：数据族 / 内建类型构造子的值实参（`Vec (Succ n) a` 的
 -- `Succ n`）是擦除后的索引，不进 OCaml 类型，不参与「不可命名」判定。
@@ -1015,11 +1019,33 @@ zonkValueOnly ec v = force (HashMap.fromList []) (ecSolsP ec) defaultFuel v
 export isOpaqueRuntimeTyIn : Ec -> Ctx -> Value -> Bool
 isOpaqueRuntimeTyIn ec ctx v =
   valueOpaqueScoped
+    (zonkValueOnly ec)
+    True
+    (nvarOpaqueCtx ctx)
+    (isTypeHeadOpaqueEc ec)
+    (ctxDepth ctx)
+    []
+    v
+
+-- 声明位置（data / 字典字段的表示判定）必须与 codegen 同源：codegen 看不到精化期解表，
+-- 所以这里不逐节点解元变量、未解元变量按可表示处理。表达式位置的 `isOpaqueRuntimeTyIn`
+-- 走保守方向，两者只在「精化期仍未解」的元变量上分叉。
+export isOpaqueRuntimeTyDecl : Ec -> Ctx -> Value -> Bool
+isOpaqueRuntimeTyDecl ec ctx v =
+  valueOpaqueScoped
+    (\x => x)
+    False
     (nvarOpaqueCtx ctx)
     (isTypeHeadOpaqueEc ec)
     (ctxDepth ctx)
     []
     (zonkValueOnly ec v)
+
+-- binder 的使用点是否要包表现层 cast：只有**运行时** binder 才有使用点；
+-- 擦除 binder 不进 OCaml，给它包 cast 反而会把它变成一次运行时使用（违反擦除纪律）。
+export opaqueRuntimeBinder : Ec -> Ctx -> Rig -> Value -> Bool
+opaqueRuntimeBinder ec ctx rig dom =
+  if rigIsErased rig then False else isOpaqueRuntimeTyIn ec ctx dom
 
 export castErased : Term -> Term
 castErased t = TApp (TGlobal primEraseName) t Rig1

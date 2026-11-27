@@ -116,8 +116,10 @@ elabTraitFinal globals ec tname paramNames superParts methods methodsP pKinds fi
               projs = methodProjections tname paramNames pKinds methodsP fieldTys
               projSpans = map (\m => (traitMethodName m, traitMethodSpan m)) methods
               -- 字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
+              -- 声明位置按 codegen 同一视角判定（未解元变量按可表示），否则投影里的 cast
+              -- 与字典构造子的字段表示会错配。
               fieldCtx = bindClassParams paramsKinds emptyCtx
-              opaqueFields = map (\t => isOpaqueRuntimeTyIn ecSup fieldCtx (eval (ctxEnv fieldCtx) t) || valueHasImplicitPi (eval (ctxEnv fieldCtx) t)) fieldTys
+              opaqueFields = map (\t => isOpaqueRuntimeTyDecl ecSup fieldCtx (eval (ctxEnv fieldCtx) t) || valueHasImplicitPi (eval (ctxEnv fieldCtx) t)) fieldTys
               projBodies = projectionDefsOpaque opaqueFields tname (length paramNames) methodsP fieldTys nFields
               cls = DtClass tname paramNames superTys projs fieldTys projSpans
               ec2 = ecAddClass (ecAddData ecSup dd) cls
@@ -1697,7 +1699,7 @@ bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo binderSp sp =
                 case p of
                   (inner, ec1) =>
                     let
-                      inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+                      inner2 = if opaqueRuntimeBinder ec1 ctx erasure dom then wrapOpaqueUses [0] inner else inner
                     in OkC (TLam pname erasure Nothing binderSp inner2, ec1)
             )
       )
