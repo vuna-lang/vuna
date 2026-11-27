@@ -81,14 +81,17 @@ searchInstFuel globals ctx fuel ec0 dom sp =
           missingInstance ec dom sp
         else
           case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
-            ([], ec1) =>
-              case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
-                OkC (Just pair) => OkC pair
-                OkC Nothing =>
-                  case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
-                    (matches, ec2) => finishInstanceSearch dom sp matches ec2
-                ErrC e => ErrC e
-            (matches, ec1) => finishInstanceSearch dom sp matches ec1
+            specific =>
+              case specific.scanMatches of
+                [] =>
+                  case tryViaDict globals ctx (fuel - 1) specific.scanEc dom sp of
+                    OkC (Just pair) => OkC pair
+                    OkC Nothing =>
+                      let
+                        blanket = matchInstances globals ctx fuel specific.scanEc dom sp (blanketInstances (searchCandidates ec dom)) []
+                      in finishInstanceSearch dom sp blanket.scanMatches blanket.scanEc
+                    ErrC e => ErrC e
+                matches => finishInstanceSearch dom sp matches specific.scanEc
 
 -- ---------------------------------------------------------------
 -- `deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
@@ -364,12 +367,35 @@ allInstancesMono : List DtInst -> Bool
 allInstancesMono [] = True
 allInstancesMono (i :: rest) = if isMonoInst i then allInstancesMono rest else False
 
-matchInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> (List InstMatch, Ec)
-matchInstances globals ctx fuel ec dom sp [] acc = (reverse acc, ec)
-matchInstances globals ctx fuel ec dom sp (i :: rest) acc =
+-- 候选扫描：每个候选都从**同一份入口 `Ec`** 出发（候选快照），命中者只推进自己的解表；
+-- 因此前一个候选（不论命中与否）都不会改变后一个候选看到的解表 / 元变量分配。
+--
+-- `scanEc` 只保留第一个命中候选推进后的 `Ec`：命中 ≥2 个时最终报歧义，候选结果不外泄；
+-- 一个都不命中时它就是入口 `Ec`，后续 via / blanket 阶段从同一状态继续。
+record InstScan where
+  scanMatches : List InstMatch
+  scanEc : Ec
+
+matchInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> InstScan
+matchInstances globals ctx fuel ec dom sp insts acc =
+  scanInstances globals ctx fuel ec dom sp insts acc Nothing
+
+scanInstances : List (String, Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Maybe Ec -> InstScan
+scanInstances globals ctx fuel ec dom sp [] acc hitEc =
+  InstScan (reverse acc) (
+      case hitEc of
+        Just e => e
+        Nothing => ec
+    )
+scanInstances globals ctx fuel ec dom sp (i :: rest) acc hitEc =
   case tryMatchInst globals ctx fuel ec i dom sp of
-    Just (term, ec1) => matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
-    Nothing => matchInstances globals ctx fuel ec dom sp rest acc
+    Just (term, ec1) =>
+      scanInstances globals ctx fuel ec dom sp rest (InstMatch i term :: acc) (
+          case hitEc of
+            Just e => Just e
+            Nothing => Just ec1
+        )
+    Nothing => scanInstances globals ctx fuel ec dom sp rest acc hitEc
 
 -- 单个候选：alloc tele metas → conv 结果头 → 读 tele 解 → 递归解 ctx → 组装
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
