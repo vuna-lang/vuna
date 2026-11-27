@@ -3,7 +3,7 @@ type t_Named = |
 and t_Row = C_Row_Nil | C_Row__x58__x58_ of (t_Row)
 and t_Member = C_Member_Here | C_Member_There of (t_Member)
 and t_EffUnit = C_EffUnit_MkEffUnit
-and 'a0 t_Eff = C_Eff_MkEff of ((t_EffUnit) -> 'a0)
+and 'a0 t_Eff = Obj.t
 and 'a0 t_Scoped = C_Scoped_MkScoped of ((int) -> 'a0)
 and t_EffSig = C_EffSig_MkEffSig
 and ('a0, 'a1) t_Cont = C_Cont_MkCont of (('a0) -> 'a1)
@@ -16,52 +16,25 @@ and t_Used = C_Used_MkUsedSmall of ((int, int) B_dData_dPair.t_Pair B_dData_dLis
 and 'a0 t_MSt = { f_MSt_msFrames : 'a0 t_Frame B_dData_dMaybe.t_Maybe; f_MSt_msCtx : 'a0 t_Ctx B_dData_dMaybe.t_Maybe; f_MSt_msUsed : t_Used; f_MSt_msNext : int; f_MSt_msFree : int B_dData_dList.t_List; f_MSt_msEpoch : int; f_MSt_msCleanups : t_Cleanup B_dData_dList.t_List; f_MSt_msCleanDepth : int }
 
 # 71 "Base/Effect/Core.vuna"
-let v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f e -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
-  | C_Eff_MkEff (dtb__0) -> (f (dtb__0 u))
-  | _ -> failwith "DT: impossible branch"
-)))))) : Obj.t)))
+let v_Functor_ua5312def40ac3976_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dFunctor.C_Functor_Functor (((Obj.magic (fun f e -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__0 = Obj.obj (e) in (f (dtb__0 u))))))) : Obj.t)))
 
 # 79 "Base/Effect/Core.vuna"
-let v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun e k -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
-  | C_Eff_MkEff (dtb__1) -> (match (k (dtb__1 u)) with
-  | C_Eff_MkEff (dtb__2) -> (dtb__2 u)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))) : Obj.t)))
+let v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dMonad.C_Monad_Monad (((Obj.magic (fun e k -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__1 = Obj.obj (e) in (let dtb__2 = Obj.obj ((k (dtb__1 u))) in (dtb__2 u))))))) : Obj.t)))
 
 # 89 "Base/Effect/Core.vuna"
-let v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> (C_Eff_MkEff ((fun (_u : t_EffUnit) -> x))))) : Obj.t), ((Obj.magic (fun mf mx -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match mf with
-  | C_Eff_MkEff (dtb__3) -> (match mx with
-  | C_Eff_MkEff (dtb__4) -> ((dtb__3 u) (dtb__4 u))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))) : Obj.t), ((Obj.magic (fun f ma mb -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match ma with
-  | C_Eff_MkEff (dtb__5) -> (match mb with
-  | C_Eff_MkEff (dtb__6) -> ((f (dtb__5 u)) (dtb__6 u))
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))) : Obj.t)))
+let v_Applicative_u19070277251d295b_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur = (B_dTrait_dApplicative.C_Applicative_Applicative (((Obj.magic (fun x -> Obj.repr ((fun (_u : t_EffUnit) -> x)))) : Obj.t), ((Obj.magic (fun mf mx -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__3 = Obj.obj (mf) in (let dtb__4 = Obj.obj (mx) in ((dtb__3 u) (dtb__4 u)))))))) : Obj.t), ((Obj.magic (fun f ma mb -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__5 = Obj.obj (ma) in (let dtb__6 = Obj.obj (mb) in ((f (dtb__5 u)) (dtb__6 u)))))))) : Obj.t)))
 
 # 58 "Base/Effect/Core.vuna"
 let v_defaultInstance = "default"
 
 # 110 "Base/Effect/Core.vuna"
-let v_effPrim = (fun f -> (C_Eff_MkEff ((fun (_u : t_EffUnit) -> (f 0)))))
+let v_effPrim = (fun f -> Obj.repr ((fun (_u : t_EffUnit) -> (f 0))))
 
 # 114 "Base/Effect/Core.vuna"
-let v_weaken = (fun comp -> (match comp with
-  | C_Eff_MkEff (dtb__7) -> (C_Eff_MkEff (dtb__7))
-  | _ -> failwith "DT: impossible branch"
-))
+let v_weaken = (fun comp -> (let dtb__7 = Obj.obj (comp) in Obj.repr (dtb__7)))
 
 # 120 "Base/Effect/Core.vuna"
-let v_runThunk = (fun e -> (match e with
-  | C_Eff_MkEff (dtb__8) -> dtb__8
-  | _ -> failwith "DT: impossible branch"
-))
+let v_runThunk = (fun e -> (let dtb__8 = Obj.obj (e) in dtb__8))
 
 # 127 "Base/Effect/Core.vuna"
 let v_runPure = (fun e -> ((v_runThunk e) C_EffUnit_MkEffUnit))
@@ -85,58 +58,28 @@ let v_handleSelf = (fun comp -> (v_handleScoped (v_scope comp)))
 let v_runMain = (fun e -> ((v_runThunk e) C_EffUnit_MkEffUnit))
 
 # 163 "Base/Effect/Core.vuna"
-let v_joinEff = (fun m -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match m with
-  | C_Eff_MkEff (dtb__10) -> (match (dtb__10 u) with
-  | C_Eff_MkEff (dtb__11) -> (dtb__11 u)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_joinEff = (fun m -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__10 = Obj.obj (m) in (let dtb__11 = Obj.obj ((dtb__10 u)) in (dtb__11 u))))))
 
 # 176 "Base/Effect/Core.vuna"
-let v_joinEffNilOuter = (fun m -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match m with
-  | C_Eff_MkEff (dtb__12) -> (match (dtb__12 u) with
-  | C_Eff_MkEff (dtb__13) -> (dtb__13 u)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_joinEffNilOuter = (fun m -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__12 = Obj.obj (m) in (let dtb__13 = Obj.obj ((dtb__12 u)) in (dtb__13 u))))))
 
 # 189 "Base/Effect/Core.vuna"
-let v_joinEffNilInner = (fun m -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match m with
-  | C_Eff_MkEff (dtb__14) -> (match (dtb__14 u) with
-  | C_Eff_MkEff (dtb__15) -> (dtb__15 u)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_joinEffNilInner = (fun m -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__14 = Obj.obj (m) in (let dtb__15 = Obj.obj ((dtb__14 u)) in (dtb__15 u))))))
 
 # 201 "Base/Effect/Core.vuna"
-let v_dropEffHead = (fun comp -> (match comp with
-  | C_Eff_MkEff (dtb__16) -> (C_Eff_MkEff (dtb__16))
-  | _ -> failwith "DT: impossible branch"
-))
+let v_dropEffHead = (fun comp -> (let dtb__16 = Obj.obj (comp) in Obj.repr (dtb__16)))
 
 # 208 "Base/Effect/Core.vuna"
-let v_weakenRow = (fun (t : t_Row) e -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
-  | C_Eff_MkEff (dtb__17) -> (dtb__17 u)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_weakenRow = (fun (t : t_Row) e -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__17 = Obj.obj (e) in (dtb__17 u)))))
 
 # 217 "Base/Effect/Core.vuna"
-let v_raise = (fun mc0 -> (match mc0 with
-  | C_Eff_MkEff (dtb__18) -> (C_Eff_MkEff (dtb__18))
-  | _ -> failwith "DT: impossible branch"
-))
+let v_raise = (fun mc0 -> (let dtb__18 = Obj.obj (mc0) in Obj.repr (dtb__18)))
 
 # 222 "Base/Effect/Core.vuna"
-let v_raiseTo = (fun (r : t_Row) e -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match e with
-  | C_Eff_MkEff (dtb__19) -> (dtb__19 u)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_raiseTo = (fun (r : t_Row) e -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__19 = Obj.obj (e) in (dtb__19 u)))))
 
 # 235 "Base/Effect/Core.vuna"
-let v_sendCoreId = (fun (key : string) (name : string) (keyId : int) (nameId : int) o -> (C_Eff_MkEff ((fun (_u : t_EffUnit) -> ((((((fun key name kid nid v -> Obj.obj (Effect.perform (Perform (kid, nid, key, name, Obj.repr v)))) key) name) keyId) nameId) o)))))
+let v_sendCoreId = (fun (key : string) (name : string) (keyId : int) (nameId : int) o -> Obj.repr ((fun (_u : t_EffUnit) -> ((((((fun key name kid nid v -> Obj.obj (Effect.perform (Perform (kid, nid, key, name, Obj.repr v)))) key) name) keyId) nameId) o))))
 
 # 231 "Base/Effect/Core.vuna"
 let v_sendCore = (fun (key : string) (name : string) o -> (((((v_sendCoreId key) name) (dtp_effectId key)) (dtp_effectId name)) o))
@@ -151,19 +94,13 @@ let v_performCoreId = (fun (n : string) (key : string) (nId : int) (keyId : int)
 let v_performCore = (fun (n : string) (key : string) o -> (((((v_performCoreId n) key) (dtp_effectId n)) (dtp_effectId key)) (Obj.magic o)))
 
 # 272 "Base/Effect/Core.vuna"
-let v_handleCoreId = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match comp with
-  | C_Eff_MkEff (dtb__20) -> ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb__20) u)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_handleCoreId = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__20 = Obj.obj (comp) in ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb__20) u)))))
 
 # 267 "Base/Effect/Core.vuna"
 let v_handleCore = (fun (key : string) (name : string) ret opH comp -> (((((((v_handleCoreId key) name) (dtp_effectId key)) (dtp_effectId name)) ret) opH) comp))
 
 # 286 "Base/Effect/Core.vuna"
-let v_handleCoreAtId = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp -> (C_Eff_MkEff ((fun (u : t_EffUnit) -> (match comp with
-  | C_Eff_MkEff (dtb__21) -> ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb__21) u)
-  | _ -> failwith "DT: impossible branch"
-)))))
+let v_handleCoreAtId = (fun (key : string) (name : string) (keyId : int) (nameId : int) ret opH comp -> Obj.repr ((fun (u : t_EffUnit) -> (let dtb__21 = Obj.obj (comp) in ((((((((dtp_effect_handle_id key) name) keyId) nameId) ret) opH) dtb__21) u)))))
 
 # 281 "Base/Effect/Core.vuna"
 let v_handleCoreAt = (fun (key : string) (name : string) ret opH comp -> (((((((v_handleCoreAtId key) name) (dtp_effectId key)) (dtp_effectId name)) ret) opH) comp))

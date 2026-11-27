@@ -107,13 +107,13 @@ let rec v_toOTy = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) -> (match mc0 with
 # 227 "Vuna/Target/Ocaml/Decl.vuna"
 let v_irTyText = (fun (qc : t_QualCtx) (ty : Vuna_dIr_dModel.t_IrTy) -> ((Vuna_dTarget_dOcaml_dRender.v_renderTy (v_qualFamOf qc)) (v_toOTy ty)))
 
-# 252 "Vuna/Target/Ocaml/Decl.vuna"
+# 260 "Vuna/Target/Ocaml/Decl.vuna"
 let v_toOCtor = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) B_dData_dPair.t_Pair) -> (match mc1 with
   | { B_dData_dPair.f_Pair_first = dtb__15; B_dData_dPair.f_Pair_second = dtb__16 } -> { Vuna_dTarget_dOcaml_dModel.f_OCtor_ocName = ((v_ctorOcamlName mc0) dtb__15); Vuna_dTarget_dOcaml_dModel.f_OCtor_ocFields = ((B_dData_dList.v_map v_toOTy) dtb__16) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 255 "Vuna/Target/Ocaml/Decl.vuna"
+# 263 "Vuna/Target/Ocaml/Decl.vuna"
 let[@tail_mod_cons] rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc2 : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (match mc2 with
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -124,18 +124,18 @@ let[@tail_mod_cons] rec v_recordFieldsOf = (fun (mc0 : string) (mc1 : (int, stri
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 246 "Vuna/Target/Ocaml/Decl.vuna"
+# 250 "Vuna/Target/Ocaml/Decl.vuna"
 let v_toODecl = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl) -> (match mc0 with
   | Vuna_dIr_dModel.C_IrTyDecl_IrUnboxedDecl (dtb__21, dtb__22, dtb__23) -> (Vuna_dTarget_dOcaml_dModel.C_ODecl_ODAlias (dtb__22, (v_typeName dtb__21), (v_toOTy dtb__23)))
   | Vuna_dIr_dModel.C_IrTyDecl_IrRecordDecl (dtb__24, dtb__25, dtb__26, dtb__27) -> (Vuna_dTarget_dOcaml_dModel.C_ODecl_ODRecord (dtb__25, (v_typeName dtb__24), (((v_recordFieldsOf dtb__24) dtb__26) dtb__27)))
-  | Vuna_dIr_dModel.C_IrTyDecl_IrVariantDecl (dtb__28, dtb__29, dtb__30) -> (Vuna_dTarget_dOcaml_dModel.C_ODecl_ODVariant (dtb__29, (v_typeName dtb__28), ((B_dData_dList.v_map (v_toOCtor dtb__28)) dtb__30)))
+  | Vuna_dIr_dModel.C_IrTyDecl_IrVariantDecl (dtb__28, dtb__29, dtb__30) -> (if (dtb__28 = Vuna_dIr_dModel.v_irEffTypeName) then (Vuna_dTarget_dOcaml_dModel.C_ODecl_ODAlias (dtb__29, (v_typeName dtb__28), Vuna_dTarget_dOcaml_dModel.C_OTy_OTOpaque)) else (Vuna_dTarget_dOcaml_dModel.C_ODecl_ODVariant (dtb__29, (v_typeName dtb__28), ((B_dData_dList.v_map (v_toOCtor dtb__28)) dtb__30))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 263 "Vuna/Target/Ocaml/Decl.vuna"
+# 271 "Vuna/Target/Ocaml/Decl.vuna"
 let v_irTypeDeclsText = (fun (qc : t_QualCtx) (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((Vuna_dTarget_dOcaml_dRender.v_renderDecls (v_qualFamOf qc)) ((B_dData_dList.v_map v_toODecl) decls)))
 
-# 270 "Vuna/Target/Ocaml/Decl.vuna"
+# 278 "Vuna/Target/Ocaml/Decl.vuna"
 let rec v_irTyGlobalNames = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) -> (match mc0 with
   | Vuna_dIr_dModel.C_IrTy_IrTyData (dtb__31, dtb__32) -> (B_dData_dList.C_List__x58__x58_ (dtb__31, ((B_dData_dList.v_concatMap v_irTyGlobalNames) dtb__32)))
   | Vuna_dIr_dModel.C_IrTy_IrTyFun (dtb__33, dtb__34) -> ((B_dData_dList.v_append (v_irTyGlobalNames dtb__33)) (v_irTyGlobalNames dtb__34))
@@ -150,14 +150,14 @@ let rec v_irTyGlobalNames = (fun (mc0 : Vuna_dIr_dModel.t_IrTy) -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 282 "Vuna/Target/Ocaml/Decl.vuna"
+# 290 "Vuna/Target/Ocaml/Decl.vuna"
 let rec v_irTyDepsGo = (fun (mc0 : t_QualCtx) (mc1 : string B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__38, dtb__39) -> (let owner = ((v_unitOfTbl (mc0).f_QualCtx_qcDatas) dtb__38) in (if (if (owner = "") then true else (owner = (mc0).f_QualCtx_qcUnit)) then (((v_irTyDepsGo mc0) dtb__39) mc2) else (if ((B_dData_dList.v_memName owner) mc2) then (((v_irTyDepsGo mc0) dtb__39) mc2) else (((v_irTyDepsGo mc0) dtb__39) (B_dData_dList.C_List__x58__x58_ (owner, mc2))))))
   | B_dData_dList.C_List_Nil -> (B_dData_dList.v_reverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 267 "Vuna/Target/Ocaml/Decl.vuna"
+# 275 "Vuna/Target/Ocaml/Decl.vuna"
 let v_irTyDeclDeps = (fun (qc : t_QualCtx) (tys : Vuna_dIr_dModel.t_IrTy B_dData_dList.t_List) -> (((v_irTyDepsGo qc) ((B_dData_dList.v_concatMap v_irTyGlobalNames) tys)) B_dData_dList.C_List_Nil))
 
 # 108 "Vuna/Target/Ocaml/Decl.vuna"

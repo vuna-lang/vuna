@@ -9,7 +9,7 @@ let v_handleTty = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_han
 
 # 32 "Base/Effect/Tty.vuna"
 let v_ttyOpHIOHost = (fun (op : t_TtyOp) k -> (match op with
-  | C_TtyOp_IsTty -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (B_dEffect_dCore.C_Eff_MkEff (fun (_ : B_dEffect_dCore.t_EffUnit) -> (dtp_isTty ())))) (fun b -> ((Obj.magic k) b)))
+  | C_TtyOp_IsTty -> (((B_dTrait_dMonad.v__x62__x62__x61_ B_dEffect_dCore.v_Monad_ucc99eea03f4e7df1_uBase_x36_46_x36_Effect_x36_46_x36_Core_x36_46_x36_Eff_ur) (Obj.repr (fun (_ : B_dEffect_dCore.t_EffUnit) -> (dtp_isTty ())))) (fun b -> ((Obj.magic k) b)))
   | _ -> failwith "DT: impossible branch"
 ))
 
