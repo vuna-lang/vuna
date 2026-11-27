@@ -11,16 +11,15 @@
 **它在终态里还成立吗**。推翻旧决策时在提交信息与对应主题页说明，不静默改写；已完成阶段
 与历史细节在 git 历史。当前路线：**单一 DT 路径**（唯一检查器与 codegen）。
 
-当前基线一句话：自举链（`seed/` → rotation → stage1 == stage2）与全工具链都已工作，
-编译器自身用 vuna 写成；性能读数见 [performance.md](docs/reference/performance.md)，
-未关闭的债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
+当前基线：自举链（`seed/` → rotation → stage1 == stage2）与全工具链都已工作，编译器自身用
+vuna 写成；性能读数见 [performance.md](docs/reference/performance.md)，未关闭的债务见 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 ## 阅读顺序
 
 1. `AGENTS.md`（本文件）——前提、不变量、纪律红线、高频命令；
 2. [`.agents/README.md`](.agents/README.md)——规则与技能索引（**按场景取用**，不要通读）；
 3. [`docs/architecture.md`](docs/architecture.md)——子系统地图：哪条链路、入口符号、连带改动、测试标签，以及「改一处 → 跑什么」；
-4. 需要时再下钻：`docs/reference/`（语言 / 类型 / Core / 编译器 / 包 / 工具 / 测试参考页）、
+4. 需要时下钻 `docs/reference/`（语言 / 类型 / Core / 编译器 / 包 / 工具 / 测试参考页）与
    [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)。
 
 人类贡献者从 [CONTRIBUTING.md](CONTRIBUTING.md) 开始：分支、提交整理、PR 标签门禁与合并方式。
@@ -32,9 +31,8 @@
 
 1. **默认**用 `nix run .#vuna -- <subcommand>`：按当前 worktree 的源码构建（store 缓存命中时很快），
    永远对应你手里的代码；
-2. `./result/bin/vuna` 只在**刚跑过** `nix build .#vuna --out-link result` 之后用。`result` 是共享
-   out-link，可能指向别的产物（例如 `vuna-wasm-browser`）或几天前的二进制；
-   需要固定二进制（性能读数、反复调用、传给别的脚本）时**先显式重建**；
+2. `./result/bin/vuna` 只在刚跑过 `nix build .#vuna --out-link result` 之后用；`result` 是共享
+   out-link，可能指向别的产物或旧二进制，需要固定二进制时先显式重建；
 3. 远端稳定版（`nix registry list` 的别名）：`nix run vuna -- <subcommand>`；
 4. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <owner/family>` 过滤，
    无参数等价 `vuna dev suite test/suite.toml`；`--jobs auto` 用全部可用核）；
@@ -93,6 +91,8 @@
   （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取与
   `git pull --ff-only`；收尾改为 push 分支 → 开 PR → 合并 → teardown，**不再 cherry-pick 回主仓**
   （[workflow.md](.agents/rules/workflow.md)）。
+- **大任务拆 phase 用 stacked PR**：2 dev 槽、每 stack ≤3 层、远端写归 orchestrator；
+  细节见技能 `vuna-phase`（冻结即开工下一层，不等 merged）。
 - **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换（先用
   `nix build .#vuna --out-link result` 固定二进制），且独立成
   `chore(seed): ...` 提交；含 seed 的 PR 加 `seed` 标签并优先合并
@@ -115,10 +115,9 @@
   **OCaml →（需要时）rotate seed → WASM → Native** 的顺序在同一轮内全部实现并验收；
   不允许只落一个后端再留 TODO（[verification.md](.agents/rules/verification.md)）。
 - **提交信息**用 `type(scope): 中文描述`（技能 `vuna-commits`）；一次提交只做一件事。
-- **提交前门禁**：`.githooks/pre-commit` 跑全仓库 `fmt --check`（含 `examples/`）、
-  `lint --max-warnings 0`、`check .`；devShell / direnv 进入仓库时自动设置
-  `core.hooksPath`。不要用 `--no-verify` 掩盖失败；`chore(seed):` 轮换这类刚重建过整链的
-  提交用 `VUNA_SKIP_HOOKS=1` 明示跳过。
+- **提交前门禁**：`.githooks/pre-commit` 跑全仓库 `fmt --check`、`lint --max-warnings 0`、
+  `check .`；devShell / direnv 自动设置 `core.hooksPath`。不要用 `--no-verify` 掩盖失败；
+  `chore(seed):` 轮换等刚重建过整链的提交用 `VUNA_SKIP_HOOKS=1` 明示跳过。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
 
 ## 高频命令
@@ -145,7 +144,9 @@ gh issue list --search 'status:todo'       # 可开工 issue；流程见技能 v
 gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
 gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
 nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA
-gh pr merge <n> --rebase                  # 仅 break-glass；默认 auto-merge 入队
+gh stack view --short                     # stack 层 / PR / 顺序（sync / arm 见技能 vuna-phase）
+nix/tools/merge-queue.sh arm <top>        # stack 只对 top arm；绿后由 sweep 整条入队
+gh pr merge <n> --rebase                  # 仅 break-glass；不适用于 stack
 git pull --ff-only                        # 主仓同步
 nix/tools/github-branch-protection.sh     # 应用 main 的 ruleset（幂等；见技能 vuna-pr）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
@@ -202,8 +203,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
   [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `vuna-obs` 的 `Obs` / `vuna dev obs` / `#line` → DWARF）、
   [logging.md](docs/reference/logging.md)（`log!` / `VUNA_LOG` / scope 过滤 / text·jsonl 输出）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
-- 债务 / 已知缺口：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)（唯一清单：只含开放项、带证据；
-  文档引用写 `gh#N`，迁移来源保留在 issue 正文的 `Legacy-Debt` 行）
+- 债务 / 已知缺口：[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)（唯一清单，只含开放项、带证据；文档引用写 `gh#N`）
 - 已决取舍：[`decisions.md`](docs/reference/decisions.md)（不再作为待办的设计决策）
 - 外部先例与精化器对照：[`prior-art-elaboration.md`](docs/reference/prior-art-elaboration.md)
   （Idris 2 / Yaffle 的流水线、可推迟的合一、case tree、分层契约；vuna 的差距与候选调整）

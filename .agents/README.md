@@ -23,6 +23,7 @@
 | [perf-debug](skills/perf-debug/SKILL.md) | 命令/阶段变慢、超时、怀疑复杂度回退 |
 | [vuna-issue](skills/vuna-issue/SKILL.md) | 创建 / 精炼 / 领取 / 收尾 issue：backlog 两类来源、查重、元信息、关系与状态 |
 | [vuna-pr](skills/vuna-pr/SKILL.md) | 开 PR：提交整理、门禁计划、rebase merge、worktree 收尾、break-glass |
+| [vuna-phase](skills/vuna-phase/SKILL.md) | 大任务拆 phase：stacked PR、2 个 dev 槽、ledger、subagent 交接与回滚 |
 | [vuna-commits](skills/vuna-commits/SKILL.md) | 写或校验提交信息（Conventional Commits 的 vuna 口径） |
 | `worktree`（全局） | 副 worktree 隔离与 teardown；口径在 `~/.config/opencode/skills/worktree/SKILL.md` |
 

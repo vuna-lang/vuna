@@ -117,6 +117,29 @@ git -C <MAIN_ROOT> pull --ff-only
   加 `blocked` 并移出队列。
 - `main` 还没绿时，不要给无关 PR arm auto-merge；队列会在红灯基线上失败并反复踢出。
 
+## 7. 大任务拆 phase（stacked PR）
+
+跨多个 PR 的大改动按 phase 推进：phase N 还没合并就开工 phase N+1。完整排班与 subagent
+交接见技能 `vuna-phase`，机制、API 与 CI 口径见
+[github-workflow.md](../../docs/reference/github-workflow.md)「Stacked PR 与合并队列」。
+
+- **并发**：2 个 dev 槽；每个 stack 最多 3 层；全局最多 4 个 open layer；队列最多 3 entry。
+  线性 stack 同一时刻只有 1 个写代码的 agent，第二个槽给独立工作流或 review / 验证。
+- **只在 phase N+1 对 phase N 有硬代码依赖时 stack**；无依赖的 phase 各自从 `origin/main`
+  切分支、开独立 PR 并行。
+- **一个 phase 一个 worktree**；branch 的 base 是上一 phase 分支，bottom 的 base 是 `main`。
+- **冻结**：提交整理完、push、PR 打开、base 正确、已 arm（入队由 checks 变绿后自动/sweep
+  完成）。下一 phase 在冻结后开工，不等 merged；冻结后该层不再接受代码改动。
+- **远端写只有 orchestrator 做**：push / PR / label / `gh stack` / `merge-queue.sh` /
+  teardown；phase agent 只改代码、跑验证、commit。
+- **stack 操作**：`gh stack init --base main <b1> <b2>`（已有追踪时 `gh stack add <bN>`）→
+  `gh stack push` → 每层 `gh pr create --base <parent>` → `gh stack link <pr...>`。只
+  `arm` + `enqueue` top，不逐层入队；合并后 `gh stack sync` 级联，不手写 `rebase --onto`。
+- `Closes #N` 只放 bottom，上层用 `Refs #N` 或 `no-issue`。
+- **seed**：rotation 只放最低层并独立成 `chore(seed): ...`；上层 PR 不碰 `seed/`，全局同时
+  只允许一次 rotation。
+- 整条 stack 合并完再 `gh stack sync --prune` / `gh stack unstack`，然后 teardown 各 worktree。
+
 ## 不要做的事
 
 - 直推 `main` / `master`，或对 `main` 执行 force push。
@@ -128,3 +151,6 @@ git -C <MAIN_ROOT> pull --ff-only
 - 在提交信息 / PR 标题里写「update」「fix bug」这类无法回溯意图的描述。
 - 因为 `BEHIND` 就 rebase，或手动 `gh pr merge --rebase` 绕过合并队列。
 - 在 `main` 红灯时给无关 PR arm auto-merge，或无视已认领的 `main-red` issue 再开一个修复 PR。
+- 让 phase agent 做远端写操作（push / PR / label / `gh stack` / `merge-queue.sh`）。
+- 逐层 enqueue，或对 stack 用 `gh pr merge` / 同步 merge 端点。
+- 无依赖也硬叠 stack，或在 stack 中途 teardown 仍会被级联 rebase 的 worktree。
