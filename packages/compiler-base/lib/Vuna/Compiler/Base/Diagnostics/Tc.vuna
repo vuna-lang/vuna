@@ -124,6 +124,8 @@ export data TcErr(..) : Nat -> Type where
   CtorDoesNotReturn : String -> String -> TcErr 2
   CtorError : String -> String -> TcErr 2
   CtorWrongIndices : String -> String -> TcErr 2
+  -- 严格正性：字段类型在负位置（Pi 定义域 / 其它族实参里的负位置）出现本族。
+  CtorNotStrictlyPositive : String -> String -> TcErr 2
   NotTraitMethod : String -> String -> TcErr 2
   OpNotDefinedFor : String -> String -> TcErr 2
   OpOnlyIntString : String -> String -> TcErr 2
@@ -245,6 +247,7 @@ tcCode (AppliedNotType _) = "TC_AppliedNotType"
 tcCode (CtorDoesNotReturn _ _) = "TC_CtorDoesNotReturn"
 tcCode (CtorError _ _) = "TC_CtorError"
 tcCode (CtorWrongIndices _ _) = "TC_CtorWrongIndices"
+tcCode (CtorNotStrictlyPositive _ _) = "TC_CtorNotStrictlyPositive"
 tcCode (NotTraitMethod _ _) = "TC_NotTraitMethod"
 tcCode (OpNotDefinedFor _ _) = "TC_OpNotDefinedFor"
 tcCode (OpOnlyIntString _ _) = "TC_OpOnlyIntString"
@@ -366,6 +369,7 @@ tcTemplate (AppliedNotType _) = "expected a type (got <0> applied to these argum
 tcTemplate (CtorDoesNotReturn _ _) = "constructor <0> does not return <1>"
 tcTemplate (CtorError _ _) = "constructor <0>: <1>"
 tcTemplate (CtorWrongIndices _ _) = "constructor <0> has the wrong number of indices for <1>"
+tcTemplate (CtorNotStrictlyPositive _ _) = "constructor <0> is not strictly positive: <1>"
 tcTemplate (NotTraitMethod _ _) = "<0> is not a method of trait <1>"
 tcTemplate (OpNotDefinedFor _ _) = "<0> is not defined for <1> (Ord instance required)"
 tcTemplate (OpOnlyIntString _ _) = "<0> is only defined for Int and String (found <1>)"
@@ -717,6 +721,10 @@ tcChunk9 =
       (tcCode (CtorWrongIndices "" ""))
       (tcTemplate (CtorWrongIndices "" ""))
       "构造子索引个数不符",
+    TcEntry
+      (tcCode (CtorNotStrictlyPositive "" ""))
+      (tcTemplate (CtorNotStrictlyPositive "" ""))
+      "构造子字段在负位置引用本族（不满足严格正性）",
     TcEntry
       (tcCode (NotTraitMethod "" ""))
       (tcTemplate (NotTraitMethod "" ""))

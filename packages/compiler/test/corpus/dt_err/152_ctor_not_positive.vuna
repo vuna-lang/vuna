@@ -1,0 +1,14 @@
+-- 反例：构造子字段把本族当函数参数（`(D -> Void)` 是字段域里某个 Pi 的定义域头）。
+-- 这样的字段给出 `D -> Void`，于是 `get (MkD get)` 有类型 `Void`——空族出现了居民。
+data Void : Type where
+
+data D : Type where
+  MkD : (D -> Void) -> D
+
+get : D -> Void
+get d =
+  case d of
+    MkD f => f d
+
+bad : Void
+bad = get (MkD get)

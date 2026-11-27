@@ -44,7 +44,7 @@ elabCtor globals fam arity famLevel ec c =
                 let
                   tyTerm = zonkTerm ec1 0 tyTerm0
                 in case resultSpine (dropParams tyTerm) of
-                  (head, args) => if head /= fam then tcErr2 (nodeRefSpan csp) (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else if length args /= arity then tcErr2 (nodeRefSpan csp) (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else Vuna.Compiler.Base.Common.bind (checkCtorFieldSorts gl emptyCtx ec1 arity famLevel cname (nodeRefSpan csp) (countTelePis tyTerm) tyExpr2) (\_ => OkC (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just (nodeRefSpan csp)), ec1))
+                  (head, args) => if head /= fam then tcErr2 (nodeRefSpan csp) (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else if length args /= arity then tcErr2 (nodeRefSpan csp) (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam else Vuna.Compiler.Base.Common.bind (checkCtorFieldSorts gl emptyCtx ec1 arity famLevel fam cname (nodeRefSpan csp) (countTelePis tyTerm) tyExpr2) (\_ => OkC (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just (nodeRefSpan csp)), ec1))
         )
 
 export elabCtors : List (String, Term) -> String -> Int -> Level -> Ec -> List Ctor -> Check (List DtCtor, Ec)
@@ -70,14 +70,76 @@ kindResultLevel (TPi _ _ _ _ cod) = kindResultLevel cod
 kindResultLevel (TType l) = Just l
 kindResultLevel _ = Nothing
 
+-- ---------------------------------------------------------------
+-- 构造子字段的严格正性（strict positivity）
+-- ---------------------------------------------------------------
+-- 归纳族 `D` 的构造子字段里，`D` 只能以「被构造 / 被持有」的形态出现
+-- （`Cons : a -> List a -> List a`、`Node : Tree -> Tree -> Tree`）。**把 `D` 当函数参数**
+-- 交进构造子则给出 `D -> Void`，一旦拿到这样的字段就能就地得到空族的居民：
+-- `MkD : (D -> Void) -> D` 下 `get (MkD get)` 有类型 `Void`。判据因此是：
+--
+--   **本族不得作为 Pi 定义域的头出现（任何深度）。**
+--
+-- 「头」= 应用脊的头，所以 `(D -> Void)`、`(D a -> Void)`、`List (D -> Void)`（里面的
+-- `D -> Void`）都拒绝；`List D`、`D a` 这类「族作容器实参 / 自身应用」的字段放行。
+--
+-- 边界（刻意比教科书极性翻转保守）：不拒绝「本族作 Pi 定义域里其它族的实参」
+-- （`(List D -> Void)`）。base 的效应机把续延编码成 `(v -> Control v)`，这些函数类型本身
+-- 就是 Pi 定义域，按极性翻转会连带拒绝 `Control` / `Frame` / `Ctx` 整族；更强的判据要先
+-- 给效应机换表示。已知的非正形态（本族直接作参数）全部在这里挡住。
+--
+-- 判定在**已精化**的字段域上做：族的引用形态是 `TGlobal`，record 族的应用是 `TRecord`
+-- 前导（`famSpineHead` 两种都按脊的头处理）。未解元变量不参与判定（由收尾诊断负责）。
+
+-- | 字段域里是否有 Pi 的定义域以本族为头（`(D -> Void)`、`(D a -> b)`、`List (D -> Void)`）。
+famAsPiDomain : String -> Term -> Bool
+famAsPiDomain fam (TPi _ _ _ dom cod) =
+  famSpineHead fam dom || famAsPiDomain fam dom || famAsPiDomain fam cod
+famAsPiDomain fam (TLam _ _ slot _ body) = famAsPiDomainSlot fam slot || famAsPiDomain fam body
+famAsPiDomain fam (TApp f a _) = famAsPiDomain fam f || famAsPiDomain fam a
+famAsPiDomain fam (TCon _ args) = famAsPiDomainArgs fam args
+famAsPiDomain fam (TMk _ args) = famAsPiDomainArgs fam args
+famAsPiDomain fam (TRecord _ args) = famAsPiDomainArgs fam args
+famAsPiDomain fam (TProj base _ _ _ _) = famAsPiDomain fam base
+famAsPiDomain fam (TRecUpd base _ _ _ body) = famAsPiDomain fam base || famAsPiDomain fam body
+famAsPiDomain fam (TCase scrut alts) = famAsPiDomain fam scrut || famAsPiDomainAlts fam alts
+famAsPiDomain fam (TIf c th el) =
+  famAsPiDomain fam c || famAsPiDomain fam th || famAsPiDomain fam el
+famAsPiDomain _ _ = False
+
+famAsPiDomainArgs : String -> List (Term, Rig) -> Bool
+famAsPiDomainArgs fam [] = False
+famAsPiDomainArgs fam ((a, _) :: rest) = famAsPiDomain fam a || famAsPiDomainArgs fam rest
+
+famAsPiDomainAlts : String -> List CaseAlt -> Bool
+famAsPiDomainAlts fam [] = False
+famAsPiDomainAlts fam (a :: rest) = famAsPiDomain fam a.caseAltBody || famAsPiDomainAlts fam rest
+
+famAsPiDomainSlot : String -> Maybe (LamMark, Maybe Term, Maybe Term) -> Bool
+famAsPiDomainSlot fam Nothing = False
+famAsPiDomainSlot fam (Just (_, binderTy, resTy)) =
+  famAsPiDomainMaybe fam binderTy || famAsPiDomainMaybe fam resTy
+
+famAsPiDomainMaybe : String -> Maybe Term -> Bool
+famAsPiDomainMaybe fam Nothing = False
+famAsPiDomainMaybe fam (Just t) = famAsPiDomain fam t
+
+-- | 应用脊的头是不是本族（`D`、`D a`、`D a b` …）。
+famSpineHead : String -> Term -> Bool
+famSpineHead fam (TGlobal g) = g == fam
+famSpineHead fam (TApp f _ _) = famSpineHead fam f
+famSpineHead fam (TRecord c _) = c == fam
+famSpineHead _ _ = False
+
 -- 对构造子的**表面**类型表达式做受控遍历：逐段 `checkType` 取域的 sort，并带 binder
 -- 进入 `Ctx`（后续依赖域的 sort 必须在正确上下文里算）。前 arity 个 binder 是族参数 /
--- 索引，不受限（大参数合法）；其余 binder 是字段，其域 sort 必须 `≤ famLevel`
--- （`Type i : Type (i+1)` 严格分层：字段比族大就是宇宙不一致）。
+-- 索引，不受限（大参数合法）；其余 binder 是字段：其域 sort 必须 `≤ famLevel`
+-- （`Type i : Type (i+1)` 严格分层：字段比族大就是宇宙不一致），并且域里本族不得作为
+-- Pi 定义域的头出现（见上面的严格正性判定；同一遍遍历，字段域只精化一次）。
 -- 匿名箭头在 AST 里是 `EApp (EVar "->") [a, b]`，命名 Pi 是 `EPi`；两者都算一个 binder。
 -- 返回的 `Ec` 只是校验过程中的状态，调用方丢弃，不污染主精化。
-checkCtorFieldSorts : List (String, Term) -> Ctx -> Ec -> Int -> Level -> String -> Span -> Int -> Expr -> Check Ec
-checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
+checkCtorFieldSorts : List (String, Term) -> Ctx -> Ec -> Int -> Level -> String -> String -> Span -> Int -> Expr -> Check Ec
+checkCtorFieldSorts globals ctx ec arity famLevel fam cname csp tyPis tyExpr =
   let
     -- 表面形态与已精化形态必须同构（否则无法确定每个字段的层级，显式拒绝而不是静默放行）。
     surfacePis = countSurfacePis tyExpr
@@ -88,7 +150,7 @@ checkCtorFieldSorts globals ctx ec arity famLevel cname csp tyPis tyExpr =
       cname
       "cannot verify the universe level of its field types; write the constructor type as a Pi chain"
   else
-    ctorFieldSortsGo globals ctx ec 0 arity famLevel cname csp tyExpr
+    ctorFieldSortsGo globals ctx ec 0 arity famLevel fam cname csp tyExpr
 
 countSurfacePis : Expr -> Int
 countSurfacePis (EPi _ _ _ _ cod _) = 1 + countSurfacePis cod
@@ -100,15 +162,15 @@ countTelePis : Term -> Int
 countTelePis (TPi _ _ _ _ cod) = 1 + countTelePis cod
 countTelePis _ = 0
 
-ctorFieldSortsGo : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> Expr -> Check Ec
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EPi name _ _ dom cod _) =
-  ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp (EApp (EVar "->" _) [a, b] _) =
-  ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp "_" a b
-ctorFieldSortsGo globals ctx ec pos arity famLevel cname csp _ = OkC ec
+ctorFieldSortsGo : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> String -> Span -> Expr -> Check Ec
+ctorFieldSortsGo globals ctx ec pos arity famLevel fam cname csp (EPi name _ _ dom cod _) =
+  ctorFieldSortsBinder globals ctx ec pos arity famLevel fam cname csp name dom cod
+ctorFieldSortsGo globals ctx ec pos arity famLevel fam cname csp (EApp (EVar "->" _) [a, b] _) =
+  ctorFieldSortsBinder globals ctx ec pos arity famLevel fam cname csp "_" a b
+ctorFieldSortsGo globals ctx ec pos arity famLevel fam cname csp _ = OkC ec
 
-ctorFieldSortsBinder : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> Span -> String -> Expr -> Expr -> Check Ec
-ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod =
+ctorFieldSortsBinder : List (String, Term) -> Ctx -> Ec -> Int -> Int -> Level -> String -> String -> Span -> String -> Expr -> Expr -> Check Ec
+ctorFieldSortsBinder globals ctx ec pos arity famLevel fam cname csp name dom cod =
   Vuna.Compiler.Base.Common.bind (checkType globals ctx ec dom) (
       \p =>
         case p of
@@ -116,9 +178,15 @@ ctorFieldSortsBinder globals ctx ec pos arity famLevel cname csp name dom cod =
             let
               ctx2 = ctxBind name domTerm ctx
             in if pos < arity then
-              ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel cname csp cod
+              ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel fam cname csp cod
             else if levelLt sort famLevel || levelEq sort famLevel then
-              ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel cname csp cod
+              if famAsPiDomain fam domTerm then
+                let
+                  field = pos - arity
+                  msg = "field #${field}: the family occurs as a function argument type (negative position)"
+                in tcErr2 csp (CtorNotStrictlyPositive (ctorDisplayName cname) msg) (ctorDisplayName cname) msg
+              else
+                ctorFieldSortsGo globals ctx2 ec1 (pos + 1) arity famLevel fam cname csp cod
             else
               let
                 field = pos - arity

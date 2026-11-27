@@ -1,0 +1,36 @@
+-- 正性检查的放行面：递归族只要求「本族不作 Pi 定义域的头」。
+-- 直接递归、自身作容器实参、互递归都合法；续延风格（函数类型的 codomain 是本族）
+-- 也保留——base 效应机的 `Control` 用这种编码续延。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data List a : Type where
+  Nil : List a
+  Cons : a -> List a -> List a
+
+data Tree : Type where
+  Leaf : Tree
+  Node : Tree -> Tree -> Tree
+
+data Rose : Type where
+  MkRose : List Rose -> Rose
+
+data Even : Nat -> Type where
+  EvenZero : Even Zero
+  EvenSucc : {n : Nat} -> Odd n -> Even (Succ n)
+
+data Odd : Nat -> Type where
+  OddSucc : {n : Nat} -> Even n -> Odd (Succ n)
+
+data Cont v : Type where
+  MkCont : (v -> Cont v) -> v -> Cont v
+
+size : Tree -> Int
+size t =
+  case t of
+    Leaf => 0
+    Node l r => 1 + size l + size r
+
+main : Int
+main = size (Node Leaf (Node Leaf Leaf)) + 39
