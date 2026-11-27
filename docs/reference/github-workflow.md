@@ -1,7 +1,8 @@
 # Issue / PR / 门禁协作
 
 本页是仓库的 GitHub 工作流说明：issue 状态机、标签含义、PR 与 issue 的联动、
-按 `type + area` 选择的 PR 门禁、合并队列，以及 main 红灯的认领流程。分支与提交整理见
+按 `type + area` 选择的 PR 门禁、合并队列、stacked PR 的入队与级联，以及 main 红灯的
+认领流程。分支与提交整理见
 [CONTRIBUTING.md](../../CONTRIBUTING.md) 与技能 `vuna-pr`；门禁语义见
 [testing-checks.md](testing-checks.md)。
 
@@ -273,6 +274,62 @@ token 不适合当长期 secret。
 管理，required checks 是 `pr / run` 与 `gates / run`。没有 bypass；break-glass 流程见
 CONTRIBUTING.md。
 
+## Stacked PR 与合并队列
+
+大任务拆 phase、上层依赖下层代码时用 stacked PR：每层一个 PR，base 指向下一层，bottom 的
+base 是 `main`；整条 stack 经合并队列原子落 `main`。排班与并发上限见技能 `vuna-phase`，
+提交整理与 PR 操作见技能 `vuna-pr`。
+
+机制（官方行为）：
+
+- 一个 stack 作为一个 merge group 入队，bottom → top 原子落库；只合到某一层时，它下方的层
+  一起落，上方层自动 retarget 到 stack base。
+- 每层按 **stack base（`main`）** 的 rules 与 required checks 评估，即使直接 base 是下层
+  分支；`pull_request` workflow 对每层都跑。
+- 队列为保持 stack 完整，允许 group 超过 `max_entries_to_merge`（当前 6）的 50%，即最多 9；
+  更大的 stack 整体进入下一组。仓库上限是每 stack 3 层，正常不会拆组。
+- 某层被移除 / 弹出队列，上方所有层一起被移除；hold 一层等于挡住上方所有层。
+- 失去线性历史（下层被改、`main` 前进）时用 `gh stack rebase` 或 PR 的 **Rebase stack**
+  恢复；bottom 合并后剩余层自动 retarget。
+- `merge_group` 侧每个入队组各跑一次完整门禁；层数越多，总 CI 成本越高。
+
+```console
+gh extension install github/gh-stack      # 一次性；要求 gh ≥2.0、git ≥2.36
+gh stack init --base main <b1> <b2>       # 建立本地追踪（bottom → top）
+gh stack add <b3>                         # 已有追踪时收养新分支
+gh stack push                             # 原子推所有层
+gh pr create --base <parent> ...          # 每层手动建 PR，标题 / 描述 / 标签自控
+gh stack link <pr1> <pr2>                 # 在 GitHub 上建立 stack（只追加，不移除）
+gh stack sync                             # fetch + 级联 rebase + push + 同步 PR
+gh stack rebase [--continue|--abort]      # 只做级联 rebase；冲突时交互解决
+gh stack unstack [--local]                # 解散 stack；--local 只清本地追踪
+nix/tools/merge-queue.sh arm <top>
+nix/tools/merge-queue.sh enqueue <top>
+```
+
+- 只对 **top** arm；checks 绿后整条入队（sweep 自动，或手动 `enqueue <top>`）。GraphQL
+  `enqueuePullRequest` 没有 stack 参数；stack 必须走 REST
+  `PUT /repos/{owner}/{repo}/pulls/{n}/merge-async`、`merge_action: merge_queue`（202 即接受，
+  脚本不阻塞轮询）。`gh pr merge` 没有 stack flag。
+- GraphQL 的 mutation 里只有 auto-merge 认 stack：`enablePullRequestAutoMerge(includeStack: true)` 与
+  `autoMergeRequest(includeStack: true)`（`disablePullRequestAutoMerge` 同名参数）。
+- `Closes #N` 只放 bottom；上层用 `Refs #N` 或 `no-issue`。否则上层合并时 issue 已经关闭。
+- 合并后用 `gh stack sync`（或 `gh stack rebase` + `gh stack push`）级联；整条 stack 完成后再
+  `gh stack sync --prune` / `gh stack unstack`，然后 teardown 各 phase worktree。
+- 远端写（push / PR / 标签 / arm / enqueue / merge / teardown）只由 orchestrator 执行；
+  phase agent 只改代码、跑验证、commit。
+
+限制与代价：
+
+- stack 要求所有分支在同一仓库，跨 fork 不支持。
+- 每 stack ≤3 层；全局 ≤4 个 open layer；队列 ≤3 entry；2 个 dev 槽（见技能 `vuna-phase`）。
+- CI 不为 stack 缩减检查：`pull_request` 每层都跑，`merge_group` 按入队组完整跑；单次耗时
+  按实测。层数是门禁成本的乘数。
+- **seed**：rotation 只在最低层，独立 `chore(seed): ...`；上层不碰 `seed/`。把 stack 拆成
+  两条时，seed 边界跟着各自的 bottom 走，全局同时只允许一次 rotation。
+- hold 用 `blocked` / `needs-info` / draft；它挡住上方所有层，解除后从 top 重新 arm，
+  绿后由 sweep 入队，不要逐层重试。
+
 ## main 红灯
 
 `main` 的 `ci` 失败时，[main-red.yml](../../.github/workflows/main-red.yml) 维护唯一的
@@ -300,6 +357,8 @@ gh api "repos/vuna-lang/vuna/issues?issue_field_values=priority:High" --jq '.[].
 nix/tools/issue.sh show <n>
 gh pr view <n> --json autoMergeRequest,labels,isDraft
 gh pr checks <n>
+gh stack view --short
+gh stack view --json
 nix/tools/merge-queue.sh status
 ```
 
@@ -317,6 +376,12 @@ nix/tools/merge-queue.sh status
 - 队列一直等 check：确认 `ci.yml` / `gates.yml` 有 `merge_group` 触发器，且 `gates / run`
   在组合 head 上有结论；检查 `merge_group.head_ref` 是否能解析出 PR 号。
 - PR 被移出队列：看 PR 时间线的原因；冲突才 rebase，检查失败就修，超时重新 arm。
+- stack 的某层不能合并：确认它下方的所有层都满足 rules、且 stack 保持线性；合并框要求
+  **Rebase stack** 时先级联（`gh stack rebase`），不要单独重试该层。
+- stack 入队后只落了前几层：队列按组推进，剩余层留在后续组；某层被 eject 时上方一起移除，
+  修根因后从 top 重新 arm + enqueue。
+- `gh stack` 不存在：`gh extension install github/gh-stack`；`gh stack` 与 `gh pr merge` 的
+  行为不同，合 stack 不要用后者。
 - `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
 - auto-merge 没打开：确认 PR 非 draft、同仓库、没有 hold 标签；队列启用后不再需要
   `strict up-to-date`。

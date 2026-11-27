@@ -1,6 +1,6 @@
 ---
 name: vuna-pr
-description: 在 vuna 仓库开、更新、合并 GitHub PR 时使用——开 PR 前的 rebase -i 提交整理、type/pkg/area 自动标签与 gates 计划、等待 pr/gates 门禁、auto-merge、worktree 收尾与 break-glass。用户说「开 PR」「提 PR」「走 PR 流程」「合并 PR」时加载。
+description: 在 vuna 仓库开、更新、合并 GitHub PR 时使用——开 PR 前的 rebase -i 提交整理、type/pkg/area 自动标签与 gates 计划、等待 pr/gates 门禁、auto-merge、stacked PR 阶段流水线、worktree 收尾与 break-glass。用户说「开 PR」「提 PR」「走 PR 流程」「合并 PR」时加载。
 ---
 
 # vuna 的 GitHub PR 流程
@@ -116,7 +116,48 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
   或用户明确要求。
 - 用 `nix/tools/merge-queue.sh dequeue <n>` 手动移出队列；`wait <n>` 只在明确要阻塞等结果时用。
 
-## 6. seed 轮换 PR
+## 6. 阶段流水线（stacked phases）
+
+大改动拆 phase、且 phase N 还没合并就要开工 phase N+1 时用。排班与 subagent 交接见技能
+`vuna-phase`；stack 与队列的机制、API 与 CI 口径见
+[github-workflow.md](../../../docs/reference/github-workflow.md)「Stacked PR 与合并队列」。
+
+- **并发上限**：2 个 dev 槽；每 stack ≤3 层；全局 ≤4 个 open layer；队列 ≤3 entry。
+  线性 stack 同一时刻只有 1 个写代码的 agent，第二个槽给独立工作流或 review / 验证。
+- **只在 phase N+1 对 phase N 有硬代码依赖时 stack**；否则各自从 `origin/main` 切分支，
+  两个独立 PR 并行。
+- **冻结即开工下一层**：提交整理完、push、PR 打开、base 正确、已 arm 就是冻结（入队由
+  checks 变绿后自动/sweep 完成），不等 merged。冻结后该层不再接受代码改动；要改先从 top
+  `dequeue` 整条 stack，改完重新整理、push、arm；绿后由 sweep 入队。
+- 每 phase 一个 worktree；branch base = 上一 phase 分支，bottom 的 base 是 `main`。
+
+```console
+gh extension install github/gh-stack           # 一次性
+gh stack init --base main feat/1-phase-1 feat/1-phase-2
+gh stack add feat/1-phase-3                    # 已有追踪时收养新分支（在 top 所在 worktree）
+gh stack push
+gh pr create --base main            --head feat/1-phase-1 --title ... --body-file ...
+gh pr create --base feat/1-phase-1  --head feat/1-phase-2 --title ... --body-file ...
+gh stack link <pr1> <pr2>
+nix/tools/merge-queue.sh arm <top>
+# nix/tools/merge-queue.sh enqueue <top>   # 仅当所有 open 层已 CLEAN
+```
+
+- `Closes #N` 只放 bottom 的 PR；上层用 `Refs #N`，PR-only 的层加 `no-issue`。
+- 只对 **top** arm；checks 绿后整条入队（sweep 自动；手动 `enqueue` 仅在全部 open 层
+  `CLEAN` 时）。stack 作为一个 merge group 入队；`gh pr merge` 与 GraphQL
+  `enqueuePullRequest` 都不认 stack，整条入队走 REST `merge-async`。
+- 某一层被 hold 或移出队列，它上方所有层一起被挡住 / 移除；修根因后从 top 重新 arm，
+  绿后由 sweep 入队，不要逐层重试。
+- 合并后用 `gh stack sync` 级联（fetch + rebase + push + 同步 PR）；冲突用
+  `gh stack rebase` 解决，不要手写 `git rebase --onto`。整条 stack 合并完再
+  `gh stack sync --prune` 或 `gh stack unstack`，然后 teardown。
+- seed rotation 只放最低层，独立 `chore(seed): ...`；上层 PR 一律不得改 `seed/`，
+  全局同时只允许一次 rotation。
+- CI 不因 stack 缩减检查：`pull_request` 对每层都跑，`merge_group` 按入队组完整验证。
+  层数就是门禁成本的乘数，这是 3 层上限的原因之一。
+
+## 7. seed 轮换 PR
 
 - 轮换放在同一个 PR，独立 `chore(seed): ...` 提交；PR 加 `seed` 标签。
 - rebase 到最新 `origin/main` 时如果 `seed/` 冲突：abort，先 rebase 非 seed 提交，再重新
@@ -125,7 +166,7 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
 - 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 不需要跟着 rebase，队列会在
   最新 `main` 上重新验证；只有 `seed/` 冲突时才按上面的流程处理。
 
-## 7. break-glass
+## 8. break-glass
 
 `main` 的 ruleset 没有 bypass。CI 自身坏了导致无法合并时：
 
@@ -136,7 +177,7 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
 
 不要用 `--admin` 合并绕过检查作为常规手段。
 
-## 8. 汇报模板
+## 9. 汇报模板
 
 ```markdown
 ## PR

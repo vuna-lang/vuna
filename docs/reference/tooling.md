@@ -1,7 +1,8 @@
 # 工具链：goal、LSP、doc、fmt 与错误码
 
 本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
-`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码；开发循环见 §0。命令面（命令树、
+`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码；开发循环见 §0，仓库协作脚本
+（`merge-queue.sh` / `gh stack`）见 §9。命令面（命令树、
 flag 词汇、帮助与建议、退出码总表、`vuna dev` 边界）见 [cli.md](cli.md)。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
@@ -492,7 +493,38 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 | `vuna dev obs symbols [--out FILE] [OUTDIR]` | 从 split 产物的 `#line` 指令抽 `vuna-symbols.json`（OCaml 符号 → `.vuna` 位置） |
 | `vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]` | CDP Profiler 子集（自带 HTTP 发现端点 + WebSocket 传输，经中立库 `vuna-http`；串行 accept，连接间空闲即退出；**离线**：`Profiler.stop` 由 TRACE 的 cpu 采样换算，非 live 采样；退出码 0/1/2） |
 
-## 9. 尚未实现（工具链自身缺口）
+## 9. 仓库协作脚本（`merge-queue.sh` / `gh stack`）
+
+`gh` 没有合并队列子命令，也没有查看队列位置的命令；仓库脚本把这两类远端操作封装起来。
+依赖 `gh`（已登录，`pull-requests: write`）与 `jq`（`nix develop` 提供）。
+
+```console
+nix/tools/merge-queue.sh status [branch]        # 队列位置 / 状态 / ETA；stack 按层显示
+nix/tools/merge-queue.sh arm <pr>               # 打开 auto-merge（GraphQL includeStack）
+nix/tools/merge-queue.sh disarm <pr>            # 关闭 auto-merge（includeStack）
+nix/tools/merge-queue.sh enqueue <pr> [--jump]  # 入队；stack 走 REST merge-async
+nix/tools/merge-queue.sh dequeue <pr>           # 移出队列（stack 的上层一起移出）
+nix/tools/merge-queue.sh wait <pr> [timeout]    # 阻塞等待合并 / 被移除，默认 1800 秒
+nix/tools/merge-queue.sh sweep [--dry-run]      # 扫已 arm 且 CLEAN 的 PR 补 enqueue
+```
+
+| 命令 | stack 语义 |
+| --- | --- |
+| `status` | 队列 entry 按 stack 聚合，同一 stack 的层标出 bottom → top 与位置 |
+| `arm` / `disarm` | GraphQL `enablePullRequestAutoMerge` / `disablePullRequestAutoMerge` 带 `includeStack: true`；覆盖该 PR 与它下方的层，所以只对 top 操作 |
+| `enqueue` | 普通 PR 走 GraphQL `enqueuePullRequest`；stack 走 REST `PUT .../pulls/{n}/merge-async`、`merge_action: merge_queue`，只对 top |
+| `dequeue` | 移出一层会连带移出上方所有层；撤回整条 stack 从 bottom 操作 |
+| `wait` | 等到 top 合并或某层被移除；被 eject 时非 0 退出 |
+| `sweep` | 按 stack 聚合补 enqueue；同一 stack 只入队 top，不逐层补 |
+
+- 正常流程只需要 auto-merge 的 arm；`enqueue` / `sweep` 是补 GitHub 回归
+  （community#209348）的兜底，`dequeue` / `wait` 用于人工干预。
+- `gh stack` 是官方扩展：`gh extension install github/gh-stack`（要求 gh ≥2.0、git ≥2.36），
+  升级用 `gh extension upgrade stack`。它只负责本地分支链与远端 stack
+  （`init` / `add` / `push` / `link` / `rebase` / `sync` / `unstack`），不改合并队列。
+- 这两个工具的远端写只由 orchestrator 执行；phase agent 不跑（技能 `vuna-phase`）。
+
+## 10. 尚未实现（工具链自身缺口）
 
 - `rewrite` / `with` 等证明工程 ergonomics：未实现。
 - **语义索引**：Index 仍是 parse 级（签名必填 ⇒ 语法索引即语义面，不另建语义索引）。

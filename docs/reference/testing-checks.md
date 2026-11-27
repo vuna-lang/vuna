@@ -83,6 +83,13 @@ job：wasm / native 矩阵与自举 conformance 只在定时 / 手动跑（见�
 main。main push 仍跑完整 gate 作为合并后兜底，定时 `suite` 继续覆盖 e2e。
 `AUTOMERGE_TOKEN` 仍用于人工 / break-glass 推送触发 push 门禁。
 
+**stacked PR 的 CI 成本**：stack 的每层都是独立 PR，`pr / run` 与 `gates / run` 对每层各跑
+一次 `pull_request`；入队后 `merge_group` 按组完整跑 `gate-shard-0..3 + units` + area，超大
+stack 拆到后续组时每组各一次 build。检查不做 stack 专属缩减——每层都要独立满足 `main` 的
+rules，否则上层会卡在合并框。层数因此直接放大总成本，仓库上限是每 stack 3 层
+（见 [github-workflow.md](github-workflow.md)「Stacked PR 与合并队列」）；单次耗时按实测，
+不承诺固定分钟数。
+
 每组有独立的 Nix store cache 前缀（`nix-<group>-<os>-<sha>`），只恢复自己组（冷启动回退
 `deep` → `pr`），只在 main push 与定时 / 手动 dispatch 上写；`purge-created: 0` 让每组只留一代。
 `nix run .#ci` 用 `--out-link .ci/result` 构建，产物是 save 前 GC 的 root，所以保存时只会

@@ -114,7 +114,46 @@ git -C <MAIN_ROOT> pull --ff-only
 - 合并用 rebase，保证 `chore(seed)` 独立落库；其他打开的 PR 不需要跟着 rebase，队列会在
   最新 `main` 上重新验证；只有 `seed/` 冲突时才按上面的流程处理。
 
-## 8. 分支保护与 break-glass
+## 8. 大改动拆 phase（stacked PR）
+
+一个改动太大、要拆成多个 PR，且后一层依赖前一层的代码时，用 stacked PR。限制：
+
+- 同时最多 2 个开发中的 agent（或人）；每 stack ≤3 层；全局 ≤4 个 open layer；队列里
+  同时最多 3 个 entry。
+- 同一线性 stack 同一时刻只有 1 个写者；第二个并行位给独立工作流或 review / 验证。
+- 只在有硬代码依赖时 stack；没有依赖就各自从 `main` 切分支、开独立 PR。
+
+每 phase 一个 worktree，branch base 是上一 phase 分支（bottom 为 `main`）：
+
+```console
+gh extension install github/gh-stack           # 一次性
+git -C <worktree-phase-1> switch -c feat/123-phase-1 origin/main
+git -C <worktree-phase-2> switch -c feat/123-phase-2 feat/123-phase-1
+# …各层开发、整理提交…
+gh stack init --base main feat/123-phase-1 feat/123-phase-2
+gh stack push
+gh pr create --base main             --head feat/123-phase-1 ...
+gh pr create --base feat/123-phase-1 --head feat/123-phase-2 ...
+gh stack link <pr1> <pr2>
+nix/tools/merge-queue.sh arm <top>
+nix/tools/merge-queue.sh enqueue <top>
+```
+
+- 下一 phase 在上一 phase **冻结**（提交整理完、push、PR 打开、base 正确、已 arm；入队由
+  checks 变绿后自动/sweep 完成）后开工，不等合并。
+- `Closes #N` 只放 bottom；上层用 `Refs #N` 或 `no-issue`。
+- 只 arm / enqueue **top**；某层被 hold 或移出队列，上方所有层一起挡住，修好后从 top 重来。
+- 合并后用 `gh stack sync` 级联；冲突用 `gh stack rebase` 解决，不要手写
+  `git rebase --onto`。整条 stack 完成后再 `gh stack sync --prune` / `gh stack unstack`
+  并清理 worktree。
+- seed rotation 只在最低层，独立 `chore(seed): ...`；上层 PR 不改 `seed/`。
+- CI 对每层都跑完整检查，层数直接放大总耗时；3 层是上限，不是目标。
+
+完整机制见 [docs/reference/github-workflow.md](docs/reference/github-workflow.md)
+「Stacked PR 与合并队列」，agent 的排班与交接见技能
+[`vuna-phase`](.agents/skills/vuna-phase/SKILL.md)。
+
+## 9. 分支保护与 break-glass
 
 `main` 的 ruleset 由 `nix/tools/github-branch-protection.sh` 管理（幂等）：
 
