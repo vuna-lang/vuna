@@ -26,6 +26,8 @@ JOBS=${VUNA_TEST_JOBS:-${NIX_BUILD_CORES:-1}}
 # 分层：VUNA_TEST_TIERS 是空格分隔的 tier 名（gate = fast integration，e2e = e2e）。
 # 空值 = 全量（本地调试）。e2e 先串行预热 packages/base、packages/compiler、全部包：23 s，换 e2e 长
 # case（44g 等）共享预热好的 base/compiler 产物，不各自冷跑；总 wall 不变、单 case 显著下降。
+# e2e 顺带跑 `tools` tier：这些 case 与 e2e 共享同一批预热产物，一起交给 LPT
+# 才能按耗时摊开（单独跑时只有两个 case，分片后必然压在 1–2 片上）。
 now_s() { date +%s; }
 phase_t0=$(now_s)
 case " $VUNA_TEST_TIERS " in
@@ -40,6 +42,9 @@ TIER_ARGS=""
 for tier in ${VUNA_TEST_TIERS:-}; do
   TIER_ARGS="$TIER_ARGS --tier $tier"
 done
+case " $VUNA_TEST_TIERS " in
+  *" e2e "*) TIER_ARGS="$TIER_ARGS --tier tools" ;;
+esac
 # 后端矩阵：VUNA_TEST_BACKENDS 是空格分隔的目标名（ocaml / wasm / native）。
 # 只跑 `matrix` 声明的允许面（见 test/suite.toml 与 testing.md）。
 BACKEND_ARGS=""
@@ -96,17 +101,10 @@ else
   run_unit_tests packages/*
 fi
 
-# e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
-# 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
-case " $VUNA_TEST_TIERS " in
-  *" e2e "*)
-    # shellcheck disable=SC2086
-    "$VUNA" dev suite --all --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS $AREA_ARGS $SHARD_ARGS || rc=1
-    ;;
-esac
 phase_t3=$(now_s)
-# 分段耗时：分片的 wall 由「预热 + 主 suite + tools」组成，只有主 suite 参与 LPT 平衡。
-echo "=== suite-timing warmup=$((phase_t1 - phase_t0))s cases=$((phase_t2 - phase_t1))s tools=$((phase_t3 - phase_t2))s"
+# 分段耗时：分片的 wall 由「预热 + 主 suite + 尾部（包内单测；分片为空）」组成，
+# 只有主 suite 参与 LPT 平衡。
+echo "=== suite-timing warmup=$((phase_t1 - phase_t0))s cases=$((phase_t2 - phase_t1))s tail=$((phase_t3 - phase_t2))s"
 
 # 调度权重：把本轮实测耗时表打进构建日志。runner 的机器特征与开发机差数倍，
 # `test/suite/costs.baseline` 的 LPT 权重只能按 runner 上的读数重录。
