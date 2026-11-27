@@ -1,0 +1,81 @@
+-- `cleanFixpoint` 的依赖链判据：一遍没有任何进展时必须把剩余模块判脏，不能把它们
+-- 当成干净接口复用（否则脏依赖会被下游模块看见）。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Driver.Cache
+import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Driver.Iface
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <-
+          consolePrint
+            ("clean fixpoint failed: " ++ join ", " xs ++ " names=" ++ join "," (namesOf (cleanFixpoint 4 [("ext", "he")] [iface "a" [("b", "hb")], iface "b" [("ext", "he")]] [])) ++ " hashes=" ++ miIfaceHashOf (iface "b" []) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "no-progress-rejects" noProgressRejects,
+    Pair "external-dep-chain" externalDepChain,
+    Pair
+      "external-count"
+      (length (namesOf (cleanFixpoint 4 [("ext", "he")] [iface "a" [("b", "hb")], iface "b" [("ext", "he")]] [])) == 2),
+    Pair
+      "external-a"
+      (memName "a" (namesOf (cleanFixpoint 4 [("ext", "he")] [iface "a" [("b", "hb")], iface "b" [("ext", "he")]] []))),
+    Pair
+      "external-b"
+      (memName "b" (namesOf (cleanFixpoint 4 [("ext", "he")] [iface "a" [("b", "hb")], iface "b" [("ext", "he")]] []))),
+    Pair "self-cycle-rejects" selfCycleRejects
+  ]
+
+noProgressRejects : Bool
+noProgressRejects =
+  let
+    clean = cleanFixpoint 4 [] [iface "a" [("b", "hb")], iface "b" [("missing", "hm")]] []
+  in length clean == 0
+
+externalDepChain : Bool
+externalDepChain =
+  let
+    clean = cleanFixpoint 4 [("ext", "he")] [iface "a" [("b", "hb")], iface "b" [("ext", "he")]] []
+    names = map miNameOf clean
+  in length names == 2 && memName "a" names && memName "b" names
+
+selfCycleRejects : Bool
+selfCycleRejects =
+  let
+    clean = cleanFixpoint 4 [] [iface "a" [("a", "ha")]] []
+  in length clean == 0
+
+namesOf : List ModuleIface -> List String
+namesOf ms = map miNameOf ms
+
+iface : String -> List (String, String) -> ModuleIface
+iface name deps =
+  ModuleIface
+    name
+    "pkg"
+    (SourceInfo name "" 0 0)
+    ("h" ++ name)
+    deps
+    []
+    []
+    []
+    []
+    []
+    []
+    []
+    (CachedProgram [] [] [] [] [] [])
+    []
