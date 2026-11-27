@@ -3,6 +3,8 @@
 let
   common = import ./common.nix { inherit nixpkgs; };
   inherit (common) systems forAllSystems pkgsFor;
+  # CI store 缓存的根（`.#ci-deps`）：只含跨 commit 稳定的第三方工具闭包。
+  ciDeps = import ./ci-deps.nix { inherit nixpkgs; };
 
   # 每个系统一份完整输出；再按 flake 的输出类型转置。
   perSystem =
@@ -155,7 +157,11 @@ let
       throw "nix/checks: ${groupError}"
     else
       {
-        inherit packages checks;
+        # `ci-deps` 不是产品，只是 CI 缓存的锚点（见 nix/build/ci-deps.nix）。
+        packages = packages // {
+          ci-deps = ciDeps.ciDeps system;
+        };
+        inherit checks;
 
         # default 是全量开发环境；ocaml 只含工具链，不依赖仓库源码，
         # 种子重建/坏掉时仍可进入（direnv 默认用 default）。

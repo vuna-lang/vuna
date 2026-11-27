@@ -207,10 +207,8 @@ jobs:
     uses: ./.github/workflows/_check.yml
     with:
       group: ${{ matrix.group }}
-      cache-key: suite
       timeout: 60
       jobs: 1
-      cache-size: 2G
 
   # 必需的汇总检查：跑 area 计划里剩下的部分，并把 suite 的结论一并收进来。
   # PR 上是轻量切片；merge_group 上是完整 gate-shard + units + area，即合并后的 main 基线。
@@ -224,7 +222,6 @@ jobs:
       group: gates
       timeout: 60
       jobs: 2
-      cache-size: 2G
       gate-labels: ${{ needs.detect.outputs.labels }}
       plan-exclude-suite: true
       precondition: ${{ (needs.detect.result == 'success' && (needs.suite.result == 'success' || needs.suite.result == 'skipped')) && 'success' || format('detect={0} suite={1}', needs.detect.result, needs.suite.result) }}
