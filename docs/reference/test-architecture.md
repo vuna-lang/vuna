@@ -151,8 +151,9 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
   工具链是构建输入，上限一触发就把它删掉（`pr` 组 3G 上限那轮实测删了
   `vuna-toolchain` / `vuna-dev` / `vuna-store`，下个 PR 重编 112s）。预热步虽然把工具链
   登记进 `/nix/var/nix/gcroots/`，实测没有兜住这一轮 gc——所以口径仍按「不触发 gc」取上限。
-- gate / e2e 各拆成 4 个 matrix shard（`--shard i/4`，同一个 `nix-suite` cache 前缀）：
-  每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。
+- gate 拆 4 个、e2e 拆 8 个 matrix shard（`--shard i/N`，同一个 `nix-suite` cache 前缀）：
+  每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。e2e 用 8 片是因为
+  单片 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 runner 比片内加并发有效。
 - 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
 - 全局 token 池替代每 check 内部 `--jobs auto`；单次 `build.sh` 固定 1 线程
   （`VUNA_BUILD_JOBS`），并行度由 worker 数提供。

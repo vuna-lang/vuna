@@ -183,7 +183,7 @@ PR 标题与分支名仍按 `<type>/<slug>`、`<type>(scope): 中文描述` 的�
 | --- | --- | --- |
 | `pr` | fmt / lint / typecheck | 所有 PR、`merge_group`、main push（`pr / run`） |
 | `gate` / `gate-shard-0..3` | tests-gate（fast+integration）+ 单测；CI 里拆 4 片并行 | `merge_group`、main push、定时、手动 |
-| `e2e-shard-0..3` | tests-e2e（steps / 长 case）4 片并行 | 定时、手动 |
+| `e2e-shard-0..7` | tests-e2e（steps / 长 case）8 片并行 | 定时、手动 |
 | `units` | 各包 `vuna test`（与 suite 解耦） | `merge_group`、main push、定时、手动 |
 | `deep` | pr + 全部便宜门禁 | 定时、手动、`deep` 标签 |
 | `suite` | tests-gate + units + tests-e2e（未分片） | 本地全量；`suite` 标签 |

@@ -170,11 +170,11 @@ jobs:
           else
             read -r -a labels <<< "$LABELS"
             matrix=$(nix run .#ci -- plan-json "${labels[@]}" | jq -c '
-              def shard($g): [range(0; 4) | "\($g)-shard-\(.)"];
+              def shard($g; $n): [range(0; $n) | "\($g)-shard-\(.)"];
               .refs as $r
               | {group: (
-                  (if ($r | index("check:vuna-tests-gate")) then shard("gate") else [] end)
-                  + (if ($r | index("check:vuna-tests-e2e")) then shard("e2e") else [] end)
+                  (if ($r | index("check:vuna-tests-gate")) then shard("gate"; 4) else [] end)
+                  + (if ($r | index("check:vuna-tests-e2e")) then shard("e2e"; 8) else [] end)
                 )}')
             suite=$(printf '%s' "$matrix" | jq '(.group | length) > 0')
             {
