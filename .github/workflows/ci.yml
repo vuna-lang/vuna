@@ -12,8 +12,10 @@ name: ci
 # 合并后兜底。`AUTOMERGE_TOKEN` 仍用于 automerge 的入队身份（创建步骤见
 # docs/reference/github-workflow.md「合并队列」）。
 #
-# `backends`（wasm / native 矩阵）与 `native`（自举 conformance）暂不在 GitHub CI 跑：
-# 本地用 `nix run .#ci -- backends` / `nix run .#ci -- native`。
+# `backends`（wasm / native 矩阵）与 `native`（自举 conformance）只在定时 / 手动跑：
+# `native` 的大头是单线程的 native 自举编译（约 20+ 分钟），`backends` 是两遍完整
+# fast+integration suite；都不适合每次 push。本地仍可单独跑
+# `nix run .#ci -- backends` / `nix run .#ci -- native`。
 on:
   push:
     branches: [main]
@@ -75,6 +77,30 @@ jobs:
       group: deep
       timeout: 60
       jobs: 2
+      cache-size: 2G
+      save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+
+  # 后端矩阵（wasm / native suite）：两遍完整 fast+integration + 全包单测。
+  # 一个派生吃掉 runner 的全部核（jobs: 1 → cores = 核数），4 核上约 10 分钟。
+  backends:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: backends
+      timeout: 90
+      jobs: 1
+      cache-size: 2G
+      save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+
+  # native 自举 conformance（构建即运行 `backend-check --scope all`）。大头是单线程的
+  # native 自举编译（20+ 分钟），conformance 本身约 5 分钟；只放定时 / 手动。
+  native:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_check.yml
+    with:
+      group: native
+      timeout: 120
+      jobs: 1
       cache-size: 2G
       save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 

@@ -77,8 +77,9 @@ gh pr checks <n>                             # PR 自己的检查
 nix/tools/merge-queue.sh status              # 队列位置 / 状态 / ETA
 ```
 
-需要强制整组时再加 `deep` / `suite` / `browser`。`backends` / `native` 暂不在 GitHub CI
-跑，只在本地手动；改后端时在 PR 描述里写清跑过哪些。
+需要强制整组时再加 `deep` / `suite` / `browser`。`backends` / `native` 不进 PR 门禁，
+只在定时 / 手动跑；改后端时本地先跑 `nix run .#ci -- backends|native`，并在 PR 描述里写清
+跑过哪些。
 分组与清单见 [`docs/reference/testing-checks.md`](docs/reference/testing-checks.md)，
 选择规则见 [`docs/reference/github-workflow.md`](docs/reference/github-workflow.md)。
 
