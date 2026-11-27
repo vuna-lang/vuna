@@ -107,6 +107,11 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
 - 需要 hold 时加 `blocked` / `needs-info` 或转 draft；automerge 会把已在队列里的 PR
   显式 dequeue（只 disable auto-merge 不够）。解除 hold 后会重新 arm。
 - 队列把 PR 移除时先看原因：冲突才 rebase；检查失败就修；超时重新 arm。
+- PR 全绿（`CLEAN`）却一直不进队列：GitHub 回归（[community#209348](https://github.com/orgs/community/discussions/209348)），
+  已 arm 的 PR 在 checks 变绿后不会自动入队。`merge-queue-sweep.yml` 每 10 分钟补一次
+  enqueue；手动用 `nix/tools/merge-queue.sh sweep [--dry-run]` 或 `enqueue <n>`。
+  `autoMergeRequest.mergeMethod` 恒为 `SQUASH`（规则集队列下 GitHub 不接受显式方法），
+  不是原因，不要靠 disable/enable 反复重 arm。
 - 不要手动 merge 绕过 required checks；手动 `gh pr merge <n> --rebase` 只用于 break-glass
   或用户明确要求。
 - 用 `nix/tools/merge-queue.sh dequeue <n>` 手动移出队列；`wait <n>` 只在明确要阻塞等结果时用。

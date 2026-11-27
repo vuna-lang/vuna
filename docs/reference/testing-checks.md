@@ -77,8 +77,9 @@ job：wasm / native 矩阵与自举 conformance 只在定时 / 手动跑（见�
 切片（PR 计划里不按这两个 area 选检查；nightly 的 `backends` 组跑完整矩阵），它们的 area
 标签只服务本地 `--area` 局部筛选。
 
-**合并队列与 main 基线**：auto-merge 只负责入队；队列在最新 main + 队前 PR 的组合 head 上
-重跑 `pr / run` 与完整 `gates / run`（gate-shard-0..3 + units + area），绿后 rebase 落
+**合并队列与 main 基线**：auto-merge 负责 arm，`merge-queue-sweep.yml` 在 required checks
+变绿后补一次 enqueue（GitHub 回归 community#209348）；队列在最新 main + 队前 PR 的组合 head
+上重跑 `pr / run` 与完整 `gates / run`（gate-shard-0..3 + units + area），绿后 rebase 落
 main。main push 仍跑完整 gate 作为合并后兜底，定时 `suite` 继续覆盖 e2e。
 `AUTOMERGE_TOKEN` 仍用于人工 / break-glass 推送触发 push 门禁。
 
