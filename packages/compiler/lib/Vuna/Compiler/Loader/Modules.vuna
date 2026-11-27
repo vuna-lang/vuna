@@ -20,7 +20,8 @@ import Base.Effect.Types as EffTypes
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
--- 最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
+-- 每个字段都是**本模块自己的**数据：`moduleFixitiesOf` 只存本模块的 `infix*` 声明，
+-- 可见表由调用方按 import 闭包拼（`Loader.Flatten.fixitiesVisibleFrom` / `moduleFixitiesVisible`；
 -- 中缀重排见 `Loader.Fixity`）。
 export record Module(..) where
   moduleNameOf : String

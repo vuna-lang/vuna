@@ -289,7 +289,7 @@ export record DiagCache where
   dcStats : List SourceInfo
   -- | termAux 预处理缓存（增量精化复用，成功后随本次请求更新）。
   dcAux : Maybe AuxCache
-  -- | 程序级 fixity 环境（lint 重排复用）。
+  -- | 本文件可见 fixity 环境（lint 重排复用）。
   dcFix : FixityEnv
   -- | 目录级 lint 配置缓存（lint 复用；manifest 每会话只读/解析一次）。
   dcLintCfg : LintConfigEnv
@@ -753,7 +753,7 @@ setAuxCache c aux =
     c.dcLintCfg
 
 -- | 内部：回退路径（会话不可用 / 增量装配不适用）——只精化当前 buffer（与 `vuna goal` 同一条
--- 路径：程序级 fixity → reorder → 容错精化）；import 闭包不展开，跨模块名字按源文本解析，
+-- 路径：本文件可见 fixity → reorder → 容错精化）；import 闭包不展开，跨模块名字按源文本解析，
 -- 比整包从源码重读重精化快一个量级。`allowFull` 时（case split 需要完整洞上下文）再退回整包
 -- 从源码加载。返回的「依赖是否完整」标记：`allowFull` 时恒为 `True`（已尝试整包加载，失败则
 -- 退回本地目标），否则为 `False`。

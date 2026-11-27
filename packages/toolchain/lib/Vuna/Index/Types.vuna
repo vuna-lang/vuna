@@ -19,7 +19,7 @@ export record ModuleInfo(..) where
   modPath : String
   -- | 源文件大小（扫描时 `strLength` 的结果），`vuna map` 概览显示用。
   modBytes : Int
-  -- | 顶层声明条数（按程序级 fixity 重排后计数）。
+  -- | 顶层声明条数（按本文件可见 fixity 重排后计数）。
   modDecls : Int
   -- | 模块 docstring（`module` 头之前的 `-- |` 块，识别规则见 [Vuna.Doc.Comments]），
   -- `vuna api` 用它渲染模块标题下的说明。

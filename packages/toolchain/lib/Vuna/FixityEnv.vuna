@@ -1,4 +1,4 @@
--- | 工具链（fmt / lint / LSP）的 per-file **程序级 fixity** 解析器。
+-- | 工具链（fmt / lint / LSP）的 per-file **可见 fixity** 解析器。
 --
 -- parser 只产出中缀链，Loader 重排需要「本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明」。
 -- 昂贵部分是**按包上下文加载模块图**（每个文件重复加载会退化成 O(#文件 × #模块)）；声明表
@@ -7,7 +7,9 @@
 --
 -- 缓存键都是文件所在目录（见 `dirKey`）：目录映射到该目录最近 manifest 的
 -- `PackageContext`（避免逐文件重读/解析 `vuna.toml`），包目录（`contextDir`）映射到已加载
--- 模块图（同包多文件只加载一次，声明表仍逐文件算）。
+-- 模块图（同包多文件只加载一次）。**模块图缓存只是已加载模块的复用池**：可见表始终按
+-- 当前文件自己的 import 闭包重算（`Flatten.fixitiesVisibleFrom`），别的文件加载过的模块
+-- 不会因此进入本文件的表——同一文件单独处理与和别的文件一起处理结果一致。
 --
 -- 上下文解析与加载失败是**硬错误**：fixity 无法确定时调用方必须拒绝格式化/lint，不能静默用
 -- 本地表继续（那会退化成 unknown fixity 或错优先级）。本模块只属于工具链，不进 seed 闭包。
@@ -31,7 +33,8 @@ import Base.Effect.Fs as EffFs
 export record FixityEnv where
   -- | 文件所在目录 -> 该目录最近 manifest 的包上下文。
   fixityEnvCtxCache : List (String, PackageContext)
-  -- | 包目录（`contextDir`）-> 已加载的模块图。
+  -- | 包目录（`contextDir`）-> 已加载模块的复用池。它是**模块图缓存**，不是可见表：
+  -- 每个文件仍按自己的 import 闭包从池里取子集。
   fixityEnvModCache : List (String, List Module)
 
 -- | 空缓存。
@@ -61,7 +64,7 @@ cacheForget key ((k, v) :: rest) =
 cachePut : String -> a -> List (String, a) -> List (String, a)
 cachePut key value entries = (key, value) :: cacheForget key entries
 
--- | 取一个文件的程序级 fixity：`Pair env' (Check (List FixityDecl))`。
+-- | 取一个文件的可见 fixity：`Pair env' (Check (List FixityDecl))`。
 --
 -- `env'` 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。上下文解析与模块图
 -- 加载是宿主动作，显式在 `Eff r` 里；缓存推进仍是纯数据。

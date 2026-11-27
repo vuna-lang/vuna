@@ -326,7 +326,7 @@ formattingEdits uri text =
         OkC formatted => if formatted == text then [] else [JObj [("range", fullRange text), ("newText", JStr formatted)]]
     )
 
--- | 内部：按文档 uri 求程序级 fixity 表；uri 解不出路径或加载失败时返回错误。
+-- | 内部：按文档 uri 求本文件可见 fixity 表；uri 解不出路径或加载失败时返回错误。
 formattingFixities : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (List FixityDecl))
 formattingFixities uri text =
   let
@@ -343,7 +343,7 @@ formattingFixities uri text =
 -- ---------------------------------------------------------------
 -- | codeAction 入口：lint quick fix + fix all 的 `Command` 形式 + 洞 case split。
 --
--- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；只取可自动
+-- 与诊断同源：本文件可见 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；只取可自动
 -- 修复（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）相交的 finding。
 -- 另加一条 "fix all lint findings"（`Vuna.Lint.Fix.fixLoop` 跑到收敛，与 CLI `--fix` 同一条
 -- 路径）；请求 range 附近没有可修复 finding 时不给 fix all，避免每行都冒出全文档 fix。
@@ -1058,7 +1058,7 @@ declSymbolJson lines decls d =
     (declChildrenJson lines d)
 
 -- | documentSymbol：按 AST 声明顺序输出声明树（data / record / trait 带子节点）。声明先与 fmt
--- 一样按程序级 fixity 重排；解析或 fixity 加载失败时为 []。
+-- 一样按本文件可见 fixity 重排；解析或 fixity 加载失败时为 []。
 export documentSymbols : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (List Json)
 documentSymbols uri text =
   case parseSourceDetailed uri text of

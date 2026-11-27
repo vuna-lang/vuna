@@ -2800,7 +2800,7 @@ markerOf text =
 
 -- | 解析源码并按配置/抑制过滤后返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
 --
--- 规则看 AST 的中缀结构，所以重排必须与程序级 fixity 一致：`programFixities` 是本文件的
+-- 规则看 AST 的中缀结构，所以重排必须与本文件可见 fixity 一致：`programFixities` 是本文件的
 -- `infix` 声明加上 import 闭包可见的声明（由调用方算），这里把它放在本文件声明（parse
 -- 得到的 env）之前，本地优先，与 loader 的顺序一致。缺声明时严格报 unknown fixity，不静默
 -- 按默认优先级重排。

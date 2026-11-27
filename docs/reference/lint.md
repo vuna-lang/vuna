@@ -105,7 +105,7 @@ workspace 整体读数见 [performance.md](performance.md)。
 含 `BindingValue` 的局部函数组；where / let 签名行由 `Binding.bindSig` 单独遍历），同时携带外层模式上下文（clause 模式列表或外层 case 的 alt
 模式）。需要源码原文（字面量、表达式体）时按 `Span` / token 的字节偏移直接切片
 （`exprText` / `spanText`），**不重新渲染 / 转义字符串字面量**；模式文本在 parser pattern
-span 偏移不完整时回落到行/列路径（`patText`）。程序级 fixity 也吃同一次解析的
+span 偏移不完整时回落到行/列路径（`patText`）。本文件可见 fixity 也吃同一次解析的
 `SourceFile`（`lintParsedWithConfig` + `FixityEnv.fixitiesForParsed`；并行路径的上下文由父线程
 预解析，worker 用 `FixityEnv.fixitiesForCtx`），不再为它二次语法分析。
 

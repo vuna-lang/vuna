@@ -44,13 +44,19 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
    `unknown fixity for operator <op> (declare it with infixl/infixr/infix)`，check / compile
    非 0。**不静默默认优先级**——否则漏声明时 `a + b * c` 会静默变成 `(a + b) * c`。
    只有反引号名字没有声明时按 9 左结合（与 Haskell 一致）。
-6. **fixity 全程序唯一**：一个运算符在加载闭包里只能有一处声明；重复声明报
-   `RN_DuplicateFixity`（指向后一处）。`Module` 只存本模块自己的声明，加载完成后拼成
-   一张全程序表参与每个模块的重排——import 到定义模块即全局生效，不再有「本模块优先」。
-   base 把声明集中在 `Base.Internal.Operator`，因此 import 任一引用它的 base 模块都会让整张
-   base 表进入闭包；代价是用户自定义同名运算符的冲突面变宽（这是有意的取舍）。
-7. **fmt 用同一张表**：`Loader.Flatten.fixitiesForSource` 给出程序级声明表；重复/内建冲突
-   在 fmt 路径同样报错，不静默按第一处处理。
+6. **可见 fixity = 本处声明 + 本处 import 的传递闭包**：`Module` 只存本模块自己的声明，
+   重排按**每个模块自己的** import 闭包拼表（`Loader.Flatten.fixitiesVisibleFrom` /
+   `moduleFixitiesVisible`），入口文件同理。import 到定义模块（或它的再导出路径）即生效；
+   「本模块优先」只体现在本处声明排在闭包之前。同一个文件单独处理与和无关文件一起处理
+   看到同一张表——工具链的模块图缓存只复用已加载模块，不扩大任何文件的可见表。
+   **全程序唯一**：一个运算符在同一加载闭包里只能有一处声明；重复声明报
+   `RN_DuplicateFixity`（指向后一处）。base 把声明集中在 `Base.Internal.Operator`，
+   因此 import 任一引用它的 base 模块都会让它进入闭包；代价是用户自定义同名运算符的
+   冲突面变宽（这是有意的取舍）。
+7. **unused-import 与重排同一条判据**：某个 import 的可见闭包提供了源码里用到的运算符
+   fixity 就算使用（不只是直接模块自己的声明），删掉它会让运算符变成 unknown fixity。
+8. **fmt 用同一张表**：`Loader.Flatten.fixitiesForSource` 给出本文件可见的声明表；重复/内建
+   冲突在 fmt 路径同样报错，不静默按第一处处理。
 
 ## `Eq` / `Ord` 的唯一真源
 
@@ -204,8 +210,8 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 | --- | --- |
 | 中缀重排 / section 立即应用折叠 / keep 模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps`） |
 | fixity 声明语法与收集 | `Frontend.Parser`（`parseFixityDecl` / `parseSectionAtom` / `parseInfix`）+ `Frontend.Ast`（`FixityDecl` / `Source.fixities`） |
-| 模块可见 fixity 闭包与去重 | `Loader.Modules.Module.fixities` + `Loader.Flatten.visibleFixitiesOf` / `dedupeFixities` |
-| 程序级 fixity（lint / index / doc / 符号排序） | `Loader.Flatten.fixitiesForSource` + `Loader.Fixity.reorderProgram` |
+| 可见 fixity 闭包与去重 | `Loader.Modules.Module.fixities` + `Loader.Flatten.fixitiesVisibleFrom` / `moduleFixitiesVisible` / `dedupeFixitiesOf` |
+| 文件可见 fixity（lint / index / doc / 符号排序） | `Loader.Flatten.fixitiesForSource` + `Loader.Fixity.reorderProgram` |
 | 方法投影判定 / 特化 | `Elab.Dict.isEqMethod` / `isCmpMethod` / `specializeEqTy` / `specializeCmpTy` |
 | 内建 runtime 名 | `Vuna.Compiler.Base.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
 | trait 声明 / 库声明表 | `packages/base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |

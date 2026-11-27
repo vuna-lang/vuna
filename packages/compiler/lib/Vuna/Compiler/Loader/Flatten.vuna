@@ -72,11 +72,12 @@ parseWith mode path src toks =
         [] => OkC (parsed, surface)
         e :: rest => ErrC (withChildren rest e)
 
--- fixity 是**程序级**属性：加载闭包里所有模块的声明构成一张表（import 到就全局生效），
--- 不再按逐模块的可见闭包拼接。`Module` 里存的是该模块自己的声明。
+-- 可见 fixity 只有一条路径：**本处声明 + 这些 import 可达的模块（传递闭包）的声明**。
+-- `Module.moduleFixitiesOf` 只存该模块自己的声明；拼表由调用方按「谁 import 了谁」完成，
+-- 不再把已加载模块的全集混进来。
 -- | 声明身份 = 所属模块 + 运算符 + 级别 + 结合性 + 源码位置。iface 路径的 span 全空，
 -- 必须靠模块名区分不同模块的同名声明（否则会被静默去重，`RN_DuplicateFixity` 失效）。
--- `local` 是入口文件自己的声明（不属于任何模块）。
+-- `local` 是本处自己的声明（入口文件或单个模块）。
 dedupeFixitiesOf : List Module -> List FixityDecl -> List FixityDecl
 dedupeFixitiesOf modules local =
   dedupeFixitiesGo
@@ -92,6 +93,53 @@ dedupeFixitiesGo (p :: rest) seen acc =
   in case HashMap.lookup key seen of
     Just _ => dedupeFixitiesGo rest seen acc
     Nothing => dedupeFixitiesGo rest (HashMap.insert key 1 seen) (secondOf p :: acc)
+
+-- | 一处源码（入口文件或模块）可见的 fixity 声明：本处声明 + 这些 import 的闭包。
+-- 闭包 = 直接 import（含自动注入的 Prelude）可达的全部模块；顺序按 import 做确定性 DFS，
+-- 所以同一处源码无论单独处理还是与别处一起处理，看到的表都一样。
+export fixitiesVisibleFrom : List Module -> List Import -> List FixityDecl -> List FixityDecl
+fixitiesVisibleFrom modules imports local =
+  dedupeFixitiesOf (fixityClosureModules modules imports) local
+
+-- | 模块自身可见的 fixity 声明（`moduleFixitiesOf` + 它自己的 import 闭包）。
+export moduleFixitiesVisible : List Module -> Module -> List FixityDecl
+moduleFixitiesVisible modules m =
+  fixitiesVisibleFrom modules (moduleAllImportsOf m) (moduleFixitiesOf m)
+
+-- | import 闭包里的模块（确定性顺序：按 import 顺序 DFS，依赖在前）。
+-- 未解析 / 未加载的名字跳过——直接 import 的缺失已由 loader 报错。
+fixityClosureModules : List Module -> List Import -> List Module
+fixityClosureModules modules imports =
+  reverse
+    (secondOf (fixityClosureGo (fixityClosureFuel modules imports) modules (map importName imports) (HashMap.fromList []) []))
+
+-- | DFS 的步数上界：初次 import 数 + 所有模块的 import 总数 + 1（每个模块只展开一次）。
+-- 显式 fuel 计步：递归会把「模块的 import 列表」换进待访问的名字列表，SCT 不闭合。
+fixityClosureFuel : List Module -> List Import -> Int
+fixityClosureFuel modules imports =
+  1 + List.length imports + foldl (\n, m => n + List.length (moduleAllImportsOf m)) 0 modules
+
+fixityClosureGo : Int -> List Module -> List String -> HashMap String Bool -> List Module -> (HashMap String Bool, List Module)
+fixityClosureGo fuel modules names seen acc =
+  if fuel <= 0 then
+    (seen, acc)
+  else
+    case names of
+      [] => (seen, acc)
+      name :: rest =>
+        case resolveModuleName modules name of
+          Nothing => fixityClosureGo (fuel - 1) modules rest seen acc
+          Just real =>
+            if HashMap.member real seen then
+              fixityClosureGo (fuel - 1) modules rest seen acc
+            else
+              case findModule modules real of
+                Nothing => fixityClosureGo (fuel - 1) modules rest seen acc
+                Just m =>
+                  let
+                    seen2 = HashMap.insert real True seen
+                    inner = fixityClosureGo (fuel - 1) modules (map importName (moduleAllImportsOf m)) seen2 acc
+                  in fixityClosureGo (fuel - 1) modules rest (firstOf inner) (m :: secondOf inner)
 
 -- 声明身份键：**运算符 + 形状 + 声明处位置**（模块名由调用方前缀）。
 fixityDeclKey : FixityDecl -> String
@@ -960,8 +1008,8 @@ loadModuleSourceWithPreloaded ctx label source preloaded =
                                       visible = fixities
                                     in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit declsSel exports visible (reexportedImportNames imports2 (append items reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports) surface :: modules) (contextPackageName ctx) [] (contextPackageName ctx) emptyFixityFacts))
 
--- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
--- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
+-- fmt 用的「本文件可见 fixity」——本文件的 `infix*` 声明 ++ 它自己的 import 闭包可见的
+-- 声明（`fixitiesVisibleFrom`；`Module` 只存各模块自己的声明）。只 parse + 加载模块图，
 -- **不做精化/名字解析**，因此很便宜；有/无模块头都支持。
 --
 -- `modules` 是调用方可复用的已加载模块表（按包上下文缓存）：同包多文件只加载一次模块图。
@@ -1005,7 +1053,7 @@ fixitiesFromParsed ctx modules0 label (SourceFile hdr imports0 fixities decls ex
               pure (
                   case modulesR of
                     ErrC e => ErrC e
-                    OkC modules => OkC (modules, dedupeFixitiesOf modules fixities)
+                    OkC modules => OkC (modules, fixitiesVisibleFrom modules (append imports implicit) fixities)
                 )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
@@ -1036,22 +1084,25 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (List Diagnostic, List Decl, List Module)
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes entryName entryFacts) =
   let
+    -- 唯一性的判据仍是整个加载闭包：同一运算符在程序里只能有一处声明。
     projectFixities = dedupeFixitiesOf modules entryFixes
+    -- 重排只用入口自己的 import 闭包；未被入口 import 的模块不改变入口的可见表。
+    entryVisible = fixitiesVisibleFrom modules (append imports implicit) entryFixes
   in Vuna.Compiler.Base.Common.bind
     (checkUniqueFixities projectFixities)
-    (\fixes => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf entryFacts fixes) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
+    (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf entryFacts entryVisible) decls)) (\decls2 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.expand" (\_ => expandDecls entryName decls2)) (\decls3 => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.entry" (\_ => resolveEntry release modules entryPkg (append imports implicit) decls3)) (\entryDecls => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.resolve.warn" (\_ => unusedImportWarnings modules imports entryDecls decls3 [])) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep modules) (\p2 => OkC (append entryWarns (secondOf p2), entryDecls, firstOf p2)))))))
 
-resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (List Module, List Diagnostic)
-resolveModulesKeep release keep fixes [] = OkC ([], [])
-resolveModulesKeep release keep fixes (m :: rest) =
+resolveModulesKeep : Bool -> List String -> List Module -> Check (List Module, List Diagnostic)
+resolveModulesKeep release keep [] = OkC ([], [])
+resolveModulesKeep release keep (m :: rest) =
   if memName (moduleNameOf m) keep then
     Vuna.Compiler.Base.Common.bind
-      (resolveModulesKeep release keep fixes rest)
+      (resolveModulesKeep release keep rest)
       (\p2 => OkC ((::) m (firstOf p2), secondOf p2))
   else
     Vuna.Compiler.Base.Common.bind
-      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf m.moduleFixFactsOf fixes) (moduleDeclsOf m)))
-      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls (moduleNameOf m) decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
+      (obsCheck "vuna.resolve.reorder" (\_ => reorderProgram (tableOf m.moduleFixFactsOf (moduleFixitiesVisible (m :: rest) m)) (moduleDeclsOf m)))
+      (\decls2 => Vuna.Compiler.Base.Common.bind (resolveModuleGo release m rest (obsCheck "vuna.resolve.expand" (\_ => expandDecls (moduleNameOf m) decls2))) (\p => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep rest) (\p2 => OkC ((::) (firstOf p) (firstOf p2), append (secondOf p) (secondOf p2)))))
 
 -- | 单个模块 expand 之后的三段：命名空间建表 → 名字解析 → 未用 import 判定。
 -- `rest` 参与模块表：解析期要看到后续模块的导出面。
@@ -1097,15 +1148,15 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
           )
     )
 
--- | 当前检查单元里所有 import 的模块声明可见的 fixity 运算符（去重前的集合源）。
+-- | 当前检查单元里所有 import 的可见闭包里声明过的 fixity 运算符（去重前的集合源）。
 visibleFixityOps : List Module -> List Import -> List String
-visibleFixityOps modules imports =
-  concatMap (
-      \imp =>
-        case findModule modules (importName imp) of
-          Just m => fixityOpsOf (moduleFixitiesOf m)
-          Nothing => []
-    ) imports
+visibleFixityOps modules imports = concatMap (\imp => importFixityOps modules imp) imports
+
+-- | 单个 import 能带进作用域的 fixity 运算符：它的闭包里所有模块自己声明过的运算符。
+-- 与重排用的是同一条可见性规则（import 闭包），不再只看直接模块。
+importFixityOps : List Module -> Import -> List String
+importFixityOps modules imp =
+  concatMap (\m => fixityOpsOf (moduleFixitiesOf m)) (fixityClosureModules modules [imp])
 
 unusedImportWarningsGo : List Module -> HashMap String Bool -> HashMap String Bool -> List Decl -> List String -> List Import -> Check (List Diagnostic)
 unusedImportWarningsGo modules nameSet sourceNames decls reexports [] = OkC []
@@ -1124,27 +1175,23 @@ unusedImportDiag imp =
     (Suggestion "remove unused import ${imp.importName}" MachineApplicable [importRemovalEdit imp])
     (warnDiagAt (importSpan imp) (UnusedImport imp.importName) [imp.importName])
 
--- | 该 import 的模块声明的 fixity 里，是否有运算符真的写进了源码。
+-- | 该 import 的可见闭包声明的 fixity 里，是否有运算符真的写进了源码。
 --
--- fixity 表是全程序的（`Module` 只存本模块声明），`import` 是让声明生效的唯一手段；
--- 而 fixity 声明不进 `Decl`，rename 结果里看不到引用，只能拿源码名比对。
+-- `import` 是让声明生效的唯一手段（含传递闭包，与重排同一条规则）；fixity 声明不进
+-- `Decl`，rename 结果里看不到引用，只能拿源码名比对。
 importProvidesUsedFixity : HashMap String Bool -> List Module -> Import -> Bool
 importProvidesUsedFixity sourceNames modules imp =
-  case findModule modules (importName imp) of
-    Nothing => False
-    Just m => anyNameIn sourceNames (fixityOpsOf (moduleFixitiesOf m))
+  anyNameIn sourceNames (importFixityOps modules imp)
 
 fixityOpsOf : List FixityDecl -> List String
 fixityOpsOf [] = []
 fixityOpsOf (d :: rest) = d.fixityOp :: fixityOpsOf rest
 
--- | 本模块自己声明了运算符（trait 方法 / 顶层定义），而它的 fixity 由该 import 提供：
+-- | 本模块自己声明了运算符（trait 方法 / 顶层定义），而它的 fixity 由该 import 的闭包提供：
 -- 这个 import 是给**下游**用的（fixity 表随 import 闭包传播），不能算 unused。
 importProvidesDeclaredFixity : List Decl -> List Module -> Import -> Bool
 importProvidesDeclaredFixity decls modules imp =
-  case findModule modules (importName imp) of
-    Nothing => False
-    Just m => anyOpDeclared (fixityOpsOf (moduleFixitiesOf m)) (definedNamesOf decls)
+  anyOpDeclared (importFixityOps modules imp) (definedNamesOf decls)
 
 anyOpDeclared : List String -> List String -> Bool
 anyOpDeclared [] _ = False

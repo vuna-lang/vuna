@@ -75,7 +75,7 @@
   - `vuna fmt [--check] [PATH]...`：`Vuna.Fmt` 格式化（2 空格缩进、幂等、可重新 parse；
     保留行注释 / 块注释，超过 100 列时在 RHS、列表字面量、函数应用参数与中缀链处折行；
     模块头显式导出列表逐项一行并按名排序，项注释随项移动；`infix*` 声明按源码顺序打印在
-    imports 之后；fixity 取**程序级**可见闭包，见 [operators.md](operators.md)）；省略 PATH
+    imports 之后；fmt 不重排中缀，不需要 fixity 闭包，见 [operators.md](operators.md)）；省略 PATH
     时格式化 workspace 内所有包的 `lib/app/test`；
   - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、纯表达式经 DT 求值（支持 import/记录/
     trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
