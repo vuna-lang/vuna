@@ -46,7 +46,7 @@
 | --- | --- | --- | --- | --- |
 | `Base.Effect.Console` | `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`） | `Print String` / `EPrint String` | `runConsoleHost`（entry）→ `@vuna@prim_eff_print`/`@vuna@prim_eff_eprint`（`Print` 在 result 族转 `Nat`）；`runConsoleEff`（worker） | 自定义 `handleConsole`（如收集日志） |
 | `Base.Effect.Clock` | `ClockOp`（实例名并进标签，`Named "mock" ClockOp :: r`） | `Now`（微秒）/`SleepMicros Int` | `runClockHost`（entry）→ `effTimeUs` + **原生 `@vuna@prim_eff_sleep`**；`runClockEff`（worker） | 固定时间戳 / 忽略 sleep |
-| `Base.Effect.Env` | `EnvOp`（实例名并进标签） | `GetEnv String`/`GetCwd`/`ExecPath` | `runEnvHost`（entry）→ `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`；`runEnvEff`（worker） | 固定字符串 |
+| `Base.Effect.Env` | `EnvOp`（实例名并进标签） | `GetEnv String`/`GetCwd`/`ExecPath`/`RealPath String` | `runEnvHost`（entry）→ `@vuna@prim_eff_getenv`/`@vuna@prim_eff_getcwd`/`@vuna@prim_eff_execPath`/`@vuna@prim_eff_realPath`；`runEnvEff`（worker） | 固定字符串 |
 | `Base.Effect.Process` | `ProcessOp`（实例名并进标签） | `Args`/`Exit Int`/`RunIn String (List String)` | `runProcessHost`（entry，`Exit` 真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `runProcessResult`（worker，启动失败收成 `Result`） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
 | `Base.Effect.Fs` | `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `runFsHost`（entry）→ `@vuna@host@try*` + 状态槽（`WriteFile`/`FileSize` 在 result 族转 `Nat`）；`runFsResult`（worker，失败收成 `Result`） | 自定义 `handleFs n`（纯 answer 内存表） |
 

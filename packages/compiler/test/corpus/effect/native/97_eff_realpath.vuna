@@ -1,0 +1,29 @@
+-- `envRealPath`：同一目录的四种写法（真名 / 符号链接 / `..` 回退 / 链接里的相对段）
+-- 落到同一个绝对路径字符串，解析不到时原样返回入参。三端里 ocaml 与 native 都必须
+-- 真解析（wasm 没有符号链接，恒等，见 docs/reference/wasm.md 的能力表）。
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Env as EffEnv
+import Base.Data.String as String
+
+bit : Bool -> Int
+bit b = if b then 1 else 0
+
+prog : Eff [FsOp, EnvOp] Int
+prog =
+  do
+    _ <- fsMakeDir "rp-real"
+    _ <- fsMakeDir "rp-real/sub"
+    _ <- fsSymlink "rp-real" "rp-link"
+    _ <- fsSymlink "rp-real/sub" "rp-deep"
+    real <- envRealPath "rp-real"
+    viaLink <- envRealPath "rp-link"
+    viaDots <- envRealPath "./rp-real/sub/.."
+    viaDeep <- envRealPath "rp-deep"
+    nested <- envRealPath "rp-link/sub/../sub"
+    missing <- envRealPath "rp-not-here"
+    pure
+      (bit (String.startsWith "/" real) + bit (real == viaLink) + bit (real == viaDots) + bit (viaDeep == "${real}/sub") + bit (nested == "${real}/sub") + bit (missing == "rp-not-here") + (if real == "rp-real" then 0 else 1))
+
+main : Eff [FsOp, EnvOp] Int
+main = prog

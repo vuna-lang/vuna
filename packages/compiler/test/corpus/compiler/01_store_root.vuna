@@ -7,10 +7,12 @@ import Base.Effect.Env as EffEnv
 import Vuna.Compiler.Base.Store
 
 mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Eff.resIdx i o -> String) -> String
-mockOpH table i op k = case op of
-  GetEnv name => k (fromMaybe "" (lookupPair name table))
-  GetCwd => k "/mock/cwd"
-  ExecPath => k "/mock/exec"
+mockOpH table i op k =
+  case op of
+    GetEnv name => k (fromMaybe "" (lookupPair name table))
+    GetCwd => k "/mock/cwd"
+    ExecPath => k "/mock/exec"
+    RealPath p => k p
 
 rootWith : List (Pair String String) -> String
 rootWith table = runPure (handleEnv "mock" (\s => s) (mockOpH table) (mockRoot "mock"))
@@ -21,10 +23,22 @@ mockRoot n = storeDataRootEff
 main : Int
 main =
   (if rootWith [Pair "VUNA_STORE" "/override"] == "/override" then 1 else 0)
-    + (if rootWith [Pair "VUNA_STORE" "/override", Pair "XDG_DATA_HOME" "/xdg"] == "/override" then 1 else 0)
+    + (
+      if rootWith [Pair "VUNA_STORE" "/override", Pair "XDG_DATA_HOME" "/xdg"] == "/override" then
+        1
+      else
+        0
+    )
     + (if rootWith [Pair "XDG_DATA_HOME" "/xdg"] == "/xdg/vuna/store" then 1 else 0)
     + (if rootWith [Pair "HOME" "/home/u"] == "/home/u/.vuna/store" then 1 else 0)
     + (if rootWith [Pair "HOME" "/homeless-shelter"] == "/tmp/vuna-store" then 1 else 0)
-    + (if rootWith [Pair "HOME" "/homeless-shelter", Pair "TMPDIR" "/t"] == "/t/vuna-store" then 1 else 0)
+    + (
+      if rootWith [Pair "HOME" "/homeless-shelter", Pair "TMPDIR" "/t"] == "/t/vuna-store" then
+        1
+      else
+        0
+    )
     + (if rootWith [Pair "TMPDIR" "/t"] == "/t/vuna-store" then 1 else 0)
-    + (if rootWith [Pair "VUNA_STORE" "", Pair "XDG_DATA_HOME" ""] == "/tmp/vuna-store" then 1 else 0)
+    + (
+      if rootWith [Pair "VUNA_STORE" "", Pair "XDG_DATA_HOME" ""] == "/tmp/vuna-store" then 1 else 0
+    )

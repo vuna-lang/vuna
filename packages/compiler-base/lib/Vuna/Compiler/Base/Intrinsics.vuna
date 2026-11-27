@@ -323,7 +323,7 @@ hostTargetNames = ["ocaml", "native", "wasm"]
 --     args / exit，没有 stdin / net；
 --   * wasm：只有 console / 相对 FS（preopen）/ env / args / exit / clock.Now；`ProcessOp`、
 --     `StdinOp`、`NetOp` 没有宿主实现，`FsOp` 缺 symlink、`mtime` 恒 `Nothing`，
---     `ClockOp` 缺 `SleepMicros`，`EnvOp` 的 execPath 恒空（常量，不算缺 op）。
+--     `ClockOp` 缺 `SleepMicros`，`EnvOp` 的 execPath 恒空、realPath 恒等（常量，不算缺 op）。
 export hostSupportOf : String -> String -> String
 hostSupportOf target tag = pickHostSupport target (findHostSupport tag hostSupportTable)
 

@@ -366,7 +366,7 @@ OCaml 端不需要额外链接库（`Domain` / `Mutex` / `Condition` / `Atomic` 
 | `Base.Effect.Console` | `ConsoleOp` | `consolePrint`（结果 `Nat`）/ `consoleEprint` | `@vuna@host@print` / `@vuna@prim_eff_eprint` |
 | `Base.Effect.Fs` | `FsOp` | `fsReadFile` / `fsReadFileRange` / `fsWriteFile` / `fsWriteFileAtomic` / `fsReadDir` / `fsIsDirectory` / `fsMakeDir` / `fsRemoveFile` / `fsFileExists` / `fsFileMtime` / `fsFileSize` / `fsRemoveTree` / `fsRename` / `fsSymlink` / `fsMakeDirExclusive` | `@vuna@host@try*` + `@vuna@prim_eff_hostStatus` |
 | `Base.Effect.Clock` | `ClockOp` | `clockNow` / `clockSleepMicros` | `effTimeUs` / `@vuna@prim_eff_sleep` |
-| `Base.Effect.Env` | `EnvOp` | `envGetEnv` / `envGetCwd` / `envExecPath` | `@vuna@prim_eff_getenv` / `getcwd` / `execPath` |
+| `Base.Effect.Env` | `EnvOp` | `envGetEnv` / `envGetCwd` / `envExecPath` / `envRealPath` | `@vuna@prim_eff_getenv` / `getcwd` / `execPath` / `realPath` |
 | `Base.Effect.Process` | `ProcessOp` | `processRunIn` / `processSpawn` / `processWait` / `processArgs` / `processExit` | `@vuna@prim_eff_runIn` / `spawn` / `wait` / `getArgs` / `exit`；宿主行变体 `@vuna@host@tryRunIn`、`@vuna@prim_eff_*_process_host` |
 | `Base.Effect.Stdin` | `StdinOp` | `stdinReadLine`（`Maybe String`）/ `stdinReadBytes` | `@vuna@host@readLine` / `readBytes`；无 handler 行的库路径回落到 `@vuna@prim_eff_readLine` / `readBytes` |
 | `Base.Effect.Args` | `ArgsOp` | `argsGetArgs` | `@vuna@prim_eff_getArgs` |
@@ -410,7 +410,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | `console` | `consolePrint` / `consoleEprint` | `@vuna@host@print`、`@vuna@prim_eff_eprint` |
 | `fs` | `fs*`（见上表） | `@vuna@host@try*` + `@vuna@prim_eff_hostStatus` |
 | `process` | `process*` / `exitWith` / `argsGetArgs` | `@vuna@prim_eff_{runIn,spawn,wait,getArgs,exit}`、`@vuna@host@tryRunIn`、`@vuna@prim_eff_{exit,getArgs}_process_host` |
-| `env` | `envGetEnv` / `envGetCwd` / `envExecPath` | `@vuna@prim_eff_{getenv,getcwd,execPath}` |
+| `env` | `envGetEnv` / `envGetCwd` / `envExecPath` / `envRealPath` | `@vuna@prim_eff_{getenv,getcwd,execPath,realPath}` |
 | `clock` | `clockNow` / `clockSleepMicros` | `effTimeUs`、`@vuna@prim_eff_sleep` |
 | `stdin` | `stdinReadLine` / `stdinReadBytes` | `@vuna@host@{readLine,readBytes}`、`@vuna@prim_eff_{readLine,readBytes}` |
 | `net` | `net*`（`NetOp`，含 `Within`） | `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus` |
@@ -431,8 +431,8 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 
 - `Unix.stat`（`@vuna@host@fileMtime` / `fileSize`）、`Unix.gettimeofday`（`effTimeUs`）、
   `Unix.sleepf`（`@vuna@prim_eff_sleep`）、`Unix.readlink "/proc/self/exe"`
-  （`@vuna@prim_eff_execPath`）；`build.sh` 无条件 `-I +unix ... unix.cmxa`。因此任何产物都
-  依赖 OCaml 的 unix 库。
+  （`@vuna@prim_eff_execPath`）、`Unix.realpath`（`@vuna@prim_eff_realPath`）；`build.sh`
+  无条件 `-I +unix ... unix.cmxa`。因此任何产物都依赖 OCaml 的 unix 库。
 - 启动时设置 GC（`minor_heap_size` 16MB = 2M words、`space_overhead` 200）。
 
 契约里的符号都是隐藏名（codegen 包一层 `MkEff`）；下表的「用户面」列给出对应标签：
@@ -447,6 +447,7 @@ writeFileAtomic,readDir,isDirectory,makeDir,removeFile}`、`@vuna@prim_eff_net*`
 | `@vuna@prim_eff_getenv` | 未设置或空串都返回 `""` | `envGetEnv`（`envGetEnvNonEmpty` 给 `Maybe`） |
 | `@vuna@prim_eff_getcwd` | 失败时返回 `"."` | `envGetCwd` |
 | `@vuna@prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` | `envExecPath` |
+| `@vuna@prim_eff_realPath` | 解析符号链接与 `..`：OCaml 用 `Unix.realpath`，native 用 `readlink` 逐段展开（见下条）；**解析失败（不存在 / 无权限 / 链接成环）原样返回入参** | `envRealPath`；`Pkg.absolutePath` 折绝对后调它 |
 | `@vuna@prim_eff_getArgs` | 排除 `argv[0]` 的其余参数 | `argsGetArgs` |
 | `@vuna@prim_eff_exit` / `@vuna@host@exitOp` | 立即退出进程（执行即退出、**不返回**） | `exitWith` |
 | `@vuna@prim_eff_sleep` | 阻塞 `Unix.sleepf (us / 1000000)`；`us <= 0` 立即返回 0（真实睡眠，非忙等） | `clockSleepMicros` |

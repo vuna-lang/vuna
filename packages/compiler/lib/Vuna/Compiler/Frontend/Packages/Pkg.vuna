@@ -3,9 +3,10 @@ module Vuna.Compiler.Frontend.Packages.Pkg where
 -- Vuna.Compiler.Frontend.Packages.Pkg：包 / workspace 解析层（不碰 Loader / CLI）。
 -- 每个包 = 带 vuna.toml 的目录。workspace 根有两种形态：根包（根 vuna.toml 同时含
 -- [workspace] 与 [package]）与虚拟根（只有 [workspace]，没有 [package]）。
--- 本模块用内建 fsReadFile / fsFileExists 读盘，不做 realpath：路径只做 lexical
--- 规范化（`Base.Source.normalizePath` / `joinPath`，与 manifest 侧同一口径），
--- 循环检测与去重用规范化后的目录字符串。
+-- 本模块用内建 fsReadFile / fsFileExists 读盘；绝对化 = 词法归一（`Base.Source.normalizePath`
+-- / `joinPath`，与 manifest 侧同一口径）后交给 `envRealPath` 解析符号链接，所以
+-- `a/../b`、尾 `/` 与 `link -> real` 三种写法落到同一个目录字符串。循环检测与去重都用
+-- 这个规范化后的目录字符串。
 -- 包内目录约定：lib/、app/、test/；入口固定 app/Main.vuna。
 --
 -- 每个源文件只有唯一**包上下文**（`PackageContext`）= 最近的 vuna.toml 包
@@ -96,14 +97,20 @@ packageImplicitPrelude package = package.packageManifest.manifestImplicitPrelude
 -- ---------------------------------------------------------------- 路径工具
 -- 相对路径按当前工作目录归一为绝对路径（向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
+-- 折绝对后交给 `envRealPath`：符号链接也归一，`/tmp/link` 与 `/tmp/real` 得到同一个
+-- 绝对目录（project id 与 store 的 roots 分目录都按这个字符串算）。路径不存在时原语
+-- 回落入参，于是等价于纯词法结果。
 export absolutePath : Member nEnv EnvOp r => String -> Eff r String
 absolutePath path =
-  if startsWith "/" path then
-    pure (normalizePath path)
-  else
-    do
-      cwd <- envGetCwd
-      pure (normalizePath "${cwd}/${path}")
+  do
+    folded <-
+      if startsWith "/" path then
+        pure (normalizePath path)
+      else
+        do
+          cwd <- envGetCwd
+          pure (normalizePath "${cwd}/${path}")
+    envRealPath folded
 
 joinPathsText : List String -> String
 joinPathsText [] = ""
