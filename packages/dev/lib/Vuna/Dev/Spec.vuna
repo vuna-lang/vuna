@@ -36,13 +36,19 @@ commands =
       "vuna dev errors gen [ROOT]"
       []
       ["输出 `ROOT/docs/.generated/errors.md` 与同源 JSON；生成物不入 git。"],
-    subCmd ["dev", "ir"] GDev "IR 调试" "vuna dev ir dump [--after NAME] [--out FILE] DIR" [] [],
+    subCmd
+      ["dev", "ir"]
+      GDev
+      "IR 调试"
+      "vuna dev ir dump [--after NAME] [--only PASS] [--out FILE] DIR"
+      []
+      [],
     subCmd
       ["dev", "ir", "dump"]
       GDev
       "检查 + lowering 后打印确定性 IR"
-      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml|ir.<pass>] [--out FILE] DIR"
-      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml|ir.<pass>" "在 lowering 的哪一步之后打印（缺省 raw；ir.* 为机器链中间步骤）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
+      "vuna dev ir dump [--after raw|cps|machine|anf|anf2|ocaml|ir.<pass>] [--only ir.<pass>]... [--out FILE] DIR"
+      [valueFlag "after" "raw|cps|machine|anf|anf2|ocaml|ir.<pass>" "在 lowering 的哪一步之后打印（缺省 raw；ir.* 为机器链中间步骤）", multiFlag "only" "ir.<pass>" "整条机器链照常跑，只打印点名 pass 之后的文本（可重复；与 --after 互斥）", valueFlag "out" "FILE" "写入文件（缺省 stdout）"]
       [],
     subCmd
       ["dev", "ir", "decode"]

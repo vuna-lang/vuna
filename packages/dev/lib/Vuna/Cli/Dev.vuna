@@ -44,7 +44,7 @@ devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "i
 
 -- | `vuna dev ir dump [--out FILE] DIR`：检查 + lowering 后打印确定性 IR。
 irDumpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-irDumpArgs rest = dumpGo Nothing "raw" [] rest
+irDumpArgs rest = dumpGo Nothing Nothing [] [] rest
 
 -- | `vuna dev ir decode FILE`：解码后端插件的 IR 载荷并打印（对齐 dump 与后端输入）。
 irDecodeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
@@ -55,26 +55,31 @@ irDecodeArgs (path :: _) =
     pure 0
 irDecodeArgs [] = usageErrorForIn DevSpec.commands ["dev", "ir", "decode"]
 
-dumpGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> List String -> List String -> Eff r Int
-dumpGo out after dirs rest =
+dumpGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> Maybe String -> List String -> List String -> List String -> Eff r Int
+dumpGo out after onlys dirs rest =
   case rest of
-    "--out" :: path :: more => dumpGo (Just path) after dirs more
-    "--after" :: a :: more => dumpGo out a dirs more
-    x :: more => dumpGo out after (x :: dirs) more
+    "--out" :: path :: more => dumpGo (Just path) after onlys dirs more
+    "--after" :: a :: more => dumpGo out (Just a) onlys dirs more
+    "--only" :: a :: more => dumpGo out after (a :: onlys) dirs more
+    x :: more => dumpGo out after onlys (x :: dirs) more
     [] =>
       case reverse dirs of
-        [dir] => runDump out after dir
+        [dir] =>
+          case (after, onlys) of
+            (Just _, _ :: _) => usageErrorForIn DevSpec.commands ["dev", "ir", "dump"]
+            (Just a, []) => runDump out a [] dir
+            (Nothing, names) => runDump out "raw" (reverse names) dir
         _ => usageErrorForIn DevSpec.commands ["dev", "ir", "dump"]
 
-runDump : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> String -> Eff r Int
-runDump out after dir =
+runDump : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> List String -> String -> Eff r Int
+runDump out after onlys dir =
   do
     pkgR <- loadPackage dir
     case pkgR of
       ErrC e => toolError (diagText e)
       OkC pkg =>
         do
-          r <- dumpIr after (packageContext pkg) (packageEntry pkg)
+          r <- dumpIr onlys after (packageContext pkg) (packageEntry pkg)
           case r of
             ErrC e => toolError (diagText e)
             OkC text =>
