@@ -116,6 +116,17 @@ jobs:
             nix run .#ci -- ${{ inputs.group }}
           fi
 
+      # runner 实测的 suite 调度权重：`vuna-tests.sh` 末尾把它打进 derivation 日志，
+      # 成功的构建不会回显日志，这里按需把那段摘出来（其余 check 没有这段，输出为空）。
+      - name: 调度权重读数
+        if: always()
+        run: |
+          for p in .ci/result*; do
+            [ -e "$p" ] || continue
+            nix log "$p" 2>/dev/null |
+              sed -n '/=== suite-costs begin/,/=== suite-costs end/p' || true
+          done
+
       # Nix 在 store 里留下 `<out>.lock`（root 0600），非 root 的 tar 打包会整体失败。
       - name: Drop builder lock files
         if: always()
