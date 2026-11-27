@@ -421,15 +421,12 @@ moduleNameOfPath rootPath path =
 rootSources : Member nFs FsOp r => Root -> Eff r (List (String, Int))
 rootSources root =
   do
-    paths <- collectVunaMeta (rootDir root)
-    pairs <-
-      mapEff (
-          \p =>
-            do
-              content <- fsReadFile p
-              pure (moduleNameOfPath (rootDir root) p, textHash content)
-        ) paths
+    mods <- scanRootsEff ScanDigest [root] []
+    let pairs = map closurePairOf mods
     pure (Sort.sortBy (\a, b => firstOf a <= firstOf b) pairs)
+
+closurePairOf : ClosureMod -> (String, Int)
+closurePairOf m = (m.cmName, m.cmKey)
 
 rootHash : Member nFs FsOp r => Root -> Eff r Int
 rootHash root =
@@ -713,6 +710,7 @@ export record ClosureMod(..) where
   cmName : String
   cmPath : String
   cmSrc : String
+  cmKey : Int
   cmImports : List String
   cmAddr : String
 deriving (Selectors)
@@ -759,45 +757,65 @@ findClosureMod : String -> List ClosureMod -> Maybe ClosureMod
 findClosureMod _ [] = Nothing
 findClosureMod n (m :: rest) = if m.cmName == n then Just m else findClosureMod n rest
 
--- | 一次读盘同时算内容摘要与 header：`cmSrc` 是源摘要，`cmImports` 是解析出的 import 边
--- （尾接隐式 Prelude 由 `appendPrelude` 在拿到全量模块表后做）。
-closureModsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
-closureModsEff ctx pkgs =
+-- | 扫描模式：`ScanDigest` 只要源摘要（build meta / 编译器身份），不 parse；
+-- `ScanImports` 额外 parse header 取 import 边（接口地址）。
+export data ScanMode(..) : Type where
+  ScanDigest : ScanMode
+  ScanImports : ScanMode
+
+-- | 唯一的「目录遍历 + 读文件 + 摘要（+ header import）」实现。
+-- `ScanDigest` 忽略 `pkgs`（用 root 名占位，调用方只取名字/键）；`ScanImports` 只扫
+-- 在包表里有记录的 root，与旧 `closureModsEff` 的静默跳过一致。
+export scanRootsEff : Member nFs FsOp r => ScanMode -> List Root -> List PkgEntry -> Eff r (List ClosureMod)
+scanRootsEff mode roots pkgs =
   do
     per <-
       mapEff (
           \r =>
-            case findPkgEntry (rootName r) pkgs of
-              Nothing => pure []
-              Just pe =>
-                do
-                  paths <- collectVunaMeta (rootDir r)
-                  mapEff (
-                      \p =>
-                        do
-                          raw <- fsReadFile p
-                          closureModOf pe (rootDir r) p raw
-                    ) paths
-        ) (contextRoots ctx)
+            case mode of
+              ScanDigest => scanRootEff ScanDigest (digestPkgFor r) r []
+              ScanImports =>
+                case findPkgEntry (rootName r) pkgs of
+                  Nothing => pure []
+                  Just pe => scanRootEff ScanImports pe r []
+        ) roots
     pure (concatMap (\xs => xs) per)
 
-closureModOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PkgEntry -> String -> String -> String -> Eff r ClosureMod
-closureModOf pe root p raw =
+digestPkgFor : Root -> PkgEntry
+digestPkgFor r = PkgEntry (rootName r) (rootDir r) "" "" True
+
+scanRootEff : Member nFs FsOp r => ScanMode -> PkgEntry -> Root -> List ClosureMod -> Eff r (List ClosureMod)
+scanRootEff mode pe root acc =
   do
+    paths <- collectVunaMeta (rootDir root)
+    mapEff (\p => scanModEff mode pe root p) paths
+
+scanModEff : Member nFs FsOp r => ScanMode -> PkgEntry -> Root -> String -> Eff r ClosureMod
+scanModEff mode pe root p =
+  do
+    raw <- fsReadFile p
     let
-      name = moduleNameOfPath root p
+      name = moduleNameOfPath (rootDir root) p
       src = contentAddress raw
-    in do
-      parsed <- parseFileWithPath p raw
-      let
-        imports =
-          case parsed of
-            ErrC _ => []
-            OkC parsedFile =>
-              let
-                hdr = headerOfSource "" (firstOf parsedFile)
-              in hdr.mhImports
-      pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src imports "")
+      key = textHash raw
+    in case mode of
+      ScanDigest => pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src key [] "")
+      ScanImports =>
+        do
+          parsed <- parseFileWithPath p raw
+          let
+            imports =
+              case parsed of
+                ErrC _ => []
+                OkC parsedFile =>
+                  let
+                    hdr = headerOfSource "" (firstOf parsedFile)
+                  in hdr.mhImports
+          pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src key imports "")
+
+-- | 接口闭包：一次扫描 + 纯投影（Prelude 边 / 地址）。
+closureModsEff : Member nFs FsOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
+closureModsEff ctx pkgs = scanRootsEff ScanImports (contextRoots ctx) pkgs
 
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」
 -- 后置在地址里，而它在拓扑序里没有前驱 ⇒ 早于 Prelude 的模块算地址时它还没分配，
@@ -819,6 +837,7 @@ appendPrelude preludeByPkg hasPrelude m =
       m.cmName
       m.cmPath
       m.cmSrc
+      m.cmKey
       (append m.cmImports ["Prelude"])
       ""
   else
@@ -870,6 +889,7 @@ withAddr srcTbl m =
     m.cmName
     m.cmPath
     m.cmSrc
+    m.cmKey
     m.cmImports
     (ifaceAddrOf srcTbl m)
 
