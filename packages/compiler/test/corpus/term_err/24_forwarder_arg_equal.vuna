@@ -1,0 +1,19 @@
+-- 回调实参不是纯形参（`k (Link Zero c)`）：替换后拿不到尺寸关系，必须拒绝。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Chain : Type where
+  End : Chain
+  Link : Nat -> Chain -> Chain
+
+applyWrap : (Chain -> Int) -> Chain -> Int
+applyWrap k c = k (Link Zero c)
+
+bad : Chain -> Int
+bad c = applyWrap bad c
+
+main : Int
+main = bad End

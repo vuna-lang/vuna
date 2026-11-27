@@ -1,0 +1,22 @@
+-- 回调实参不是纯形参（`k (tail c)`）：按调用点实参替换后 `tail c` 仍是形参的真子项，
+-- 下降关系必须照样成立。（`Chain` 没有结尾构造子，夹具只做 check，`main` 不需要真值。）
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Chain : Type where
+  Node : Nat -> Chain -> Chain
+
+tail : Chain -> Chain
+tail (Node n c) = c
+
+applyTail : (Chain -> Int) -> Chain -> Int
+applyTail k c = k (tail c)
+
+count : Chain -> Int
+count (Node n c) = applyTail count c
+
+main : Int
+main = 0
