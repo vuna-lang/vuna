@@ -41,7 +41,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
-| 包级 `check` | 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自的状态目录） | 精化脏模块；依赖导出面缺件 ⇒ 递归构建依赖，仍缺才回退全量 |
+| 包级 `check` | 按地址读 `<包状态>/iface/<addr>`（本包与依赖各自的状态目录） | 精化脏模块；依赖导出面缺件 ⇒ 递归构建依赖，仍缺才回退全量；依赖闭包里两个包导出同名模块 ⇒ 直接回退全量（歧义由 loader 报 `RN_AmbiguousModule`） |
 | 包级 `build` | 没有产物缓存：每次都精化脏模块 → codegen → 链接 | 冷构建的完整成本 |
 | 同树重复 `build` | `<pkg>/.output/build-meta.json` 与当前输入一致（含二进制身份 `cache-tag`） | 重跑 codegen + `ocamlopt` |
 | 依赖身份 | 不读缓存：`manifest:<toml 摘要>:<根源闭包摘要>`（源码 + manifest 现场算） | —（依赖源码变化即换地址） |

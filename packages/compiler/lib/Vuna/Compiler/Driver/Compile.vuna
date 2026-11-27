@@ -1175,13 +1175,30 @@ probeRequired ctx mods p =
     in pure (if allNamesIn required present then Just (orderClosurePairs pairs) else Nothing)
 
 goPkgsAt : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> PackageContext -> List ClosureMod -> List String -> List (ClosureMod, ModuleIface) -> Eff r (Maybe (List (ClosureMod, ModuleIface)))
-goPkgsAt _ _ _ [] acc = pure (Just acc)
+goPkgsAt _ _ _ [] acc =
+  if duplicatePairNames acc then
+    do
+      let
+        _ = log! "debug" "iface-reject=dep-module-duplicate"
+      in pure Nothing
+  else
+    pure (Just acc)
 goPkgsAt fuel ctx mods (p :: rest) acc =
   do
     pairs <- depPairsOfPkgAt fuel ctx mods p
     case pairs of
       Nothing => pure Nothing
       Just ps => goPkgsAt fuel ctx mods rest (append acc ps)
+
+-- | 依赖包之间是否导出同名模块。增量路径按模块名分配元变量段号，同名会让两个模块抢同一段；
+-- 这属于「依赖闭包本身有歧义」，必须回退全量让 loader 报 `RN_AmbiguousModule`
+-- （歧义诊断由 loader 负责，不能在接口层当内部错误）。
+duplicatePairNames : List (ClosureMod, ModuleIface) -> Bool
+duplicatePairNames pairs = duplicateNamesOf (map (\pair => modNameOf (firstOf pair)) pairs)
+
+duplicateNamesOf : List String -> Bool
+duplicateNamesOf [] = False
+duplicateNamesOf (x :: rest) = memName x rest || duplicateNamesOf rest
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
 exportedDepModsOf : PackageContext -> String -> List ClosureMod -> List ClosureMod
