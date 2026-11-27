@@ -21,12 +21,20 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   索引（不受层级限制），其余是字段；每个字段 binder 的域 sort 必须 `≤` 族层级，
   违反报 `TC_CtorError`。检查在表面类型表达式上逐段做（带 binder 进入 `Ctx`），
   依赖字段按正确上下文计算。
+- **构造子字段严格正性**：字段域里本族不得作为 **Pi 定义域的头**出现（任何深度）：
+  `MkD : (D -> Void) -> D` 会给出 `D -> Void`，`get (MkD get)` 因此有类型 `Void`，
+  违反报 `TC_CtorNotStrictlyPositive`。正位置递归照常放行——直接递归
+  （`Node : Tree -> Tree -> Tree`）、族作容器实参（`MkRose : List Rose -> Rose`）、
+  自身应用（`Cont` 的 `(v -> Cont v)`）与互递归都在合法面内。边界：族作 **Pi 定义域里
+  其它族的实参**（如 `(List D -> Void)`）暂不拒绝——base 效应机把续延编码成
+  `(v -> Control v)`，按教科书极性翻转会连带拒绝 `Control` / `Frame` / `Ctx` 整族；
+  更强的判据要先给效应机换表示（[债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)）。
 - **没有宇宙多态**：族参数按 `Type 0` 落地，索引可以用更大层级的类型。层级显示区分
   0 层与更高层：`Type 0` 打印成 `Type`，`Type n`（n > 0）打印成 `Type n`
   （`Core/Eval.showValueAt`），所以非累积的类型不匹配文案是
   `expected Type, got Type 1` 这类可定位的形式。显示是诊断约定，不改变相等判定。
 - 实现：`Elab/Meta.kindWellFormed`（kind 形状 / 层级）、`Elab/Data.elabCtor` +
-  `checkCtorFieldSorts`（字段层级）。
+  `checkCtorFieldSorts`（字段层级与严格正性）。
 
 ## Nat → Int 隐式提升
 

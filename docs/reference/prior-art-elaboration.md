@@ -129,9 +129,6 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 6. **候选级快照缺失**。已有「单遍逐定义恢复」（`Elab.Driver.elabProgramErrors`，只有 body 阶段
    可恢复），但没有 per-candidate 的回滚：gh#33 明确记「上一候选的解表污染下一候选」；
    `perform` / `handle` 现在是三候选试错、失败抛第一个错（gh#126）。
-7. **没有严格正性检查**（本文档调查中实测）。`Elab.Data.elabCtor` 只校验构造子结果头是本族、
-   索引个数、字段的宇宙层级（`checkCtorFieldSorts`）；仓库内没有 positivity 标记或文档章节。
-   见 gh#32 与 §9 的探针。
 
 ## 7. 值得采纳的设计（分级）
 
@@ -185,11 +182,10 @@ case block 的覆盖率检查、termination 测试、编译器层级收尾，自
 2. 若是缺口 → 登记到 [债务清单](https://github.com/vuna-lang/vuna/issues?q=label%3Adebt)，带可复现证据；
 3. 未被采纳的条目留在本文档，作为先例对照；不要复制进其它主题页。
 
-按「收益 / 风险」排序的三条：
+按「收益 / 风险」排序的两条：
 
 | 候选 | 收益（消掉的债务） | 代价 / 风险 |
 | --- | --- | --- |
-| 严格正性检查 | 补一致性缺口（gh#32）；当前可构造空类型居民 | 低：纯加法，判据可整段照搬 Idris2 `Core/Termination/Positivity.idr` 的 `nameIn` 思路；需先扫 base 的自引用形状 |
 | `Ec` / `ConstraintStore` 拆分 + 名字身份化 | gh#69 / gh#70；让 `branch` 式快照与按定义增量可行 | 中：面广，但可机械分步（先拆 record，再在 Core/Elab 边界引入确定性 id） |
 | 等式推迟 | gh#95 / gh#72 / gh#47 + dot / rewrite 的前置 | 高：贯穿精化器；需要先写决策（契约、错误选择、与字典队列的关系） |
 
@@ -215,7 +211,8 @@ vuna 侧的对照点：`Core/Conv.vuna` 的 `conv` / `solveMeta`；`Elab/Types.v
 `Lowering/Erased.vuna`；`Driver/Dt.vuna` 的 `checkDtProgramOf`；`Driver/Target.vuna` 的
 `compileBackend`。
 
-**严格正性探针**（当前 `vuna check` 接受，说明缺口成立）：
+**严格正性探针**（已被 `Elab.Data.elabCtor` 的字段检查拒绝；判据与放行面见
+[type-system.md](type-system.md)「构造子字段严格正性」）：
 
 ```vuna
 -- 非严格正性 + 空族：能构造出空类型的一个居民
@@ -233,7 +230,7 @@ bad = get (MkD get)
 ```
 
 ```console
-nix run .#vuna -- check probe.vuna   # 当前 exit 0
+nix run .#vuna -- check probe.vuna   # exit 1：TC_CtorNotStrictlyPositive
 ```
 
 对照：同一份形状在 Idris 2 会被 `Positivity` 检查拒绝。
