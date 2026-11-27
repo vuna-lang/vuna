@@ -307,11 +307,13 @@ gh stack link <pr1> <pr2>                 # 在 GitHub 上建立 stack（只追�
 gh stack sync                             # fetch + 级联 rebase + push + 同步 PR
 gh stack rebase [--continue|--abort]      # 只做级联 rebase；冲突时交互解决
 gh stack unstack [--local]                # 解散 stack；--local 只清本地追踪
-nix/tools/merge-queue.sh arm <top>
-nix/tools/merge-queue.sh enqueue <top>
+nix/tools/merge-queue.sh sweep        # checks 绿后整条入队（stack 不依赖 auto-merge）
+# nix/tools/merge-queue.sh enqueue <top>  # 手动：所有 open 层 CLEAN 时
 ```
 
-- 只对 **top** arm；checks 绿后整条入队（sweep 自动，或手动 `enqueue <top>`）。GraphQL
+- stack **不依赖 auto-merge**：GitHub 可能在只想 rebase 的仓库上按默认 squash 校验
+  `includeStack` 并拒绝 arm；checks 绿后由 sweep 自动、或手动 `enqueue <top>` 走 REST
+  `merge-async` 整条入队。GraphQL
   `enqueuePullRequest` 没有 stack 参数；stack 必须走 REST
   `PUT /repos/{owner}/{repo}/pulls/{n}/merge-async`、`merge_action: merge_queue`（202 即接受，
   脚本不阻塞轮询）。`gh pr merge` 没有 stack flag。
@@ -331,8 +333,8 @@ nix/tools/merge-queue.sh enqueue <top>
   按实测。层数是门禁成本的乘数。
 - **seed**：rotation 只在最低层，独立 `chore(seed): ...`；上层不碰 `seed/`。把 stack 拆成
   两条时，seed 边界跟着各自的 bottom 走，全局同时只允许一次 rotation。
-- hold 用 `blocked` / `needs-info` / draft；它挡住上方所有层，解除后从 top 重新 arm，
-  绿后由 sweep 入队，不要逐层重试。
+- hold 用 `blocked` / `needs-info` / draft；它挡住上方所有层，解除后由 sweep 直接入队，
+  不要逐层重试。
 
 ## main 红灯
 
@@ -383,9 +385,10 @@ nix/tools/merge-queue.sh status
 - stack 的某层不能合并：确认它下方的所有层都满足 rules、且 stack 保持线性；合并框要求
   **Rebase stack** 时先级联（`gh stack rebase`），不要单独重试该层。
 - stack 入队后只落了前几层：队列按组推进，剩余层留在后续组；某层被 eject 时上方一起移除，
-  修根因后从 top 重新 arm + enqueue。
+修根因后由 sweep 重新入队。
 - `gh stack link` 报 “has auto-merge enabled”：先对每层 `merge-queue.sh disarm <pr>`；或把 PR
-  先开成 draft，`link` 完再 `ready_for_review`，让 automerge 按 stack 整条 arm。
+  先开成 draft，`link` 完再 `ready_for_review`，让 automerge 按 stack 整条处理。stack 入队
+  由 sweep 负责，不依赖 arm。
 - `gh stack` 不存在：`gh extension install github/gh-stack`；`gh stack` 与 `gh pr merge` 的
   行为不同，合 stack 不要用后者。
 - `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
