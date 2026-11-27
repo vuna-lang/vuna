@@ -301,229 +301,250 @@ let v_reachableDefs = (fun (seeds : string B_dData_dList.t_List) (defs : Vuna_dI
 
 # 391 "Vuna/Ir/Analysis.vuna"
 let rec v_irStringsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
-  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__75, dtb__76, dtb__77, dtb__78, dtb__79) -> (v_irStringsOf dtb__79)
-  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__80) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__80)
-  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__81, dtb__82, dtb__83, dtb__84, dtb__85) -> ((B_dData_dList.v_append (v_irStringsOf dtb__81)) ((B_dData_dList.v_append (v_irStringsOfAltMaybe dtb__83)) ((B_dData_dList.v_append (v_irStringsOfAltMaybe dtb__84)) (v_irStringsOfAltMaybe dtb__85))))
-  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__86, dtb__87, dtb__88, dtb__89) -> ((B_dData_dList.v_append (v_irStringsOf dtb__88)) ((B_dData_dList.v_concatMap v_irStringsOfAlt) dtb__89))
-  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__90, dtb__91, dtb__92) -> ((B_dData_dList.v_append (v_irStringsOf dtb__90)) ((B_dData_dList.v_append (v_irStringsOf dtb__91)) (v_irStringsOf dtb__92)))
-  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__93) -> (v_irStringsOf dtb__93)
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__94, dtb__95, dtb__96) -> ((B_dData_dList.v_append (v_irStringsOf dtb__95)) (v_irStringsOf dtb__96))
-  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__97, dtb__98, dtb__99) -> (v_irStringsOf dtb__99)
-  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__100, dtb__101, dtb__102) -> ((B_dData_dList.v_append (v_irStringsOf dtb__101)) (v_irStringsOf dtb__102))
-  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__103, dtb__104, dtb__105) -> (v_irStringsOf dtb__105)
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__106, dtb__107) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__107)
-  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__108, dtb__109, dtb__110, dtb__111) -> ((B_dData_dList.v_append (v_irStringsOf dtb__108)) ((B_dData_dList.v_concatMap v_irStringsOfField) dtb__110))
-  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__112, dtb__113, dtb__114, dtb__115) -> (v_irStringsOf dtb__112)
-  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__116, dtb__117, dtb__118) -> ((B_dData_dList.v_concatMap v_irStringsOfField) dtb__118)
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__119, dtb__120, dtb__121, dtb__122) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__122)
-  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__123) -> (B_dData_dList.C_List__x58__x58_ (dtb__123, B_dData_dList.C_List_Nil))
-  | _ -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__75, dtb__76, dtb__77) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__78) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__79) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__80) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__81) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__82) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__83) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__84, dtb__85, dtb__86, dtb__87, dtb__88) -> (v_irStringsOf dtb__88)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__89) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__89)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__90, dtb__91, dtb__92, dtb__93, dtb__94) -> ((B_dData_dList.v_append (v_irStringsOf dtb__90)) ((B_dData_dList.v_append (v_irStringsOfAltMaybe dtb__92)) ((B_dData_dList.v_append (v_irStringsOfAltMaybe dtb__93)) (v_irStringsOfAltMaybe dtb__94))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__95, dtb__96, dtb__97, dtb__98) -> ((B_dData_dList.v_append (v_irStringsOf dtb__97)) ((B_dData_dList.v_concatMap v_irStringsOfAlt) dtb__98))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__99, dtb__100, dtb__101) -> ((B_dData_dList.v_append (v_irStringsOf dtb__99)) ((B_dData_dList.v_append (v_irStringsOf dtb__100)) (v_irStringsOf dtb__101)))
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__102) -> (v_irStringsOf dtb__102)
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__103, dtb__104, dtb__105) -> ((B_dData_dList.v_append (v_irStringsOf dtb__104)) (v_irStringsOf dtb__105))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__106, dtb__107, dtb__108) -> (v_irStringsOf dtb__108)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__109, dtb__110, dtb__111) -> ((B_dData_dList.v_append (v_irStringsOf dtb__110)) (v_irStringsOf dtb__111))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__112, dtb__113, dtb__114) -> (v_irStringsOf dtb__114)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__115, dtb__116) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__116)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__117, dtb__118, dtb__119, dtb__120) -> ((B_dData_dList.v_append (v_irStringsOf dtb__117)) ((B_dData_dList.v_concatMap v_irStringsOfField) dtb__119))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__121, dtb__122, dtb__123, dtb__124) -> (v_irStringsOf dtb__121)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__125, dtb__126, dtb__127) -> ((B_dData_dList.v_concatMap v_irStringsOfField) dtb__127)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__128, dtb__129, dtb__130, dtb__131) -> ((B_dData_dList.v_concatMap v_irStringsOf) dtb__131)
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__132) -> (B_dData_dList.C_List__x58__x58_ (dtb__132, B_dData_dList.C_List_Nil))
+  | _ -> failwith "DT: impossible branch"
 ))
-# 414 "Vuna/Ir/Analysis.vuna"
-and v_irStringsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irStringsOf (B_dData_dPair.v_secondOf p)))
-# 417 "Vuna/Ir/Analysis.vuna"
-and v_irStringsOfAlt = (fun (alt : Vuna_dIr_dModel.t_IrAlt) -> (v_irStringsOf (Vuna_dIr_dModel.v_irAltBodyOf alt)))
 # 420 "Vuna/Ir/Analysis.vuna"
-and v_irStringsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__124) -> (v_irStringsOfAlt dtb__124)
-  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | _ -> failwith "DT: impossible branch"
-))
-
+and v_irStringsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irStringsOf (B_dData_dPair.v_secondOf p)))
+# 423 "Vuna/Ir/Analysis.vuna"
+and v_irStringsOfAlt = (fun (alt : Vuna_dIr_dModel.t_IrAlt) -> (v_irStringsOf (Vuna_dIr_dModel.v_irAltBodyOf alt)))
 # 426 "Vuna/Ir/Analysis.vuna"
-let rec v_irFloatLitsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
-  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__125, dtb__126, dtb__127, dtb__128, dtb__129) -> (v_irFloatLitsOf dtb__129)
-  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__130) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__130)
-  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__131, dtb__132, dtb__133, dtb__134, dtb__135) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__131)) ((B_dData_dList.v_append (v_floatsOfAltMaybe dtb__133)) ((B_dData_dList.v_append (v_floatsOfAltMaybe dtb__134)) (v_floatsOfAltMaybe dtb__135))))
-  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__136, dtb__137, dtb__138, dtb__139) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__138)) ((B_dData_dList.v_concatMap v_floatsOfAlt) dtb__139))
-  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__140, dtb__141, dtb__142) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__140)) ((B_dData_dList.v_append (v_irFloatLitsOf dtb__141)) (v_irFloatLitsOf dtb__142)))
-  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__143) -> (v_irFloatLitsOf dtb__143)
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__144, dtb__145, dtb__146) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__145)) (v_irFloatLitsOf dtb__146))
-  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__147, dtb__148, dtb__149) -> (v_irFloatLitsOf dtb__149)
-  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__150, dtb__151, dtb__152) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__151)) (v_irFloatLitsOf dtb__152))
-  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__153, dtb__154, dtb__155) -> (v_irFloatLitsOf dtb__155)
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__156, dtb__157) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__157)
-  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__158, dtb__159, dtb__160, dtb__161) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__158)) ((B_dData_dList.v_concatMap v_floatsOfField) dtb__160))
-  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__162, dtb__163, dtb__164, dtb__165) -> (v_irFloatLitsOf dtb__162)
-  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__166, dtb__167, dtb__168) -> ((B_dData_dList.v_concatMap v_floatsOfField) dtb__168)
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__169, dtb__170, dtb__171, dtb__172) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__172)
-  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__173) -> (B_dData_dList.C_List__x58__x58_ (dtb__173, B_dData_dList.C_List_Nil))
-  | _ -> B_dData_dList.C_List_Nil
-))
-# 449 "Vuna/Ir/Analysis.vuna"
-and v_floatsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irFloatLitsOf (B_dData_dPair.v_secondOf p)))
-# 452 "Vuna/Ir/Analysis.vuna"
-and v_floatsOfAlt = (fun (alt : Vuna_dIr_dModel.t_IrAlt) -> (v_irFloatLitsOf (Vuna_dIr_dModel.v_irAltBodyOf alt)))
-# 455 "Vuna/Ir/Analysis.vuna"
-and v_floatsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__174) -> (v_floatsOfAlt dtb__174)
+and v_irStringsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__133) -> (v_irStringsOfAlt dtb__133)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 460 "Vuna/Ir/Analysis.vuna"
+# 432 "Vuna/Ir/Analysis.vuna"
+let rec v_irFloatLitsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__134, dtb__135, dtb__136) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__137) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__138) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__139) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__140) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__141) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__142) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__143, dtb__144, dtb__145, dtb__146, dtb__147) -> (v_irFloatLitsOf dtb__147)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__148) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__148)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__149, dtb__150, dtb__151, dtb__152, dtb__153) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__149)) ((B_dData_dList.v_append (v_floatsOfAltMaybe dtb__151)) ((B_dData_dList.v_append (v_floatsOfAltMaybe dtb__152)) (v_floatsOfAltMaybe dtb__153))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__154, dtb__155, dtb__156, dtb__157) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__156)) ((B_dData_dList.v_concatMap v_floatsOfAlt) dtb__157))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__158, dtb__159, dtb__160) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__158)) ((B_dData_dList.v_append (v_irFloatLitsOf dtb__159)) (v_irFloatLitsOf dtb__160)))
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__161) -> (v_irFloatLitsOf dtb__161)
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__162, dtb__163, dtb__164) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__163)) (v_irFloatLitsOf dtb__164))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__165, dtb__166, dtb__167) -> (v_irFloatLitsOf dtb__167)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__168, dtb__169, dtb__170) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__169)) (v_irFloatLitsOf dtb__170))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__171, dtb__172, dtb__173) -> (v_irFloatLitsOf dtb__173)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__174, dtb__175) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__175)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__176, dtb__177, dtb__178, dtb__179) -> ((B_dData_dList.v_append (v_irFloatLitsOf dtb__176)) ((B_dData_dList.v_concatMap v_floatsOfField) dtb__178))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__180, dtb__181, dtb__182, dtb__183) -> (v_irFloatLitsOf dtb__180)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__184, dtb__185, dtb__186) -> ((B_dData_dList.v_concatMap v_floatsOfField) dtb__186)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__187, dtb__188, dtb__189, dtb__190) -> ((B_dData_dList.v_concatMap v_irFloatLitsOf) dtb__190)
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__191) -> (B_dData_dList.C_List__x58__x58_ (dtb__191, B_dData_dList.C_List_Nil))
+  | _ -> failwith "DT: impossible branch"
+))
+# 461 "Vuna/Ir/Analysis.vuna"
+and v_floatsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irFloatLitsOf (B_dData_dPair.v_secondOf p)))
+# 464 "Vuna/Ir/Analysis.vuna"
+and v_floatsOfAlt = (fun (alt : Vuna_dIr_dModel.t_IrAlt) -> (v_irFloatLitsOf (Vuna_dIr_dModel.v_irAltBodyOf alt)))
+# 467 "Vuna/Ir/Analysis.vuna"
+and v_floatsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__192) -> (v_floatsOfAlt dtb__192)
+  | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 472 "Vuna/Ir/Analysis.vuna"
 let rec v_flattenApp = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__175, dtb__176, dtb__177) -> (let p = (v_flattenApp dtb__176) in { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dList.C_List__x58__x58_ (dtb__177, B_dData_dList.C_List_Nil))) })
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__193, dtb__194, dtb__195) -> (let p = (v_flattenApp dtb__194) in { B_dData_dPair.f_Pair_first = (B_dData_dPair.v_firstOf p); B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append (B_dData_dPair.v_secondOf p)) (B_dData_dList.C_List__x58__x58_ (dtb__195, B_dData_dList.C_List_Nil))) })
   | _ -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }
 ))
 
-# 468 "Vuna/Ir/Analysis.vuna"
+# 480 "Vuna/Ir/Analysis.vuna"
 let rec v_irGlobalsOf = (fun (mc0 : Vuna_dIr_dModel.t_Ir) -> (match mc0 with
-  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__178) -> (v_irGlobalsOf dtb__178)
-  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__179, dtb__180, dtb__181, dtb__182, dtb__183) -> (v_irGlobalsOf dtb__183)
-  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__184) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__184)
-  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__185, dtb__186, dtb__187, dtb__188, dtb__189) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__185)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__187)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__188)) (v_globalsOfAltMaybe dtb__189))))
-  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__190, dtb__191, dtb__192, dtb__193) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__192)) ((B_dData_dList.v_concatMap v_globalsOfAlt) dtb__193))
-  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__194, dtb__195, dtb__196) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__194)) ((B_dData_dList.v_append (v_irGlobalsOf dtb__195)) (v_irGlobalsOf dtb__196)))
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__197, dtb__198, dtb__199) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__198)) (v_irGlobalsOf dtb__199))
-  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__200, dtb__201, dtb__202) -> (v_irGlobalsOf dtb__202)
-  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__203, dtb__204, dtb__205) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__204)) (v_irGlobalsOf dtb__205))
-  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__206, dtb__207, dtb__208) -> (v_irGlobalsOf dtb__208)
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__209, dtb__210) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__210)
-  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__211, dtb__212, dtb__213, dtb__214) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__211)) ((B_dData_dList.v_concatMap v_globalsOfField) dtb__213))
-  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__215, dtb__216, dtb__217, dtb__218) -> (v_irGlobalsOf dtb__215)
-  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__219, dtb__220, dtb__221) -> ((B_dData_dList.v_concatMap v_globalsOfField) dtb__221)
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__222, dtb__223, dtb__224, dtb__225) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__225)
-  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__226) -> (B_dData_dList.C_List__x58__x58_ (dtb__226, B_dData_dList.C_List_Nil))
-  | _ -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__196, dtb__197, dtb__198) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__199) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__200) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__201) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__202) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__203) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__204) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__205) -> (v_irGlobalsOf dtb__205)
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__206, dtb__207, dtb__208, dtb__209, dtb__210) -> (v_irGlobalsOf dtb__210)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__211) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__211)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__212, dtb__213, dtb__214, dtb__215, dtb__216) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__212)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__214)) ((B_dData_dList.v_append (v_globalsOfAltMaybe dtb__215)) (v_globalsOfAltMaybe dtb__216))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__217, dtb__218, dtb__219, dtb__220) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__219)) ((B_dData_dList.v_concatMap v_globalsOfAlt) dtb__220))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__221, dtb__222, dtb__223) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__221)) ((B_dData_dList.v_append (v_irGlobalsOf dtb__222)) (v_irGlobalsOf dtb__223)))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__224, dtb__225, dtb__226) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__225)) (v_irGlobalsOf dtb__226))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__227, dtb__228, dtb__229) -> (v_irGlobalsOf dtb__229)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__230, dtb__231, dtb__232) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__231)) (v_irGlobalsOf dtb__232))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__233, dtb__234, dtb__235) -> (v_irGlobalsOf dtb__235)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__236, dtb__237) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__237)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__238, dtb__239, dtb__240, dtb__241) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__238)) ((B_dData_dList.v_concatMap v_globalsOfField) dtb__240))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__242, dtb__243, dtb__244, dtb__245) -> (v_irGlobalsOf dtb__242)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__246, dtb__247, dtb__248) -> ((B_dData_dList.v_concatMap v_globalsOfField) dtb__248)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__249, dtb__250, dtb__251, dtb__252) -> ((B_dData_dList.v_concatMap v_irGlobalsOf) dtb__252)
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__253) -> (B_dData_dList.C_List__x58__x58_ (dtb__253, B_dData_dList.C_List_Nil))
+  | _ -> failwith "DT: impossible branch"
 ))
-# 490 "Vuna/Ir/Analysis.vuna"
+# 508 "Vuna/Ir/Analysis.vuna"
 and v_globalsOfField = (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> (v_irGlobalsOf (B_dData_dPair.v_secondOf p)))
-# 493 "Vuna/Ir/Analysis.vuna"
+# 511 "Vuna/Ir/Analysis.vuna"
 and v_globalsOfAlt = (fun (a : Vuna_dIr_dModel.t_IrAlt) -> (v_irGlobalsOf (Vuna_dIr_dModel.v_irAltBodyOf a)))
-# 496 "Vuna/Ir/Analysis.vuna"
+# 514 "Vuna/Ir/Analysis.vuna"
 and v_globalsOfAltMaybe = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__227) -> (v_globalsOfAlt dtb__227)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__254) -> (v_globalsOfAlt dtb__254)
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 515 "Vuna/Ir/Analysis.vuna"
+# 533 "Vuna/Ir/Analysis.vuna"
 let v_bodyRefCount = (fun (mc0 : Vuna_dIr_dModel.t_Ir B_dData_dMaybe.t_Maybe) -> (match mc0 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__228) -> (v_countList (v_irGlobalsOf dtb__228))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__255) -> (v_countList (v_irGlobalsOf dtb__255))
   | B_dData_dMaybe.C_Maybe_Nothing -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 511 "Vuna/Ir/Analysis.vuna"
+# 529 "Vuna/Ir/Analysis.vuna"
 let v_refEdgeCount = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (((B_dData_dList.v_foldl (fun (acc : int) (d : Vuna_dIr_dModel.t_IrDef) -> ((acc + (v_bodyRefCount (Vuna_dIr_dModel.v_irDefBody d))) + (v_countList (Vuna_dIr_dModel.v_irDefDeps d))))) 0) defs))
 
-# 519 "Vuna/Ir/Analysis.vuna"
+# 537 "Vuna/Ir/Analysis.vuna"
 let v_refsOfDef = (fun (keepDep : (string) -> bool) (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((B_dData_dList.v_filter keepDep) (Vuna_dIr_dModel.v_irDefDeps d))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__229) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__229)) ((B_dData_dList.v_filter keepDep) (Vuna_dIr_dModel.v_irDefDeps d)))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__256) -> ((B_dData_dList.v_append (v_irGlobalsOf dtb__256)) ((B_dData_dList.v_filter keepDep) (Vuna_dIr_dModel.v_irDefDeps d)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 525 "Vuna/Ir/Analysis.vuna"
+# 543 "Vuna/Ir/Analysis.vuna"
 let rec v_closeRefsByRefs = (fun (fuel : int) (tbl : (string, Vuna_dIr_dModel.t_IrDef) B_dContainer_dHashMap.t_HashMap) (keepDep : (string) -> bool) (work : string B_dData_dList.t_List) (seen : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (if (fuel <= 0) then seen else (match work with
   | B_dData_dList.C_List_Nil -> seen
-  | B_dData_dList.C_List__x58__x58_ (dtb__230, dtb__231) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) seen) then (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) seen) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) tbl) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__231) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) true) seen))
-  | B_dData_dMaybe.C_Maybe_Just (dtb__232) -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) ((B_dData_dList.v_append ((v_refsOfDef keepDep) dtb__232)) dtb__231)) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__230) true) seen))
+  | B_dData_dList.C_List__x58__x58_ (dtb__257, dtb__258) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__257) seen) then (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__258) seen) else (match ((((B_dContainer_dHashMap.v_lookup B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__257) tbl) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) dtb__258) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__257) true) seen))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__259) -> (((((v_closeRefsByRefs (fuel - 1)) tbl) keepDep) ((B_dData_dList.v_append ((v_refsOfDef keepDep) dtb__259)) dtb__258)) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__257) true) seen))
   | _ -> failwith "DT: impossible branch"
 ))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 503 "Vuna/Ir/Analysis.vuna"
+# 521 "Vuna/Ir/Analysis.vuna"
 let v_reachableDefsByRefs = (fun (keepDep : (string) -> bool) (fuel : int) (roots : string B_dData_dList.t_List) (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (let tbl = (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) ((B_dData_dList.v_map (fun (d : Vuna_dIr_dModel.t_IrDef) -> { B_dData_dPair.f_Pair_first = (Vuna_dIr_dModel.v_irDefName d); B_dData_dPair.f_Pair_second = d })) defs)) in (let budget = ((8 + fuel) + (v_refEdgeCount defs)) in (let seen = (((((v_closeRefsByRefs budget) tbl) keepDep) roots) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)) in ((B_dData_dList.v_filter (fun (d : Vuna_dIr_dModel.t_IrDef) -> ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) (Vuna_dIr_dModel.v_irDefName d)) seen))) defs)))))
 
-# 541 "Vuna/Ir/Analysis.vuna"
+# 559 "Vuna/Ir/Analysis.vuna"
 let v_irStringsOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb__233) -> (v_irStringsOf dtb__233)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__260) -> (v_irStringsOf dtb__260)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 548 "Vuna/Ir/Analysis.vuna"
+# 566 "Vuna/Ir/Analysis.vuna"
 let v_irFloatLitsOfDef = (fun (d : Vuna_dIr_dModel.t_IrDef) -> (match (Vuna_dIr_dModel.v_irDefBody d) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb__234) -> (v_irFloatLitsOf dtb__234)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__261) -> (v_irFloatLitsOf dtb__261)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 559 "Vuna/Ir/Analysis.vuna"
+# 577 "Vuna/Ir/Analysis.vuna"
 let rec v_checkUniqueDefNamesGo = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string, bool) B_dContainer_dHashMap.t_HashMap) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__235, dtb__236) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__235) mc1) then (Base_dDiag.v_icInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__235; "`"])) else ((v_checkUniqueDefNamesGo dtb__236) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__235) true) mc1)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__262, dtb__263) -> (if ((((B_dContainer_dHashMap.v_member B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__262) mc1) then (Base_dDiag.v_icInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__262; "`"])) else ((v_checkUniqueDefNamesGo dtb__263) (((((B_dContainer_dHashMap.v_insert B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb__262) true) mc1)))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 556 "Vuna/Ir/Analysis.vuna"
+# 574 "Vuna/Ir/Analysis.vuna"
 let v_checkUniqueDefNames = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((v_checkUniqueDefNamesGo ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) (((B_dContainer_dHashMap.v_fromList B_dData_dString.v_Hashable_ue4b0f10b020a5e82_uString) B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) B_dData_dList.C_List_Nil)))
 
-# 596 "Vuna/Ir/Analysis.vuna"
+# 614 "Vuna/Ir/Analysis.vuna"
 let rec v_firstBadRecName = (fun (mc0 : string B_dData_dList.t_List) (mc1 : (string) -> bool) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__237, dtb__238) -> (if (mc1 dtb__237) then ((v_firstBadRecName dtb__238) mc1) else (B_dData_dMaybe.C_Maybe_Just (dtb__237)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__264, dtb__265) -> (if (mc1 dtb__264) then ((v_firstBadRecName dtb__265) mc1) else (B_dData_dMaybe.C_Maybe_Just (dtb__264)))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 580 "Vuna/Ir/Analysis.vuna"
+# 598 "Vuna/Ir/Analysis.vuna"
 let rec v_assembleGo = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List B_dData_dList.t_List) (mc2 : (string) -> bool) (mc3 : (string) -> Base_dSource.t_Span B_dData_dMaybe.t_Maybe) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__239, dtb__240) -> (let isRec = ((v_groupNeedsRec mc0) dtb__239) in (let checked = (if isRec then (match ((v_firstBadRecName dtb__239) mc2) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__241) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (mc3 dtb__241)) dtb__241) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__241))) (B_dData_dVec.C_Vec__x58__x58_ (dtb__241, B_dData_dVec.C_Vec_Nil)))
-  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__239 }))
+  | B_dData_dList.C_List__x58__x58_ (dtb__266, dtb__267) -> (let isRec = ((v_groupNeedsRec mc0) dtb__266) in (let checked = (if isRec then (match ((v_firstBadRecName dtb__266) mc2) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__268) -> ((((Base_dDiagnostics_dCg.v_cgErrDefAt (mc3 dtb__268)) dtb__268) (Base_dDiagnostics_dCg.C_CgErr_RecursiveValueDefinition (dtb__268))) (B_dData_dVec.C_Vec__x58__x58_ (dtb__268, B_dData_dVec.C_Vec_Nil)))
+  | B_dData_dMaybe.C_Maybe_Nothing -> (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = true; B_dData_dPair.f_Pair_second = dtb__266 }))
   | _ -> failwith "DT: impossible branch"
-) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = dtb__239 }))) in ((Base_dCommon.v_bind checked) (fun (grp : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_assembleGo mc0) dtb__240) mc2) mc3)) (fun (tail : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (grp, tail))))))))))
+) else (Base_dDiag.C_Check_OkC ({ B_dData_dPair.f_Pair_first = false; B_dData_dPair.f_Pair_second = dtb__266 }))) in ((Base_dCommon.v_bind checked) (fun (grp : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair) -> ((Base_dCommon.v_bind ((((v_assembleGo mc0) dtb__267) mc2) mc3)) (fun (tail : (bool, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ (grp, tail))))))))))
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 576 "Vuna/Ir/Analysis.vuna"
+# 594 "Vuna/Ir/Analysis.vuna"
 let v_groupNamesGo = (fun (mc0 : (string, string B_dData_dList.t_List) B_dContainer_dHashMap.t_HashMap) (mc1 : string B_dData_dList.t_List) (mc2 : string B_dData_dList.t_List B_dData_dList.t_List Base_dDiag.t_Check) (mc3 : (string) -> bool) (mc4 : (string) -> Base_dSource.t_Span B_dData_dMaybe.t_Maybe) -> (match mc2 with
-  | Base_dDiag.C_Check_OkC (dtb__242) -> ((((v_assembleGo mc0) dtb__242) mc3) mc4)
-  | Base_dDiag.C_Check_ErrC (dtb__243) -> (Base_dDiag.C_Check_ErrC (dtb__243))
+  | Base_dDiag.C_Check_OkC (dtb__269) -> ((((v_assembleGo mc0) dtb__269) mc3) mc4)
+  | Base_dDiag.C_Check_ErrC (dtb__270) -> (Base_dDiag.C_Check_ErrC (dtb__270))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 572 "Vuna/Ir/Analysis.vuna"
+# 590 "Vuna/Ir/Analysis.vuna"
 let v_assembleGroupNames = (fun (adj : (string, string B_dData_dList.t_List) B_dData_dPair.t_Pair B_dData_dList.t_List) (names : string B_dData_dList.t_List) (recOk : (string) -> bool) (spanOf : (string) -> Base_dSource.t_Span B_dData_dMaybe.t_Maybe) -> (((((v_groupNamesGo (v_adjTblOf adj)) names) ((v_groupNames adj) names)) recOk) spanOf))
 
-# 602 "Vuna/Ir/Analysis.vuna"
+# 620 "Vuna/Ir/Analysis.vuna"
 let rec v_irMentionsGlobal = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_Ir) -> (match mc1 with
-  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__244, dtb__245, dtb__246, dtb__247, dtb__248) -> ((v_irMentionsGlobal mc0) dtb__248)
-  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__249) -> ((v_anyMentions mc0) dtb__249)
-  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__250, dtb__251, dtb__252, dtb__253, dtb__254) -> (if ((v_irMentionsGlobal mc0) dtb__250) then true else (if ((v_anyMentionsAltM mc0) dtb__252) then true else (if ((v_anyMentionsAltM mc0) dtb__253) then true else ((v_anyMentionsAltM mc0) dtb__254))))
-  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__255, dtb__256, dtb__257, dtb__258) -> (if ((v_irMentionsGlobal mc0) dtb__257) then true else ((v_anyMentionsAlts mc0) dtb__258))
-  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__259, dtb__260, dtb__261) -> (if ((v_irMentionsGlobal mc0) dtb__259) then true else (if ((v_irMentionsGlobal mc0) dtb__260) then true else ((v_irMentionsGlobal mc0) dtb__261)))
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__262, dtb__263, dtb__264) -> (if ((v_irMentionsGlobal mc0) dtb__263) then true else ((v_irMentionsGlobal mc0) dtb__264))
-  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__265, dtb__266, dtb__267) -> ((v_irMentionsGlobal mc0) dtb__267)
-  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__268, dtb__269, dtb__270) -> (if ((v_irMentionsGlobal mc0) dtb__269) then true else ((v_irMentionsGlobal mc0) dtb__270))
-  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__271, dtb__272, dtb__273) -> ((v_irMentionsGlobal mc0) dtb__273)
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__274, dtb__275) -> ((v_anyMentions mc0) dtb__275)
-  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__276, dtb__277, dtb__278, dtb__279) -> (if ((v_irMentionsGlobal mc0) dtb__276) then true else ((v_anyMentionsFields mc0) dtb__278))
-  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__280, dtb__281, dtb__282, dtb__283) -> ((v_irMentionsGlobal mc0) dtb__280)
-  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__284, dtb__285, dtb__286) -> ((v_anyMentionsFields mc0) dtb__286)
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__287, dtb__288, dtb__289, dtb__290) -> ((v_anyMentions mc0) dtb__290)
-  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__291) -> (dtb__291 = mc0)
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__271, dtb__272, dtb__273, dtb__274, dtb__275) -> ((v_irMentionsGlobal mc0) dtb__275)
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__276) -> ((v_anyMentions mc0) dtb__276)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__277, dtb__278, dtb__279, dtb__280, dtb__281) -> (if ((v_irMentionsGlobal mc0) dtb__277) then true else (if ((v_anyMentionsAltM mc0) dtb__279) then true else (if ((v_anyMentionsAltM mc0) dtb__280) then true else ((v_anyMentionsAltM mc0) dtb__281))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__282, dtb__283, dtb__284, dtb__285) -> (if ((v_irMentionsGlobal mc0) dtb__284) then true else ((v_anyMentionsAlts mc0) dtb__285))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__286, dtb__287, dtb__288) -> (if ((v_irMentionsGlobal mc0) dtb__286) then true else (if ((v_irMentionsGlobal mc0) dtb__287) then true else ((v_irMentionsGlobal mc0) dtb__288)))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__289, dtb__290, dtb__291) -> (if ((v_irMentionsGlobal mc0) dtb__290) then true else ((v_irMentionsGlobal mc0) dtb__291))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__292, dtb__293, dtb__294) -> ((v_irMentionsGlobal mc0) dtb__294)
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__295, dtb__296, dtb__297) -> (if ((v_irMentionsGlobal mc0) dtb__296) then true else ((v_irMentionsGlobal mc0) dtb__297))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__298, dtb__299, dtb__300) -> ((v_irMentionsGlobal mc0) dtb__300)
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__301, dtb__302) -> ((v_anyMentions mc0) dtb__302)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__303, dtb__304, dtb__305, dtb__306) -> (if ((v_irMentionsGlobal mc0) dtb__303) then true else ((v_anyMentionsFields mc0) dtb__305))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__307, dtb__308, dtb__309, dtb__310) -> ((v_irMentionsGlobal mc0) dtb__307)
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__311, dtb__312, dtb__313) -> ((v_anyMentionsFields mc0) dtb__313)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__314, dtb__315, dtb__316, dtb__317) -> ((v_anyMentions mc0) dtb__317)
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__318) -> (dtb__318 = mc0)
   | _ -> false
 ))
-# 626 "Vuna/Ir/Analysis.vuna"
+# 644 "Vuna/Ir/Analysis.vuna"
 and v_anyMentions = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_Ir B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__292, dtb__293) -> (if ((v_irMentionsGlobal mc0) dtb__292) then true else ((v_anyMentions mc0) dtb__293))
+  | B_dData_dList.C_List__x58__x58_ (dtb__319, dtb__320) -> (if ((v_irMentionsGlobal mc0) dtb__319) then true else ((v_anyMentions mc0) dtb__320))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 630 "Vuna/Ir/Analysis.vuna"
+# 648 "Vuna/Ir/Analysis.vuna"
 and v_anyMentionsFields = (fun (mc0 : string) (mc1 : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__294, dtb__295) -> (match dtb__294 with
-  | { B_dData_dPair.f_Pair_first = dtb__296; B_dData_dPair.f_Pair_second = dtb__297 } -> (if ((v_irMentionsGlobal mc0) dtb__297) then true else ((v_anyMentionsFields mc0) dtb__295))
+  | B_dData_dList.C_List__x58__x58_ (dtb__321, dtb__322) -> (match dtb__321 with
+  | { B_dData_dPair.f_Pair_first = dtb__323; B_dData_dPair.f_Pair_second = dtb__324 } -> (if ((v_irMentionsGlobal mc0) dtb__324) then true else ((v_anyMentionsFields mc0) dtb__322))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 634 "Vuna/Ir/Analysis.vuna"
+# 652 "Vuna/Ir/Analysis.vuna"
 and v_anyMentionsAlts = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__298, dtb__299) -> (if ((v_irMentionsGlobal mc0) (Vuna_dIr_dModel.v_irAltBodyOf dtb__298)) then true else ((v_anyMentionsAlts mc0) dtb__299))
+  | B_dData_dList.C_List__x58__x58_ (dtb__325, dtb__326) -> (if ((v_irMentionsGlobal mc0) (Vuna_dIr_dModel.v_irAltBodyOf dtb__325)) then true else ((v_anyMentionsAlts mc0) dtb__326))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
-# 639 "Vuna/Ir/Analysis.vuna"
+# 657 "Vuna/Ir/Analysis.vuna"
 and v_anyMentionsAltM = (fun (mc0 : string) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc1 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb__300) -> ((v_irMentionsGlobal mc0) (Vuna_dIr_dModel.v_irAltBodyOf dtb__300))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__327) -> ((v_irMentionsGlobal mc0) (Vuna_dIr_dModel.v_irAltBodyOf dtb__327))
   | B_dData_dMaybe.C_Maybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))

@@ -67,11 +67,6 @@ let bi_neq_int (a : int) (b : int) = a <> b
 let bi_eq_str (a : string) (b : string) = a = b
 let bi_neq_str (a : string) (b : string) = a <> b
 let bi_strFromInt (n : int) = string_of_int n
-let bi_strLength (s : string) = String.length s
-let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])
-let bi_strPack (cs : int list) =
-  let a = Array.of_list cs in
-  String.init (Array.length a) (fun i -> Char.chr a.(i))
 let bi_lt_int (a : int) (b : int) = a < b
 let bi_le_int (a : int) (b : int) = a <= b
 let bi_gt_int (a : int) (b : int) = a > b
@@ -102,6 +97,12 @@ let bi_natDiv (a : int) (b : int) = if b = 0 then failwith "division by zero" el
 let bi_natToInt (n : int) = n
 let bi_natFromInt (n : int) = if n <= 0 then 0 else n
 let dt_show_bool b = if b then "True" else "False"
+let dtp_exit n = exit n
+let bi_strLength (s : string) = String.length s
+let bi_strUnpack (s : string) = List.init (String.length s) (fun i -> Char.code s.[i])
+let bi_strPack (cs : int list) =
+  let a = Array.of_list cs in
+  String.init (Array.length a) (fun i -> Char.chr a.(i))
 let dt_show_string s =
   let n = String.length s in
   let b = Bytes.create (2 * n + 2) in
@@ -117,6 +118,16 @@ let dt_show_string s =
     else (Bytes.set b !o c; incr o)) s;
   Bytes.set b !o (Char.chr 34);
   Bytes.sub_string b 0 (!o + 1)
+let dtp_strHash (s : string) =
+  let h = ref 0 in
+  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
+  !h
+let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
+let dtp_substring start len s =
+  let n = String.length s in
+  let st = if start < 0 then 0 else if start > n then n else start in
+  let ln = if len < 0 then 0 else if st + len > n then n - st else len in
+  String.sub s st ln
 let dtp_arraySet (a : 'a array) (i : int) (v : 'a) =
   let b = Array.copy a in
   Array.set b i v; b
@@ -176,17 +187,6 @@ let dtp_mbufClear (r : Obj.t ref) =
 let dtp_mbufToString (r : Obj.t ref) =
   let (b, n) = (Obj.obj !r : bytes * int) in
   Bytes.sub_string b 0 n
-let dtp_strHash (s : string) =
-  let h = ref 0 in
-  String.iter (fun c -> h := ((!h * 33) + Char.code c) land 1023) s;
-  !h
-let dtp_strAt (s : string) (i : int) = if i < 0 || i >= String.length s then -1 else Char.code s.[i]
-let dtp_substring start len s =
-  let n = String.length s in
-  let st = if start < 0 then 0 else if start > n then n else start in
-  let ln = if len < 0 then 0 else if st + len > n then n - st else len in
-  String.sub s st ln
-let dtp_exit n = exit n
 type _ Effect.t += Perform : int * int * string * string * Obj.t -> Obj.t Effect.t
 
 (* 派发 id：与编译器 dispatchIdOf 及 native / wasm runtime 同一公式
@@ -433,15 +433,6 @@ let bi_ge_float (a : float) (b : float) = a >= b
 let dt_def_locs_raw_ref : string ref = ref ""
 let dt_set_locs_raw (raw : string) : unit =
   dt_def_locs_raw_ref := raw
-let rec dt_frame_parts parts =
-  match parts with
-  | [] -> []
-  | "(fun)" :: rest -> dt_frame_parts rest
-  | p :: rest -> p :: dt_frame_parts rest
-let dt_frame_key nm =
-  match dt_frame_parts (List.rev (String.split_on_char '.' nm)) with
-  | value :: unit :: _ -> Some (unit ^ "." ^ value)
-  | _ -> None
 type dt_raw_backtrace = int array
 type dt_backtrace_slot =
   | Known_location of {
@@ -459,21 +450,89 @@ type dt_backtrace_slot =
 external dt_record_backtrace : bool -> unit = "caml_record_backtrace"
 external dt_get_raw_backtrace_prim : unit -> dt_raw_backtrace = "caml_get_exception_raw_backtrace"
 external dt_convert_raw_backtrace : dt_raw_backtrace -> dt_backtrace_slot array = "caml_convert_raw_backtrace"
+(* 回溯 / 位置表路径只用字符与字节原语：引用 `List` / `Array` / `String` / `Bytes`
+   会把整串 stdlib 模块拖进每个产物的启动路径（纯 `main = 42` 的 text 有一半来自这里）。 *)
+external dt_str_len : string -> int = "%string_length"
+external dt_str_get : string -> int -> char = "%string_safe_get"
+external dt_arr_len : 'a array -> int = "%array_length"
+external dt_arr_get : 'a array -> int -> 'a = "%array_safe_get"
+external dt_bytes_create : int -> bytes = "caml_create_bytes"
+external dt_blit_string : string -> int -> bytes -> int -> int -> unit = "caml_blit_string" [@@noalloc]
+external dt_bytes_set : bytes -> int -> char -> unit = "%bytes_safe_set"
+external dt_bytes_to_string : bytes -> string = "%bytes_to_string"
+let dt_sub s ofs len =
+  let b = dt_bytes_create len in
+  dt_blit_string s ofs b 0 len;
+  dt_bytes_to_string b
+let dt_quote_char = dt_bytes_create 1
+let () = dt_bytes_set dt_quote_char 0 '"'
+let dt_quote () = dt_bytes_to_string dt_quote_char
+let dt_eq_sub s ofs len (t : string) =
+  if dt_str_len t <> len then false
+  else begin
+    let ok = ref true in
+    let i = ref 0 in
+    while !ok && !i < len do
+      if dt_str_get s (ofs + !i) <> dt_str_get t !i then ok := false;
+      incr i
+    done;
+    !ok
+  end
+let dt_is_fun s a b =
+  b - a = 5 && dt_str_get s a = '(' && dt_str_get s (a + 1) = 'f'
+  && dt_str_get s (a + 2) = 'u' && dt_str_get s (a + 3) = 'n' && dt_str_get s (a + 4) = ')'
+(* 帧名 `Unit.value`：取最后两段（跳过 `(fun)`），不建中间列表。 *)
+let dt_frame_key nm =
+  let n = dt_str_len nm in
+  let name = ref (0, 0) and prev = ref (0, 0) and have = ref 0 in
+  let start = ref 0 in
+  let i = ref 0 in
+  while !i <= n do
+    (if !i = n || dt_str_get nm !i = '.' then begin
+      if not (dt_is_fun nm !start !i) then begin
+        prev := !name;
+        name := (!start, !i);
+        incr have
+      end;
+      start := !i + 1
+    end);
+    incr i
+  done;
+  if !have < 2 then None
+  else
+    let (a, b) = !name and (c, d) = !prev in
+    Some (dt_sub nm c (d - c) ^ "." ^ dt_sub nm a (b - a))
+(* 位置表是压平的 `key\ndisplay\nloc\n` 字符串：按行扫描，不建中间列表。 *)
+let dt_scan_nl s pos =
+  let n = dt_str_len s in
+  let i = ref pos in
+  while !i < n && dt_str_get s !i <> '\n' do incr i done;
+  !i
+let dt_def_loc_find key =
+  let raw = !dt_def_locs_raw_ref in
+  let n = dt_str_len raw in
+  let rec go pos =
+    if pos >= n then None
+    else
+      let k_end = dt_scan_nl raw pos in
+      if k_end >= n then None
+      else
+        let d_start = k_end + 1 in
+        let d_end = dt_scan_nl raw d_start in
+        if d_end >= n then None
+        else
+          let l_start = d_end + 1 in
+          let l_end = dt_scan_nl raw l_start in
+          if dt_eq_sub raw pos (k_end - pos) key then
+            Some (dt_sub raw d_start (d_end - d_start), dt_sub raw l_start (l_end - l_start))
+          else go (l_end + 1)
+  in go 0
 let dt_get_raw_backtrace () = try dt_get_raw_backtrace_prim () with _ -> [||]
 let dt_backtrace_slots bt = (try Some (dt_convert_raw_backtrace bt) with Failure _ -> None)
 let dt_slot_defname slot =
   match slot with
   | Unknown_location _ -> None
   | Known_location l -> if l.defname = "" then None else Some l.defname
-(* 位置表压平成一个字符串（`key\ndisplay\nloc\n` 重复）：每个条目是三条字符串
-   字面量时，静态数据里的指针每个都要一条重定位，启动时几千条重定位纯属浪费。
-   查表只在异常报告路径发生，扫一遍字符串即可。 *)
-let dt_def_loc_find key =
-  let rec go rest =
-    match rest with
-    | k :: d :: l :: tl -> if k = key then Some (d, l) else go tl
-    | _ -> None
-  in go (String.split_on_char (Char.chr 10) (!dt_def_locs_raw_ref))
 let dt_frame_label slot =
   match dt_slot_defname slot with
   | None -> None
@@ -484,20 +543,7 @@ let dt_frame_label slot =
       (match dt_def_loc_find key with
        | Some (display, loc) -> Some (display ^ " (" ^ loc ^ ")")
        | None -> None)
-let dt_bt_labels (bt : dt_raw_backtrace) : string list =
-  match dt_backtrace_slots bt with
-  | None -> []
-  | Some slots ->
-    let rec go rest shown last acc =
-      if shown >= 12 then List.rev acc
-      else match rest with
-      | [] -> List.rev acc
-      | slot :: tl ->
-        (match dt_frame_label slot with
-         | Some s -> if s = last then go tl shown last acc else go tl (shown + 1) s (s :: acc)
-         | None -> go tl shown last acc)
-    in go (Array.to_list slots) 0 "" []
-let dt_exn_quote m = String.make 1 (Char.chr 34) ^ m ^ String.make 1 (Char.chr 34)
+let dt_exn_quote m = dt_quote () ^ m ^ dt_quote ()
 let dt_exn_msg e =
   match e with
   | Effect.Unhandled (Perform (_, _, key, name, _)) -> "unhandled effect " ^ key ^ " (instance " ^ name ^ ")"
@@ -513,7 +559,17 @@ let dt_exn_msg e =
   | _ -> "<exception>"
 let dt_report_exn e bt =
   prerr_string ("vuna: runtime error: " ^ dt_exn_msg e ^ "\n");
-  List.iter (fun s -> prerr_string ("  at " ^ s ^ "\n")) (dt_bt_labels bt)
+  match dt_backtrace_slots bt with
+  | None -> ()
+  | Some slots ->
+    let shown = ref 0 and last = ref "" and i = ref 0 in
+    let n = dt_arr_len slots in
+    while !i < n && !shown < 12 do
+      (match dt_frame_label (dt_arr_get slots !i) with
+       | Some s -> if s <> !last then begin prerr_string ("  at " ^ s ^ "\n"); incr shown; last := s end
+       | None -> ());
+      incr i
+    done
 (* ------------------------------------------------------------------ *)
 (* Single-threaded cooperative fiber scheduler.                        *)
 (*                                                                     *)
