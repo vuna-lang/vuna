@@ -56,7 +56,7 @@ OCaml / native / wasm 三个后端是独立包（`packages/target-{ocaml,native,
 | `Frontend.Reserved` | 保留 / 合成名的唯一编码：`?hole`、表面语法糖标记（`data Reserved`：list / tuple / ascribe / perform / handle / row / app / inst-arg / over-ctor / over-value / macro / do，载荷是构造子字段）、`classify` / `reservedText` 是唯一一对线上字符串编解码，以及编译器合成的 `#...` 名（`#section` / `#dict…` / `#eta…` / `#tele` / `#ov…`）。`isParserSurface` 是 Loader 放行普通包 `@vuna@…` 的白名单（无通配分支）。`Frontend.Ast` 重导出它 | `Reserved`、`classify`、`reservedText`、`isParserSurface`、`isInternalSyntaxName`、`sectionBinderName`、`isSynthName` |
 | `Frontend.Name` | 名字身份与字符串分类：`RName`（局部、全局(module,name)、内建、宏、洞）与 `classifyName`（唯一按前缀分类的入口，`Loader` / 工具不得自行按包名前缀判别）；`splitGlobalKey` 按最后一个点切 canonical 名。注：`Elab` 不读 `RName`——引用名就是字符串，变量解析按名字先查局部 ctx，特殊形式名（`Type` / `->` / `@vuna@…`）不可能被 binder 遮蔽 | `RName`、`classifyName`、`splitGlobalKey` |
 | `Frontend.AstQuery` | 语法树规模查询：`patWeight` / `exprWeight` 与入口预算 `patBudget` / `exprBudget`（节点数派生步数预算；权重按 `weightCap` 截断，纯遍历也用它作显式燃料） | `exprBudget`、`patBudget`、`exprWeight` |
-| `Frontend.AstWalk` | AST 形状的唯一真源：`exprChildren` / `patChildren` / `declExprs` / `declPats` 显式列出全部构造子；`foldExpr` / `foldPat` / `foldDecl` 做只读折叠；`mapExpr` / `mapExprPat` / `mapPat` / `mapDeclWith` 做重写（保留 `NodeRef`）；`scopedExprChildren` / `mapScopedExpr` / `mapScopedExprPat` / `patBinders` 给名字解析用（顺序 `let` / do 链返回 `Nothing`，由 pass 钩子处理）。新增构造子只在这里编译失败，不再让各 pass 的 `_` 静默跳过 | `exprChildren`、`foldDecl`、`mapExpr`、`mapDeclWith`、`scopedExprChildren`、`patBinders` |
+| `Frontend.AstWalk` | AST 形状的唯一真源：`exprChildren` / `patChildren` / `declExprs` / `declPats` 显式列出全部构造子；`foldExpr` / `foldPat` / `foldDecl` 做只读折叠；`mapExpr` / `mapExprPat` / `mapPat` / `mapDeclWith` 做重写（保留 `NodeRef`）；`scopedExprChildren` / `mapScopedExpr` / `mapScopedExprPat` / `patBinders` / `PatAlg` / `foldPatAlg` 给名字解析用（顺序 `let` / do 链返回 `Nothing`，由 pass 钩子处理）。新增构造子只在这里编译失败，不再让各 pass 的 `_` 静默跳过 | `exprChildren`、`foldDecl`、`mapExpr`、`mapDeclWith`、`scopedExprChildren`、`patBinders` |
 | `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
 | `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name` 与可选 `implicit-prelude`；`[layers]` 的键/值形状；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Frontend.Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
@@ -89,7 +89,8 @@ section / 链）。`Flatten` 的引用收集也覆盖 `TraitParam.traitParamKind
 
 `Elab.Sig` 的 `exprMaxAppArity` / `exprLowerVars` / `argParamKinds` 与 `Elab.Trait.exprFreeLower`
 也走 `AstWalk.foldExpr`：只保留每个节点的名字/应用数钩子，不再各自手写 15 个构造子与
-绑定/分支/do 辅助。
+绑定/分支/do 辅助。`Loader.Resolve.resolvePattern` 走 `PatAlg` / `foldPatAlg`（每个构造子
+返回解析后的模式与 binder 表），tuple/unit 的保留名改写只替换构造名、不重复解析已折叠的子模式。
 
 ### Core（类型论、求值、相等、Core 编码）
 
