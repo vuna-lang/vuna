@@ -151,6 +151,7 @@ path = "../greet"
 | `git = url` + `rev = commit` | `hash = "sha256:<64hex>"` | 不可变源；`vuna deps fetch` 取到持久 store |
 | `url = "..."` | `hash = ...` | URL 直指 `pkg-source 1` 对象文件（不是 tarball） |
 | 任意源 | 可选 `identity = "sha256:<64hex>"` | 语义身份（`identityHash`）；fetch/check 校验，不替代内容完整性 |
+| 任意源 | — | 出处：声明的源文本（`git:<url>@<rev>` / `url:<u>`）必须出现在 store 物化视图的 `.origin` 里，否则 `PKG_ProvenanceMismatch` |
 
 - 摘要只固定**不可变源**：改 `path` 依赖的源码**不需要**改任何 manifest（新鲜度由 iface
   接口哈希链负责；回归见 `90/steps_native/67_pkg_deps`）。
@@ -158,9 +159,9 @@ path = "../greet"
   `identity` 一并写回。`identity` 只 pin 语义面，不是完整性摘要。
 - 一个依赖图内包名唯一：无版本号共存；需要多版本只能改名/分叉。
 - 未知 key、源字段互斥、`git` 缺 `rev`、不可变源缺 hash、identity 格式错误或与取到的包
-  不符都在加载期报 `PKG_*` 码（`PKG_UnknownSourceKey` / `PKG_SourceConflict` /
-  `PKG_GitRevRequired` / `PKG_MissingHash` / `PKG_IdentityMalformed` /
-  `PKG_IdentityMismatch`）。
+  不符、声明的来源与 store 记录不符都在加载期报 `PKG_*` 码（`PKG_UnknownSourceKey` /
+  `PKG_SourceConflict` / `PKG_GitRevRequired` / `PKG_MissingHash` /
+  `PKG_IdentityMalformed` / `PKG_IdentityMismatch` / `PKG_ProvenanceMismatch`）。
 - 存储布局、fetch 流程与离线边界见 [package-store.md](package-store.md)。
 
 ## 包格式速查

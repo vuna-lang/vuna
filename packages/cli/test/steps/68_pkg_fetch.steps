@@ -1,7 +1,8 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 68) 包获取：`vuna deps fetch` 把 git 依赖取到持久 store，check/build 只读。
 #     git 用本地仓库（file://），无需网络；`--locked` 不联网只校验；`clean --packages`
-#     清持久 store 后 check 回到 PKG_NotMaterialized。
+#     清持久 store 后 check 回到 PKG_NotMaterialized。最后覆盖**出处**：store 的 `.origin`
+#     必须记着声明的源（同 hash 换仓库 / 缺记录 / rev 前进但 hash 没更新都不复用缓存）。
 
 # 68a) 搭一个本地 git 依赖包（dep）与依赖方（app），hash 先写全零。
 run: sh -c 'rm -rf "$TMPDIR/f68"; mkdir -p "$TMPDIR/f68/dep/lib" "$TMPDIR/f68/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$TMPDIR/f68/dep/vuna.toml"; printf "module D where\n\nexport v : Int\nv = 41\n" > "$TMPDIR/f68/dep/lib/D.vuna"; ( cd "$TMPDIR/f68/dep" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init ); rev=$( cd "$TMPDIR/f68/dep" && git rev-parse HEAD ); printf "[package]\nname = \"app\"\n\n[dependencies.dep]\ngit = \"file://%s\"\nrev = \"%s\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" "$TMPDIR/f68/dep" "$rev" > "$TMPDIR/f68/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$TMPDIR/f68/app/app/Main.vuna"'
@@ -72,3 +73,44 @@ run: sh -c 'ln -sfn "$TMPDIR/f68/app" "$TMPDIR/f68/app-link" && for d in "$TMPDI
 exit: 0
 run: sh -c 'n=$(find "$TMPDIR/f68/pid-store/roots" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " "); [ "$n" = "1" ] || { echo "roots entries: $n"; exit 1; }; p=$(cat "$TMPDIR/f68/pid-store/roots/"*"/.project"); [ "$p" = "$TMPDIR/f68/app" ] || { echo "project path: $p"; exit 1; }'
 exit: 0
+
+# 68l) 出处校验：内容逐字节相同但仓库不同（镜像）用同一 hash ⇒ check 不能静默复用缓存。
+#      store 的 `.origin` 记的是原 url@rev，声明换成镜像后报 PKG_ProvenanceMismatch；
+#      `deps fetch` 从声明的源取一次（内容一致、摘要匹配）登记出处后 check 恢复成功。
+run: sh -c 'rm -rf "$TMPDIR/f68/dep-mirror"; cp -a "$TMPDIR/f68/dep" "$TMPDIR/f68/dep-mirror"; rm -rf "$TMPDIR/f68/dep-mirror/.git"; ( cd "$TMPDIR/f68/dep-mirror" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm mirror ); rev=$( cd "$TMPDIR/f68/dep-mirror" && git rev-parse HEAD ); sed -i "s|^git = .*|git = \"file://$TMPDIR/f68/dep-mirror\"|" "$TMPDIR/f68/app/vuna.toml"; sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app" 2>&1'
+exit: 1
+out-contains: PKG_ProvenanceMismatch
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
+exit: 0
+out-contains: fetch: dep ok
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app"'
+exit: 0
+
+# 68m) 出处记录缺失（旧 store / 记录被删）⇒ check 与 `--locked` 都报 PKG_ProvenanceMismatch：
+#      没有出处可验就不复用缓存。`deps fetch` 重建记录后回到 cached / check 成功。
+run: sh -c 'rm -f "$TMPDIR/f68/store/pkgs/"*"/.origin"'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app" 2>&1'
+exit: 1
+out-contains: PKG_ProvenanceMismatch
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch --locked "$TMPDIR/f68/app" 2>&1'
+exit: 1
+out-contains: PKG_ProvenanceMismatch
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
+exit: 0
+out-contains: fetch: dep ok
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
+out-contains: fetch: dep cached
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app"'
+exit: 0
+
+# 68n) rev 前进但 hash 没更新 ⇒ fetch 不复用缓存（同一 hash 不同 rev 要重新取），
+#      取回的内容与声明摘要不符报 PKG_HashMismatch；绝不出现 cached。
+run: sh -c 'printf "module D where\n\nexport v : Int\nv = 43\n" > "$TMPDIR/f68/dep-mirror/lib/D.vuna"; ( cd "$TMPDIR/f68/dep-mirror" && git add -A && git -c user.email=t@t -c user.name=t commit -qm bump43 ); rev=$( cd "$TMPDIR/f68/dep-mirror" && git rev-parse HEAD ); sed -i "s|^rev = .*|rev = \"$rev\"|" "$TMPDIR/f68/app/vuna.toml"'
+exit: 0
+run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" deps fetch "$TMPDIR/f68/app" 2>&1'
+exit: 1
+out-contains: PKG_HashMismatch
+out-not-contains: cached

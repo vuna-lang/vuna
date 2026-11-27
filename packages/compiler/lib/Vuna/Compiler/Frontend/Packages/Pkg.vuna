@@ -179,7 +179,8 @@ mismatchMessage Nothing actual = "pkg: package name mismatch"
 mismatchMessage (Just expected) actual =
   "pkg: dependency ${expected} expects package name ${expected} but found ${actual}"
 
--- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
+-- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`），校验 `.complete` 与出处
+-- 记录（`.origin`）后加载。
 -- 物化视图由 `vuna deps fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
 loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r, Member MutOp r => MutRef (HashMap String Package) -> Int -> List (String, String) -> Dependency -> Eff r (Check Package)
 loadStoreDependency memo fuel stack dep =
@@ -198,19 +199,82 @@ loadStoreDependency memo fuel stack dep =
               text <- fsReadFile "${dir}/.complete"
               if text == digest then
                 do
-                  pkgR <- loadPackageWalk memo fuel stack (Just (depAliasOf dep)) dir
-                  case pkgR of
+                  provR <- verifyProvenanceEff dep dir
+                  case provR of
                     ErrC e => pure (ErrC e)
-                    OkC pkg =>
+                    OkC _ =>
                       do
-                        idR <- verifyIdentityEff dep dir pkg.packageManifest
-                        case idR of
+                        pkgR <- loadPackageWalk memo fuel stack (Just (depAliasOf dep)) dir
+                        case pkgR of
                           ErrC e => pure (ErrC e)
-                          OkC _ => pure (OkC pkg)
+                          OkC pkg =>
+                            do
+                              idR <- verifyIdentityEff dep dir pkg.packageManifest
+                              case idR of
+                                ErrC e => pure (ErrC e)
+                                OkC _ => pure (OkC pkg)
               else
                 pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
           else
             pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+
+-- ---------------------------------------------------------------- store 出处
+-- 物化视图的出处记录（`.origin`）：每行一个 `depSourceText`，由 `vuna deps fetch` /
+-- `deps pin` 在写 `.complete` 之前追加。出处文本与 manifest 的语义投影（缓存指纹）
+-- 是同一份文本，这里不另造身份。
+export originRecordPath : String -> String
+originRecordPath dir = "${dir}/.origin"
+
+-- 出处记录 → 非空来源行（文件尾换行不产生空行）。
+originLines : String -> List String
+originLines originText = keepOriginLines (split "\n" originText)
+
+keepOriginLines : List String -> List String
+keepOriginLines [] = []
+keepOriginLines (line :: rest) =
+  let
+    t = trim line
+  in if t == "" then keepOriginLines rest else t :: keepOriginLines rest
+
+originHas : String -> List String -> Bool
+originHas text [] = False
+originHas text (line :: rest) = line == text || originHas text rest
+
+originDetail : String -> List String -> String
+originDetail declared [] = "declared ${declared}, store recorded no source"
+originDetail declared recorded = "declared ${declared}, store recorded ${join ", " recorded}"
+
+-- | 出处记录文本里是否有声明的来源（纯判断）。check/build 与 fetch 共用这一个口径。
+export originRecorded : Dependency -> String -> Bool
+originRecorded dep originText = originHas (depSourceText (depSourceOf dep)) (originLines originText)
+
+-- | 出处不符诊断（`PKG_ProvenanceMismatch`）：声明出处 vs `.origin` 记录。
+-- 第二个参数是 `.origin` 的全文；缺失时传空串。check/build 与 fetch 共用同一条诊断。
+export provenanceDiagnostic : Dependency -> String -> Diagnostic
+provenanceDiagnostic dep originText =
+  let
+    declared = depSourceText (depSourceOf dep)
+    detail = originDetail declared (originLines originText)
+  in withAbsent
+    NsPackageGraph
+    (pkgMsg (ProvenanceMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+
+-- 已物化视图还要校验**出处**：声明的源（url / rev）必须出现在 `.origin` 记录里。
+-- 内容摘要相同不足以说明「这份内容来自声明的仓库」——共享 store 里同一摘要可能由别的
+-- 来源写入，而声明的那条来源从未被验证过。缺记录 / 不匹配都要求重新 `deps fetch`
+-- （fetch 从声明的源取一次，摘要一致就登记出处）。
+verifyProvenanceEff : Member nFs FsOp r => Dependency -> String -> Eff r (Check Int)
+verifyProvenanceEff dep dir =
+  let
+    recordPath = originRecordPath dir
+  in do
+    exists <- fsFileExists recordPath
+    if exists then
+      do
+        originText <- fsReadFile recordPath
+        if originRecorded dep originText then pure (OkC 0) else pure (ErrC (provenanceDiagnostic dep originText))
+    else
+      pure (ErrC (provenanceDiagnostic dep ""))
 
 -- 依赖声明了语义身份（`identity`）时校验；未声明则跳过（内容摘要负责完整性）。
 verifyIdentityEff : Member nFs FsOp r => Dependency -> String -> Manifest -> Eff r (Check Int)

@@ -52,6 +52,15 @@ depHashOf (Dependency alias source hash identity) = hash
 export depIdentityOf : Dependency -> Maybe String
 depIdentityOf (Dependency alias source hash identity) = identity
 
+-- | 依赖来源的**出处文本**（`path:<rel>` / `git:<url>@<rev>` / `url:<u>`）。
+-- 它同时是两个位置用的同一份文本：manifest 的语义投影（缓存指纹，见
+-- `Driver.Compile.depSourceText` 的调用点）与 store 物化视图的出处记录（`.origin` 的
+-- 每一行）。出处校验因此不需要第二套身份。
+export depSourceText : DependencySource -> String
+depSourceText (DepPath p) = "path:${p}"
+depSourceText (DepGit url rev) = "git:${url}@${rev}"
+depSourceText (DepUrl u) = "url:${u}"
+
 export record Layer(..) where
   layerName : String
   layerUses : List String
