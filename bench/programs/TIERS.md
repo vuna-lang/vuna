@@ -103,7 +103,7 @@ bench/programs/
 | t7 | 全部 | — |
 | t8 | 全部 | — |
 | t9 | 全部 | — |
-| t10 | `micro_mut_ref` `mut_array` `mut_barrier` `mut_dyn` `mut_buffer` | `mut_vec` → `ocaml,wasm` |
+| t10 | `micro_mut_ref` `mut_array` `mut_barrier` `mut_dyn` `mut_buffer` `mut_vec` | — |
 | t11 | `thread_par_map` `thread_par_fold` `thread_par_map_eff` | 其余线程用例 → `ocaml,native` |
 | t12 | `host_clock` `host_env` | `fs_roundtrip` `fs_cursor` → `ocaml,native`；`ffi_arith` → `ocaml` |
 
@@ -113,10 +113,10 @@ bench/programs/
   限制后再降级并在本表登记。
 - t5 的 `gc_low_live` / `gc_array_churn` / `gc_pressure` 保留非尾累加循环（机制本身），在
   V8 默认栈上 trap；同层的 `gc_retain` / `gc_large_obj` / `gc_promote` 已给 wasm 覆盖。
-- t10 的 `mut_vec` 的 native codegen 对动态 `Fin` 结果错误，因此只开 `ocaml,wasm`；
-  `Base.Container.MutDynArray` / `MutBuffer` 的 `dynGrow` / `mbufGrow` 在容量足够时
-  早退（三端一致）。native 的 pure 包装 CAF 初始化顺序问题已在用例源码用
-  `runPure (…with… )` 绕过（语料 `effect_common/66` / `71` 仍保留原形）。
+- t10 的 `mut_vec` 依赖 native 高阶特化的实参指纹（`Native.Specialize.irKey` 是整棵 IR
+  的结构编码）：递归里 `Vec.tabulate` 逐层构造新的闭合闭包，指纹不能把不同层认成同一个值；
+  `Base.Container.MutDynArray` / `MutBuffer` 的 `dynGrow` / `mbufGrow` 在容量足够时早退
+  （三端一致）。
 - 非 wasm 用例必须在 `.bench` 写 `targets=`；`--check` 把它记成 `excluded`，不是
   `run_ok=false`。
 - wasm 的 1 MB 栈是浏览器路径的真实边界：非尾递归的机制（如 `list_recursion` 的

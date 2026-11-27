@@ -17,17 +17,15 @@ fill out k =
 
 main : Int
 main =
-  runPure (
-      MutBuffer.withMutBuffer (
-          \out =>
-            do
-              fill out 2000
-              n1 <- MutBuffer.size out
-              s1 <- MutBuffer.toString out
-              MutBuffer.clear out
-              n2 <- MutBuffer.size out
-              MutBuffer.append out s1
-              n3 <- MutBuffer.size out
-              pure (natToInt n1 + strLength s1 + natToInt n2 + natToInt n3 + strAt s1 0 + strAt s1 (strLength s1 - 1))
-        )
+  MutBuffer.withMutBufferPure (
+      \out =>
+        do
+          fill out 2000
+          n1 <- MutBuffer.size out
+          s1 <- MutBuffer.toString out
+          MutBuffer.clear out
+          n2 <- MutBuffer.size out
+          MutBuffer.append out s1
+          n3 <- MutBuffer.size out
+          pure (natToInt n1 + strLength s1 + natToInt n2 + natToInt n3 + strAt s1 0 + strAt s1 (strLength s1 - 1))
     )
