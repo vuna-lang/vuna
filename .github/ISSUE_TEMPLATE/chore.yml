@@ -1,6 +1,6 @@
-name: Task
-description: 维护、重构、测试或 agent 发现的后继任务
-title: "[task] "
+name: Chore
+description: 构建、CI、依赖、bench 或仓库维护
+title: "[chore] "
 body:
   - type: textarea
     id: context

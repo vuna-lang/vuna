@@ -245,7 +245,7 @@ cmd_audit() {
 
   types=$(gh api "orgs/$owner/issue-types" --jq '[.[].name] | join(",")' 2>/dev/null ||
     gh api "users/$owner/issue-types" --jq '[.[].name] | join(",")')
-  for want in Task Bug Feature Refactor Perf Docs Test Epic; do
+  for want in Bug Feature Chore Refactor Perf Docs Test Epic; do
     if ! printf '%s\n' "$types" | tr ',' '\n' | grep -Fxq "$want"; then
       echo "缺少 issue type: $want" >&2
       bad=$((bad + 1))

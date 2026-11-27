@@ -105,7 +105,7 @@ jobs:
             case "$issue_type" in
               Bug) type_label="type:bug" ;;
               Feature) type_label="type:feature" ;;
-              Task) type_label="type:chore" ;;
+              Chore) type_label="type:chore" ;;
               Refactor) type_label="type:refactor" ;;
               Perf) type_label="type:perf" ;;
               Docs) type_label="type:docs" ;;

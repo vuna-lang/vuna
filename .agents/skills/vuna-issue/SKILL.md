@@ -35,7 +35,7 @@ gh issue list --state all --label pkg:compiler --search "<关键词>" --limit 20
 
 1. 在 issue 里和用户确认背景、目标 / 非目标、方案、验收标准。
 2. 补齐元信息：
-   - issue type：`gh issue edit <n> --type Bug|Feature|Task|Refactor|Perf|Docs|Test|Epic`
+   - issue type：`gh issue edit <n> --type Bug|Feature|Chore|Refactor|Perf|Docs|Test|Epic`
    - `pkg:*`：涉及的 workspace 包，可多个
    - `area:*`：包内子系统，决定 PR 门禁
    - 优先级：`nix/tools/issue.sh priority <n> P0..P3`（字段里显示 Urgent / High / Medium / Low）
