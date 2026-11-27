@@ -67,7 +67,9 @@ jobs:
       cache-key: suite
       timeout: 60
       jobs: 1
-      cache-size: 2G
+      # store 实测 ~3.7G；2G 的 gc 上限会在 save 前把工具链（`vuna` / seed / 插件）
+      # 当“构建输入=垃圾”删掉，下一个 job 只能从头重编（~2min/片）。
+      cache-size: 6G
       save: ${{ matrix.shard == 0 }}
 
   deep:
@@ -117,7 +119,10 @@ jobs:
       cache-key: suite
       timeout: 60
       jobs: 1
-      cache-size: 2G
+      # e2e 的 store 比 gate 更大（web-cli / wasm 工具）；同样给足上限，
+      # 第 0 片把这份 cache 写到 `nix-suite-` 前缀（夜间 / 手动）。
+      cache-size: 6G
+      save: ${{ matrix.shard == 0 }}
 
   # 包内单测（vuna test packages/*）与 suite 解耦，独立并行。
   units:

@@ -136,6 +136,11 @@ suite），长 case 的根因是冷编译而不是断言数量，所以拆 case 
 
 - 每个 check 用私有对象库（`mktemp -d` 的 `VUNA_STORE`），父进程预热一次、worker/case 共享；
   Nix store cache 只负责工具链与 `vuna` 二进制。
+- cache 的 `gc-max-store-size` 必须盖住整个 store：`nix store gc --max` 只保「输出引用图」，
+  工具链（`vuna` / seed / 插件）是 check 的**构建输入**、不在输出引用里，上限太小会在 save
+  前把它们当垃圾删掉，下一个 job 只能从头重编（实测 ~2 min/片）。
+- 工具链在 check 之前用 `--max-jobs 4 --cores 1` 预热：这些包彼此独立、单包单线程，
+  默认 `--max-jobs 1` 会串行编两分钟。
 - gate / e2e 各拆成 4 个 matrix shard（`--shard i/4`，同一个 `nix-suite` cache 前缀）：
   每片跑完整 case 集合的一部分，不采样；gate 的第 0 片负责写 cache。
 - 包内单测（`vuna test packages/*`）独立成 `units` check，与 shard 并行、不重复。
