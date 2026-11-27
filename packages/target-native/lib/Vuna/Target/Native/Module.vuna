@@ -4353,6 +4353,14 @@ nativeBridgeFuncs lfM fams =
 -- ---------------------------------------------------------------
 -- 装配
 -- -----------------------------------------------------------
+-- 每步之后的 scoped 校验（`psCheckAfter`）。校验在链尾统一跑：值都已求出，
+-- 失败信息仍带第一个出问题的 pass 名；codegen 在 thunk 里，校验不过就不生成。
+withStageChecks : List (PassSpec, List IrDef) -> (Int -> NativeOutcome) -> NativeOutcome
+withStageChecks stages k =
+  case Passes.checkAfterAll stages of
+    Err msg => NativeRejected (NativeUnsupported msg)
+    Ok _ => k 0
+
 export build : IrProgram -> Bool -> NativeOutcome
 build program printResult =
   let
@@ -4438,31 +4446,35 @@ build program printResult =
                       -- 形参区间：整程序不动点（调用点常量 + 自调用实参），给
                       -- `Module` 的溢出 / 归一化判据补上循环形参的事实。
                       pfacts = Params.paramFactsOf cpsFloatLets
-                    in case genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] [] of
-                      NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
-                      NOk pair =>
-                        let
-                          progFuncs = firstOf pair
-                          statics = dedupeClosures (secondOf (secondOf pair))
-                          bridgeFuncs = nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
-                          baseFuncs = dedupeFuncs (append bridgeFuncs (append nativeRtFuncs progFuncs))
-                          -- 入口打印用到的运行时函数（float 的 render 是程序定义，已在 progFuncs 里）。
-                          printerSeeds =
-                            case kind of
-                              "bool" => ["rt_print_bool"]
-                              "str" => ["rt_show_str", "rt_print_str"]
-                              "float" => ["rt_print_str"]
-                              _ => ["rt_print_int"]
-                          renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
-                          needs = initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds)
-                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
-                          -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
-                          -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
-                          liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
-                          keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
-                          moduleLits = map (\p => (split "." (firstOf p), poolItems (secondOf p))) pools
-                          moduleFloats = map (\p => (split "." (firstOf p), floatPoolItems (secondOf p))) fpools
-                          -- 需求集合与保留集合只差 `start` 的引用（init_*）；入口 init 自己
-                          -- 碰 scratch 时这里会先炸，不会漏映射后带病出产物。
-                          drift = funcsScratchAccess keptFuncs /= needs.inScratch
-                        in if drift then NativeRejected (NativeUnsupported "native target: internal: scratch gating drifted") else NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
+                      stages = [(Passes.nativeCps, cps0), (Passes.nativeSpecialize, cpsSpecialized), (Passes.nativeLsr, cpsLsr), (Passes.nativeInline, firstOf inlinedOnce), (Passes.nativeInlineAgain, firstOf inlined), (Passes.nativeLetFloat, cpsFloated), (Passes.nativeCse, cpsCse), (Passes.nativeInlineTail, firstOf tailInlined), (Passes.nativeSimplify, cps1), (Passes.nativeMergeTailIf, cpsMerged), (Passes.nativeAlias, cpsAlias0), (Passes.nativeFoldNatSums, firstOf sumP), (Passes.nativeFoldAffine, cpsAcc), (Passes.nativePrune, cpsOrdered), (Passes.nativeAliasAgain, cpsAliased), (Passes.nativeFloatLets, cpsFloatLets)]
+                    in withStageChecks stages (
+                        \_ =>
+                          case genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] [] of
+                            NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
+                            NOk pair =>
+                              let
+                                progFuncs = firstOf pair
+                                statics = dedupeClosures (secondOf (secondOf pair))
+                                bridgeFuncs = nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
+                                baseFuncs = dedupeFuncs (append bridgeFuncs (append nativeRtFuncs progFuncs))
+                                -- 入口打印用到的运行时函数（float 的 render 是程序定义，已在 progFuncs 里）。
+                                printerSeeds =
+                                  case kind of
+                                    "bool" => ["rt_print_bool"]
+                                    "str" => ["rt_show_str", "rt_print_str"]
+                                    "float" => ["rt_print_str"]
+                                    _ => ["rt_print_int"]
+                                renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
+                                needs = initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds)
+                                start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
+                                -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
+                                -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
+                                liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
+                                keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
+                                moduleLits = map (\p => (split "." (firstOf p), poolItems (secondOf p))) pools
+                                moduleFloats = map (\p => (split "." (firstOf p), floatPoolItems (secondOf p))) fpools
+                                -- 需求集合与保留集合只差 `start` 的引用（init_*）；入口 init 自己
+                                -- 碰 scratch 时这里会先炸，不会漏映射后带病出产物。
+                                drift = funcsScratchAccess keptFuncs /= needs.inScratch
+                              in if drift then NativeRejected (NativeUnsupported "native target: internal: scratch gating drifted") else NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
+                      )

@@ -7,7 +7,10 @@ module Vuna.Ir.Passes where
 import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.String as String
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
+import Vuna.Ir.Model
+import Vuna.Ir.Validate
 
 -- | 一个优化步骤的元数据。`psCheckBefore` / `psCheckAfter` / `psDump` 是给驱动的声明，
 -- 不把函数放进记录（不同层的返回类型不同，记录保持可比较、可测试的纯数据）。
@@ -56,52 +59,52 @@ irPasses = [irCps, irMachineHandlers, irMachineMark, irMachineApply, irMachineSt
 -- native 链（`Target.Native.Module.build`）
 -- ---------------------------------------------------------------
 export nativeCps : PassSpec
-nativeCps = PassSpec "native.cps" "native" "lower" False False True
+nativeCps = PassSpec "native.cps" "native" "lower" False True True
 
 export nativeSpecialize : PassSpec
-nativeSpecialize = PassSpec "native.specialize" "native" "inline" False False True
+nativeSpecialize = PassSpec "native.specialize" "native" "inline" False True True
 
 export nativeLsr : PassSpec
-nativeLsr = PassSpec "native.lsr" "native" "fold" False False True
+nativeLsr = PassSpec "native.lsr" "native" "fold" False True True
 
 export nativeInline : PassSpec
-nativeInline = PassSpec "native.inline" "native" "inline" False False True
+nativeInline = PassSpec "native.inline" "native" "inline" False True True
 
 export nativeInlineAgain : PassSpec
-nativeInlineAgain = PassSpec "native.inline.again" "native" "inline" False False True
+nativeInlineAgain = PassSpec "native.inline.again" "native" "inline" False True True
 
 export nativeLetFloat : PassSpec
-nativeLetFloat = PassSpec "native.let-float" "native" "fold" False False True
+nativeLetFloat = PassSpec "native.let-float" "native" "fold" False True True
 
 export nativeCse : PassSpec
-nativeCse = PassSpec "native.cse" "native" "fold" False False True
+nativeCse = PassSpec "native.cse" "native" "fold" False True True
 
 export nativeInlineTail : PassSpec
-nativeInlineTail = PassSpec "native.inline.tail" "native" "inline" False False True
+nativeInlineTail = PassSpec "native.inline.tail" "native" "inline" False True True
 
 export nativeSimplify : PassSpec
-nativeSimplify = PassSpec "native.simplify" "native" "fold" False False True
+nativeSimplify = PassSpec "native.simplify" "native" "fold" False True True
 
 export nativeMergeTailIf : PassSpec
-nativeMergeTailIf = PassSpec "native.merge-tail-if" "native" "fold" False False True
+nativeMergeTailIf = PassSpec "native.merge-tail-if" "native" "fold" False True True
 
 export nativeAlias : PassSpec
-nativeAlias = PassSpec "native.alias" "native" "fold" False False True
+nativeAlias = PassSpec "native.alias" "native" "fold" False True True
 
 export nativeFoldNatSums : PassSpec
-nativeFoldNatSums = PassSpec "native.fold-nat-sums" "native" "fold" False False True
+nativeFoldNatSums = PassSpec "native.fold-nat-sums" "native" "fold" False True True
 
 export nativeFoldAffine : PassSpec
-nativeFoldAffine = PassSpec "native.fold-affine" "native" "fold" False False True
+nativeFoldAffine = PassSpec "native.fold-affine" "native" "fold" False True True
 
 export nativePrune : PassSpec
-nativePrune = PassSpec "native.prune" "native" "prune" False False True
+nativePrune = PassSpec "native.prune" "native" "prune" False True True
 
 export nativeAliasAgain : PassSpec
-nativeAliasAgain = PassSpec "native.alias.again" "native" "fold" False False True
+nativeAliasAgain = PassSpec "native.alias.again" "native" "fold" False True True
 
 export nativeFloatLets : PassSpec
-nativeFloatLets = PassSpec "native.float-lets" "native" "fold" False False True
+nativeFloatLets = PassSpec "native.float-lets" "native" "fold" False True True
 
 export nativePasses : List PassSpec
 nativePasses =
@@ -128,19 +131,19 @@ nativePasses =
 -- wasm 链（`Target.Wasm.Module.build`；顺序声明随后端接线一起用）
 -- ---------------------------------------------------------------
 export wasmCps : PassSpec
-wasmCps = PassSpec "wasm.cps" "wasm" "lower" False False True
+wasmCps = PassSpec "wasm.cps" "wasm" "lower" False True True
 
 export wasmHostRewrite : PassSpec
-wasmHostRewrite = PassSpec "wasm.host-rewrite" "wasm" "lower" False False True
+wasmHostRewrite = PassSpec "wasm.host-rewrite" "wasm" "lower" False True True
 
 export wasmPrune : PassSpec
-wasmPrune = PassSpec "wasm.prune" "wasm" "prune" False False True
+wasmPrune = PassSpec "wasm.prune" "wasm" "prune" False True True
 
 export wasmAnf : PassSpec
-wasmAnf = PassSpec "wasm.anf" "wasm" "lower" False False True
+wasmAnf = PassSpec "wasm.anf" "wasm" "lower" False True True
 
 export wasmTailAnnotate : PassSpec
-wasmTailAnnotate = PassSpec "wasm.tail.annotate" "wasm" "mark" False False True
+wasmTailAnnotate = PassSpec "wasm.tail.annotate" "wasm" "mark" False True True
 
 export wasmPasses : List PassSpec
 wasmPasses = [wasmHostRewrite, wasmPrune, wasmCps, wasmAnf, wasmTailAnnotate]
@@ -156,3 +159,24 @@ psNameOf spec = spec.psName
 export findPass : String -> List PassSpec -> Maybe PassSpec
 findPass name [] = Nothing
 findPass name (spec :: rest) = if spec.psName == name then Just spec else findPass name rest
+
+-- | 一步之后的 scoped 校验（`psCheckAfter`）：定义名唯一 + `IrVar` 指向语法作用域内的
+-- binder。不查运行时符号契约（CPS / 机器 / 后端内部符号不在 `Ir.Runtime` 里）。返回的
+-- 错误带 pass 名，驱动直接把它当作该步失败。
+export checkPassAfter : PassSpec -> List IrDef -> Result Int
+checkPassAfter spec ds =
+  if spec.psCheckAfter then
+    case Vuna.Ir.Validate.validateScopedDefs ds of
+      ErrC e => Err "pass ${spec.psName}: ${diagText e}"
+      OkC n => Ok n
+  else
+    Ok 0
+
+-- | 依次检查一批（pass, 该步输出）对；第一个失败即停。驱动在链尾统一调用，避免把
+-- 校验塞进每一步的嵌套 `let`。
+export checkAfterAll : List (PassSpec, List IrDef) -> Result Int
+checkAfterAll [] = Ok 0
+checkAfterAll ((spec, ds) :: rest) =
+  case checkPassAfter spec ds of
+    Err msg => Err msg
+    Ok _ => checkAfterAll rest

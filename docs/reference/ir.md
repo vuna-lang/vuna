@@ -306,16 +306,17 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 
 - 名字、层、kind 与顺序声明在 `Vuna.Ir.Passes`（`PassSpec`，纯数据，不把函数放进记录）；
   `passSpan` 把一步求值放进 `ph:"X"` 跨度，事件名 `vuna.pass.<name>`。
-- 已接线：`Ir.Cps.cpsDefsMachine`（5 步）、`Target.Native.Module.build`（16 次执行，
+- 已接线：`Ir.Cps.cpsDefsMachine`（6 步）、`Target.Native.Module.build`（16 次执行，
   含 `inlineDefs` 两遍、`resolveDefAliases` 两次与条件剪枝）与 `Target.Wasm.Module.build`
   （host-rewrite / prune / cps / anf / tail；directable 路径跳过 cps）。顺序仍由各链自己的
-  数据依赖串接；表负责命名、观测与后续 `--only` / dump 的公共词汇。
+  数据依赖串接；表负责命名、观测、前后校验与 dump 的公共词汇。
 - `vuna dev ir dump --after ir.<pass>` 可以停在机器链的任意一步（`cpsMachineAfter`）；
   `--after ir.tail.annotate` 与 `--after machine` 输出逐字节一致。
-- IR 机器链的六步都设 `psCheckAfter`：驱动在每步之后跑 `Ir.Validate.validateScopedDefs`
-  （定义名唯一 + `IrVar` 作用域），失败带 pass 名。它**不查**运行时符号契约
-  （`@ir@cps@*` / `@ir@m@*` 不在 `Ir.Runtime` 里），因此不能直接复用 `validateUnit`。
-  native / wasm 链的 `psCheckAfter` 仍是声明位；`psDump` 也尚未由驱动消费。
+- 三层链的 `psCheckAfter` 都已消费：`Passes.checkPassAfter` 跑
+  `Ir.Validate.validateScopedDefs`（定义名唯一 + `IrVar` 作用域），失败信息带 pass 名。
+  它**不查**运行时符号契约（`@ir@cps@*` / `@ir@m@*` 与后端内部符号不在
+  `Ir.Runtime` 里），因此不能直接复用 `validateUnit`。native / wasm 在链尾用
+  `checkAfterAll` 统一检查各步输出；`psDump` 仍未被驱动消费。
 
 ## 预算
 

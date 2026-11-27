@@ -2185,6 +2185,13 @@ depKeeps tbl n =
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
+-- 每步之后的 scoped 校验（`psCheckAfter`）；失败信息带第一个出问题的 pass 名。
+withStageChecks : List (PassSpec, List IrDef) -> (Int -> WasmOutcome) -> WasmOutcome
+withStageChecks stages k =
+  case Passes.checkAfterAll stages of
+    Err msg => WasmRejected (WasmInternal msg)
+    Ok _ => k 0
+
 export build : IrProgram -> Bool -> WasmOutcome
 build program printResult =
   let
@@ -2224,13 +2231,19 @@ build program printResult =
       case Passes.passSpan Passes.wasmAnf (\_ => anfProgramDefs ds) of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
         Ok ds1 =>
-          case Passes.passSpan Passes.wasmTailAnnotate (\_ => annotateDefs ds1) of
-            -- 第二次 ANF（CPS 输出再规范化）会丢掉输入里的尾标记；ANF 之后重新标记。
-            Err msg => WasmRejected (WasmInternal ("tail: " ++ msg))
-            Ok ds2 =>
-              case buildModule 100000 (mkSt ds2) ds2 entry0 printResult lf of
-                Ok m => WasmOk m
-                Err msg => WasmRejected (classifyWasmErr msg)
+          withStageChecks [(Passes.wasmAnf, ds1)] (
+              \_ =>
+                case Passes.passSpan Passes.wasmTailAnnotate (\_ => annotateDefs ds1) of
+                  -- 第二次 ANF（CPS 输出再规范化）会丢掉输入里的尾标记；ANF 之后重新标记。
+                  Err msg => WasmRejected (WasmInternal ("tail: " ++ msg))
+                  Ok ds2 =>
+                    withStageChecks [(Passes.wasmTailAnnotate, ds2)] (
+                        \_ =>
+                          case buildModule 100000 (mkSt ds2) ds2 entry0 printResult lf of
+                            Ok m => WasmOk m
+                            Err msg => WasmRejected (classifyWasmErr msg)
+                      )
+            )
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e =>
@@ -2282,13 +2295,16 @@ build program printResult =
             (irEntryRunMainOf e)
             []
             (irEntryRowTagsOf e)
-      in if directable then
-        buildAnf (append (map Synthetic.effCaseToLetDef rewritten) [pureKDef]) (Just entryClean) listFamM
-      else
-        case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
-          -- 直连路径不经 CPS：`Eff` 同样是 thunk，`case … of MkEff f` 也要降成 `let`。
-          Ok cpsOrdered => buildAnf cpsOrdered (Just e) listFamM
-          Err msg => WasmRejected (WasmUnsupported msg)
+      in withStageChecks [(Passes.wasmHostRewrite, rewrittenAll), (Passes.wasmPrune, rewritten)] (
+          \_ =>
+            if directable then
+              buildAnf (append (map Synthetic.effCaseToLetDef rewritten) [pureKDef]) (Just entryClean) listFamM
+            else
+              case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
+                -- 直连路径不经 CPS：`Eff` 同样是 thunk，`case … of MkEff f` 也要降成 `let`。
+                Ok cpsOrdered => withStageChecks [(Passes.wasmCps, cpsOrdered)] (\_ => buildAnf cpsOrdered (Just e) listFamM)
+                Err msg => WasmRejected (WasmUnsupported msg)
+        )
 
 -- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
