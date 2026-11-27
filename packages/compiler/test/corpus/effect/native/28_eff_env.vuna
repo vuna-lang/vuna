@@ -29,6 +29,7 @@ mopH i op k =
     GetEnv name => k ""
     GetCwd => k "/mock/cwd"
     ExecPath => k "/mock/exe"
+    RealPath p => k p
 
 main : Eff [ConsoleOp, EnvOp] Int
 main =

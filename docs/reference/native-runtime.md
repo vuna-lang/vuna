@@ -38,6 +38,12 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
 - 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`@vuna@prim_eff_getArgs`
   （List 桥接，不含 `argv[0]`）、`@vuna@host@getenv`（扫 `envp` 的 `KEY=`）、`@vuna@host@getcwd`（syscall 79）、
   `@vuna@host@execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
+  `@vuna@host@realPath`（`real_path`）也是这条线上的路径解析：相对路径先 `getcwd` 折绝对，
+  再**逐段**拼候选路径用 `readlink` 探测——返回 `EINVAL` 说明不是链接，直接接上前缀；
+  返回目标就把目标内联进待解析路径（绝对目标丢掉已有前缀）并从头重新归约，`..` 只是
+  截断已解析前缀。链接深度上限 40（等价 `ELOOP`），任何其它错误（不存在 / 无权限 /
+  超长）原样返回入参。缓冲在栈帧里（两个 4 KiB + 一个 4 KiB 暂存），`readlink` 目标写
+  `rt_path_buf2`，所以 `.bss` 布局与 `native-artifact` 基线不变。
 - 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`@vuna@prim_eff_sleep`（`nanosleep`，
   syscall 35）、`@vuna@host@isTty`（`ioctl(1, TCGETS)`，stdout，与 OCaml 侧一致）、
   `@vuna@prim_eff_hostStatus`（读 线程 TCB 的宿主状态槽；fs / process 的 `try*` 后续写入）。

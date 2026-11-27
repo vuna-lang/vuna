@@ -60,12 +60,15 @@ run: sh -c 'sed -i "s|^identity = .*|identity = \"sha256:00000000000000000000000
 exit: 1
 out-contains: PKG_IdentityMismatch
 
-# 68k) project id 只按词法归一：同一项目的等价写法（尾 `/`、`..`、尾 `/.`）fetch 后只写
-#      一份 `store/roots/<id>`，`.project` 记的是规范化后的目录。68j 已把 identity 改成
-#      全零，先 pin 回实际值（复验不跳过身份校验的那条路径）。
+# 68k) project id 只按「折绝对 + 符号链接解析」归一：同一项目的等价写法（尾 `/`、`..`、尾
+#      `/.`）与**符号链接入口**（`ln -s app link`）fetch 后只写一份 `store/roots/<id>`，
+#      `.project` 记的是物理目录。68j 已把 identity 改成全零，先 pin 回实际值（复验不跳过
+#      身份校验的那条路径）。
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/pid-store" "$VUNA" deps pin "$TMPDIR/f68/app" 2>&1'
 out-contains: pin:
 run: sh -c 'for d in "$TMPDIR/f68/app" "$TMPDIR/f68/app/" "$TMPDIR/f68/dep/../app/."; do VUNA_STORE="$TMPDIR/f68/pid-store" "$VUNA" deps fetch "$d" || exit 1; done'
+exit: 0
+run: sh -c 'ln -sfn "$TMPDIR/f68/app" "$TMPDIR/f68/app-link" && for d in "$TMPDIR/f68/app-link" "$TMPDIR/f68/app-link/"; do VUNA_STORE="$TMPDIR/f68/pid-store" "$VUNA" deps fetch "$d" || exit 1; done'
 exit: 0
 run: sh -c 'n=$(find "$TMPDIR/f68/pid-store/roots" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " "); [ "$n" = "1" ] || { echo "roots entries: $n"; exit 1; }; p=$(cat "$TMPDIR/f68/pid-store/roots/"*"/.project"); [ "$p" = "$TMPDIR/f68/app" ] || { echo "project path: $p"; exit 1; }'
 exit: 0

@@ -206,7 +206,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | 结构化比较 | `$rt_compare` 给三向 i32（`-1` / `0` / `1`），`bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool` 包装成 Bool。分派按运行时类型：`i31` → `$int` → `$float` → `$str` → `$arr` → 用户族（声明序逐个 `ref.test`）；`null` 参与排序；分派末端与不可比的值对走 `$rt_cmpTrap`（`wasm host operation is not implemented` + exit 2），跨族的 `ref.cast` 也可能直接 trap |
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
 | 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
-| 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、`fileExists` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
+| 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、`fileExists` / `fileSize`、`getenv` / `getcwd` / `execPath` / `realPath`（恒等）/ `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
 | 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`tryReadFileRange`（trap：宿主把整文件读进内存，区间读没有收益）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@log@on`（恒 `False`）/ `@vuna@log@emit`（恒 `0`）；obs 叶子桩（见下） |
 
@@ -246,9 +246,9 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 用 cookie 续读。WASI errno 映射成与 `dtp_hostCode` 一致的 1..6 / 9，写进
 `$g_hostStatus` 供 `@vuna@prim_eff_hostStatus` 读取。
 
-- **env / cwd / execPath / 时间**：`getenv` 一次 `environ_get` 进 scratch 后按 `KEY=`
-  前缀匹配；`getcwd` 返回固定 `"/"`（虚拟 preopen 根，不读 `PWD`）；`execPath` 返回空串
-  （WASI preview1 没有可执行路径）；`clockNow` 读 monotonic clock；`sleep` 是运行期 trap
+- **env / cwd / execPath / realPath / 时间**：`getenv` 一次 `environ_get` 进 scratch 后按
+  `KEY=` 前缀匹配；`getcwd` 返回固定 `"/"`（虚拟 preopen 根，不读 `PWD`）；`execPath` 返回空串
+  （WASI preview1 没有可执行路径）；`realPath` **恒等返回入参**（没有符号链接可解，见 §8.2）；`clockNow` 读 monotonic clock；`sleep` 是运行期 trap
   （浏览器不能用同步忙等阻塞事件循环）；`isTty` 恒 `False`（WASI preview1 无 isatty，stdout 终端性不可知，保守按管道处理）。
 - **未实现的宿主操作**走 `$rt_hostTrap<n>`：运行期 `vuna: runtime error: wasm host
   operation is not implemented` + exit 2，不返回伪造结果。`@vuna@host@tryReadFileRange` /
@@ -256,8 +256,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   （`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` /
   `tryMakeDir` / `tryRemoveFile` / `tryRemoveTree` / `tryRename` / `tryMakeDirExclusive` /
   `fileExists` / `fileMtime` / `fileSize`），是 base `FsOp` handler 走的可用路径；
-  `@vuna@prim_eff_getArgs` / `@vuna@host@getenv` / `@vuna@host@getcwd` / `@vuna@host@execPath`
-  也直连真实实现。
+  `@vuna@prim_eff_getArgs` / `@vuna@host@getenv` / `@vuna@host@getcwd` / `@vuna@host@execPath` /
+  `@vuna@host@realPath` 也直连真实实现。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
 契约符号，例如 Sched 家族（`prim_sched*`）、线程同步原语（`mutex*` / `condvar*` / `atomic*`，
@@ -382,6 +382,9 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
   `parallelism` 恒 1；Mutex / Condvar / Atomic 仍按引用点拒绝（单线程下无意义）。
 - **cwd**：`getcwd` 返回 `/`，不读 `PWD`；`execPath` 返回空串。相对路径按这个虚拟根
   归一。
+- **realPath 恒等**：没有符号链接可解，`@vuna@host@realPath` / `@vuna@prim_eff_realPath`
+  就是 `$rt_realPath`（`local.get $p`）。这是明确的降级：项目身份的「同一目录两种写法」
+  在这个后端只由词法归一保证（`Pkg.absolutePath` 折绝对后调用它，恒等等于不改变结果）。
 - **fd 3 主机根**：fd 3 只是 preview1 的 preopen 约定，不是主机 `/`。浏览器没有隐含
   根；文件访问必须在宿主注入的 preopen 内，多个 preopen 不支持。
 - **原子写**：`WriteFileAtomic` 保留「写临时文件 + rename」的 best-effort 语义；
@@ -416,7 +419,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
 | `Eff` 的 handler | 全部走显式效应机器（`@ir@m@*`），宿主家族与用户/作用域 handler 同一套帧 | 产物默认引擎可跑；`bracket`/`finally` 的 cleanup 由机器弹帧前按深度执行 |
 | `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
-| `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
+| `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`realPath` 恒等、`isTty` 恒 `False` |
 | `ClockOp.Now` | 支持 | monotonic clock |
 | `ClockOp.SleepMicros` | 不支持 | 运行期 trap（浏览器不能阻塞事件循环） |
 | `ProcessOp` | 部分 | `Args` / `Exit` 可用；`Spawn` / `Wait` / `RunIn` trap；家族告警 |

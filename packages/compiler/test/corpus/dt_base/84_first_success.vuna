@@ -25,24 +25,32 @@ mockEnv : List (Pair String String) -> String -> String
 mockEnv table name = fromMaybe "" (lookupPair name table)
 
 mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Eff.resIdx i o -> Int) -> Int
-mockOpH table i op k = case op of
-  GetEnv name => k (mockEnv table name)
-  GetCwd => k "/mock/cwd"
-  ExecPath => k "/mock/exec"
+mockOpH table i op k =
+  case op of
+    GetEnv name => k (mockEnv table name)
+    GetCwd => k "/mock/cwd"
+    ExecPath => k "/mock/exec"
+    RealPath p => k p
 
 envScore : Maybe String -> Maybe String -> Maybe String -> Int
-envScore set empty missing = ((case set of
-  Just v => if v == "/s" then 1 else 0
-  Nothing => 0
-) + (if isNothing empty then 1 else 0)
-) + (if isNothing missing then 1 else 0)
+envScore set empty missing =
+  (
+    (
+      case set of
+        Just v => if v == "/s" then 1 else 0
+        Nothing => 0
+    )
+      + (if isNothing empty then 1 else 0)
+  )
+    + (if isNothing missing then 1 else 0)
 
 envProbe : (n : String) -> Eff (Named n EnvOp :: []) Int
-envProbe n = do
-  set <- envGetEnvNonEmpty@(n) "SET"
-  empty <- envGetEnvNonEmpty@(n) "EMPTY"
-  missing <- envGetEnvNonEmpty@(n) "MISSING"
-  pure (envScore set empty missing)
+envProbe n =
+  do
+    set <- envGetEnvNonEmpty@(n) "SET"
+    empty <- envGetEnvNonEmpty@(n) "EMPTY"
+    missing <- envGetEnvNonEmpty@(n) "MISSING"
+    pure (envScore set empty missing)
 
 envTotal : Int
 envTotal =
@@ -50,17 +58,29 @@ envTotal =
     (handleEnv "mock" (\s => s) (mockOpH [Pair "SET" "/s", Pair "EMPTY" ""]) (envProbe "mock"))
 
 main : Int
-main = (((((if isNothing firstOfNone then 1 else 0) + (case firstOfLater of
-  Just 2 => 1
-  _ => 0
-)
-) + (case firstOfZero of
-  Just 0 => 1
-  _ => 0
-)
-) + (case runPure picks of
-  Just 5 => 1
-  _ => 0
-)
-) + (if isNothing (runPure picksNone) then 1 else 0)
-) + envTotal
+main =
+  (
+    (
+      (
+        (
+          (if isNothing firstOfNone then 1 else 0) + (
+              case firstOfLater of
+                Just 2 => 1
+                _ => 0
+            )
+        )
+          + (
+            case firstOfZero of
+              Just 0 => 1
+              _ => 0
+          )
+      )
+        + (
+          case runPure picks of
+            Just 5 => 1
+            _ => 0
+        )
+    )
+      + (if isNothing (runPure picksNone) then 1 else 0)
+  )
+    + envTotal
