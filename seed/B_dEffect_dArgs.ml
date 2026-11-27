@@ -2,13 +2,13 @@ open Vuna_runtime
 type t_ArgsOp = C_ArgsOp_GetArgs
 
 # 16 "Base/Effect/Args.vuna"
-let v_argsGetArgs = (fun (dtb_u_u1 : string) -> (((((B_dEffect_dCore.v_sendCoreId "args") dtb_u_u1) 487237436) (dtp_effectId dtb_u_u1)) C_ArgsOp_GetArgs))
+let v_argsGetArgs = (fun (n : string) -> (((((B_dEffect_dCore.v_sendCoreId "args") n) 487237436) (dtp_effectId n)) C_ArgsOp_GetArgs))
 
 # 16 "Base/Effect/Args.vuna"
 let v_argsGetArgs_u_udirect = (fun (n : string) _u_ueffTok -> ((Obj.magic (((((B_dEffect_dCore.v_sendCoreId "args") n) 487237436) (dtp_effectId n)) C_ArgsOp_GetArgs)) _u_ueffTok))
 
 # 20 "Base/Effect/Args.vuna"
-let v_handleArgs = (fun (dtb_u_u9 : string) dtb_u_u11 dtb_u_u12 dtb_u_u13 -> (((((((B_dEffect_dCore.v_handleCoreId "args") dtb_u_u9) 487237436) (dtp_effectId dtb_u_u9)) dtb_u_u11) (Obj.magic dtb_u_u12)) dtb_u_u13))
+let v_handleArgs = (fun (n : string) ret opH comp -> (((((((B_dEffect_dCore.v_handleCoreId "args") n) 487237436) (dtp_effectId n)) ret) (Obj.magic opH)) comp))
 
 # 20 "Base/Effect/Args.vuna"
 let v_handleArgs_u_udirect = (fun (n : string) ret opH comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreId "args") n) 487237436) (dtp_effectId n)) ret) (Obj.magic opH)) comp)) _u_ueffTok))
@@ -32,13 +32,13 @@ let v_handleArgsHostHost = (fun (dtb_u_u28 : string) dtb_u_u29 -> (((((((B_dEffe
 let v_handleArgsHostHost_u_udirect = (fun (n : string) comp _u_ueffTok -> ((Obj.magic (((((((B_dEffect_dCore.v_handleCoreAtId "args") n) 487237436) (dtp_effectId n)) (fun dtb_u_u30 -> (let dtb_u_u32 = dtb_u_u30 in (Obj.repr ((fun (dtb_u_u33 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u32)))))) v_argsOpHIOHost) comp)) _u_ueffTok))
 
 # 40 "Base/Effect/Args.vuna"
-let v_runArgsHost = (fun dtb_u_u36 -> (B_dEffect_dCore.v_joinEff ((v_handleArgsHostHost "default") dtb_u_u36)))
+let v_runArgsHost = (fun comp -> (B_dEffect_dCore.v_joinEff ((v_handleArgsHostHost "default") comp)))
 
 # 40 "Base/Effect/Args.vuna"
 let v_runArgsHost_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic (B_dEffect_dCore.v_joinEff ((v_handleArgsHostHost "default") comp))) _u_ueffTok))
 
 # 44 "Base/Effect/Args.vuna"
-let v_runArgsEff = (fun dtb_u_u38 -> (B_dEffect_dHost.v_hostSync (v_runArgsHost dtb_u_u38)))
+let v_runArgsEff = (fun comp -> (B_dEffect_dHost.v_hostSync (v_runArgsHost comp)))
 
 # 44 "Base/Effect/Args.vuna"
 let v_runArgsEff_u_udirect = (fun comp _u_ueffTok -> ((Obj.magic (B_dEffect_dHost.v_hostSync (v_runArgsHost comp))) _u_ueffTok))

@@ -5,40 +5,40 @@ type t_Frame = { f_Frame_fTag : string; f_Frame_fCodec : string; f_Frame_fPayloa
 let v_storeMagic = "vuna-cache-frame 2"
 
 # 56 "Vuna/Compiler/Base/Store.vuna"
-let v_fTagOf = (fun (dtb_u_u1 : t_Frame) -> (match dtb_u_u1 with
-  | { f_Frame_fTag = dtb_u_u2; f_Frame_fCodec = dtb_u_u3; f_Frame_fPayload = dtb_u_u4 } -> dtb_u_u2
+let v_fTagOf = (fun (mc0 : t_Frame) -> (match mc0 with
+  | { f_Frame_fTag = dtb__0; f_Frame_fCodec = dtb__1; f_Frame_fPayload = dtb__2 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 59 "Vuna/Compiler/Base/Store.vuna"
-let v_fCodecOf = (fun (dtb_u_u5 : t_Frame) -> (match dtb_u_u5 with
-  | { f_Frame_fTag = dtb_u_u6; f_Frame_fCodec = dtb_u_u7; f_Frame_fPayload = dtb_u_u8 } -> dtb_u_u7
+let v_fCodecOf = (fun (mc0 : t_Frame) -> (match mc0 with
+  | { f_Frame_fTag = dtb__3; f_Frame_fCodec = dtb__4; f_Frame_fPayload = dtb__5 } -> dtb__4
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 62 "Vuna/Compiler/Base/Store.vuna"
-let v_fPayloadOf = (fun (dtb_u_u9 : t_Frame) -> (match dtb_u_u9 with
-  | { f_Frame_fTag = dtb_u_u10; f_Frame_fCodec = dtb_u_u11; f_Frame_fPayload = dtb_u_u12 } -> dtb_u_u12
+let v_fPayloadOf = (fun (mc0 : t_Frame) -> (match mc0 with
+  | { f_Frame_fTag = dtb__6; f_Frame_fCodec = dtb__7; f_Frame_fPayload = dtb__8 } -> dtb__8
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 66 "Vuna/Compiler/Base/Store.vuna"
-let v_frameHeader = (fun (dtb_u_u13 : string) (dtb_u_u14 : string) (dtb_u_u15 : int) (dtb_u_u16 : string) -> (String.concat "" [v_storeMagic; "|"; dtb_u_u13; "|"; dtb_u_u14; "|"; (string_of_int dtb_u_u15); "|"; dtb_u_u16; "\n"]))
+let v_frameHeader = (fun (tag : string) (codec : string) (len : int) (digest : string) -> (String.concat "" [v_storeMagic; "|"; tag; "|"; codec; "|"; (string_of_int len); "|"; digest; "\n"]))
 
 # 70 "Vuna/Compiler/Base/Store.vuna"
-let v_storeEncode = (fun (dtb_u_u17 : string) (dtb_u_u18 : string) (dtb_u_u19 : string) -> (((((v_frameHeader dtb_u_u17) dtb_u_u18) (String.length dtb_u_u19)) (Base_dHash.v_contentAddress dtb_u_u19)) ^ dtb_u_u19))
+let v_storeEncode = (fun (tag : string) (codec : string) (payload : string) -> (((((v_frameHeader tag) codec) (String.length payload)) (Base_dHash.v_contentAddress payload)) ^ payload))
 
 # 78 "Vuna/Compiler/Base/Store.vuna"
-let v_storeEncodeAs = (fun (dtb_u_u20 : string) (dtb_u_u21 : string) (dtb_u_u22 : string) (dtb_u_u23 : string) -> (((((v_frameHeader dtb_u_u20) dtb_u_u21) (String.length dtb_u_u23)) dtb_u_u22) ^ dtb_u_u23))
+let v_storeEncodeAs = (fun (tag : string) (codec : string) (digest : string) (payload : string) -> (((((v_frameHeader tag) codec) (String.length payload)) digest) ^ payload))
 
 # 82 "Vuna/Compiler/Base/Store.vuna"
-let v_headerFields = (fun (dtb_u_u24 : string) -> (let dtb_u_u25 = ((B_dData_dString.v_split "|") dtb_u_u24) in (match dtb_u_u25 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u26, dtb_u_u27) -> (match dtb_u_u27 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u28, dtb_u_u29) -> (match dtb_u_u29 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u30, dtb_u_u31) -> (match dtb_u_u31 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u32, dtb_u_u33) -> (match dtb_u_u33 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u34, dtb_u_u35) -> (match dtb_u_u35 with
-  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb_u_u26; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb_u_u28; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb_u_u30; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb_u_u32; B_dData_dPair.f_Pair_second = dtb_u_u34 } } } }))
+let v_headerFields = (fun (line : string) -> (let nd_uscrut1 = ((B_dData_dString.v_split "|") line) in (match nd_uscrut1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__9, dtb__10) -> (match dtb__10 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__11, dtb__12) -> (match dtb__12 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__13, dtb__14) -> (match dtb__14 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__15, dtb__16) -> (match dtb__16 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__17, dtb__18) -> (match dtb__18 with
+  | B_dData_dList.C_List_Nil -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__9; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb__11; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb__13; B_dData_dPair.f_Pair_second = { B_dData_dPair.f_Pair_first = dtb__15; B_dData_dPair.f_Pair_second = dtb__17 } } } }))
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
 )
   | _ -> B_dData_dMaybe.C_Maybe_Nothing
@@ -53,51 +53,51 @@ let v_headerFields = (fun (dtb_u_u24 : string) -> (let dtb_u_u25 = ((B_dData_dSt
 )))
 
 # 88 "Vuna/Compiler/Base/Store.vuna"
-let rec v_breakFirstNewline = (fun (dtb_u_u36 : int B_dData_dList.t_List) (dtb_u_u37 : int B_dData_dList.t_List) -> (match dtb_u_u36 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u38, dtb_u_u39) -> (if (dtb_u_u38 = 10) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse dtb_u_u37)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack dtb_u_u39) })) else ((v_breakFirstNewline dtb_u_u39) (B_dData_dList.C_List__x58__x58_ (dtb_u_u38, dtb_u_u37))))
+let rec v_breakFirstNewline = (fun (mc0 : int B_dData_dList.t_List) (mc1 : int B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (if (dtb__19 = 10) then (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse mc1)); B_dData_dPair.f_Pair_second = (B_dData_dList.dtp_pack dtb__20) })) else ((v_breakFirstNewline dtb__20) (B_dData_dList.C_List__x58__x58_ (dtb__19, mc1))))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 96 "Vuna/Compiler/Base/Store.vuna"
-let v_frameSplit = (fun (dtb_u_u40 : string) -> (let dtb_u_u41 = (String.length dtb_u_u40) in (let dtb_u_u42 = (if (dtb_u_u41 < 512) then dtb_u_u41 else 512) in (match ((v_breakFirstNewline (B_dData_dList.dtp_unpack (((dtp_substring 0) dtb_u_u42) dtb_u_u40))) B_dData_dList.C_List_Nil) with
+let v_frameSplit = (fun (raw : string) -> (let n = (String.length raw) in (let headLen = (if (n < 512) then n else 512) in (match ((v_breakFirstNewline (B_dData_dList.dtp_unpack (((dtp_substring 0) headLen) raw))) B_dData_dList.C_List_Nil) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u43) -> (let dtb_u_u44 = (B_dData_dPair.v_firstOf dtb_u_u43) in (let dtb_u_u45 = ((String.length dtb_u_u44) + 1) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb_u_u44; B_dData_dPair.f_Pair_second = (((dtp_substring dtb_u_u45) (dtb_u_u41 - dtb_u_u45)) dtb_u_u40) }))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__21) -> (let header = (B_dData_dPair.v_firstOf dtb__21) in (let start = ((String.length header) + 1) in (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = header; B_dData_dPair.f_Pair_second = (((dtp_substring start) (n - start)) raw) }))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 110 "Vuna/Compiler/Base/Store.vuna"
-let v_headerOk = (fun (dtb_u_u46 : string) (dtb_u_u47 : string) (dtb_u_u48 : string) (dtb_u_u49 : string) -> (match (v_headerFields dtb_u_u48) with
+let v_headerOk = (fun (tag : string) (codec : string) (header : string) (payload : string) -> (match (v_headerFields header) with
   | B_dData_dMaybe.C_Maybe_Nothing -> false
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u50) -> (let dtb_u_u51 = (B_dData_dPair.v_firstOf dtb_u_u50) in (let dtb_u_u52 = (B_dData_dPair.v_secondOf dtb_u_u50) in (let dtb_u_u53 = (B_dData_dPair.v_firstOf dtb_u_u52) in (let dtb_u_u54 = (B_dData_dPair.v_secondOf dtb_u_u52) in (let dtb_u_u55 = (B_dData_dPair.v_firstOf dtb_u_u54) in (let dtb_u_u56 = (B_dData_dPair.v_secondOf dtb_u_u54) in (let dtb_u_u57 = (B_dData_dPair.v_firstOf dtb_u_u56) in (if (if (if (dtb_u_u51 = v_storeMagic) then (dtb_u_u53 = dtb_u_u46) else false) then (dtb_u_u55 = dtb_u_u47) else false) then (dtb_u_u57 = (string_of_int (String.length dtb_u_u49))) else false))))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__22) -> (let magic = (B_dData_dPair.v_firstOf dtb__22) in (let rest1 = (B_dData_dPair.v_secondOf dtb__22) in (let gotTag = (B_dData_dPair.v_firstOf rest1) in (let rest2 = (B_dData_dPair.v_secondOf rest1) in (let gotCodec = (B_dData_dPair.v_firstOf rest2) in (let rest3 = (B_dData_dPair.v_secondOf rest2) in (let gotLen = (B_dData_dPair.v_firstOf rest3) in (if (if (if (magic = v_storeMagic) then (gotTag = tag) else false) then (gotCodec = codec) else false) then (gotLen = (string_of_int (String.length payload))) else false))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 128 "Vuna/Compiler/Base/Store.vuna"
-let v_headerDigestOf = (fun (dtb_u_u58 : string) -> (match (v_headerFields dtb_u_u58) with
+let v_headerDigestOf = (fun (header : string) -> (match (v_headerFields header) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u59) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb_u_u59))))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__23) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf (B_dData_dPair.v_secondOf dtb__23))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 135 "Vuna/Compiler/Base/Store.vuna"
-let v_storeDecode = (fun (dtb_u_u60 : string) (dtb_u_u61 : string) (dtb_u_u62 : string) -> (match (v_frameSplit dtb_u_u62) with
+let v_storeDecode = (fun (tag : string) (codec : string) (raw : string) -> (match (v_frameSplit raw) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u63) -> (let dtb_u_u64 = (B_dData_dPair.v_secondOf dtb_u_u63) in (if (if ((((v_headerOk dtb_u_u60) dtb_u_u61) (B_dData_dPair.v_firstOf dtb_u_u63)) dtb_u_u64) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dString.v_Eq_u018fc178ff3df1b4_uString)) (v_headerDigestOf (B_dData_dPair.v_firstOf dtb_u_u63))) (B_dData_dMaybe.C_Maybe_Just ((Base_dHash.v_contentAddress dtb_u_u64)))) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb_u_u64)) else B_dData_dMaybe.C_Maybe_Nothing))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__24) -> (let payload = (B_dData_dPair.v_secondOf dtb__24) in (if (if ((((v_headerOk tag) codec) (B_dData_dPair.v_firstOf dtb__24)) payload) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dString.v_Eq_u018fc178ff3df1b4_uString)) (v_headerDigestOf (B_dData_dPair.v_firstOf dtb__24))) (B_dData_dMaybe.C_Maybe_Just ((Base_dHash.v_contentAddress payload)))) else false) then (B_dData_dMaybe.C_Maybe_Just (payload)) else B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 152 "Vuna/Compiler/Base/Store.vuna"
-let v_storeDecodeAs = (fun (dtb_u_u65 : string) (dtb_u_u66 : string) (dtb_u_u67 : string) (dtb_u_u68 : string) -> (match (v_frameSplit dtb_u_u68) with
+let v_storeDecodeAs = (fun (tag : string) (codec : string) (digest : string) (raw : string) -> (match (v_frameSplit raw) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u69) -> (let dtb_u_u70 = (B_dData_dPair.v_secondOf dtb_u_u69) in (if (if ((((v_headerOk dtb_u_u65) dtb_u_u66) (B_dData_dPair.v_firstOf dtb_u_u69)) dtb_u_u70) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dString.v_Eq_u018fc178ff3df1b4_uString)) (v_headerDigestOf (B_dData_dPair.v_firstOf dtb_u_u69))) (B_dData_dMaybe.C_Maybe_Just (dtb_u_u67))) else false) then (B_dData_dMaybe.C_Maybe_Just (dtb_u_u70)) else B_dData_dMaybe.C_Maybe_Nothing))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__25) -> (let payload = (B_dData_dPair.v_secondOf dtb__25) in (if (if ((((v_headerOk tag) codec) (B_dData_dPair.v_firstOf dtb__25)) payload) then (((B_dTrait_dEq.v__x61__x61_ (B_dData_dMaybe.v_Eq_u018fc178ff3df1b4_uBase_x36_46_x36_Data_x36_46_x36_Maybe_x36_46_x36_Maybe_ua B_dData_dString.v_Eq_u018fc178ff3df1b4_uString)) (v_headerDigestOf (B_dData_dPair.v_firstOf dtb__25))) (B_dData_dMaybe.C_Maybe_Just (digest))) else false) then (B_dData_dMaybe.C_Maybe_Just (payload)) else B_dData_dMaybe.C_Maybe_Nothing))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 180 "Vuna/Compiler/Base/Store.vuna"
-let v_dirUnder = (fun (dtb_u_u71 : string) (dtb_u_u72 : string B_dData_dMaybe.t_Maybe) -> (match dtb_u_u72 with
+let v_dirUnder = (fun (mc0 : string) (mc1 : string B_dData_dMaybe.t_Maybe) -> (match mc1 with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u73) -> (B_dData_dMaybe.C_Maybe_Just ((String.concat "" [dtb_u_u73; "/"; dtb_u_u71])))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__26) -> (B_dData_dMaybe.C_Maybe_Just ((String.concat "" [dtb__26; "/"; mc0])))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -132,13 +132,13 @@ let v_storeReadAsEff = (fun (dtb_u_u158 : string) (dtb_u_u161 : string) (dtb_u_u
 let v_storeReadAsEff_u_udirect = (fun (nFs : string) (tag : string) (codec : string) (digest : string) (path : string) _u_ueffTok -> ((Obj.magic (((Base_dObs.v_obsSpanEff "vuna.cache.lookup") "vuna.cache") (Obj.repr ((fun (dtb_u_u169 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u172 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) path) dtb_u_u169) in (if dtb_u_u172 then (let dtb_u_u180 = (((B_dEffect_dFs.v_fsReadFile_u_udirect nFs) path) dtb_u_u169) in (let dtb_u_u182 = ((((v_storeDecodeAs tag) codec) digest) dtb_u_u180) in dtb_u_u182)) else (let dtb_u_u185 = B_dData_dMaybe.C_Maybe_Nothing in dtb_u_u185)))))))) _u_ueffTok))
 
 # 231 "Vuna/Compiler/Base/Store.vuna"
-let v_storeWriteEff = (fun (dtb_u_u187 : string) (dtb_u_u190 : string) (dtb_u_u191 : string) (dtb_u_u192 : string) (dtb_u_u193 : string) -> (((B_dEffect_dFs.v_fsWriteFileAtomic dtb_u_u187) dtb_u_u192) (((v_storeEncode dtb_u_u190) dtb_u_u191) dtb_u_u193)))
+let v_storeWriteEff = (fun (nFs : string) (tag : string) (codec : string) (path : string) (payload : string) -> (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) (((v_storeEncode tag) codec) payload)))
 
 # 231 "Vuna/Compiler/Base/Store.vuna"
 let v_storeWriteEff_u_udirect = (fun (nFs : string) (tag : string) (codec : string) (path : string) (payload : string) _u_ueffTok -> ((Obj.magic (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) (((v_storeEncode tag) codec) payload))) _u_ueffTok))
 
 # 235 "Vuna/Compiler/Base/Store.vuna"
-let v_storeWriteAsEff = (fun (dtb_u_u194 : string) (dtb_u_u197 : string) (dtb_u_u198 : string) (dtb_u_u199 : string) (dtb_u_u200 : string) (dtb_u_u201 : string) -> (((B_dEffect_dFs.v_fsWriteFileAtomic dtb_u_u194) dtb_u_u200) ((((v_storeEncodeAs dtb_u_u197) dtb_u_u198) dtb_u_u199) dtb_u_u201)))
+let v_storeWriteAsEff = (fun (nFs : string) (tag : string) (codec : string) (digest : string) (path : string) (payload : string) -> (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) ((((v_storeEncodeAs tag) codec) digest) payload)))
 
 # 235 "Vuna/Compiler/Base/Store.vuna"
 let v_storeWriteAsEff_u_udirect = (fun (nFs : string) (tag : string) (codec : string) (digest : string) (path : string) (payload : string) _u_ueffTok -> ((Obj.magic (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) ((((v_storeEncodeAs tag) codec) digest) payload))) _u_ueffTok))
@@ -156,26 +156,26 @@ let v_storeWriteIfChangedAsEff = (fun (dtb_u_u229 : string) (dtb_u_u232 : string
 let v_storeWriteIfChangedAsEff_u_udirect = (fun (nFs : string) (tag : string) (codec : string) (digest : string) (path : string) (payload : string) _u_ueffTok -> (let dtb_u_u237 = ((((v_storeEncodeAs tag) codec) digest) payload) in (let dtb_u_u245 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) path) _u_ueffTok) in (if dtb_u_u245 then (let dtb_u_u253 = (((B_dEffect_dFs.v_fsReadFile_u_udirect nFs) path) _u_ueffTok) in (if (dtb_u_u253 = dtb_u_u237) then (let dtb_u_u255 = 0 in dtb_u_u255) else ((Obj.magic (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) dtb_u_u237)) _u_ueffTok))) else ((Obj.magic (((B_dEffect_dFs.v_fsWriteFileAtomic nFs) path) dtb_u_u237)) _u_ueffTok)))))
 
 # 267 "Vuna/Compiler/Base/Store.vuna"
-let v_storeFileExistsEff = (fun (dtb_u_u257 : string) (dtb_u_u260 : string) -> ((B_dEffect_dFs.v_fsFileExists dtb_u_u257) dtb_u_u260))
+let v_storeFileExistsEff = (fun (nFs : string) (path : string) -> ((B_dEffect_dFs.v_fsFileExists nFs) path))
 
 # 267 "Vuna/Compiler/Base/Store.vuna"
 let v_storeFileExistsEff_u_udirect = (fun (nFs : string) (path : string) _u_ueffTok -> ((Obj.magic ((B_dEffect_dFs.v_fsFileExists nFs) path)) _u_ueffTok))
 
 # 270 "Vuna/Compiler/Base/Store.vuna"
-let v_storeRemoveEff = (fun (dtb_u_u261 : string) (dtb_u_u264 : string) -> ((B_dEffect_dFs.v_fsRemoveFile dtb_u_u261) dtb_u_u264))
+let v_storeRemoveEff = (fun (nFs : string) (path : string) -> ((B_dEffect_dFs.v_fsRemoveFile nFs) path))
 
 # 270 "Vuna/Compiler/Base/Store.vuna"
 let v_storeRemoveEff_u_udirect = (fun (nFs : string) (path : string) _u_ueffTok -> ((Obj.magic ((B_dEffect_dFs.v_fsRemoveFile nFs) path)) _u_ueffTok))
 
 # 314 "Vuna/Compiler/Base/Store.vuna"
-let rec v_storeDropPastSlash = (fun (dtb_u_u265 : int B_dData_dList.t_List) -> (match dtb_u_u265 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u266, dtb_u_u267) -> (if (dtb_u_u266 = 47) then dtb_u_u267 else (v_storeDropPastSlash dtb_u_u267))
+let rec v_storeDropPastSlash = (fun (mc0 : int B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__51, dtb__52) -> (if (dtb__51 = 47) then dtb__52 else (v_storeDropPastSlash dtb__52))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 298 "Vuna/Compiler/Base/Store.vuna"
-let v_storeParentOf = (fun (dtb_u_u268 : string) -> (let dtb_u_u269 = (B_dData_dList.dtp_unpack dtb_u_u268) in (let dtb_u_u270 = (v_storeDropPastSlash (B_dData_dList.v_reverse dtb_u_u269)) in (if ((B_dData_dList.v_length dtb_u_u270) = (B_dData_dList.v_length (B_dData_dList.v_reverse dtb_u_u269))) then "." else (let dtb_u_u271 = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse dtb_u_u270)) in (if (dtb_u_u271 = "") then (if ((B_dData_dString.v_startsWith "/") dtb_u_u268) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") dtb_u_u268) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") dtb_u_u271)) else false) then ("/" ^ dtb_u_u271) else dtb_u_u271)))))))
+let v_storeParentOf = (fun (path : string) -> (let rev = (B_dData_dList.dtp_unpack path) in (let after = (v_storeDropPastSlash (B_dData_dList.v_reverse rev)) in (if ((B_dData_dList.v_length after) = (B_dData_dList.v_length (B_dData_dList.v_reverse rev))) then "." else (let p = (B_dData_dList.dtp_pack (B_dData_dList.v_reverse after)) in (if (p = "") then (if ((B_dData_dString.v_startsWith "/") path) then "/" else ".") else (if (if ((B_dData_dString.v_startsWith "/") path) then (B_dData_dBool.v_not ((B_dData_dString.v_startsWith "/") p)) else false) then ("/" ^ p) else p)))))))
 
 # 282 "Vuna/Compiler/Base/Store.vuna"
 let rec v_storeEnsureDirFuel = (fun (dtb_u_u272 : string) (dtb_u_u273 : string) (dtb_u_u277 : int) (dtb_u_u278 : string) -> (if (dtb_u_u277 <= 0) then (let dtb_u_u280 = 0 in (Obj.repr ((fun (dtb_u_u281 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u280)))) else (if (if (if (dtb_u_u278 = "") then true else (dtb_u_u278 = ".")) then true else (dtb_u_u278 = "/")) then (let dtb_u_u283 = 0 in (Obj.repr ((fun (dtb_u_u284 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u283)))) else (Obj.repr ((fun (dtb_u_u289 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u292 = (((B_dEffect_dFs.v_fsFileExists_u_udirect dtb_u_u272) dtb_u_u278) dtb_u_u289) in (if dtb_u_u292 then (let dtb_u_u294 = 0 in dtb_u_u294) else (let dtb_u_u303 = (((((v_storeEnsureDirFuel_u_udirect dtb_u_u272) dtb_u_u273) (dtb_u_u277 - 1)) (v_storeParentOf dtb_u_u278)) dtb_u_u289) in ((Obj.magic ((B_dEffect_dFs.v_fsMakeDir dtb_u_u272) dtb_u_u278)) dtb_u_u289))))))))))
@@ -183,7 +183,7 @@ let rec v_storeEnsureDirFuel = (fun (dtb_u_u272 : string) (dtb_u_u273 : string) 
 and v_storeEnsureDirFuel_u_udirect = (fun (nFs : string) (nProcess : string) (fuel : int) (path : string) _u_ueffTok -> (if (fuel <= 0) then (let dtb_u_u280 = 0 in dtb_u_u280) else (if (if (if (path = "") then true else (path = ".")) then true else (path = "/")) then (let dtb_u_u283 = 0 in dtb_u_u283) else (let dtb_u_u292 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) path) _u_ueffTok) in (if dtb_u_u292 then (let dtb_u_u294 = 0 in dtb_u_u294) else (let dtb_u_u303 = (((((v_storeEnsureDirFuel_u_udirect nFs) nProcess) (fuel - 1)) (v_storeParentOf path)) _u_ueffTok) in ((Obj.magic ((B_dEffect_dFs.v_fsMakeDir nFs) path)) _u_ueffTok)))))))
 
 # 274 "Vuna/Compiler/Base/Store.vuna"
-let v_storeEnsureDirEff = (fun (dtb_u_u304 : string) (dtb_u_u305 : string) (dtb_u_u309 : string) -> ((((v_storeEnsureDirFuel dtb_u_u304) dtb_u_u305) 256) dtb_u_u309))
+let v_storeEnsureDirEff = (fun (nFs : string) (nProcess : string) (path : string) -> ((((v_storeEnsureDirFuel nFs) nProcess) 256) path))
 
 # 274 "Vuna/Compiler/Base/Store.vuna"
 let v_storeEnsureDirEff_u_udirect = (fun (nFs : string) (nProcess : string) (path : string) _u_ueffTok -> ((Obj.magic ((((v_storeEnsureDirFuel nFs) nProcess) 256) path)) _u_ueffTok))
@@ -192,7 +192,7 @@ let v_storeEnsureDirEff_u_udirect = (fun (nFs : string) (nProcess : string) (pat
 let v_storeParentPathOf = v_storeParentOf
 
 # 335 "Vuna/Compiler/Base/Store.vuna"
-let v_storeRootEff = (fun (dtb_u_u310 : string) -> (v_storeDataRootEff dtb_u_u310))
+let v_storeRootEff = (fun (nEnv : string) -> (v_storeDataRootEff nEnv))
 
 # 335 "Vuna/Compiler/Base/Store.vuna"
 let v_storeRootEff_u_udirect = (fun (nEnv : string) _u_ueffTok -> ((Obj.magic (v_storeDataRootEff nEnv)) _u_ueffTok))
@@ -210,16 +210,16 @@ let v_storeRootReadyEff = (fun (dtb_u_u338 : string) (dtb_u_u339 : string) (dtb_
 let v_storeRootReadyEff_u_udirect = (fun (nFs : string) (nEnv : string) (nProcess : string) _u_ueffTok -> (let dtb_u_u352 = ((v_storeDataRootEff_u_udirect nEnv) _u_ueffTok) in (let dtb_u_u360 = ((((v_dirReady_u_udirect nFs) nProcess) dtb_u_u352) _u_ueffTok) in (if dtb_u_u360 then (let dtb_u_u362 = dtb_u_u352 in dtb_u_u362) else (let dtb_u_u371 = ((v_tmpStoreRootEff_u_udirect nEnv) _u_ueffTok) in (let dtb_u_u379 = ((((v_dirReady_u_udirect nFs) nProcess) dtb_u_u371) _u_ueffTok) in (let dtb_u_u381 = dtb_u_u371 in dtb_u_u381)))))))
 
 # 201 "Vuna/Compiler/Base/Store.vuna"
-let v_storeCacheBaseEff = (fun (dtb_u_u383 : string) (dtb_u_u384 : string) (dtb_u_u385 : string) -> (((v_storeRootReadyEff dtb_u_u383) dtb_u_u384) dtb_u_u385))
+let v_storeCacheBaseEff = (fun (nFs : string) (nEnv : string) (nProcess : string) -> (((v_storeRootReadyEff nFs) nEnv) nProcess))
 
 # 201 "Vuna/Compiler/Base/Store.vuna"
 let v_storeCacheBaseEff_u_udirect = (fun (nFs : string) (nEnv : string) (nProcess : string) _u_ueffTok -> ((Obj.magic (((v_storeRootReadyEff nFs) nEnv) nProcess)) _u_ueffTok))
 
 # 365 "Vuna/Compiler/Base/Store.vuna"
-let v_storeObjectTag = (fun (dtb_u_u390 : string) -> ("vuna-object 1/" ^ dtb_u_u390))
+let v_storeObjectTag = (fun (kind : string) -> ("vuna-object 1/" ^ kind))
 
 # 368 "Vuna/Compiler/Base/Store.vuna"
-let v_objectPathIn = (fun (dtb_u_u391 : string) (dtb_u_u392 : string) (dtb_u_u393 : string) -> (String.concat "" [dtb_u_u391; "/objects/"; dtb_u_u392; "/"; dtb_u_u393]))
+let v_objectPathIn = (fun (root : string) (kind : string) (digest : string) -> (String.concat "" [root; "/objects/"; kind; "/"; digest]))
 
 # 371 "Vuna/Compiler/Base/Store.vuna"
 let v_storeObjectPathEff = (fun (dtb_u_u394 : string) (dtb_u_u395 : string) (dtb_u_u396 : string) (dtb_u_u401 : string) (dtb_u_u402 : string) -> (Obj.repr ((fun (dtb_u_u407 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u410 = ((((v_storeRootReadyEff_u_udirect dtb_u_u394) dtb_u_u395) dtb_u_u396) dtb_u_u407) in (let dtb_u_u412 = (((v_objectPathIn dtb_u_u410) dtb_u_u401) dtb_u_u402) in dtb_u_u412))))))
@@ -258,12 +258,12 @@ let v_storeRootsPathEff = (fun (dtb_u_u525 : string) (dtb_u_u526 : string) (dtb_
 let v_storeRootsPathEff_u_udirect = (fun (nFs : string) (nEnv : string) (nProcess : string) (projectId : string) _u_ueffTok -> (let dtb_u_u540 = ((((v_storeRootReadyEff_u_udirect nFs) nEnv) nProcess) _u_ueffTok) in (let dtb_u_u542 = (String.concat "" [dtb_u_u540; "/roots/"; projectId]) in dtb_u_u542)))
 
 # 429 "Vuna/Compiler/Base/Store.vuna"
-let v_insertRootLine = (fun (dtb_u_u544 : string) (dtb_u_u545 : string B_dData_dList.t_List) -> (if ((B_dData_dList.v_memName dtb_u_u544) dtb_u_u545) then dtb_u_u545 else (B_dData_dList.C_List__x58__x58_ (dtb_u_u544, dtb_u_u545))))
+let v_insertRootLine = (fun (line : string) (lines : string B_dData_dList.t_List) -> (if ((B_dData_dList.v_memName line) lines) then lines else (B_dData_dList.C_List__x58__x58_ (line, lines))))
 
 # 432 "Vuna/Compiler/Base/Store.vuna"
-let rec v_mergeRootLines = (fun (dtb_u_u546 : string B_dData_dList.t_List) (dtb_u_u547 : string B_dData_dList.t_List) -> (match dtb_u_u547 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u548, dtb_u_u549) -> ((v_mergeRootLines ((v_insertRootLine dtb_u_u548) dtb_u_u546)) dtb_u_u549)
-  | B_dData_dList.C_List_Nil -> dtb_u_u546
+let rec v_mergeRootLines = (fun (mc0 : string B_dData_dList.t_List) (mc1 : string B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__89, dtb__90) -> ((v_mergeRootLines ((v_insertRootLine dtb__89) mc0)) dtb__90)
+  | B_dData_dList.C_List_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -320,19 +320,19 @@ let v_storeRootRemoveEff = (fun (dtb_u_u773 : string) (dtb_u_u774 : string) (dtb
 let v_storeRootRemoveEff_u_udirect = (fun (nFs : string) (nEnv : string) (nProcess : string) (projectId : string) _u_ueffTok -> (let dtb_u_u788 = (((((v_storeRootsPathEff_u_udirect nFs) nEnv) nProcess) projectId) _u_ueffTok) in (let dtb_u_u796 = (((B_dEffect_dFs.v_fsFileExists_u_udirect nFs) dtb_u_u788) _u_ueffTok) in (if dtb_u_u796 then (let dtb_u_u804 = (((B_dEffect_dFs.v_fsIsDirectory_u_udirect nFs) dtb_u_u788) _u_ueffTok) in (if dtb_u_u804 then ((Obj.magic ((B_dEffect_dFs.v_fsRemoveTree nFs) dtb_u_u788)) _u_ueffTok) else ((Obj.magic ((B_dEffect_dFs.v_fsRemoveFile nFs) dtb_u_u788)) _u_ueffTok))) else (let dtb_u_u806 = 0 in dtb_u_u806)))))
 
 # 51 "Vuna/Compiler/Base/Store.vuna"
-let v_fTag = (fun (dtb_u_u808 : t_Frame) -> (match dtb_u_u808 with
-  | { f_Frame_fTag = dtb_u_u809; f_Frame_fCodec = dtb_u_u810; f_Frame_fPayload = dtb_u_u811 } -> dtb_u_u809
+let v_fTag = (fun (p : t_Frame) -> (match p with
+  | { f_Frame_fTag = dtb__135; f_Frame_fCodec = dtb__136; f_Frame_fPayload = dtb__137 } -> dtb__135
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 52 "Vuna/Compiler/Base/Store.vuna"
-let v_fCodec = (fun (dtb_u_u812 : t_Frame) -> (match dtb_u_u812 with
-  | { f_Frame_fTag = dtb_u_u813; f_Frame_fCodec = dtb_u_u814; f_Frame_fPayload = dtb_u_u815 } -> dtb_u_u814
+let v_fCodec = (fun (p : t_Frame) -> (match p with
+  | { f_Frame_fTag = dtb__138; f_Frame_fCodec = dtb__139; f_Frame_fPayload = dtb__140 } -> dtb__139
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 53 "Vuna/Compiler/Base/Store.vuna"
-let v_fPayload = (fun (dtb_u_u816 : t_Frame) -> (match dtb_u_u816 with
-  | { f_Frame_fTag = dtb_u_u817; f_Frame_fCodec = dtb_u_u818; f_Frame_fPayload = dtb_u_u819 } -> dtb_u_u819
+let v_fPayload = (fun (p : t_Frame) -> (match p with
+  | { f_Frame_fTag = dtb__141; f_Frame_fCodec = dtb__142; f_Frame_fPayload = dtb__143 } -> dtb__143
   | _ -> failwith "DT: impossible branch"
 ))

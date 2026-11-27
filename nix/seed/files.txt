@@ -107,6 +107,7 @@ Elab_dUsage.ml
 Frontend_dAst.ml
 Frontend_dAstQuery.ml
 Frontend_dAstView.ml
+Frontend_dAstWalk.ml
 Frontend_dCanonical_dAst.ml
 Frontend_dCanonical_dPkg.ml
 Frontend_dCst.ml

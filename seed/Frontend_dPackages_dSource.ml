@@ -1,12 +1,12 @@
 open Vuna_runtime
 # 25 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_skipSourceDir = (fun (dtb_u_u1 : string) -> (if (if (if (if (if (if (if (if (if (dtb_u_u1 = ".git") then true else (dtb_u_u1 = ".local")) then true else (dtb_u_u1 = ".output")) then true else (dtb_u_u1 = ".vuna")) then true else (dtb_u_u1 = ".direnv")) then true else (dtb_u_u1 = "node_modules")) then true else (dtb_u_u1 = "seed")) then true else (dtb_u_u1 = "_scratch")) then true else (dtb_u_u1 = "result")) then true else (dtb_u_u1 = "corpus")))
+let v_skipSourceDir = (fun (name : string) -> (if (if (if (if (if (if (if (if (if (name = ".git") then true else (name = ".local")) then true else (name = ".output")) then true else (name = ".vuna")) then true else (name = ".direnv")) then true else (name = "node_modules")) then true else (name = "seed")) then true else (name = "_scratch")) then true else (name = "result")) then true else (name = "corpus")))
 
 # 42 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_normalizeHash = (fun (dtb_u_u2 : string) -> (if ((B_dData_dString.v_startsWith "sha256:") dtb_u_u2) then (((B_dData_dString.v_substring 7) 64) dtb_u_u2) else dtb_u_u2))
+let v_normalizeHash = (fun (h : string) -> (if ((B_dData_dString.v_startsWith "sha256:") h) then (((B_dData_dString.v_substring 7) 64) h) else h))
 
 # 46 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_verifyHash = (fun (dtb_u_u3 : string) (dtb_u_u4 : string) -> ((v_normalizeHash dtb_u_u3) = (v_normalizeHash dtb_u_u4)))
+let v_verifyHash = (fun (expected : string) (actual : string) -> ((v_normalizeHash expected) = (v_normalizeHash actual)))
 
 # 76 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_pkgSourceDepth = 4096
@@ -55,10 +55,10 @@ and v_collectNames_u_udirect = (fun (nFs : string) (mc0 : Base_dIgnore.t_IgnoreC
 and v_walkName_u_udirect = (fun (nFs : string) (ctx : Base_dIgnore.t_IgnoreContext) (fuel : int) (root : string) (rel : string) (name : string) _u_ueffTok -> (if (fuel <= 0) then (let dtb_u_u134 = (Base_dDiag.v_icFuel "package file collection") in dtb_u_u134) else (if (name = ".") then (let dtb_u_u137 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u137) else (if (name = "..") then (let dtb_u_u140 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u140) else (if (v_skipSourceDir name) then (let dtb_u_u143 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u143) else (let dtb_u_u145 = (if (rel = "") then name else (String.concat "" [rel; "/"; name])) in (let dtb_u_u146 = (String.concat "" [root; "/"; dtb_u_u145]) in (if (((Base_dIgnore.v_isIgnored ctx) dtb_u_u145) false) then (let dtb_u_u148 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u148) else (let dtb_u_u157 = (((B_dEffect_dFs.v_fsIsDirectory_u_udirect nFs) dtb_u_u146) _u_ueffTok) in (if dtb_u_u157 then (if (((Base_dIgnore.v_isIgnored ctx) dtb_u_u145) true) then (let dtb_u_u159 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u159) else ((Obj.magic (((((v_collectDirFiles nFs) ctx) (fuel - 1)) root) dtb_u_u145)) _u_ueffTok)) else (if ((B_dData_dString.v_endsWith ".vuna") name) then (let dtb_u_u168 = (((B_dEffect_dFs.v_fsReadFile_u_udirect nFs) dtb_u_u146) _u_ueffTok) in (let dtb_u_u170 = (Base_dDiag.C_Check_OkC ((B_dData_dList.C_List__x58__x58_ ({ Frontend_dCanonical_dPkg.f_PackageFile_pfPath = dtb_u_u145; Frontend_dCanonical_dPkg.f_PackageFile_pfContent = dtb_u_u168 }, B_dData_dList.C_List_Nil)))) in dtb_u_u170)) else (let dtb_u_u173 = (Base_dDiag.C_Check_OkC (B_dData_dList.C_List_Nil)) in dtb_u_u173))))))))))))
 
 # 154 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_filePathLe = (fun (dtb_u_u175 : Frontend_dCanonical_dPkg.t_PackageFile) (dtb_u_u176 : Frontend_dCanonical_dPkg.t_PackageFile) -> ((dtb_u_u175).Frontend_dCanonical_dPkg.f_PackageFile_pfPath <= (dtb_u_u176).Frontend_dCanonical_dPkg.f_PackageFile_pfPath))
+let v_filePathLe = (fun (a : Frontend_dCanonical_dPkg.t_PackageFile) (b : Frontend_dCanonical_dPkg.t_PackageFile) -> ((a).Frontend_dCanonical_dPkg.f_PackageFile_pfPath <= (b).Frontend_dCanonical_dPkg.f_PackageFile_pfPath))
 
 # 157 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_sortByPath = (fun (dtb_u_u177 : Frontend_dCanonical_dPkg.t_PackageFile B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy v_filePathLe) dtb_u_u177))
+let v_sortByPath = (fun (files : Frontend_dCanonical_dPkg.t_PackageFile B_dData_dList.t_List) -> ((B_dData_dSort.v_sortBy v_filePathLe) files))
 
 # 52 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_packageFilesEff = (fun (dtb_u_u178 : string) (dtb_u_u181 : string) -> (Obj.repr ((fun (dtb_u_u186 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u189 = (((Base_dIgnore.v_ignoreContextEff_u_udirect dtb_u_u178) dtb_u_u181) dtb_u_u186) in (let dtb_u_u197 = (((((Base_dIgnore.v_loadIgnoreFile_u_udirect dtb_u_u178) dtb_u_u181) ((Base_dIgnore.v_ignorePathOf dtb_u_u189) "")) dtb_u_u189) dtb_u_u186) in (let dtb_u_u205 = (((v_readManifestFile_u_udirect dtb_u_u178) dtb_u_u181) dtb_u_u186) in (let dtb_u_u213 = ((((((v_collectDirFiles_u_udirect dtb_u_u178) dtb_u_u197) v_pkgSourceDepth) dtb_u_u181) "lib") dtb_u_u186) in (match dtb_u_u213 with
@@ -91,29 +91,29 @@ let v_packageFilesEff_u_udirect = (fun (nFs : string) (root : string) _u_ueffTok
 ))))))
 
 # 169 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_packageNameOf = (fun (dtb_u_u248 : Frontend_dManifest.t_Manifest) -> (match (dtb_u_u248).Frontend_dManifest.f_Manifest_manifestName with
+let v_packageNameOf = (fun (manifest : Frontend_dManifest.t_Manifest) -> (match (manifest).Frontend_dManifest.f_Manifest_manifestName with
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u249) -> dtb_u_u249
+  | B_dData_dMaybe.C_Maybe_Just (dtb__44) -> dtb__44
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 175 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_exportsOf = (fun (dtb_u_u250 : Frontend_dManifest.t_Manifest) -> (match (dtb_u_u250).Frontend_dManifest.f_Manifest_manifestExports with
+let v_exportsOf = (fun (manifest : Frontend_dManifest.t_Manifest) -> (match (manifest).Frontend_dManifest.f_Manifest_manifestExports with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u251) -> dtb_u_u251
+  | B_dData_dMaybe.C_Maybe_Just (dtb__45) -> dtb__45
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 183 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_depKeyOf = (fun (dtb_u_u252 : Frontend_dManifest.t_Dependency) -> (let dtb_u_u253 = (match (Frontend_dManifest.v_depIdentityOf dtb_u_u252) with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u254) -> (v_normalizeHash dtb_u_u254)
-  | B_dData_dMaybe.C_Maybe_Nothing -> (match (Frontend_dManifest.v_depHashOf dtb_u_u252) with
+let v_depKeyOf = (fun (dep : Frontend_dManifest.t_Dependency) -> (let key = (match (Frontend_dManifest.v_depIdentityOf dep) with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__46) -> (v_normalizeHash dtb__46)
+  | B_dData_dMaybe.C_Maybe_Nothing -> (match (Frontend_dManifest.v_depHashOf dep) with
   | B_dData_dMaybe.C_Maybe_Nothing -> "path"
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u255) -> (v_normalizeHash dtb_u_u255)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__47) -> (v_normalizeHash dtb__47)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-) in { B_dData_dPair.f_Pair_first = (Frontend_dManifest.v_depAliasOf dtb_u_u252); B_dData_dPair.f_Pair_second = dtb_u_u253 }))
+) in { B_dData_dPair.f_Pair_first = (Frontend_dManifest.v_depAliasOf dep); B_dData_dPair.f_Pair_second = key }))
 
 # 161 "Vuna/Compiler/Frontend/Packages/Source.vuna"
 let v_packageSourceEff = (fun (dtb_u_u256 : string) (dtb_u_u259 : string) (dtb_u_u260 : Frontend_dManifest.t_Manifest) -> (Obj.repr ((fun (dtb_u_u265 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u268 = (((v_packageFilesEff_u_udirect dtb_u_u256) dtb_u_u259) dtb_u_u265) in (match dtb_u_u268 with
@@ -130,7 +130,7 @@ let v_packageSourceEff_u_udirect = (fun (nFs : string) (root : string) (manifest
 )))
 
 # 196 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_contentHashOf = (fun (dtb_u_u277 : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageContent (dtb_u_u277).Frontend_dCanonical_dPkg.f_PackageSource_psFiles)))
+let v_contentHashOf = (fun (ps : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageContent (ps).Frontend_dCanonical_dPkg.f_PackageSource_psFiles)))
 
 # 200 "Vuna/Compiler/Frontend/Packages/Source.vuna"
-let v_identityHashOf = (fun (dtb_u_u278 : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageIdentity (Frontend_dCanonical_dPkg.v_identityOfSource dtb_u_u278))))
+let v_identityHashOf = (fun (ps : Frontend_dCanonical_dPkg.t_PackageSource) -> (Base_dHash.v_contentAddress (Frontend_dCanonical_dPkg.v_encPackageIdentity (Frontend_dCanonical_dPkg.v_identityOfSource ps))))

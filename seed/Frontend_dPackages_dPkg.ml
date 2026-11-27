@@ -5,32 +5,32 @@ and t_PackageContext = { f_PackageContext_contextDir : string; f_PackageContext_
 and t_Workspace = { f_Workspace_workspaceDir : string; f_Workspace_workspaceRoot : t_Package B_dData_dMaybe.t_Maybe; f_Workspace_workspaceMembers : t_Package B_dData_dList.t_List }
 
 # 67 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootLayers = (fun (dtb_u_u1 : t_Root) -> (match dtb_u_u1 with
-  | { f_Root_rootDir = dtb_u_u2; f_Root_rootName = dtb_u_u3; f_Root_rootExports = dtb_u_u4; f_Root_rootLayerRules = dtb_u_u5; f_Root_rootImplicitPrelude = dtb_u_u6 } -> dtb_u_u5
+let v_rootLayers = (fun (mc0 : t_Root) -> (match mc0 with
+  | { f_Root_rootDir = dtb__0; f_Root_rootName = dtb__1; f_Root_rootExports = dtb__2; f_Root_rootLayerRules = dtb__3; f_Root_rootImplicitPrelude = dtb__4 } -> dtb__3
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 75 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextPackageOf = (fun (dtb_u_u7 : t_PackageContext) -> (dtb_u_u7).f_PackageContext_contextPackage)
+let v_contextPackageOf = (fun (ctx : t_PackageContext) -> (ctx).f_PackageContext_contextPackage)
 
 # 79 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextWithRelease = (fun (dtb_u_u8 : bool) (dtb_u_u9 : t_PackageContext) -> { dtb_u_u9 with f_PackageContext_contextRelease = dtb_u_u8 })
+let v_contextWithRelease = (fun (release : bool) (ctx : t_PackageContext) -> { ctx with f_PackageContext_contextRelease = release })
 
 # 82 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageName = (fun (dtb_u_u10 : t_Package) -> (match ((dtb_u_u10).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestName with
+let v_packageName = (fun (package : t_Package) -> (match ((package).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestName with
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u11) -> dtb_u_u11
+  | B_dData_dMaybe.C_Maybe_Just (dtb__5) -> dtb__5
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 88 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageExports = (fun (dtb_u_u12 : t_Package) -> ((dtb_u_u12).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestExports)
+let v_packageExports = (fun (package : t_Package) -> ((package).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestExports)
 
 # 91 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageLayers = (fun (dtb_u_u13 : t_Package) -> ((dtb_u_u13).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestLayers)
+let v_packageLayers = (fun (package : t_Package) -> ((package).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestLayers)
 
 # 94 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageImplicitPrelude = (fun (dtb_u_u14 : t_Package) -> ((dtb_u_u14).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestImplicitPrelude)
+let v_packageImplicitPrelude = (fun (package : t_Package) -> ((package).f_Package_packageManifest).Frontend_dManifest.f_Manifest_manifestImplicitPrelude)
 
 # 100 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_absolutePath = (fun (dtb_u_u15 : string) (dtb_u_u18 : string) -> (if ((B_dData_dString.v_startsWith "/") dtb_u_u18) then (let dtb_u_u20 = (Base_dSource.v_normalizePath dtb_u_u18) in (Obj.repr ((fun (dtb_u_u21 : B_dEffect_dCore.t_EffUnit) -> dtb_u_u20)))) else (Obj.repr ((fun (dtb_u_u26 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u29 = ((B_dEffect_dEnv.v_envGetCwd_u_udirect dtb_u_u15) dtb_u_u26) in (let dtb_u_u31 = (Base_dSource.v_normalizePath (String.concat "" [dtb_u_u29; "/"; dtb_u_u18])) in dtb_u_u31)))))))
@@ -39,10 +39,10 @@ let v_absolutePath = (fun (dtb_u_u15 : string) (dtb_u_u18 : string) -> (if ((B_d
 let v_absolutePath_u_udirect = (fun (nEnv : string) (path : string) _u_ueffTok -> (if ((B_dData_dString.v_startsWith "/") path) then (let dtb_u_u20 = (Base_dSource.v_normalizePath path) in dtb_u_u20) else (let dtb_u_u29 = ((B_dEffect_dEnv.v_envGetCwd_u_udirect nEnv) _u_ueffTok) in (let dtb_u_u31 = (Base_dSource.v_normalizePath (String.concat "" [dtb_u_u29; "/"; path])) in dtb_u_u31))))
 
 # 109 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_joinPathsText = (fun (dtb_u_u33 : string B_dData_dList.t_List) -> (match dtb_u_u33 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u34, dtb_u_u35) -> (match dtb_u_u35 with
-  | B_dData_dList.C_List_Nil -> dtb_u_u34
-  | _ -> (String.concat "" [dtb_u_u34; ", "; (v_joinPathsText dtb_u_u35)])
+let rec v_joinPathsText = (fun (mc0 : string B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__8, dtb__9) -> (match dtb__9 with
+  | B_dData_dList.C_List_Nil -> dtb__8
+  | _ -> (String.concat "" [dtb__8; ", "; (v_joinPathsText dtb__9)])
 )
   | B_dData_dList.C_List_Nil -> ""
   | _ -> failwith "DT: impossible branch"
@@ -71,24 +71,24 @@ let v_loadManifestAt_u_udirect = (fun (nFs : string) (path : string) _u_ueffTok 
 ) in dtb_u_u57)) else (let dtb_u_u64 = (((Base_dDiagnostics_dPkg.v_pkgPath1 path) (Base_dDiagnostics_dPkg.C_PkgErr_MissingManifest ((Base_dSource.v_normalizePath (Frontend_dManifest.v_manifestDir path))))) (Base_dSource.v_normalizePath (Frontend_dManifest.v_manifestDir path))) in dtb_u_u64))))
 
 # 134 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_manifestNameString = (fun (dtb_u_u66 : Frontend_dManifest.t_Manifest) -> (match (dtb_u_u66).Frontend_dManifest.f_Manifest_manifestName with
+let v_manifestNameString = (fun (manifest : Frontend_dManifest.t_Manifest) -> (match (manifest).Frontend_dManifest.f_Manifest_manifestName with
   | B_dData_dMaybe.C_Maybe_Nothing -> ""
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u67) -> dtb_u_u67
+  | B_dData_dMaybe.C_Maybe_Just (dtb__18) -> dtb__18
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 142 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_memStackDir = (fun dtb_u_u70 dtb_u_u71 dtb_u_u72 -> (match dtb_u_u72 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u73, dtb_u_u74) -> (if (((B_dTrait_dEq.v__x61__x61_ dtb_u_u70) (B_dData_dPair.v_firstOf dtb_u_u73)) dtb_u_u71) then true else (((v_memStackDir dtb_u_u70) dtb_u_u71) dtb_u_u74))
+let rec v_memStackDir = (fun _uctx0 mc0 mc1 -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (if (((B_dTrait_dEq.v__x61__x61_ _uctx0) (B_dData_dPair.v_firstOf dtb__19)) mc0) then true else (((v_memStackDir _uctx0) mc0) dtb__20))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 146 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_cyclePrefix = (fun dtb_u_u77 dtb_u_u78 dtb_u_u79 -> (match dtb_u_u79 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u80, dtb_u_u81) -> (if (((B_dTrait_dEq.v__x61__x61_ dtb_u_u77) (B_dData_dPair.v_firstOf dtb_u_u80)) dtb_u_u78) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ (dtb_u_u80, B_dData_dList.C_List_Nil)))) else (match (((v_cyclePrefix dtb_u_u77) dtb_u_u78) dtb_u_u81) with
+let rec v_cyclePrefix = (fun _uctx0 mc0 mc1 -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (if (((B_dTrait_dEq.v__x61__x61_ _uctx0) (B_dData_dPair.v_firstOf dtb__21)) mc0) then (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ (dtb__21, B_dData_dList.C_List_Nil)))) else (match (((v_cyclePrefix _uctx0) mc0) dtb__22) with
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u82) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ (dtb_u_u80, dtb_u_u82))))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__23) -> (B_dData_dMaybe.C_Maybe_Just ((B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__23))))
   | _ -> failwith "DT: impossible branch"
 ))
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -96,26 +96,26 @@ let rec v_cyclePrefix = (fun dtb_u_u77 dtb_u_u78 dtb_u_u79 -> (match dtb_u_u79 w
 ))
 
 # 156 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_cycleMessage = (fun (dtb_u_u83 : string) (dtb_u_u84 : string B_dData_dMaybe.t_Maybe) (dtb_u_u85 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match dtb_u_u84 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u86) -> (match (((v_cyclePrefix B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) dtb_u_u83) dtb_u_u85) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ("pkg: dependency cycle at " ^ dtb_u_u83)
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u87) -> ("pkg: dependency cycle: " ^ (Base_dSource.v_joinArrows ((B_dData_dList.v_append ((B_dData_dList.v_map B_dData_dPair.v_secondOf) (B_dData_dList.v_reverse dtb_u_u87))) (B_dData_dList.C_List__x58__x58_ (dtb_u_u86, B_dData_dList.C_List_Nil)))))
+let v_cycleMessage = (fun (mc0 : string) (mc1 : string B_dData_dMaybe.t_Maybe) (mc2 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__24) -> (match (((v_cyclePrefix B_dData_dString.v_Eq_u018fc178ff3df1b4_uString) mc0) mc2) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ("pkg: dependency cycle at " ^ mc0)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__25) -> ("pkg: dependency cycle: " ^ (Base_dSource.v_joinArrows ((B_dData_dList.v_append ((B_dData_dList.v_map B_dData_dPair.v_secondOf) (B_dData_dList.v_reverse dtb__25))) (B_dData_dList.C_List__x58__x58_ (dtb__24, B_dData_dList.C_List_Nil)))))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dMaybe.C_Maybe_Nothing -> ("pkg: dependency cycle at " ^ dtb_u_u83)
+  | B_dData_dMaybe.C_Maybe_Nothing -> ("pkg: dependency cycle at " ^ mc0)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 164 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_dependencyNameOk = (fun dtb_u_u89 dtb_u_u90 dtb_u_u91 -> (match dtb_u_u90 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u92) -> (((B_dTrait_dEq.v__x61__x61_ dtb_u_u89) dtb_u_u92) dtb_u_u91)
+let v_dependencyNameOk = (fun _uctx0 mc0 mc1 -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__26) -> (((B_dTrait_dEq.v__x61__x61_ _uctx0) dtb__26) mc1)
   | B_dData_dMaybe.C_Maybe_Nothing -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 168 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_mismatchMessage = (fun (dtb_u_u93 : string B_dData_dMaybe.t_Maybe) (dtb_u_u94 : string) -> (match dtb_u_u93 with
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u95) -> (String.concat "" ["pkg: dependency "; dtb_u_u95; " expects package name "; dtb_u_u95; " but found "; dtb_u_u94])
+let v_mismatchMessage = (fun (mc0 : string B_dData_dMaybe.t_Maybe) (mc1 : string) -> (match mc0 with
+  | B_dData_dMaybe.C_Maybe_Just (dtb__27) -> (String.concat "" ["pkg: dependency "; dtb__27; " expects package name "; dtb__27; " but found "; mc1])
   | B_dData_dMaybe.C_Maybe_Nothing -> "pkg: package name mismatch"
   | _ -> failwith "DT: impossible branch"
 ))
@@ -311,9 +311,9 @@ and v_loadPackageWalk_u_udirect = (fun (nFs : string) (nEnv : string) (memo : (s
 ))))))
 
 # 366 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_lookupPackageDir = (fun (dtb_u_u442 : string) (dtb_u_u443 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match dtb_u_u443 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u444, dtb_u_u445) -> (match dtb_u_u444 with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u446; B_dData_dPair.f_Pair_second = dtb_u_u447 } -> (if (dtb_u_u446 = dtb_u_u442) then (B_dData_dMaybe.C_Maybe_Just (dtb_u_u447)) else ((v_lookupPackageDir dtb_u_u442) dtb_u_u445))
+let rec v_lookupPackageDir = (fun (mc0 : string) (mc1 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__97, dtb__98) -> (match dtb__97 with
+  | { B_dData_dPair.f_Pair_first = dtb__99; B_dData_dPair.f_Pair_second = dtb__100 } -> (if (dtb__99 = mc0) then (B_dData_dMaybe.C_Maybe_Just (dtb__100)) else ((v_lookupPackageDir mc0) dtb__98))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
@@ -321,11 +321,11 @@ let rec v_lookupPackageDir = (fun (dtb_u_u442 : string) (dtb_u_u443 : (string, s
 ))
 
 # 371 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_checkUniqueNamesGo = (fun (dtb_u_u448 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (dtb_u_u449 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match dtb_u_u449 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u450, dtb_u_u451) -> (match dtb_u_u450 with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u452; B_dData_dPair.f_Pair_second = dtb_u_u453 } -> (match ((v_lookupPackageDir dtb_u_u452) dtb_u_u448) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_checkUniqueNamesGo (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb_u_u452; B_dData_dPair.f_Pair_second = dtb_u_u453 }, dtb_u_u448))) dtb_u_u451)
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u454) -> (if (dtb_u_u454 = dtb_u_u453) then ((v_checkUniqueNamesGo dtb_u_u448) dtb_u_u451) else ((Base_dDiagnostics_dPkg.v_pkgNoLoc (Base_dDiagnostics_dPkg.C_PkgErr_DuplicatePackageName (dtb_u_u452, dtb_u_u454, dtb_u_u453))) (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u452, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u454, (B_dData_dVec.C_Vec__x58__x58_ (dtb_u_u453, B_dData_dVec.C_Vec_Nil))))))))
+let rec v_checkUniqueNamesGo = (fun (mc0 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) (mc1 : (string, string) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__101, dtb__102) -> (match dtb__101 with
+  | { B_dData_dPair.f_Pair_first = dtb__103; B_dData_dPair.f_Pair_second = dtb__104 } -> (match ((v_lookupPackageDir dtb__103) mc0) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> ((v_checkUniqueNamesGo (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = dtb__103; B_dData_dPair.f_Pair_second = dtb__104 }, mc0))) dtb__102)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__105) -> (if (dtb__105 = dtb__104) then ((v_checkUniqueNamesGo mc0) dtb__102) else ((Base_dDiagnostics_dPkg.v_pkgNoLoc (Base_dDiagnostics_dPkg.C_PkgErr_DuplicatePackageName (dtb__103, dtb__105, dtb__104))) (B_dData_dVec.C_Vec__x58__x58_ (dtb__103, (B_dData_dVec.C_Vec__x58__x58_ (dtb__105, (B_dData_dVec.C_Vec__x58__x58_ (dtb__104, B_dData_dVec.C_Vec_Nil))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -338,15 +338,15 @@ let rec v_checkUniqueNamesGo = (fun (dtb_u_u448 : (string, string) B_dData_dPair
 let v_pkgFuelBound = 1048576
 
 # 439 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceRootOf = (fun (dtb_u_u455 : t_Workspace) -> (dtb_u_u455).f_Workspace_workspaceRoot)
+let v_workspaceRootOf = (fun (workspace : t_Workspace) -> (workspace).f_Workspace_workspaceRoot)
 
 # 442 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceMembersOf = (fun (dtb_u_u456 : t_Workspace) -> (dtb_u_u456).f_Workspace_workspaceMembers)
+let v_workspaceMembersOf = (fun (workspace : t_Workspace) -> (workspace).f_Workspace_workspaceMembers)
 
 # 446 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceAllPackages = (fun (dtb_u_u457 : t_Workspace) -> (match (dtb_u_u457).f_Workspace_workspaceRoot with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (dtb_u_u457).f_Workspace_workspaceMembers
-  | B_dData_dMaybe.C_Maybe_Just (dtb_u_u458) -> (B_dData_dList.C_List__x58__x58_ (dtb_u_u458, (dtb_u_u457).f_Workspace_workspaceMembers))
+let v_workspaceAllPackages = (fun (workspace : t_Workspace) -> (match (workspace).f_Workspace_workspaceRoot with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (workspace).f_Workspace_workspaceMembers
+  | B_dData_dMaybe.C_Maybe_Just (dtb__106) -> (B_dData_dList.C_List__x58__x58_ (dtb__106, (workspace).f_Workspace_workspaceMembers))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -360,7 +360,7 @@ and v_findManifestUpMaybe_u_udirect = (fun (nFs : string) (fuel : int) (dir : st
 and v_findManifestUpMaybeStep_u_udirect = (fun (nFs : string) (fuel : int) (dir : string) (parent : string) _u_ueffTok -> (if (fuel <= 0) then (let dtb_u_u485 = B_dData_dMaybe.C_Maybe_Nothing in dtb_u_u485) else (if (parent = dir) then (let dtb_u_u488 = B_dData_dMaybe.C_Maybe_Nothing in dtb_u_u488) else ((Obj.magic (((v_findManifestUpMaybe nFs) (fuel - 1)) parent)) _u_ueffTok))))
 
 # 590 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_findManifestDirMaybe = (fun (dtb_u_u490 : string) (dtb_u_u493 : string) -> (let dtb_u_u494 = (Base_dSource.v_normalizePath dtb_u_u493) in (((v_findManifestUpMaybe dtb_u_u490) ((2 * (String.length dtb_u_u494)) + 4)) dtb_u_u494)))
+let v_findManifestDirMaybe = (fun (nFs : string) (startDir : string) -> (let start = (Base_dSource.v_normalizePath startDir) in (((v_findManifestUpMaybe nFs) ((2 * (String.length start)) + 4)) start)))
 
 # 590 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_findManifestDirMaybe_u_udirect = (fun (nFs : string) (startDir : string) _u_ueffTok -> (let dtb_u_u494 = (Base_dSource.v_normalizePath startDir) in ((Obj.magic (((v_findManifestUpMaybe nFs) ((2 * (String.length dtb_u_u494)) + 4)) dtb_u_u494)) _u_ueffTok)))
@@ -380,16 +380,16 @@ let v_findManifestDir_u_udirect = (fun (nFs : string) (startDir : string) _u_uef
 ) in dtb_u_u508)))
 
 # 612 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_hasManifest = (fun (dtb_u_u511 : string) (dtb_u_u514 : string) -> ((B_dEffect_dFs.v_fsFileExists dtb_u_u511) (dtb_u_u514 ^ "/vuna.toml")))
+let v_hasManifest = (fun (nFs : string) (dir : string) -> ((B_dEffect_dFs.v_fsFileExists nFs) (dir ^ "/vuna.toml")))
 
 # 612 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_hasManifest_u_udirect = (fun (nFs : string) (dir : string) _u_ueffTok -> ((Obj.magic ((B_dEffect_dFs.v_fsFileExists nFs) (dir ^ "/vuna.toml"))) _u_ueffTok))
 
 # 615 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_baseCandidates = (fun (dtb_u_u515 : string) -> (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath dtb_u_u515) "base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath dtb_u_u515) "../base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath dtb_u_u515) "../../base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath dtb_u_u515) "../../../base"), B_dData_dList.C_List_Nil)))))))))
+let v_baseCandidates = (fun (exeDir : string) -> (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath exeDir) "base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath exeDir) "../base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath exeDir) "../../base"), (B_dData_dList.C_List__x58__x58_ (((Base_dSource.v_joinPath exeDir) "../../../base"), B_dData_dList.C_List_Nil)))))))))
 
 # 624 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_baseNotFound = (fun (dtb_u_u517 : string B_dData_dList.t_List) -> ((Base_dDiagnostics_dPkg.v_pkgNoLoc1 (Base_dDiagnostics_dPkg.C_PkgErr_MissingBase ((v_joinPathsText dtb_u_u517)))) (v_joinPathsText dtb_u_u517)))
+let v_baseNotFound = (fun (tried : string B_dData_dList.t_List) -> ((Base_dDiagnostics_dPkg.v_pkgNoLoc1 (Base_dDiagnostics_dPkg.C_PkgErr_MissingBase ((v_joinPathsText tried)))) (v_joinPathsText tried)))
 
 # 627 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let rec v_firstExistingBase = (fun (dtb_u_u518 : string) (dtb_u_u521 : string B_dData_dList.t_List) (dtb_u_u522 : string B_dData_dList.t_List) -> (match dtb_u_u522 with
@@ -411,67 +411,67 @@ let v_locateBase = (fun (dtb_u_u539 : string) (dtb_u_u540 : string) (dtb_u_u544 
 let v_locateBase_u_udirect = (fun (nFs : string) (nEnv : string) (_u : B_dData_dUnit.t_Unit) _u_ueffTok -> (let dtb_u_u552 = (((B_dEffect_dEnv.v_envGetEnv_u_udirect nEnv) "VUNA_BASE") _u_ueffTok) in (if (dtb_u_u552 = "") then (let dtb_u_u560 = ((B_dEffect_dEnv.v_envExecPath_u_udirect nEnv) _u_ueffTok) in (let dtb_u_u568 = (((v_absolutePath_u_udirect nEnv) dtb_u_u560) _u_ueffTok) in (let dtb_u_u569 = (v_baseCandidates (Frontend_dManifest.v_manifestDir dtb_u_u568)) in ((Obj.magic (((v_firstExistingBase nFs) dtb_u_u569) dtb_u_u569)) _u_ueffTok)))) else (let dtb_u_u577 = (((v_absolutePath_u_udirect nEnv) dtb_u_u552) _u_ueffTok) in (let dtb_u_u585 = (((v_hasManifest_u_udirect nFs) dtb_u_u577) _u_ueffTok) in (if dtb_u_u585 then (let dtb_u_u587 = (Base_dDiag.C_Check_OkC (dtb_u_u577)) in dtb_u_u587) else (let dtb_u_u590 = (v_baseNotFound (B_dData_dList.C_List__x58__x58_ (dtb_u_u577, B_dData_dList.C_List_Nil))) in dtb_u_u590)))))))
 
 # 38 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootDir = (fun (dtb_u_u592 : t_Root) -> (match dtb_u_u592 with
-  | { f_Root_rootDir = dtb_u_u593; f_Root_rootName = dtb_u_u594; f_Root_rootExports = dtb_u_u595; f_Root_rootLayerRules = dtb_u_u596; f_Root_rootImplicitPrelude = dtb_u_u597 } -> dtb_u_u593
+let v_rootDir = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__126; f_Root_rootName = dtb__127; f_Root_rootExports = dtb__128; f_Root_rootLayerRules = dtb__129; f_Root_rootImplicitPrelude = dtb__130 } -> dtb__126
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 39 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootName = (fun (dtb_u_u598 : t_Root) -> (match dtb_u_u598 with
-  | { f_Root_rootDir = dtb_u_u599; f_Root_rootName = dtb_u_u600; f_Root_rootExports = dtb_u_u601; f_Root_rootLayerRules = dtb_u_u602; f_Root_rootImplicitPrelude = dtb_u_u603 } -> dtb_u_u600
+let v_rootName = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__131; f_Root_rootName = dtb__132; f_Root_rootExports = dtb__133; f_Root_rootLayerRules = dtb__134; f_Root_rootImplicitPrelude = dtb__135 } -> dtb__132
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 71 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootPackage = (fun (dtb_u_u604 : t_Root) -> (v_rootName dtb_u_u604))
+let v_rootPackage = (fun (root : t_Root) -> (v_rootName root))
 
 # 40 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootExports = (fun (dtb_u_u605 : t_Root) -> (match dtb_u_u605 with
-  | { f_Root_rootDir = dtb_u_u606; f_Root_rootName = dtb_u_u607; f_Root_rootExports = dtb_u_u608; f_Root_rootLayerRules = dtb_u_u609; f_Root_rootImplicitPrelude = dtb_u_u610 } -> dtb_u_u608
+let v_rootExports = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__136; f_Root_rootName = dtb__137; f_Root_rootExports = dtb__138; f_Root_rootLayerRules = dtb__139; f_Root_rootImplicitPrelude = dtb__140 } -> dtb__138
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 41 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootLayerRules = (fun (dtb_u_u611 : t_Root) -> (match dtb_u_u611 with
-  | { f_Root_rootDir = dtb_u_u612; f_Root_rootName = dtb_u_u613; f_Root_rootExports = dtb_u_u614; f_Root_rootLayerRules = dtb_u_u615; f_Root_rootImplicitPrelude = dtb_u_u616 } -> dtb_u_u615
+let v_rootLayerRules = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__141; f_Root_rootName = dtb__142; f_Root_rootExports = dtb__143; f_Root_rootLayerRules = dtb__144; f_Root_rootImplicitPrelude = dtb__145 } -> dtb__144
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 43 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_rootImplicitPrelude = (fun (dtb_u_u617 : t_Root) -> (match dtb_u_u617 with
-  | { f_Root_rootDir = dtb_u_u618; f_Root_rootName = dtb_u_u619; f_Root_rootExports = dtb_u_u620; f_Root_rootLayerRules = dtb_u_u621; f_Root_rootImplicitPrelude = dtb_u_u622 } -> dtb_u_u622
+let v_rootImplicitPrelude = (fun (p : t_Root) -> (match p with
+  | { f_Root_rootDir = dtb__146; f_Root_rootName = dtb__147; f_Root_rootExports = dtb__148; f_Root_rootLayerRules = dtb__149; f_Root_rootImplicitPrelude = dtb__150 } -> dtb__150
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 47 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageManifest = (fun (dtb_u_u623 : t_Package) -> (match dtb_u_u623 with
-  | { f_Package_packageManifest = dtb_u_u624; f_Package_packageDependencies = dtb_u_u625; f_Package_packageDir = dtb_u_u626 } -> dtb_u_u624
+let v_packageManifest = (fun (p : t_Package) -> (match p with
+  | { f_Package_packageManifest = dtb__151; f_Package_packageDependencies = dtb__152; f_Package_packageDir = dtb__153 } -> dtb__151
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 48 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageDependencies = (fun (dtb_u_u627 : t_Package) -> (match dtb_u_u627 with
-  | { f_Package_packageManifest = dtb_u_u628; f_Package_packageDependencies = dtb_u_u629; f_Package_packageDir = dtb_u_u630 } -> dtb_u_u629
+let v_packageDependencies = (fun (p : t_Package) -> (match p with
+  | { f_Package_packageManifest = dtb__154; f_Package_packageDependencies = dtb__155; f_Package_packageDir = dtb__156 } -> dtb__155
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 49 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageDir = (fun (dtb_u_u631 : t_Package) -> (match dtb_u_u631 with
-  | { f_Package_packageManifest = dtb_u_u632; f_Package_packageDependencies = dtb_u_u633; f_Package_packageDir = dtb_u_u634 } -> dtb_u_u634
+let v_packageDir = (fun (p : t_Package) -> (match p with
+  | { f_Package_packageManifest = dtb__157; f_Package_packageDependencies = dtb__158; f_Package_packageDir = dtb__159 } -> dtb__159
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 357 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_collectPackageIds = (fun (dtb_u_u635 : t_Package) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_packageName dtb_u_u635); B_dData_dPair.f_Pair_second = (v_packageDir dtb_u_u635) }, (v_collectDependencyIds (v_packageDependencies dtb_u_u635)))))
+let rec v_collectPackageIds = (fun (package : t_Package) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = (v_packageName package); B_dData_dPair.f_Pair_second = (v_packageDir package) }, (v_collectDependencyIds (v_packageDependencies package)))))
 # 361 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-and v_collectDependencyIds = (fun (dtb_u_u636 : t_Package B_dData_dList.t_List) -> (match dtb_u_u636 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u637, dtb_u_u638) -> ((B_dData_dList.v_append (v_collectPackageIds dtb_u_u637)) (v_collectDependencyIds dtb_u_u638))
+and v_collectDependencyIds = (fun (mc0 : t_Package B_dData_dList.t_List) -> (match mc0 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__160, dtb__161) -> ((B_dData_dList.v_append (v_collectPackageIds dtb__160)) (v_collectDependencyIds dtb__161))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 382 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_checkUniquePackageNames = (fun (dtb_u_u639 : t_Package B_dData_dList.t_List) -> ((v_checkUniqueNamesGo B_dData_dList.C_List_Nil) (v_collectDependencyIds dtb_u_u639)))
+let v_checkUniquePackageNames = (fun (packages : t_Package B_dData_dList.t_List) -> ((v_checkUniqueNamesGo B_dData_dList.C_List_Nil) (v_collectDependencyIds packages)))
 
 # 397 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_loadPackage = (fun (dtb_u_u640 : string) (dtb_u_u641 : string) (dtb_u_u645 : string) -> ((B_dContainer_dMutRef.v_withMutRef v_emptyPackageMemo) (fun (dtb_u_u646 : (string, t_Package) B_dContainer_dHashMap.t_HashMap B_dContainer_dMutRef.t_MutRef) -> (Obj.repr ((fun (dtb_u_u651 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u654 = ((((((((v_loadPackageWalk_u_udirect dtb_u_u640) dtb_u_u641) dtb_u_u646) v_pkgFuelBound) B_dData_dList.C_List_Nil) B_dData_dMaybe.C_Maybe_Nothing) dtb_u_u645) dtb_u_u651) in (let dtb_u_u656 = (match dtb_u_u654 with
@@ -601,35 +601,35 @@ let v_workspacePackages_u_udirect = (fun (nFs : string) (nEnv : string) (rootBas
 ) in dtb_u_u779)))
 
 # 515 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_dependencyRootOf = (fun (dtb_u_u783 : t_Package) -> { f_Root_rootDir = ((v_packageDir dtb_u_u783) ^ "/lib"); f_Root_rootName = (v_packageName dtb_u_u783); f_Root_rootExports = (v_packageExports dtb_u_u783); f_Root_rootLayerRules = (v_packageLayers dtb_u_u783); f_Root_rootImplicitPrelude = (v_packageImplicitPrelude dtb_u_u783) })
+let v_dependencyRootOf = (fun (package : t_Package) -> { f_Root_rootDir = ((v_packageDir package) ^ "/lib"); f_Root_rootName = (v_packageName package); f_Root_rootExports = (v_packageExports package); f_Root_rootLayerRules = (v_packageLayers package); f_Root_rootImplicitPrelude = (v_packageImplicitPrelude package) })
 
 # 505 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceContext = (fun (dtb_u_u784 : t_Workspace) -> { f_PackageContext_contextDir = (dtb_u_u784).f_Workspace_workspaceDir; f_PackageContext_contextPackage = B_dData_dMaybe.C_Maybe_Nothing; f_PackageContext_contextRoots = ((B_dData_dList.v_map v_dependencyRootOf) (v_workspaceMembersOf dtb_u_u784)); f_PackageContext_contextPackageName = ""; f_PackageContext_contextRelease = false })
+let v_workspaceContext = (fun (workspace : t_Workspace) -> { f_PackageContext_contextDir = (workspace).f_Workspace_workspaceDir; f_PackageContext_contextPackage = B_dData_dMaybe.C_Maybe_Nothing; f_PackageContext_contextRoots = ((B_dData_dList.v_map v_dependencyRootOf) (v_workspaceMembersOf workspace)); f_PackageContext_contextPackageName = ""; f_PackageContext_contextRelease = false })
 
 # 528 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let rec v_dependencyRoots = (fun (dtb_u_u785 : string B_dData_dList.t_List) (dtb_u_u786 : t_Package B_dData_dList.t_List) -> (match dtb_u_u786 with
-  | B_dData_dList.C_List__x58__x58_ (dtb_u_u787, dtb_u_u788) -> (if ((B_dData_dList.v_memName (v_packageName dtb_u_u787)) dtb_u_u785) then ((v_dependencyRoots dtb_u_u785) dtb_u_u788) else (match ((v_dependencyRoots (B_dData_dList.C_List__x58__x58_ ((v_packageName dtb_u_u787), dtb_u_u785))) (v_packageDependencies dtb_u_u787)) with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u789; B_dData_dPair.f_Pair_second = dtb_u_u790 } -> (match ((v_dependencyRoots dtb_u_u789) dtb_u_u788) with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u791; B_dData_dPair.f_Pair_second = dtb_u_u792 } -> { B_dData_dPair.f_Pair_first = dtb_u_u791; B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append dtb_u_u790) (B_dData_dList.C_List__x58__x58_ ((v_dependencyRootOf dtb_u_u787), dtb_u_u792))) }
+let rec v_dependencyRoots = (fun (mc0 : string B_dData_dList.t_List) (mc1 : t_Package B_dData_dList.t_List) -> (match mc1 with
+  | B_dData_dList.C_List__x58__x58_ (dtb__203, dtb__204) -> (if ((B_dData_dList.v_memName (v_packageName dtb__203)) mc0) then ((v_dependencyRoots mc0) dtb__204) else (match ((v_dependencyRoots (B_dData_dList.C_List__x58__x58_ ((v_packageName dtb__203), mc0))) (v_packageDependencies dtb__203)) with
+  | { B_dData_dPair.f_Pair_first = dtb__205; B_dData_dPair.f_Pair_second = dtb__206 } -> (match ((v_dependencyRoots dtb__205) dtb__204) with
+  | { B_dData_dPair.f_Pair_first = dtb__207; B_dData_dPair.f_Pair_second = dtb__208 } -> { B_dData_dPair.f_Pair_first = dtb__207; B_dData_dPair.f_Pair_second = ((B_dData_dList.v_append dtb__206) (B_dData_dList.C_List__x58__x58_ ((v_dependencyRootOf dtb__203), dtb__208))) }
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
-  | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = dtb_u_u785; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }
+  | B_dData_dList.C_List_Nil -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = B_dData_dList.C_List_Nil }
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 541 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageRoots = (fun (dtb_u_u793 : t_Package) -> (let dtb_u_u794 = (v_packageName dtb_u_u793) in (let dtb_u_u795 = { f_Root_rootDir = ((v_packageDir dtb_u_u793) ^ "/lib"); f_Root_rootName = dtb_u_u794; f_Root_rootExports = B_dData_dMaybe.C_Maybe_Nothing; f_Root_rootLayerRules = (v_packageLayers dtb_u_u793); f_Root_rootImplicitPrelude = (v_packageImplicitPrelude dtb_u_u793) } in (match ((v_dependencyRoots (B_dData_dList.C_List__x58__x58_ (dtb_u_u794, B_dData_dList.C_List_Nil))) (dtb_u_u793).f_Package_packageDependencies) with
-  | { B_dData_dPair.f_Pair_first = dtb_u_u796; B_dData_dPair.f_Pair_second = dtb_u_u797 } -> (B_dData_dList.C_List__x58__x58_ (dtb_u_u795, dtb_u_u797))
+let v_packageRoots = (fun (package : t_Package) -> (let selfName = (v_packageName package) in (let selfRoot = { f_Root_rootDir = ((v_packageDir package) ^ "/lib"); f_Root_rootName = selfName; f_Root_rootExports = B_dData_dMaybe.C_Maybe_Nothing; f_Root_rootLayerRules = (v_packageLayers package); f_Root_rootImplicitPrelude = (v_packageImplicitPrelude package) } in (match ((v_dependencyRoots (B_dData_dList.C_List__x58__x58_ (selfName, B_dData_dList.C_List_Nil))) (package).f_Package_packageDependencies) with
+  | { B_dData_dPair.f_Pair_first = dtb__209; B_dData_dPair.f_Pair_second = dtb__210 } -> (B_dData_dList.C_List__x58__x58_ (selfRoot, dtb__210))
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 556 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageEntry = (fun (dtb_u_u798 : t_Package) -> ((v_packageDir dtb_u_u798) ^ "/app/Main.vuna"))
+let v_packageEntry = (fun (package : t_Package) -> ((v_packageDir package) ^ "/app/Main.vuna"))
 
 # 560 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_packageContext = (fun (dtb_u_u799 : t_Package) -> { f_PackageContext_contextDir = (v_packageDir dtb_u_u799); f_PackageContext_contextPackage = (B_dData_dMaybe.C_Maybe_Just (dtb_u_u799)); f_PackageContext_contextRoots = (v_packageRoots dtb_u_u799); f_PackageContext_contextPackageName = (v_packageName dtb_u_u799); f_PackageContext_contextRelease = false })
+let v_packageContext = (fun (package : t_Package) -> { f_PackageContext_contextDir = (v_packageDir package); f_PackageContext_contextPackage = (B_dData_dMaybe.C_Maybe_Just (package)); f_PackageContext_contextRoots = (v_packageRoots package); f_PackageContext_contextPackageName = (v_packageName package); f_PackageContext_contextRelease = false })
 
 # 657 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
 let v_baseOnlyContext = (fun (dtb_u_u800 : string) (dtb_u_u801 : string) (dtb_u_u805 : string) -> (Obj.repr ((fun (dtb_u_u810 : B_dEffect_dCore.t_EffUnit) -> (let dtb_u_u813 = ((((v_loadPackage_u_udirect dtb_u_u800) dtb_u_u801) dtb_u_u805) dtb_u_u810) in (let dtb_u_u815 = (match dtb_u_u813 with
@@ -712,49 +712,49 @@ let v_contextForDir = (fun (dtb_u_u901 : string) (dtb_u_u902 : string) (dtb_u_u9
 let v_contextForDir_u_udirect = (fun (nFs : string) (nEnv : string) (dir : string) _u_ueffTok -> (let dtb_u_u914 = (((v_absolutePath_u_udirect nEnv) dir) _u_ueffTok) in ((Obj.magic (((v_contextAt nFs) nEnv) dtb_u_u914)) _u_ueffTok)))
 
 # 60 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextDir = (fun (dtb_u_u915 : t_PackageContext) -> (match dtb_u_u915 with
-  | { f_PackageContext_contextDir = dtb_u_u916; f_PackageContext_contextPackage = dtb_u_u917; f_PackageContext_contextRoots = dtb_u_u918; f_PackageContext_contextPackageName = dtb_u_u919; f_PackageContext_contextRelease = dtb_u_u920 } -> dtb_u_u916
+let v_contextDir = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__239; f_PackageContext_contextPackage = dtb__240; f_PackageContext_contextRoots = dtb__241; f_PackageContext_contextPackageName = dtb__242; f_PackageContext_contextRelease = dtb__243 } -> dtb__239
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 61 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextPackage = (fun (dtb_u_u921 : t_PackageContext) -> (match dtb_u_u921 with
-  | { f_PackageContext_contextDir = dtb_u_u922; f_PackageContext_contextPackage = dtb_u_u923; f_PackageContext_contextRoots = dtb_u_u924; f_PackageContext_contextPackageName = dtb_u_u925; f_PackageContext_contextRelease = dtb_u_u926 } -> dtb_u_u923
+let v_contextPackage = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__244; f_PackageContext_contextPackage = dtb__245; f_PackageContext_contextRoots = dtb__246; f_PackageContext_contextPackageName = dtb__247; f_PackageContext_contextRelease = dtb__248 } -> dtb__245
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 62 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextRoots = (fun (dtb_u_u927 : t_PackageContext) -> (match dtb_u_u927 with
-  | { f_PackageContext_contextDir = dtb_u_u928; f_PackageContext_contextPackage = dtb_u_u929; f_PackageContext_contextRoots = dtb_u_u930; f_PackageContext_contextPackageName = dtb_u_u931; f_PackageContext_contextRelease = dtb_u_u932 } -> dtb_u_u930
+let v_contextRoots = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__249; f_PackageContext_contextPackage = dtb__250; f_PackageContext_contextRoots = dtb__251; f_PackageContext_contextPackageName = dtb__252; f_PackageContext_contextRelease = dtb__253 } -> dtb__251
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 63 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextPackageName = (fun (dtb_u_u933 : t_PackageContext) -> (match dtb_u_u933 with
-  | { f_PackageContext_contextDir = dtb_u_u934; f_PackageContext_contextPackage = dtb_u_u935; f_PackageContext_contextRoots = dtb_u_u936; f_PackageContext_contextPackageName = dtb_u_u937; f_PackageContext_contextRelease = dtb_u_u938 } -> dtb_u_u937
+let v_contextPackageName = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__254; f_PackageContext_contextPackage = dtb__255; f_PackageContext_contextRoots = dtb__256; f_PackageContext_contextPackageName = dtb__257; f_PackageContext_contextRelease = dtb__258 } -> dtb__257
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 64 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_contextRelease = (fun (dtb_u_u939 : t_PackageContext) -> (match dtb_u_u939 with
-  | { f_PackageContext_contextDir = dtb_u_u940; f_PackageContext_contextPackage = dtb_u_u941; f_PackageContext_contextRoots = dtb_u_u942; f_PackageContext_contextPackageName = dtb_u_u943; f_PackageContext_contextRelease = dtb_u_u944 } -> dtb_u_u944
+let v_contextRelease = (fun (p : t_PackageContext) -> (match p with
+  | { f_PackageContext_contextDir = dtb__259; f_PackageContext_contextPackage = dtb__260; f_PackageContext_contextRoots = dtb__261; f_PackageContext_contextPackageName = dtb__262; f_PackageContext_contextRelease = dtb__263 } -> dtb__263
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 434 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceDir = (fun (dtb_u_u945 : t_Workspace) -> (match dtb_u_u945 with
-  | { f_Workspace_workspaceDir = dtb_u_u946; f_Workspace_workspaceRoot = dtb_u_u947; f_Workspace_workspaceMembers = dtb_u_u948 } -> dtb_u_u946
+let v_workspaceDir = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__264; f_Workspace_workspaceRoot = dtb__265; f_Workspace_workspaceMembers = dtb__266 } -> dtb__264
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 435 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceRoot = (fun (dtb_u_u949 : t_Workspace) -> (match dtb_u_u949 with
-  | { f_Workspace_workspaceDir = dtb_u_u950; f_Workspace_workspaceRoot = dtb_u_u951; f_Workspace_workspaceMembers = dtb_u_u952 } -> dtb_u_u951
+let v_workspaceRoot = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__267; f_Workspace_workspaceRoot = dtb__268; f_Workspace_workspaceMembers = dtb__269 } -> dtb__268
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 436 "Vuna/Compiler/Frontend/Packages/Pkg.vuna"
-let v_workspaceMembers = (fun (dtb_u_u953 : t_Workspace) -> (match dtb_u_u953 with
-  | { f_Workspace_workspaceDir = dtb_u_u954; f_Workspace_workspaceRoot = dtb_u_u955; f_Workspace_workspaceMembers = dtb_u_u956 } -> dtb_u_u956
+let v_workspaceMembers = (fun (p : t_Workspace) -> (match p with
+  | { f_Workspace_workspaceDir = dtb__270; f_Workspace_workspaceRoot = dtb__271; f_Workspace_workspaceMembers = dtb__272 } -> dtb__272
   | _ -> failwith "DT: impossible branch"
 ))
