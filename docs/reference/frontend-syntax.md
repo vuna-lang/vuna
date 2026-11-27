@@ -81,7 +81,7 @@
 | `let` | `let` + 绑定块 + `in body` | 顺序 let：`TApp (TLam x body) value` | `Elab.Term.Impl`、[language.md](language.md) |
 | `where` | `f x = e where` + 绑定块 | 函数体后的绑定块（每个绑定必须写签名） | `Frontend.Parser`、`Elab.Term.Support`、[language.md](language.md) |
 | lambda | `\x, y => e` | `ELam`；参数只能是名字（逗号分隔，无 `->` 形式、无参数模式） | `Frontend.Parser` |
-| `do` | `let pat = e` / `pat <- e` / 裸表达式 | do 链（`@vuna@do@bind@*` 标记）；**最后一条必须是裸表达式**；`let` 是纯绑定（对后续语句可见）；`pat <- e` 接受任意不可反驳模式，可反驳模式按普通 `case` 报穷尽性错误 | `Frontend.Parser`、`Loader.Resolve`、[records-traits.md](records-traits.md) |
+| `do` | `let pat = e` / `pat <- e` / 裸表达式 | do 链（`@vuna@do@bind@*` 标记）；**最后一条必须是裸表达式**；`let` 是纯绑定（对后续语句可见）；`pat <- e` 接受任意不可反驳模式，可反驳模式按普通 `case` 报穷尽性错误；语句是绑定还是表达式按语句内深度 0 的 `<-` 判定（写坏的模式不会被当成表达式重解） | `Frontend.Parser`、`Loader.Resolve`、[records-traits.md](records-traits.md) |
 | `perform` | `perform (Print s)` | `Base.Effect.Core.performCore` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | `handle` | `handle c { return x -> e`，随后每个 `C p k -> e` 一行，`}` 收尾 | `handleWith` / `handleWithAt` | `Elab.Term.Impl`、[native-effects.md](native-effects.md) |
 | 记录构造 | `Point { y = 2, x = 1 }` | 合成位置构造子应用；字段必须写全、必须写 `=` | `Elab.Records`、[records-traits.md](records-traits.md) |
