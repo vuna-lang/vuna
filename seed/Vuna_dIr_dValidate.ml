@@ -302,24 +302,24 @@ let rec v_validateTyDeclsGo = (fun (mc0 : Vuna_dIr_dModel.t_IrTyDecl B_dData_dLi
 # 335 "Vuna/Ir/Validate.vuna"
 let v_validateTyDecls = (fun (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t_List) -> ((v_validateTyDeclsGo decls) decls))
 
-# 390 "Vuna/Ir/Validate.vuna"
+# 398 "Vuna/Ir/Validate.vuna"
 let v_scopedFuelOf = (fun (body : Vuna_dIr_dModel.t_Ir) -> ((8 * (Vuna_dIr_dModel.v_irSize body)) + 64))
 
-# 435 "Vuna/Ir/Validate.vuna"
+# 443 "Vuna/Ir/Validate.vuna"
 let v_maybeAlts = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__126) -> (B_dData_dList.C_List__x58__x58_ (dtb__126, B_dData_dList.C_List_Nil))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 439 "Vuna/Ir/Validate.vuna"
+# 447 "Vuna/Ir/Validate.vuna"
 let[@tail_mod_cons] rec v_altWork = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (Vuna_dIr_dModel.v_irAltBindersOf dtb__127)) mc0); B_dData_dPair.f_Pair_second = (Vuna_dIr_dModel.v_irAltBodyOf dtb__127) }, ((v_altWork mc0) dtb__128)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 406 "Vuna/Ir/Validate.vuna"
+# 414 "Vuna/Ir/Validate.vuna"
 let v_scopedChildren = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_Ir) -> (match mc1 with
   | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__129, dtb__130, dtb__131) -> B_dData_dList.C_List_Nil
   | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__132) -> B_dData_dList.C_List_Nil
@@ -347,17 +347,17 @@ let v_scopedChildren = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_Li
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 448 "Vuna/Ir/Validate.vuna"
+# 456 "Vuna/Ir/Validate.vuna"
 let v_sameBinder = Vuna_dIr_dModel.v_sameBinderId
 
-# 444 "Vuna/Ir/Validate.vuna"
+# 452 "Vuna/Ir/Validate.vuna"
 let rec v_memBinder = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__187, dtb__188) -> (if ((v_sameBinder mc0) dtb__187) then true else ((v_memBinder mc0) dtb__188))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 393 "Vuna/Ir/Validate.vuna"
+# 401 "Vuna/Ir/Validate.vuna"
 let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-scope") else (let nd_uscrut2 = work in (match nd_uscrut2 with
   | B_dData_dList.C_List__x58__x58_ (dtb__189, dtb__190) -> (match dtb__189 with
   | { B_dData_dPair.f_Pair_first = dtb__191; B_dData_dPair.f_Pair_second = dtb__192 } -> (match dtb__192 with
@@ -370,7 +370,7 @@ let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinde
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 380 "Vuna/Ir/Validate.vuna"
+# 388 "Vuna/Ir/Validate.vuna"
 let rec v_checkScopedDefs = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc0 with
   | B_dData_dList.C_List__x58__x58_ (dtb__194, dtb__195) -> (match (Vuna_dIr_dModel.v_irDefBody dtb__194) with
   | B_dData_dMaybe.C_Maybe_Nothing -> (v_checkScopedDefs dtb__195)
@@ -393,3 +393,6 @@ let v_validateProgram = (fun (p : Vuna_dIr_dModel.t_IrProgram) -> (let u = (p).V
   | B_dData_dMaybe.C_Maybe_Just (dtb__197) -> (if ((B_dData_dList.v_memName (dtb__197).Vuna_dIr_dModel.f_IrEntry_irEntryMain) ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) then ((v_validateUnit shared) u) else (Base_dDiag.v_icInternal (String.concat "" ["IR entry references an undefined main: `"; (dtb__197).Vuna_dIr_dModel.f_IrEntry_irEntryMain; "`"])))
   | _ -> failwith "DT: impossible branch"
 )))))
+
+# 382 "Vuna/Ir/Validate.vuna"
+let v_validateScopedDefs = (fun (defs : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> ((Base_dCommon.v_bind (Vuna_dIr_dAnalysis.v_checkUniqueDefNames defs)) (fun (_u : int) -> (v_checkScopedDefs defs))))
