@@ -93,6 +93,10 @@
   （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取与
   `git pull --ff-only`；收尾改为 push 分支 → 开 PR → 合并 → teardown，**不再 cherry-pick 回主仓**
   （[workflow.md](.agents/rules/workflow.md)）。
+- **大任务拆 phase 用 stacked PR**：2 个 dev 槽、每 stack ≤3 层、全局 ≤4 个 open layer、队列
+  ≤3 entry；线性 stack 同一时刻只有 1 个写者；远端写只由 orchestrator 做。phase N 在上一 phase
+  **代码冻结**后开工，不等 merged（技能 `vuna-phase`、
+  [github-workflow.md](docs/reference/github-workflow.md)「Stacked PR 与合并队列」）。
 - **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换（先用
   `nix build .#vuna --out-link result` 固定二进制），且独立成
   `chore(seed): ...` 提交；含 seed 的 PR 加 `seed` 标签并优先合并
@@ -145,7 +149,11 @@ gh issue list --search 'status:todo'       # 可开工 issue；流程见技能 v
 gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
 gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
 nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA
-gh pr merge <n> --rebase                  # 仅 break-glass；默认 auto-merge 入队
+gh stack view --short                     # stack 层 / PR / 顺序（需 gh extension install github/gh-stack）
+gh stack sync                             # 级联合并后的 stack（不要手写 rebase --onto）
+nix/tools/merge-queue.sh arm <top>        # stack 只对 top arm / enqueue；不逐层操作
+nix/tools/merge-queue.sh enqueue <top>
+gh pr merge <n> --rebase                  # 仅 break-glass；不适用于 stack
 git pull --ff-only                        # 主仓同步
 nix/tools/github-branch-protection.sh     # 应用 main 的 ruleset（幂等；见技能 vuna-pr）
 nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / api
