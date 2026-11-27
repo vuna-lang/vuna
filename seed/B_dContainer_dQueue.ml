@@ -2,107 +2,107 @@ open Vuna_runtime
 type 'a0 t_Queue = { f_Queue_queueFront : 'a0 B_dData_dList.t_List; f_Queue_queueBack : 'a0 B_dData_dList.t_List; f_Queue_queueCount : int }
 
 # 28 "Base/Container/Queue.vuna"
-let rec v_revOnto = (fun mc0 mc1 -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__0, dtb__1) -> ((v_revOnto dtb__1) (B_dData_dList.C_List__x58__x58_ (dtb__0, mc1)))
-  | B_dData_dList.C_List_Nil -> mc1
+let rec v_revOnto = (fun dtb_u_u2 dtb_u_u3 -> (match dtb_u_u2 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u4, dtb_u_u5) -> ((v_revOnto dtb_u_u5) (B_dData_dList.C_List__x58__x58_ (dtb_u_u4, dtb_u_u3)))
+  | B_dData_dList.C_List_Nil -> dtb_u_u3
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 33 "Base/Container/Queue.vuna"
-let v_appendLists = (fun xs ys -> ((v_revOnto ((v_revOnto xs) B_dData_dList.C_List_Nil)) ys))
+let v_appendLists = (fun dtb_u_u7 dtb_u_u8 -> ((v_revOnto ((v_revOnto dtb_u_u7) B_dData_dList.C_List_Nil)) dtb_u_u8))
 
 # 41 "Base/Container/Queue.vuna"
-let rec v_lenIntGo = (fun (mc0 : int) mc1 -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__2, dtb__3) -> ((v_lenIntGo (mc0 + 1)) dtb__3)
-  | B_dData_dList.C_List_Nil -> mc0
+let rec v_lenIntGo = (fun (dtb_u_u10 : int) dtb_u_u11 -> (match dtb_u_u11 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u12, dtb_u_u13) -> ((v_lenIntGo (dtb_u_u10 + 1)) dtb_u_u13)
+  | B_dData_dList.C_List_Nil -> dtb_u_u10
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 37 "Base/Container/Queue.vuna"
-let v_lenInt = (fun xs -> ((v_lenIntGo 0) xs))
+let v_lenInt = (fun dtb_u_u15 -> ((v_lenIntGo 0) dtb_u_u15))
 
 # 46 "Base/Container/Queue.vuna"
 let v_empty = { f_Queue_queueFront = B_dData_dList.C_List_Nil; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = 0 }
 
 # 50 "Base/Container/Queue.vuna"
-let v_push = (fun mc0 mc1 -> (match mc1 with
-  | { f_Queue_queueFront = dtb__4; f_Queue_queueBack = dtb__5; f_Queue_queueCount = dtb__6 } -> { f_Queue_queueFront = dtb__4; f_Queue_queueBack = (B_dData_dList.C_List__x58__x58_ (mc0, dtb__5)); f_Queue_queueCount = (dtb__6 + 1) }
+let v_push = (fun dtb_u_u18 dtb_u_u19 -> (match dtb_u_u19 with
+  | { f_Queue_queueFront = dtb_u_u20; f_Queue_queueBack = dtb_u_u21; f_Queue_queueCount = dtb_u_u22 } -> { f_Queue_queueFront = dtb_u_u20; f_Queue_queueBack = (B_dData_dList.C_List__x58__x58_ (dtb_u_u18, dtb_u_u21)); f_Queue_queueCount = (dtb_u_u22 + 1) }
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 54 "Base/Container/Queue.vuna"
-let rec v_pushAll = (fun mc0 mc1 -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__7, dtb__8) -> ((v_pushAll dtb__8) ((v_push dtb__7) mc1))
-  | B_dData_dList.C_List_Nil -> mc1
+let rec v_pushAll = (fun dtb_u_u24 dtb_u_u25 -> (match dtb_u_u24 with
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u26, dtb_u_u27) -> ((v_pushAll dtb_u_u27) ((v_push dtb_u_u26) dtb_u_u25))
+  | B_dData_dList.C_List_Nil -> dtb_u_u25
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 59 "Base/Container/Queue.vuna"
-let v_pop = (fun mc0 -> (match mc0 with
-  | { f_Queue_queueFront = dtb__9; f_Queue_queueBack = dtb__10; f_Queue_queueCount = dtb__11 } -> (match dtb__9 with
-  | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb__10) with
+let v_pop = (fun dtb_u_u29 -> (match dtb_u_u29 with
+  | { f_Queue_queueFront = dtb_u_u30; f_Queue_queueBack = dtb_u_u31; f_Queue_queueCount = dtb_u_u32 } -> (match dtb_u_u30 with
+  | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb_u_u31) with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__12, dtb__13) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__12; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__13; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (dtb__11 - 1) } }))
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u33, dtb_u_u34) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb_u_u33; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb_u_u34; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (dtb_u_u32 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dList.C_List__x58__x58_ (dtb__14, dtb__15) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb__14; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb__15; f_Queue_queueBack = dtb__10; f_Queue_queueCount = (dtb__11 - 1) } }))
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u35, dtb_u_u36) -> (B_dData_dMaybe.C_Maybe_Just ({ B_dData_dPair.f_Pair_first = dtb_u_u35; B_dData_dPair.f_Pair_second = { f_Queue_queueFront = dtb_u_u36; f_Queue_queueBack = dtb_u_u31; f_Queue_queueCount = (dtb_u_u32 - 1) } }))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 67 "Base/Container/Queue.vuna"
-let v_peek = (fun mc0 -> (match mc0 with
-  | { f_Queue_queueFront = dtb__16; f_Queue_queueBack = dtb__17; f_Queue_queueCount = dtb__18 } -> (match dtb__16 with
-  | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb__17) with
+let v_peek = (fun dtb_u_u38 -> (match dtb_u_u38 with
+  | { f_Queue_queueFront = dtb_u_u39; f_Queue_queueBack = dtb_u_u40; f_Queue_queueCount = dtb_u_u41 } -> (match dtb_u_u39 with
+  | B_dData_dList.C_List_Nil -> (match (B_dData_dList.v_reverse dtb_u_u40) with
   | B_dData_dList.C_List_Nil -> B_dData_dMaybe.C_Maybe_Nothing
-  | B_dData_dList.C_List__x58__x58_ (dtb__19, dtb__20) -> (B_dData_dMaybe.C_Maybe_Just (dtb__19))
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u42, dtb_u_u43) -> (B_dData_dMaybe.C_Maybe_Just (dtb_u_u42))
   | _ -> failwith "DT: impossible branch"
 )
-  | B_dData_dList.C_List__x58__x58_ (dtb__21, dtb__22) -> (B_dData_dMaybe.C_Maybe_Just (dtb__21))
+  | B_dData_dList.C_List__x58__x58_ (dtb_u_u44, dtb_u_u45) -> (B_dData_dMaybe.C_Maybe_Just (dtb_u_u44))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 75 "Base/Container/Queue.vuna"
-let v_isEmpty = (fun mc0 -> (match mc0 with
-  | { f_Queue_queueFront = dtb__23; f_Queue_queueBack = dtb__24; f_Queue_queueCount = dtb__25 } -> (dtb__25 = 0)
+let v_isEmpty = (fun dtb_u_u47 -> (match dtb_u_u47 with
+  | { f_Queue_queueFront = dtb_u_u48; f_Queue_queueBack = dtb_u_u49; f_Queue_queueCount = dtb_u_u50 } -> (dtb_u_u50 = 0)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 79 "Base/Container/Queue.vuna"
-let v_size = (fun mc0 -> (match mc0 with
-  | { f_Queue_queueFront = dtb__26; f_Queue_queueBack = dtb__27; f_Queue_queueCount = dtb__28 } -> (bi_natFromInt dtb__28)
+let v_size = (fun dtb_u_u52 -> (match dtb_u_u52 with
+  | { f_Queue_queueFront = dtb_u_u53; f_Queue_queueBack = dtb_u_u54; f_Queue_queueCount = dtb_u_u55 } -> (bi_natFromInt dtb_u_u55)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 83 "Base/Container/Queue.vuna"
-let v_fromList = (fun xs -> { f_Queue_queueFront = xs; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (v_lenInt xs) })
+let v_fromList = (fun dtb_u_u57 -> { f_Queue_queueFront = dtb_u_u57; f_Queue_queueBack = B_dData_dList.C_List_Nil; f_Queue_queueCount = (v_lenInt dtb_u_u57) })
 
 # 87 "Base/Container/Queue.vuna"
-let v_toList = (fun mc0 -> (match mc0 with
-  | { f_Queue_queueFront = dtb__29; f_Queue_queueBack = dtb__30; f_Queue_queueCount = dtb__31 } -> ((v_appendLists dtb__29) (B_dData_dList.v_reverse dtb__30))
+let v_toList = (fun dtb_u_u59 -> (match dtb_u_u59 with
+  | { f_Queue_queueFront = dtb_u_u60; f_Queue_queueBack = dtb_u_u61; f_Queue_queueCount = dtb_u_u62 } -> ((v_appendLists dtb_u_u60) (B_dData_dList.v_reverse dtb_u_u61))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 90 "Base/Container/Queue.vuna"
-let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_Queue_x36_46_x36_Queue_ua = (fun _uctx0 -> (B_dTrait_dShow.C_Show_Show ((fun q -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua _uctx0)) (v_toList q)))))))
+let v_Show_u0077d73cf424e521_uBase_x36_46_x36_Container_x36_46_x36_Queue_x36_46_x36_Queue_ua = (fun dtb_u_u64 -> (B_dTrait_dShow.C_Show_Show ((fun dtb_u_u65 -> ("fromList " ^ ((B_dTrait_dShow.v_show (B_dData_dList.v_Show_u0077d73cf424e521_uBase_x36_46_x36_Data_x36_46_x36_List_x36_46_x36_List_ua dtb_u_u64)) (v_toList dtb_u_u65)))))))
 
 # 20 "Base/Container/Queue.vuna"
-let v_queueFront = (fun p -> (match p with
-  | { f_Queue_queueFront = dtb__32; f_Queue_queueBack = dtb__33; f_Queue_queueCount = dtb__34 } -> dtb__32
+let v_queueFront = (fun dtb_u_u67 -> (match dtb_u_u67 with
+  | { f_Queue_queueFront = dtb_u_u68; f_Queue_queueBack = dtb_u_u69; f_Queue_queueCount = dtb_u_u70 } -> dtb_u_u68
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 22 "Base/Container/Queue.vuna"
-let v_queueBack = (fun p -> (match p with
-  | { f_Queue_queueFront = dtb__35; f_Queue_queueBack = dtb__36; f_Queue_queueCount = dtb__37 } -> dtb__36
+let v_queueBack = (fun dtb_u_u72 -> (match dtb_u_u72 with
+  | { f_Queue_queueFront = dtb_u_u73; f_Queue_queueBack = dtb_u_u74; f_Queue_queueCount = dtb_u_u75 } -> dtb_u_u74
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 24 "Base/Container/Queue.vuna"
-let v_queueCount = (fun p -> (match p with
-  | { f_Queue_queueFront = dtb__38; f_Queue_queueBack = dtb__39; f_Queue_queueCount = dtb__40 } -> dtb__40
+let v_queueCount = (fun dtb_u_u77 -> (match dtb_u_u77 with
+  | { f_Queue_queueFront = dtb_u_u78; f_Queue_queueBack = dtb_u_u79; f_Queue_queueCount = dtb_u_u80 } -> dtb_u_u80
   | _ -> failwith "DT: impossible branch"
 ))
