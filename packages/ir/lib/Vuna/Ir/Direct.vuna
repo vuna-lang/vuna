@@ -1,0 +1,464 @@
+module Vuna.Ir.Direct where
+
+-- Vuna.Ir.Direct：OCaml 目标的 Eff 直接风格化（OCaml-only 的 IR→IR pass）。
+--
+-- `Eff` 在目标层是 thunk（`unit -> a`）。Lowering 的字典展开把 `>>=` 变成
+-- `\e k -> MkEff (\u -> case e of MkEff a => case (k (a u)) of MkEff b => b u)`；
+-- 一次 bind 链因此每段一个 thunk。本 pass 只识别这个 bind 形状，把「运行一个动作」的
+-- 语义下沉成一个 token 传递：
+--
+--   run (MkEff (\u -> body)) t = body[u := t]
+--   run (let x = e in a)     t = let x = e in run a t
+--   run (case … )            t = 同结构，各分支 run
+--   run (k (a t))            t = 继续对 k 的结果做同样的事
+--
+-- 于是一条 do 链合成一个 `MkEff (\u -> let … in …)`，不再每段分配 thunk。
+-- 只动 bind 形状，不做通用 β/内联；不改变惰性边界（所有合并都发生在同一个外层
+-- thunk 内）。binder 名在 def 末尾统一按 id 唯一化，避免融合后同名遮蔽。
+--
+-- 边界：只 import `Ir.Model`，不 import 任何 target。
+import Vuna.Ir.Model
+
+-- ---------------------------------------------------------------
+-- 基础：使用计数 / 替换 / binder 名
+-- ---------------------------------------------------------------
+usesOf : IrBinder -> Ir -> Int
+usesOf b ir = usesFuel (64 + 4 * irSize ir) b ir
+
+usesFuel : Int -> IrBinder -> Ir -> Int
+usesFuel fuel b ir =
+  if fuel <= 0 then
+    0
+  else
+    case ir of
+      IrVar x => if sameBinderId b x then 1 else 0
+      IrCtor _ _ _ xs => usesList (fuel - 1) b xs
+      IrRecord _ _ fs => usesFields (fuel - 1) b fs
+      IrProj base _ _ _ => usesFuel (fuel - 1) b base
+      IrRecUpd base _ fs _ => usesFuel (fuel - 1) b base + usesFields (fuel - 1) b fs
+      IrRtApp _ xs => usesList (fuel - 1) b xs
+      IrCast _ _ x => usesFuel (fuel - 1) b x
+      IrLet _ rhs body => usesFuel (fuel - 1) b rhs + usesFuel (fuel - 1) b body
+      IrLam _ _ body => usesFuel (fuel - 1) b body
+      IrApp _ f a => usesFuel (fuel - 1) b f + usesFuel (fuel - 1) b a
+      IrTail inner => usesFuel (fuel - 1) b inner
+      IrIf c t e => usesFuel (fuel - 1) b c + usesFuel (fuel - 1) b t + usesFuel (fuel - 1) b e
+      IrCase _ _ sc alts => usesFuel (fuel - 1) b sc + usesAlts (fuel - 1) b alts
+      IrNatCase sc _ z su ca => usesFuel (fuel - 1) b sc + usesAltM (fuel - 1) b z + usesAltM (fuel - 1) b su + usesAltM (fuel - 1) b ca
+      IrConcatMany xs => usesList (fuel - 1) b xs
+      IrEffThunk _ _ _ _ prim => usesFuel (fuel - 1) b prim
+      _ => 0
+
+usesList : Int -> IrBinder -> List Ir -> Int
+usesList fuel b xs =
+  if fuel <= 0 then
+    0
+  else
+    case xs of
+      [] => 0
+      x :: rest => usesFuel (fuel - 1) b x + usesList (fuel - 1) b rest
+
+usesFields : Int -> IrBinder -> List (String, Ir) -> Int
+usesFields fuel b fs =
+  if fuel <= 0 then
+    0
+  else
+    case fs of
+      [] => 0
+      p :: rest => usesFuel (fuel - 1) b (secondOf p) + usesFields (fuel - 1) b rest
+
+usesAlts : Int -> IrBinder -> List IrAlt -> Int
+usesAlts fuel b alts =
+  if fuel <= 0 then
+    0
+  else
+    case alts of
+      [] => 0
+      a :: rest => usesFuel (fuel - 1) b (irAltBodyOf a) + usesAlts (fuel - 1) b rest
+
+usesAltM : Int -> IrBinder -> Maybe IrAlt -> Int
+usesAltM fuel b m =
+  if fuel <= 0 then
+    0
+  else
+    case m of
+      Nothing => 0
+      Just a => usesFuel (fuel - 1) b (irAltBodyOf a)
+
+substIr : IrBinder -> Ir -> Ir -> Ir
+substIr b arg ir = substFuel (64 + 4 * irSize ir) b arg ir
+
+substFuel : Int -> IrBinder -> Ir -> Ir -> Ir
+substFuel fuel b arg ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrVar x => if sameBinderId b x then arg else ir
+      IrCtor fam ctor tys xs => IrCtor fam ctor tys (substList (fuel - 1) b arg xs)
+      IrRecord fam ty fs => IrRecord fam ty (substFields (fuel - 1) b arg fs)
+      IrProj base fam x ty => IrProj (substFuel (fuel - 1) b arg base) fam x ty
+      IrRecUpd base fam fs ty => IrRecUpd (substFuel (fuel - 1) b arg base) fam (substFields (fuel - 1) b arg fs) ty
+      IrRtApp sym xs => IrRtApp sym (substList (fuel - 1) b arg xs)
+      IrCast from to x => IrCast from to (substFuel (fuel - 1) b arg x)
+      IrLet bs rhs body => IrLet bs (substFuel (fuel - 1) b arg rhs) (substFuel (fuel - 1) b arg body)
+      IrLam bs rt body => IrLam bs rt (substFuel (fuel - 1) b arg body)
+      IrApp ty f a => IrApp ty (substFuel (fuel - 1) b arg f) (substFuel (fuel - 1) b arg a)
+      IrTail inner => IrTail (substFuel (fuel - 1) b arg inner)
+      IrIf c t e => IrIf (substFuel (fuel - 1) b arg c) (substFuel (fuel - 1) b arg t) (substFuel (fuel - 1) b arg e)
+      IrCase ct rt sc alts => IrCase ct rt (substFuel (fuel - 1) b arg sc) (substAlts (fuel - 1) b arg alts)
+      IrNatCase sc fr z su ca => IrNatCase (substFuel (fuel - 1) b arg sc) fr (substAltM (fuel - 1) b arg z) (substAltM (fuel - 1) b arg su) (substAltM (fuel - 1) b arg ca)
+      IrConcatMany xs => IrConcatMany (substList (fuel - 1) b arg xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (substFuel (fuel - 1) b arg prim)
+      _ => ir
+
+substList : Int -> IrBinder -> Ir -> List Ir -> List Ir
+substList fuel b arg xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => substFuel (fuel - 1) b arg x :: substList (fuel - 1) b arg rest
+
+substFields : Int -> IrBinder -> Ir -> List (String, Ir) -> List (String, Ir)
+substFields fuel b arg fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => (firstOf p, substFuel (fuel - 1) b arg (secondOf p)) :: substFields (fuel - 1) b arg rest
+
+substAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
+substAlts fuel b arg alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (substFuel (fuel - 1) b arg a.irAltBody) :: substAlts (fuel - 1) b arg rest
+
+substAltM : Int -> IrBinder -> Ir -> Maybe IrAlt -> Maybe IrAlt
+substAltM fuel b arg m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (substFuel (fuel - 1) b arg a.irAltBody))
+
+binderSafeName : IrBinder -> String
+binderSafeName b =
+  if b.irBinderId < 0 then
+    "dtb__n" ++ strFromInt (0 - b.irBinderId)
+  else
+    "dtb__" ++ strFromInt b.irBinderId
+
+safeBinder : IrBinder -> IrBinder
+safeBinder b = IrBinder b.irBinderId (IrBUser (binderSafeName b)) b.irBinderErased b.irBinderTy
+
+sameIr : IrBinder -> Ir -> Bool
+sameIr b (IrVar x) = sameBinderId b x
+sameIr b _ = False
+
+isEffThunk : String -> String -> Bool
+isEffThunk fam ctor = fam == irEffTypeName && ctor == irEffMkCtor
+
+effFieldOf : Ir -> Maybe Ir
+effFieldOf (IrCtor fam ctor _ [x]) = if isEffThunk fam ctor then Just x else Nothing
+effFieldOf _ = Nothing
+
+-- ---------------------------------------------------------------
+-- bind 识别与 token 下沉
+-- ---------------------------------------------------------------
+
+-- | `(MkEff (\\u -> body)) t` 打开；`let/case/if` 结构把 token 推进分支。
+applyAll : Ir -> List Ir -> Ir
+applyAll f [] = f
+applyAll f (a :: rest) = applyAll (IrApp Nothing f a) rest
+
+listLen : List a -> Int
+listLen [] = 0
+listLen (_ :: rest) = 1 + listLen rest
+
+flattenCall : Ir -> (Ir, List Ir)
+flattenCall (IrApp _ f a) =
+  case flattenCall f of
+    (head, args) => (head, append args [a])
+flattenCall t = (t, [])
+
+applyToken : (String -> Maybe Int) -> Ir -> Ir -> Ir
+applyToken eff action token =
+  case flattenCall action of
+    (IrGlobal f, args) =>
+      case eff f of
+        Just ar =>
+          if listLen args == ar then
+            applyAll (IrGlobal f) (append args [token])
+          else
+            IrApp Nothing (IrCast Nothing Nothing action) token
+        Nothing => IrApp Nothing (IrCast Nothing Nothing action) token
+    _ => IrApp Nothing (IrCast Nothing Nothing action) token
+
+runAction : (String -> Maybe Int) -> Int -> Ir -> Ir -> Ir
+runAction eff fuel action token =
+  if fuel <= 0 then
+    IrApp Nothing action token
+  else
+    case action of
+      IrCtor fam ctor _ [IrLam [u] _ body] => if isEffThunk fam ctor then substIr u token body else IrApp Nothing action token
+      IrLet bs rhs body => IrLet bs rhs (runAction eff (fuel - 1) body token)
+      IrIf c t e => IrIf c (runAction eff (fuel - 1) t token) (runAction eff (fuel - 1) e token)
+      IrCase ct rt sc alts => IrCase ct rt sc (runAlt eff (fuel - 1) alts token)
+      IrCast from to x => IrCast from to (runAction eff (fuel - 1) x token)
+      IrApp _ (IrLam [b] _ lbody) arg =>
+        let
+          b2 = safeBinder b
+        in runAction eff (fuel - 1) (IrLet [b2] arg (substIr b (IrVar b2) lbody)) token
+      _ =>
+        case matchBind eff fuel action of
+          Just fused => runAction eff (fuel - 1) fused token
+          Nothing => IrApp Nothing (IrCast Nothing Nothing action) token
+
+runAlt : (String -> Maybe Int) -> Int -> List IrAlt -> Ir -> List IrAlt
+runAlt eff fuel alts token =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (runAction eff (fuel - 1) a.irAltBody token) :: runAlt eff (fuel - 1) rest token
+
+-- | 把续延 `k v` 变成 action（不预先运行）：k 是 lambda 时落成 let（保留求值顺序）。
+applyCont : Ir -> Ir -> Ir
+applyCont (IrLam [v] _ body) arg =
+  let
+    v2 = safeBinder v
+  in IrLet [v2] arg (substIr v (IrVar v2) body)
+applyCont k arg = IrApp Nothing k arg
+
+-- | 识别 `(\\e k -> MkEff (\\u -> case e of MkEff a => case (k (a u)) of MkEff b => b u)) E K`。
+matchBind : (String -> Maybe Int) -> Int -> Ir -> Maybe Ir
+matchBind eff fuel ir =
+  if fuel <= 0 then
+    Nothing
+  else
+    case ir of
+      IrApp _ (IrApp _ (IrLam [e, k] _ (IrCtor fam ctor _ [IrLam [u] _ bindBody])) eAct) kAct =>
+        if isEffThunk fam ctor then
+          case bindBody of
+            IrCase _ _ (IrVar e1) [alt1] =>
+              if sameBinderId e e1 then
+                case irAltBindersOf alt1 of
+                  [a] =>
+                    case irAltBodyOf alt1 of
+                      IrCase _ _ (IrApp _ (IrVar k1) (IrApp _ (IrVar a1) (IrVar u1))) [alt2] =>
+                        if sameBinderId k k1 && sameBinderId a a1 && sameBinderId u u1 then
+                          case irAltBindersOf alt2 of
+                            [b] =>
+                              case irAltBodyOf alt2 of
+                                IrApp _ (IrVar b1) (IrVar u2) => if sameBinderId b b1 && sameBinderId u u2 then Just (fuse eff fuel eAct kAct fam ctor u a) else Nothing
+                                _ => Nothing
+                            _ => Nothing
+                        else
+                          Nothing
+                      _ => Nothing
+                  _ => Nothing
+              else
+                Nothing
+            _ => Nothing
+        else
+          Nothing
+      _ => Nothing
+
+fuse : (String -> Maybe Int) -> Int -> Ir -> Ir -> String -> String -> IrBinder -> IrBinder -> Ir
+fuse eff fuel eAct kAct fam ctor u a =
+  let
+    u2 = safeBinder u
+    a2 = safeBinder a
+    applied = applyCont kAct (IrApp Nothing (IrVar a2) (IrVar u2))
+    body = runAction eff (fuel - 1) applied (IrVar u2)
+    caseBody =
+      case effFieldOf eAct of
+        Just x => IrLet [a2] x body
+        Nothing => IrCase Nothing Nothing eAct [IrAlt (Just (irEffTypeName, irEffMkCtor)) [a2] body]
+  in IrCtor fam ctor Nothing [IrLam [u2] Nothing caseBody]
+
+-- ---------------------------------------------------------------
+-- 遍历：先递归子项（找嵌套的 bind），再尝试融合
+-- ---------------------------------------------------------------
+directIr : (String -> Maybe Int) -> Int -> Ir -> Ir
+directIr eff fuel ir =
+  if fuel <= 0 then
+    ir
+  else
+    case matchBind eff fuel ir of
+      Just fused => directIr eff (fuel - 1) fused
+      Nothing =>
+        let
+          ir1 = directChildren eff (fuel - 1) ir
+        in ir1
+
+directChildren : (String -> Maybe Int) -> Int -> Ir -> Ir
+directChildren eff fuel ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrCtor fam ctor tys xs => IrCtor fam ctor tys (directList eff (fuel - 1) xs)
+      IrRecord fam ty fs => IrRecord fam ty (directFields eff (fuel - 1) fs)
+      IrProj base fam x ty => IrProj (directIr eff (fuel - 1) base) fam x ty
+      IrRecUpd base fam fs ty => IrRecUpd (directIr eff (fuel - 1) base) fam (directFields eff (fuel - 1) fs) ty
+      IrRtApp sym xs => IrRtApp sym (directList eff (fuel - 1) xs)
+      IrCast from to x => IrCast from to (directIr eff (fuel - 1) x)
+      IrLet bs rhs body => IrLet bs (directIr eff (fuel - 1) rhs) (directIr eff (fuel - 1) body)
+      IrLam bs rt body => IrLam bs rt (directIr eff (fuel - 1) body)
+      IrApp ty f a => IrApp ty (directIr eff (fuel - 1) f) (directIr eff (fuel - 1) a)
+      IrTail inner => IrTail (directIr eff (fuel - 1) inner)
+      IrIf c t e => IrIf (directIr eff (fuel - 1) c) (directIr eff (fuel - 1) t) (directIr eff (fuel - 1) e)
+      IrCase ct rt sc alts => IrCase ct rt (directIr eff (fuel - 1) sc) (directAlts eff (fuel - 1) alts)
+      IrNatCase sc fr z su ca => IrNatCase (directIr eff (fuel - 1) sc) fr (directAltM eff (fuel - 1) z) (directAltM eff (fuel - 1) su) (directAltM eff (fuel - 1) ca)
+      IrConcatMany xs => IrConcatMany (directList eff (fuel - 1) xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (directIr eff (fuel - 1) prim)
+      _ => ir
+
+directList : (String -> Maybe Int) -> Int -> List Ir -> List Ir
+directList eff fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => directIr eff (fuel - 1) x :: directList eff (fuel - 1) rest
+
+directFields : (String -> Maybe Int) -> Int -> List (String, Ir) -> List (String, Ir)
+directFields eff fuel fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => (firstOf p, directIr eff (fuel - 1) (secondOf p)) :: directFields eff (fuel - 1) rest
+
+directAlts : (String -> Maybe Int) -> Int -> List IrAlt -> List IrAlt
+directAlts eff fuel alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (directIr eff (fuel - 1) a.irAltBody) :: directAlts eff (fuel - 1) rest
+
+directAltM : (String -> Maybe Int) -> Int -> Maybe IrAlt -> Maybe IrAlt
+directAltM eff fuel m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (directIr eff (fuel - 1) a.irAltBody))
+
+-- ---------------------------------------------------------------
+-- binder 全局唯一化（融合后作用域合并，名字必须唯一）
+-- ---------------------------------------------------------------
+safeIr : Int -> Ir -> Ir
+safeIr fuel ir =
+  if fuel <= 0 then
+    ir
+  else
+    case ir of
+      IrLam bs rt body =>
+        let
+          bs2 = map safeBinder bs
+          body2 = renameAll bs bs2 body
+        in IrLam bs2 rt (safeIr (fuel - 1) body2)
+      IrLet bs rhs body =>
+        let
+          bs2 = map safeBinder bs
+          body2 = renameAll bs bs2 body
+        in IrLet bs2 (safeIr (fuel - 1) rhs) (safeIr (fuel - 1) body2)
+      IrCase ct rt sc alts => IrCase ct rt (safeIr (fuel - 1) sc) (safeAlts (fuel - 1) alts)
+      IrNatCase sc fr z su ca => IrNatCase (safeIr (fuel - 1) sc) fr (safeAltM (fuel - 1) z) (safeAltM (fuel - 1) su) (safeAltM (fuel - 1) ca)
+      IrCtor fam ctor tys xs => IrCtor fam ctor tys (safeList (fuel - 1) xs)
+      IrRecord fam ty fs => IrRecord fam ty (safeFields (fuel - 1) fs)
+      IrProj base fam x ty => IrProj (safeIr (fuel - 1) base) fam x ty
+      IrRecUpd base fam fs ty => IrRecUpd (safeIr (fuel - 1) base) fam (safeFields (fuel - 1) fs) ty
+      IrCast from to x => IrCast from to (safeIr (fuel - 1) x)
+      IrApp ty f a => IrApp ty (safeIr (fuel - 1) f) (safeIr (fuel - 1) a)
+      IrTail inner => IrTail (safeIr (fuel - 1) inner)
+      IrIf c t e => IrIf (safeIr (fuel - 1) c) (safeIr (fuel - 1) t) (safeIr (fuel - 1) e)
+      IrConcatMany xs => IrConcatMany (safeList (fuel - 1) xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (safeIr (fuel - 1) prim)
+      _ => ir
+
+renameAll : List IrBinder -> List IrBinder -> Ir -> Ir
+renameAll [] _ body = body
+renameAll (b :: rest) (b2 :: rest2) body = renameAll rest rest2 (substIr b (IrVar b2) body)
+renameAll _ _ body = body
+
+safeList : Int -> List Ir -> List Ir
+safeList fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => safeIr (fuel - 1) x :: safeList (fuel - 1) rest
+
+safeFields : Int -> List (String, Ir) -> List (String, Ir)
+safeFields fuel fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => (firstOf p, safeIr (fuel - 1) (secondOf p)) :: safeFields (fuel - 1) rest
+
+safeAlts : Int -> List IrAlt -> List IrAlt
+safeAlts fuel alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => safeAlt (fuel - 1) a :: safeAlts (fuel - 1) rest
+
+safeAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+safeAltM fuel m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (safeAlt (fuel - 1) a)
+
+safeAlt : Int -> IrAlt -> IrAlt
+safeAlt fuel a =
+  let
+    bs = a.irAltBinders
+    bs2 = map safeBinder bs
+    body2 = renameAll bs bs2 a.irAltBody
+  in IrAlt a.irAltCtor bs2 (safeIr (fuel - 1) body2)
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+directDef : (String -> Maybe Int) -> IrDef -> IrDef
+directDef eff (IrDef n ar deps sigTy body r g sp) =
+  let
+    body1 = directIr eff (128 + 8 * irSize body) body
+  in IrDef n ar deps sigTy (safeIr (256 + 8 * irSize body1) body1) r g sp
+directDef _ d = d
+
+directGroup : (String -> Maybe Int) -> IrGroup -> IrGroup
+directGroup eff g = IrGroup g.irGroupIsRec (map (directDef eff) g.irGroupDefs)
+
+export directUnit : (String -> Maybe Int) -> IrUnit -> IrUnit
+directUnit eff u =
+  IrUnit
+    u.irUnitTyDecls
+    (map (directGroup eff) u.irUnitGroups)
+    u.irUnitHasListFamily
+    u.irUnitTypeRefs
+    u.irUnitEntry

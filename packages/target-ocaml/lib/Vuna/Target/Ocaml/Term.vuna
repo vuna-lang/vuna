@@ -2693,7 +2693,7 @@ genIrNode st (IrCtor family ctor _ args) =
         Vuna.Compiler.Base.Common.bind (genIr st x) (
             \p =>
               case p of
-                (xTerm, st1) => OkC (ORaw ("Obj.repr (" ++ renderTerm xTerm ++ ")"), st1)
+                (xTerm, st1) => OkC (ORaw ("(Obj.repr (" ++ renderTerm xTerm ++ "))"), st1)
           )
       _ => icInternal "Eff thunk must have exactly one argument"
   else
