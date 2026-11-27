@@ -183,6 +183,13 @@ area。`detect` 失败或任一 shard 失败都会让它失败，不会因为 jo
 `dequeuePullRequest`，再关闭 auto-merge。PR 落后于 main 不需要处理——队列会基于最新
 `main` + 队前 PR 建临时组合分支并重跑 required checks。
 
+队列只接受 ruleset 里的 `merge_method`（`REBASE`）。GitHub 回归
+（[community#209348](https://github.com/orgs/community/discussions/209348)，2026-09 起）后，
+已 arm 的 PR 在 required checks 变绿时不再自动进入规则集合并队列，会停在 `CLEAN`；
+`autoMergeRequest.mergeMethod` 恒为 `SQUASH`，显式设 `REBASE` 也会被改回，不是原因。
+[merge-queue-sweep.yml](../../.github/workflows/merge-queue-sweep.yml) 每 10 分钟把
+「已 arm、无 hold、`CLEAN`、不在队列」的 PR 补 enqueue；`automerge.yml` 只负责 arm / disarm。
+
 启用顺序：先合并 workflow 改动（`ci.yml` / `gates.yml` 的 `merge_group` 支持），再跑
 [nix/tools/github-branch-protection.sh](../../nix/tools/github-branch-protection.sh) 打开
 队列；反过来的话 required checks 在 `merge_group` 上还没有报告者。
@@ -206,6 +213,7 @@ PR 被队列移除时看原因：冲突才 rebase，检查失败就修，超时�
 nix/tools/merge-queue.sh status
 nix/tools/merge-queue.sh wait <n> [timeout]
 nix/tools/merge-queue.sh dequeue <n>
+nix/tools/merge-queue.sh sweep [--dry-run]
 ```
 
 需要 hold 时加 `blocked` / `needs-info` 或转 draft；只 `--disable-auto` 不会把已经在队列里的
@@ -261,6 +269,10 @@ nix/tools/merge-queue.sh status
 - `gates` 选错检查：先在本地跑 `nix run .#ci -- plan <labels>`，再检查 PR 的 `type:*` /
   `pkg:*` / `area:*` 是否完整。
 - PR 一直 `BEHIND`：正常；合并队列会在最新 main 上重新验证，不要 rebase。
+- PR 全绿（`CLEAN`）但一直不进队列：GitHub 回归（community#209348），armed PR
+  不再自动入队。`merge-queue-sweep.yml` 会每 10 分钟补 enqueue；手动用
+  `nix/tools/merge-queue.sh sweep [--dry-run]` 或 `enqueue <n>`。`mergeMethod` 恒为
+  `SQUASH` 是已知表现，不是原因。
 - 队列一直等 check：确认 `ci.yml` / `gates.yml` 有 `merge_group` 触发器，且 `gates / run`
   在组合 head 上有结论；检查 `merge_group.head_ref` 是否能解析出 PR 号。
 - PR 被移出队列：看 PR 时间线的原因；冲突才 rebase，检查失败就修，超时重新 arm。
