@@ -25,7 +25,10 @@ main =
         pure ""
 
 problems : List String
-problems = append dispatchProblems (append rotateProblems (append spillProblems argProblems))
+problems =
+  append
+    dispatchProblems
+    (append rotateProblems (append spillProblems (append argProblems mergeProblems)))
 
 -- ---------------------------------------------------------------
 -- 稠密分派回边直连
@@ -225,3 +228,40 @@ argProblems =
     []
   else
     ["args: loop-carried params did not stay in their incoming registers"]
+
+-- ---------------------------------------------------------------
+-- 守卫形状：块内 `test`/`cmp` 不在块首时不是守卫
+-- ---------------------------------------------------------------
+-- 汇合块里也可能出现 `test r, r; jcc`；把进入它的 `jmp` 改写到守卫失败点会跳过
+-- 块首的真实工作（先读后判断的值）。
+mergeBody : List Instr
+mergeBody =
+  [
+    ILabel ".L0",
+    ITest Rbx Rbx,
+    IJcc "jg" ".L1",
+    IMov (OpReg R14) (OpImm 7),
+    IJmp ".L1",
+    ILabel ".L1",
+    IMov (OpReg Rax) (OpReg R14),
+    ITest R14 R14,
+    IJcc "je" ".L2",
+    IMov (OpReg Rax) (OpImm 2),
+    IJmp ".L2",
+    ILabel ".L2",
+    IRet
+  ]
+
+mergeProblems : List String
+mergeProblems =
+  let
+    out = Regs.optimizeDispatch mergeBody
+  in if countInstr (\i => refsLbl ".L1x" i) out == 0 then
+    []
+  else
+    ["guard: 汇合块被当成守卫，jmp 被改写到失败点（跳过块首指令）"]
+
+refsLbl : String -> Instr -> Bool
+refsLbl l (IJmp m) = l == m
+refsLbl l (IJcc _ m) = l == m
+refsLbl _ _ = False

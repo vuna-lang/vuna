@@ -728,27 +728,19 @@ lookupGuard : String -> List ThrGuard -> Maybe ThrGuard
 lookupGuard _ [] = Nothing
 lookupGuard k (g :: rest) = if k == g.tgLabel then Just g else lookupGuard k rest
 
--- | 守卫块：块内第一条 `jcc` 的前一条指令是 `test`/`cmp`。
+-- | 守卫块：**块首**就是 `test`/`cmp` + `jcc`（循环头的守卫形状）。
+--   收窄到块首是正确性要求：`jmp g` / 回边的改写会跳到 `gx`（守卫失败点），
+--   块里 `jcc` 之前的指令不能被跳过；普通的 if 汇合块里也可能出现 `test; jcc`。
 collectGuards : List Instr -> List ThrGuard
 collectGuards (i :: rest) =
   case i of
     ILabel l =>
-      case guardScan l Nothing rest of
-        Just g => g :: collectGuards rest
-        Nothing => collectGuards rest
+      case rest of
+        t :: (IJcc cc tgt) :: more =>
+          if guardTest t then (ThrGuard l t cc tgt) :: collectGuards more else collectGuards rest
+        _ => collectGuards rest
     _ => collectGuards rest
 collectGuards [] = []
-
-guardScan : String -> Maybe Instr -> List Instr -> Maybe ThrGuard
-guardScan g prev (i :: rest) =
-  case i of
-    IJcc cc t =>
-      case prev of
-        Just p => if guardTest p then Just (ThrGuard g p cc t) else Nothing
-        Nothing => Nothing
-    ILabel _ => Nothing
-    _ => guardScan g (Just i) rest
-guardScan _ _ [] = Nothing
 
 guardTest : Instr -> Bool
 guardTest (ITest _ _) = True
