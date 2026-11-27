@@ -19,8 +19,8 @@
 #
 # 每段用**独立** socket 路径：同一路径复用会让「上一段的 server 还没退干净」与「新 server
 # 绑定同一路径」互相踩（旧进程退场时删掉新进程的 socket 文件），失败也难归因。
-# 停 server 一律经 `timeout` 包一层的进程组：`$!` 是路由层 `vuna`，真正的 server 是它
-# spawn 的插件子进程 `vuna-dev`，直接 `kill $!` 只会杀掉路由层。
+# 停 server 直接 `kill` 路由层 `vuna`：它把终止信号转发给它起的插件子进程（`vuna-dev`），
+# 插件随路由层一起退出；不需要 `timeout` / 进程组包装。
 #
 # 为什么不进 `nix flake check`：需要 Node + 端口（沙箱不保证）；serve 本身无外部依赖，
 # 由 suite 的 e2e tier 覆盖。
@@ -51,8 +51,6 @@ pass=0
 fail=0
 srv_pid=''
 sock=''
-# 单个 serve 的生命上限（秒）：只是兜底，正常路径都是客户端断开后自行退出。
-serve_ttl=120
 
 stop_serve() {
   if [ -n "$srv_pid" ]; then
@@ -88,12 +86,8 @@ wait_ready() { # logfile timeout_ticks
   return 1
 }
 
-spawn_serve() { # addr trace log -> 起 serve（成功时 srv_pid 是它的进程组入口）
-  if command -v timeout >/dev/null 2>&1; then
-    timeout -s TERM -k 5 "$serve_ttl" "$VUNA" dev obs serve --cdp "$1" "$2" >"$3" 2>"$3.err" &
-  else
-    "$VUNA" dev obs serve --cdp "$1" "$2" >"$3" 2>"$3.err" &
-  fi
+spawn_serve() { # addr trace log -> 起 serve（成功时 srv_pid 是路由层 pid）
+  "$VUNA" dev obs serve --cdp "$1" "$2" >"$3" 2>"$3.err" &
   srv_pid=$!
 }
 

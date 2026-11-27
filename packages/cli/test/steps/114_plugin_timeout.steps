@@ -1,5 +1,6 @@
-# 114) 后端插件调用有超时：极小超时必须失败（而不是静默等插件跑完），`0` 关闭超时。
-# 超时值允许小数，`0.001` 保证小包的原生 codegen 也会被截断。
+# 114) 插件子进程生命周期：后端插件调用有超时（极小超时必须失败，而不是静默等插件跑完，
+#      `0` 关闭超时；超时值允许小数，`0.001` 保证小包的原生 codegen 也会被截断），
+#      以及路由层被 kill 时插件子进程必须一起退出（issue #36）。
 
 run: sh -c 'd="$TMPDIR/pt/pkg"; mkdir -p "$d/app"; printf "[package]\nname = \"pt\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
 exit: 0
@@ -12,3 +13,11 @@ out-contains: timed out after 0.001s
 # 0 = 关闭：同一构建正常完成。
 run: sh -c 'VUNA_PLUGIN_TIMEOUT=0 "$VUNA" build --target native --no-compile --out "$TMPDIR/pt/out" "$TMPDIR/pt/pkg" 2>&1'
 exit: 0
+
+# 114b) 路由层被 kill 后插件子进程一起退出（issue #36）。
+#       `vuna` 只做发现与路由，`vuna dev …` 真正在跑的是它起的 `vuna-dev`；
+#       终止信号必须转发到子进程，否则杀路由层只留下仍在监听 socket 的孤儿插件。
+#       回归脚本用真实长驻插件（`dev obs serve --cdp`），不走 mock。
+run: sh $VUNA_SUITE_ROOT/packages/cli/test/corpus/plugin-kill/smoke.sh "$VUNA"
+exit: 0
+out-contains: passed, 0 failed

@@ -368,20 +368,13 @@ let dtp_removeFile path =
 let dtp_fileExists path = Sys.file_exists path
 let dtp_getenv k = try Sys.getenv k with Not_found -> \"\"
 let dtp_getcwd () = try Sys.getcwd () with _ -> \".\"
-(* POSIX shell 单引号转义（与 Filename.quote 同形）：只给 Sys.command 用。
-   不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
+(* POSIX shell 单引号转义（与 Filename.quote 同形：结束单引号 → 反斜杠转义引号 → 重开
+   单引号）。不引用 Filename 模块——它会把 Printexc / Printf / Buffer 拖进每个产物。 *)
 let dtp_shell_quote s =
   let q = String.make 1 (Char.chr 39) in
-  let esc = q ^ String.make 1 (Char.chr 92) ^ q in
+  let bslash = String.make 1 (Char.chr 92) in
+  let esc = q ^ bslash ^ q ^ q in
   q ^ String.concat esc (String.split_on_char (Char.chr 39) s) ^ q
-let dtp_runIn dir args =
-  dtp_hostReset ();
-  let quote s = dtp_shell_quote s in
-  let cmd = String.concat \" \" (List.map quote args) in
-  (* `cd` 在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。
-     125 是「目录进不去」的保留哨兵（与命令自己的退出码区分）。 *)
-  let code = Sys.command (\"cd \" ^ quote dir ^ \" || exit 125; \" ^ cmd) in
-  if code = 125 then (dtp_hostSetStatus 1; -1) else code
 let dtp_net_next = ref 1
 let dtp_net_parse (addr : string) =
   let n = String.length addr in
@@ -1211,13 +1204,126 @@ let dtp_tryMakeDirExclusive path =
   (try dtp_hostReset (); Unix.mkdir path 0o755; 0
    with e -> dtp_hostMark (dtp_hostCode e) e; 1)
 let dtp_isTty () = Unix.isatty Unix.stdout
+(* 在跑的子进程 pid 槽（64 个）：`dtp_runIn` / `dtp_tryRunIn` / `dtp_spawn` 登记，
+   回收时摘掉；父进程收到终止类信号时逐个收掉，路由层被 kill 也不会把插件子进程留成孤儿。
+
+   读者是信号处理器：它可能正好打断写者，所以槽用 `Atomic` 发布、不拿锁。只有并发子进程
+   超过 64 个时，后来的子进程才会不被跟踪。 *)
+let dtp_child_slots = 64
+let dtp_child_pids : int Atomic.t array =
+  Array.init dtp_child_slots (fun _ -> Atomic.make 0)
+let dtp_child_add (pid : int) =
+  let rec go i =
+    if i < dtp_child_slots then
+      if Atomic.compare_and_set dtp_child_pids.(i) 0 pid then () else go (i + 1) in
+  go 0
+let dtp_child_drop (pid : int) =
+  let rec go i =
+    if i < dtp_child_slots then
+      if Atomic.compare_and_set dtp_child_pids.(i) pid 0 then () else go (i + 1) in
+  go 0
+let dtp_child_kill (sig_ : int) =
+  for i = 0 to dtp_child_slots - 1 do
+    let pid = Atomic.get dtp_child_pids.(i) in
+    if pid <> 0 then (try Unix.kill pid sig_ with _ -> ())
+  done
+(* 收掉已退出的子进程（`WNOHANG`）：信号处理器等宽限时用，避免把僵尸当成还活着。 *)
+let dtp_child_reap () =
+  for i = 0 to dtp_child_slots - 1 do
+    let pid = Atomic.get dtp_child_pids.(i) in
+    if pid <> 0 then
+      match Unix.waitpid [Unix.WNOHANG] pid with
+      | (0, _) -> ()
+      | _ -> dtp_child_drop pid
+      | exception _ -> dtp_child_drop pid
+  done
+(* 是否还有被跟踪的子进程（含未被回收的僵尸）。 *)
+let dtp_child_any () =
+  let any = ref false in
+  for i = 0 to dtp_child_slots - 1 do
+    if Atomic.get dtp_child_pids.(i) <> 0 then any := true
+  done;
+  !any
+(* 终止类信号的统一出口：先 TERM，宽限内仍在就 KILL，最后恢复默认处理器重发同一个信号——
+   退出状态保持「被信号终止」，而不是一个普通退出码。 *)
+let dtp_kill_children_and_die (sig_ : int) =
+  dtp_child_kill Sys.sigterm;
+  let rec grace n =
+    if n > 0 && dtp_child_any () then begin
+      Unix.sleepf 0.02;
+      dtp_child_reap ();
+      grace (n - 1)
+    end in
+  grace 25;
+  if dtp_child_any () then dtp_child_kill Sys.sigkill;
+  Sys.set_signal sig_ Sys.Signal_default;
+  (try Unix.kill (Unix.getpid ()) sig_ with _ -> exit (128 + sig_))
+(* 首次起子进程时装上转发器：没有子进程的程序行为不变。SIGINT 只转发、自己不退
+   （插件如何处理 Ctrl-C 由插件决定）；TERM / HUP / QUIT 转发后跟随退出。 *)
+let dtp_children_armed = ref false
+let dtp_handle_term sig_ _ =
+  (try dtp_kill_children_and_die sig_ with _ -> exit (128 + sig_))
+let dtp_handle_int _ = dtp_child_kill Sys.sigint
+let dtp_arm_children () =
+  if not !dtp_children_armed then begin
+    dtp_children_armed := true;
+    Sys.set_signal Sys.sigterm (Sys.Signal_handle (dtp_handle_term Sys.sigterm));
+    Sys.set_signal Sys.sighup (Sys.Signal_handle (dtp_handle_term Sys.sighup));
+    Sys.set_signal Sys.sigquit (Sys.Signal_handle (dtp_handle_term Sys.sigquit));
+    Sys.set_signal Sys.sigint (Sys.Signal_handle dtp_handle_int);
+    at_exit (fun () -> dtp_child_kill Sys.sigterm)
+  end
+(* fork + exec `prog`（argv 首项由调用方给全），父进程登记子进程 pid 并返回。
+   用 `Unix.create_process` 而不是 `Unix.fork`：OCaml 5 的 `Unix.fork` 在进程里有过 domain
+   之后直接失败（REPL 的索引构建会用 domain 并行），而 `create_process` 没有这个限制；它
+   内部是 `execvp`，与旧路径一样按 PATH 查找（`Sys.executable_name` 可能不带目录）。 *)
+let dtp_spawn_prog (prog : string) (argv : string array) : int =
+  dtp_arm_children ();
+  let pid = Unix.create_process prog argv Unix.stdin Unix.stdout Unix.stderr in
+  dtp_child_add pid;
+  pid
+(* 起 `/bin/sh -c cmd` 并等它，返回退出码；被信号终止时给 255（与 `Sys.command` 同口径，
+   下游 `processRunIn` 的调用点行为不变）。子进程留在前台进程组：交互子进程读终端、
+   收 Ctrl-C 的行为不变。 *)
+let dtp_sh (cmd : string) : int =
+  (* 子进程继承 stdout/stderr：先落盘本进程的缓冲，否则缓冲内容会被两份进程各写一遍。 *)
+  flush_all ();
+  let pid = dtp_spawn_prog \"/bin/sh\" [| \"/bin/sh\"; \"-c\"; cmd |] in
+  let rec go () =
+    match Unix.waitpid [] pid with
+    | (_, Unix.WEXITED c) -> c
+    | (_, _) -> 255
+    | exception Unix.Unix_error (Unix.EINTR, _, _) -> go ()
+    (* 已被信号处理器回收（进程正要按信号退出）：仍按「被信号终止」报告。 *)
+    | exception Unix.Unix_error (Unix.ECHILD, _, _) -> 255 in
+  let code = go () in
+  dtp_child_drop pid;
+  code
+(* 目录存在且确实是目录；任何异常按「不存在」处理（与 `Sys.chdir` 失败的映射一致）。 *)
+let dtp_dirExists path =
+  (try Sys.file_exists path && Sys.is_directory path with _ -> false)
+(* 当前进程能否进入这个目录（`X_OK` 在目录上就是「可搜索 / 穿过」）；异常按不可用处理。 *)
+let dtp_dirUsable path =
+  (try Unix.access path [Unix.X_OK]; true with _ -> false)
+let dtp_runIn dir args =
+  dtp_hostReset ();
+  let quote s = dtp_shell_quote s in
+  let cmd = String.concat \" \" (List.map quote args) in
+  (* 宿主侧先判目录：不存在 / 不是目录给状态 1，存在但进不去（权限）给状态 2；两者都
+     不 spawn 也不打印（`sh` 的 `cd` 失败会把错误写到 stderr，污染调用方捕获的输出；
+     旧实现在 OCaml 里 `Sys.chdir` 失败同样没有输出，并按 errno 区分这两类）。 *)
+  if not (dtp_dirExists dir) then (dtp_hostSetStatus 1; -1)
+  else if not (dtp_dirUsable dir) then (dtp_hostSetStatus 2; -1)
+  else
+    (* `cd` 仍在 shell 里做：进程级 cwd 不动（多 domain 下不能改进程 cwd）。判目录与
+       spawn 之间目录可能被删（TOCTOU），`cd` 的 stderr 屏蔽掉，失败仍旧走 125 哨兵
+       （与命令自己的退出码区分）→ 状态 1。 *)
+    let code = dtp_sh (\"cd \" ^ quote dir ^ \" 2>/dev/null || exit 125; \" ^ cmd) in
+    if code = 125 then (dtp_hostSetStatus 1; -1) else code
 let dtp_tryRunIn dir args =
-  let cmd = String.concat \" \" (List.map Filename.quote args) in
-  (try
-     dtp_hostReset ();
-     let old = Sys.getcwd () in
-     Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
-   with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
+  (* cwd 由 `dtp_runIn` 在 shell 里切：不改进程 cwd（多 domain 下 chdir 是进程级的），
+     目录进不去同样走 125 哨兵 → 状态槽 1。 *)
+  (try dtp_runIn dir args with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
 let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
 let dtp_sleep us =
   (if us > 0 then Unix.sleepf (float_of_int us /. 1000000.0));
@@ -1225,10 +1331,17 @@ let dtp_sleep us =
 let dtp_execPath () = try Unix.readlink \"/proc/self/exe\" with _ -> Sys.executable_name
 let dtp_spawn (args : string list) : int =
   let prog = Sys.executable_name in
-  Unix.create_process prog (Array.of_list (prog :: args)) Unix.stdin Unix.stdout Unix.stderr
+  dtp_spawn_prog prog (Array.of_list (prog :: args))
 let dtp_wait (pid : int) : int =
-  let (_, st) = Unix.waitpid [] pid in
-  match st with Unix.WEXITED c -> c | _ -> 1
+  let rec go () =
+    match Unix.waitpid [] pid with
+    | (_, Unix.WEXITED c) -> c
+    | (_, _) -> 1
+    | exception Unix.Unix_error (Unix.EINTR, _, _) -> go ()
+    | exception Unix.Unix_error (Unix.ECHILD, _, _) -> 1 in
+  let code = go () in
+  dtp_child_drop pid;
+  code
 let dtp_net_tbl : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 16
 (* 监听句柄绑定的 unix socket 路径与当时的 inode：关闭句柄时只删仍然指向自己的那份文件。
    没有这条记录（tcp 句柄 / 已被替换的路径）就不删，免得删掉同一路径上后继进程的 socket。 *)

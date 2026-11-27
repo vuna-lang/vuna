@@ -33,6 +33,7 @@
 | `vuna-<domain> --vuna-describe` | 打印命令表（stdout） |
 | `vuna-<domain> --vuna-describe FILE` | 把命令表写到 FILE（入口用这个形态收集，子进程 stdout/stderr 被丢弃） |
 | 路由 | `vuna <path> ...` 原样把 argv 交给拥有该路径的插件；stdio 继承、退出码透传 |
+| 终止信号 | 收到 TERM / HUP / QUIT 时先转给在跑的插件子进程、再按原信号退出；收到 INT 时只转发（插件自己决定 Ctrl-C 语义）。子进程不进新进程组，杀路由层不会留下仍在监听的孤儿插件 |
 | `vuna-<domain> --vuna-describe` 的 `req\t<domain>` 行 | 声明的依赖域；未满足（没有提供该域的插件）时整个插件被丢弃 |
 | 缺失 | 插件不在 → 它的命令从帮助里消失，调用报 exit 2；入口其余功能不受影响 |
 
