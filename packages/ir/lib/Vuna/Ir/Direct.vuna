@@ -188,18 +188,24 @@ flattenCall (IrApp _ f a) =
     (head, args) => (head, append args [a])
 flattenCall t = (t, [])
 
-applyToken : (String -> Maybe Int) -> Ir -> Ir -> Ir
-applyToken eff action token =
+directCallOf : (String -> Maybe Int) -> Ir -> Ir -> Maybe Ir
+directCallOf eff action token =
   case flattenCall action of
     (IrGlobal f, args) =>
       case eff f of
         Just ar =>
-          if listLen args == ar then
-            applyAll (IrGlobal f) (append args [token])
+          if ar > 0 && listLen args == ar then
+            Just (applyAll (IrGlobal (f ++ "__direct")) (append args [token]))
           else
-            IrApp Nothing (IrCast Nothing Nothing action) token
-        Nothing => IrApp Nothing (IrCast Nothing Nothing action) token
-    _ => IrApp Nothing (IrCast Nothing Nothing action) token
+            Nothing
+        Nothing => Nothing
+    _ => Nothing
+
+applyToken : (String -> Maybe Int) -> Ir -> Ir -> Ir
+applyToken eff action token =
+  case directCallOf eff action token of
+    Just direct => direct
+    Nothing => IrApp Nothing (IrCast Nothing Nothing action) token
 
 runAction : (String -> Maybe Int) -> Int -> Ir -> Ir -> Ir
 runAction eff fuel action token =
@@ -211,6 +217,7 @@ runAction eff fuel action token =
       IrLet bs rhs body => IrLet bs rhs (runAction eff (fuel - 1) body token)
       IrIf c t e => IrIf c (runAction eff (fuel - 1) t token) (runAction eff (fuel - 1) e token)
       IrCase ct rt sc alts => IrCase ct rt sc (runAlt eff (fuel - 1) alts token)
+      IrNatCase sc fr z su ca => IrNatCase sc fr (runAltM eff (fuel - 1) z token) (runAltM eff (fuel - 1) su token) (runAltM eff (fuel - 1) ca token)
       IrCast from to x => IrCast from to (runAction eff (fuel - 1) x token)
       IrApp _ (IrLam [b] _ lbody) arg =>
         let
@@ -220,6 +227,15 @@ runAction eff fuel action token =
         case matchBind eff fuel action of
           Just fused => runAction eff (fuel - 1) fused token
           Nothing => IrApp Nothing (IrCast Nothing Nothing action) token
+
+runAltM : (String -> Maybe Int) -> Int -> Maybe IrAlt -> Ir -> Maybe IrAlt
+runAltM eff fuel m token =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (runAction eff (fuel - 1) a.irAltBody token))
 
 runAlt : (String -> Maybe Int) -> Int -> List IrAlt -> Ir -> List IrAlt
 runAlt eff fuel alts token =
@@ -277,12 +293,21 @@ fuse eff fuel eAct kAct fam ctor u a =
   let
     u2 = safeBinder u
     a2 = safeBinder a
-    applied = applyCont kAct (IrApp Nothing (IrVar a2) (IrVar u2))
+    direct = directCallOf eff eAct (IrVar u2)
+    arg =
+      case direct of
+        Just d => d
+        Nothing => IrApp Nothing (IrVar a2) (IrVar u2)
+    applied = applyCont kAct arg
     body = runAction eff (fuel - 1) applied (IrVar u2)
     caseBody =
       case effFieldOf eAct of
         Just x => IrLet [a2] x body
-        Nothing => IrCase Nothing Nothing eAct [IrAlt (Just (irEffTypeName, irEffMkCtor)) [a2] body]
+        Nothing =>
+          case direct of
+            Just _ => body
+            Nothing =>
+              IrCase Nothing Nothing eAct [IrAlt (Just (irEffTypeName, irEffMkCtor)) [a2] body]
   in IrCtor fam ctor Nothing [IrLam [u2] Nothing caseBody]
 
 -- ---------------------------------------------------------------
@@ -444,21 +469,111 @@ safeAlt fuel a =
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
-directDef : (String -> Maybe Int) -> IrDef -> IrDef
-directDef eff (IrDef n ar deps sigTy body r g sp) =
+-- | 从 IR 签名类型数 Eff 之前的运行时参数个数。
+irTyEffArity : Maybe IrTy -> Maybe Int
+irTyEffArity Nothing = Nothing
+irTyEffArity (Just ty) = irTyPeel 0 ty
+
+irTyPeel : Int -> IrTy -> Maybe Int
+irTyPeel n (IrTyFun _ cod) = irTyPeel (n + 1) cod
+irTyPeel n (IrTyData fam _) = if fam == irEffTypeName then Just n else Nothing
+irTyPeel _ _ = Nothing
+
+effPairOfDef : IrDef -> Maybe (String, Int)
+effPairOfDef d =
+  case irTyEffArity (irDefTy d) of
+    Just ar => Just (irDefName d, ar)
+    Nothing => Nothing
+
+effPairsOfDefs : List IrDef -> List (String, Int)
+effPairsOfDefs [] = []
+effPairsOfDefs (d :: rest) =
+  case effPairOfDef d of
+    Just p => p :: effPairsOfDefs rest
+    Nothing => effPairsOfDefs rest
+
+effPairsOfGroup : IrGroup -> List (String, Int)
+effPairsOfGroup g = effPairsOfDefs g.irGroupDefs
+
+effWithUnit : (String -> Maybe Int) -> List (String, Int) -> String -> Maybe Int
+effWithUnit eff pairs n =
+  case eff n of
+    Just ar => Just ar
+    Nothing => effArityLookup n pairs
+
+effArityLookup : String -> List (String, Int) -> Maybe Int
+effArityLookup n [] = Nothing
+effArityLookup n ((k, ar) :: rest) = if k == n then Just ar else effArityLookup n rest
+
+-- | 形参个数与类型 arity 不一致的别名：eta 展开成 `\x1..xn u -> (f x1..xn) u`
+--   （保留原 thunk；只保证调用点签名一致，不做额外优化）。
+etaTwin : String -> Int -> IrBinder -> Ir
+etaTwin n ar0 u =
+  let
+    xs =
+      map
+        (\i => IrBinder (0 - (2200000000 + i)) (IrBUser ("__eta" ++ strFromInt i)) False Nothing)
+        (range 0 ar0)
+    argVars = map (\x => IrVar x) xs
+    action = applyAll (IrGlobal n) argVars
+  in IrLam (append xs [u]) Nothing (IrApp Nothing (IrCast Nothing Nothing action) (IrVar u))
+
+-- | 原定义（bind 融合后、名字唯一化）。
+directOriginal : (String -> Maybe Int) -> IrDef -> IrDef
+directOriginal eff (IrDef n ar deps sigTy body r g sp) =
   let
     body1 = directIr eff (128 + 8 * irSize body) body
   in IrDef n ar deps sigTy (safeIr (256 + 8 * irSize body1) body1) r g sp
-directDef _ d = d
+directOriginal eff d = d
 
-directGroup : (String -> Maybe Int) -> IrGroup -> IrGroup
-directGroup eff g = IrGroup g.irGroupIsRec (map (directDef eff) g.irGroupDefs)
+-- | `__direct` 双发射（Eff 返回、ar > 0）；没有就返回空表。
+directTwin : (String -> Maybe Int) -> IrDef -> List IrDef
+directTwin eff (IrDef n ar deps sigTy body r g sp) =
+  case eff n of
+    Just ar0 =>
+      if ar0 > 0 then
+        let
+          body1 = directIr eff (128 + 8 * irSize body) body
+          u = IrBinder (0 - 2100000000) (IrBUser "__effTok") False Nothing
+          twinBody =
+            case body1 of
+              IrLam bs _ b =>
+                if listLen bs == ar0 then
+                  let
+                    b2 = runAction eff (128 + 8 * irSize b) b (IrVar u)
+                  in IrLam (append bs [u]) Nothing (safeIr (256 + 8 * irSize b2) b2)
+                else
+                  etaTwin n ar0 u
+              _ => etaTwin n ar0 u
+        in [IrDef (n ++ "__direct") (ar0 + 1) deps sigTy twinBody r g sp]
+      else
+        []
+    Nothing => []
+directTwin eff _ = []
+
+-- | 递归组：原定义与 twin 必须在同一个 `let rec` 里（原定义可能直接调用 twin）；
+--   非递归组：twin 单独成组放在原定义之后（twin 可能引用原定义，OCaml 的非递归
+--   `let … and …` 不允许互引）。
+directGroup : (String -> Maybe Int) -> IrGroup -> List IrGroup
+directGroup eff g =
+  let
+    originals = map (directOriginal eff) g.irGroupDefs
+    twins = concatMap (directTwin eff) g.irGroupDefs
+  in if g.irGroupIsRec then
+    [IrGroup True (append originals twins)]
+  else
+    case twins of
+      [] => [IrGroup False originals]
+      _ => [IrGroup False originals, IrGroup False twins]
 
 export directUnit : (String -> Maybe Int) -> IrUnit -> IrUnit
 directUnit eff u =
-  IrUnit
+  let
+    unitPairs = concatMap effPairsOfGroup u.irUnitGroups
+    eff2 = effWithUnit eff unitPairs
+  in IrUnit
     u.irUnitTyDecls
-    (map (directGroup eff) u.irUnitGroups)
+    (concatMap (directGroup eff2) u.irUnitGroups)
     u.irUnitHasListFamily
     u.irUnitTypeRefs
     u.irUnitEntry

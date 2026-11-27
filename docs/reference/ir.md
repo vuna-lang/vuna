@@ -39,7 +39,10 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
   `\e k -> MkEff (\u -> case e of MkEff a => case (k (a u)) of MkEff b => b u)`，把
   「运行动作」的语义下沉成单个 token 传递（`run (MkEff (\u -> body)) t = body[u:=t]`，
   并推进 `let`/`case`/`if` 分支）。一条 do 链因此合成一个 thunk；binder 名在 def 末尾按
-  id 唯一化，避免融合后遮蔽。只作用于 OCaml 路径，native / wasm 的 CPS 形态不变。
+  id 唯一化，避免融合后遮蔽。对 Eff 返回的函数再发射一个 `__direct` 双发射（多一个
+  token 形参、直接运行 body）：run 位置直接调用它（递归动作因此是直接尾调用），值位置
+  仍用原定义，保持 `Obj.t` 表示与类型不变；形参与类型 arity 不一致的别名走 eta 兜底。
+  只作用于 OCaml 路径，native / wasm 的 CPS 形态不变。
 - **CPS lowering（native / wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
   `prim_effect*` 换成 `@ir@cps@*`。末尾把 `case e of MkEff f` 统一规范化成
