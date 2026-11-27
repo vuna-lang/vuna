@@ -292,10 +292,12 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 
 ## 结构遍历的无 catch-all 约束
 
-`Ir.Model.irChildren` / `irSizeChildren`、`Ir.Validate.scopedChildren`、`Ir.Represent.representIr`
-是泛型遍历的地基：它们显式列出全部 `Ir` 构造子（叶子逐条写 `[]` / `0` / 原样返回），
-不用 `_` 兜底。新增 `Ir` 构造子时这些定义会编译失败，必须一起决定它的子节点、规模、
-作用域与表示改写。各机器 pass 的遍历按同一判据逐步补齐。
+`Ir.Model.irChildren` / `irSizeChildren` / `irResultTyFuel`、`Ir.Validate.scopedChildren`、
+`Ir.Represent.representIr` 与 `Ir.Analysis` 的三个收集器（`irStringsOf` / `irFloatLitsOf` /
+`irGlobalsOf`）是泛型遍历的地基：它们显式列出全部 `Ir` 构造子（叶子逐条写 `[]` / `0` /
+`Nothing` / 原样返回），不用 `_` 兜底。新增 `Ir` 构造子时这些定义会编译失败，必须一起
+决定它的子节点、规模、结果类型、作用域、表示改写与三张收集表。各机器 pass 的遍历按同一
+判据逐步补齐。
 
 ## pass 表与观测
 
