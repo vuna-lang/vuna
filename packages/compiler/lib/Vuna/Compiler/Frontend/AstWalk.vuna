@@ -387,6 +387,44 @@ mapOneDoStmtExprPat f g (DExpr e sp) =
 mapOneDoStmtExprPat f g (DLet binds sp) =
   Vuna.Compiler.Base.Common.bind (mapBindingExprPat f g binds) (\binds2 => OkC (DLet binds2 sp))
 
+-- | 返回 binder 表的模式代数：每个构造子一个钩子，子节点已经先折叠。
+-- 名字解析 / binder 检查这类需要返回值的 pass 用它，避免再抄一遍 7 个构造子
+-- （`PAs` / `PCon` / `PRecord` 的 binder 合并顺序由调用方钩子决定）。
+export record PatAlg where
+  paVar : String -> NodeRef -> Check (Pat, List String)
+  paWild : NodeRef -> Check (Pat, List String)
+  paInt : Int -> NodeRef -> Check (Pat, List String)
+  paStr : String -> NodeRef -> Check (Pat, List String)
+  paAs : String -> (Pat, List String) -> NodeRef -> Check (Pat, List String)
+  paCon : String -> List (Pat, List String) -> NodeRef -> Check (Pat, List String)
+  paRecord : String -> List ((String, Pat), List String) -> NodeRef -> Check (Pat, List String)
+
+export foldPatAlg : PatAlg -> Pat -> Check (Pat, List String)
+foldPatAlg alg (PVar name ref) = alg.paVar name ref
+foldPatAlg alg (PWild ref) = alg.paWild ref
+foldPatAlg alg (PInt n ref) = alg.paInt n ref
+foldPatAlg alg (PStr s ref) = alg.paStr s ref
+foldPatAlg alg (PAs name inner ref) =
+  Vuna.Compiler.Base.Common.bind (foldPatAlg alg inner) (\p => alg.paAs name p ref)
+foldPatAlg alg (PCon name pats ref) =
+  Vuna.Compiler.Base.Common.bind (foldPatAlgList alg pats) (\ps => alg.paCon name ps ref)
+foldPatAlg alg (PRecord name fields ref) =
+  Vuna.Compiler.Base.Common.bind (foldPatAlgFields alg fields) (\fs => alg.paRecord name fs ref)
+
+foldPatAlgList : PatAlg -> List Pat -> Check (List (Pat, List String))
+foldPatAlgList _ [] = OkC []
+foldPatAlgList alg (p :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (foldPatAlg alg p)
+    (\p2 => Vuna.Compiler.Base.Common.bind (foldPatAlgList alg rest) (\rest2 => OkC (p2 :: rest2)))
+
+foldPatAlgFields : PatAlg -> List (String, Pat) -> Check (List ((String, Pat), List String))
+foldPatAlgFields _ [] = OkC []
+foldPatAlgFields alg (field :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (foldPatAlg alg (secondOf field))
+    (\p2 => Vuna.Compiler.Base.Common.bind (foldPatAlgFields alg rest) (\rest2 => OkC (((firstOf field, firstOf p2), secondOf p2) :: rest2)))
+
 export mapPat : (Pat -> Check Pat) -> Pat -> Check Pat
 mapPat f (p@(PVar _ _)) = OkC p
 mapPat f (p@(PWild _)) = OkC p
