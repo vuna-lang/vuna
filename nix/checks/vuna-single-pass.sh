@@ -27,8 +27,25 @@ report() {
 for pkg in $PACKAGES; do
   work=$(mktemp -d "$OUT/single-pass.XXXXXX")
   export VUNA_STORE="$work/store"
+  export VUNA_PKG_STATE="$work/state"
   export TMPDIR="$work/tmp"
   mkdir -p "$TMPDIR"
+
+  # 依赖先预热：递归构建会自己 check 依赖，collectSigs 行不能算到被测包头上。
+  case "$pkg" in
+    packages/compiler)
+      deps="packages/base packages/compiler-base packages/ir packages/target-ocaml"
+      ;;
+    packages/toolchain)
+      deps="packages/obs packages/target-ocaml packages/ir packages/compiler-base packages/base packages/compiler packages/http packages/plugin-kit"
+      ;;
+    *)
+      deps=""
+      ;;
+  esac
+  for d in $deps; do
+    VUNA_LOG=off "$VUNA" check "$d" >/dev/null 2>&1 || { echo "single-pass: prewarm $d 失败" >&2; exit 1; }
+  done
 
   if ! VUNA_LOG=debug "$VUNA" check "$pkg" >"$work/stdout" 2>"$work/stderr"; then
     echo "single-pass: check $pkg 失败" >&2
