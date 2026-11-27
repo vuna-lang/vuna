@@ -1,0 +1,64 @@
+-- `Loader.Closure` 的纯算法：可达闭包（含外部名与环）与依赖序拓扑排序。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Loader.Closure
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <- consolePrint ("closure algebra failed: " ++ join ", " xs ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "reachable-chain" reachableChain,
+    Pair "reachable-external" reachableExternal,
+    Pair "reachable-cycle" reachableCycle,
+    Pair "topo-chain" topoChain,
+    Pair "topo-missing-dep" topoMissingDep
+  ]
+
+record Node where
+  nodeName : String
+  nodeDeps : List String
+
+node : String -> List String -> Node
+node n ds = Node n ds
+
+reachableChain : Bool
+reachableChain =
+  let
+    names = reachableFrom nodeName nodeDeps ["a"] [node "a" ["b"], node "b" ["c"]]
+  in length names == 3 && memName "a" names && memName "b" names && memName "c" names
+
+reachableExternal : Bool
+reachableExternal = reachableFrom nodeName nodeDeps ["outside"] [node "a" []] == ["outside"]
+
+reachableCycle : Bool
+reachableCycle =
+  let
+    names = reachableFrom nodeName nodeDeps ["a"] [node "a" ["b"], node "b" ["a"]]
+  in length names == 2 && memName "a" names && memName "b" names
+
+topoChain : Bool
+topoChain =
+  let
+    order =
+      map nodeName (topoOrderBy nodeName nodeDeps [node "a" ["b"], node "b" ["c"], node "c" []])
+  in order == ["c", "b", "a"]
+
+topoMissingDep : Bool
+topoMissingDep =
+  let
+    order = map nodeName (topoOrderBy nodeName nodeDeps [node "a" ["missing"], node "b" []])
+  in order == ["a", "b"]

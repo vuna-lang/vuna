@@ -18,6 +18,7 @@ module Vuna.Compiler.Driver.Compile where
 import Base.Container.HashMap as HashMap
 import Base.Data.Maybe as Maybe
 import Vuna.Compiler.Loader.Addr
+import Vuna.Compiler.Loader.Closure
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Diagnostics.Pkg
@@ -1265,30 +1266,16 @@ toolEnabled =
     v <- envGetEnv "VUNA_IFACE_TOOL"
     pure (v /= "0")
 
-importClosureGo : Int -> List ClosureMod -> List String -> List String -> List String
-importClosureGo fuel _ [] acc = acc
-importClosureGo fuel mods (n :: rest) acc =
-  if fuel <= 0 then
-    acc
-  else if memName n acc then
-    importClosureGo (fuel - 1) mods rest acc
-  else
-    case findClosureMod n mods of
-      Nothing => importClosureGo (fuel - 1) mods rest (n :: acc)
-      Just m => importClosureGo (fuel - 1) mods (append m.cmImports rest) (n :: acc)
-
 -- 从起点名单沿 header 的 import 边做传递闭包（不读模块文件；header 已在内存）。
--- fuel 守卫：header 图理论上无环（loader 拒绝环），这里只防脏数据。队列里每个名字
--- 最多处理一次；重复边与起点里的外部名也会入队，所以上界 = 起点 + 节点 + 边 + 1。
+-- 算法与 LSP 的接口闭包共用 `Loader.Closure.reachableFrom`。
 importClosureOf : List ClosureMod -> List String -> List String
-importClosureOf mods starts = importClosureGo (closureFuel mods starts) mods starts []
+importClosureOf mods starts = reachableFrom closureModName closureModImports starts mods
 
-closureFuel : List ClosureMod -> List String -> Int
-closureFuel mods starts = length starts + length mods + closureEdges mods + 1
+closureModName : ClosureMod -> String
+closureModName m = m.cmName
 
-closureEdges : List ClosureMod -> Int
-closureEdges [] = 0
-closureEdges (m :: rest) = length m.cmImports + closureEdges rest
+closureModImports : ClosureMod -> List String
+closureModImports m = m.cmImports
 
 isNeededMod : List String -> ClosureMod -> Bool
 isNeededMod needed m = memName m.cmName needed

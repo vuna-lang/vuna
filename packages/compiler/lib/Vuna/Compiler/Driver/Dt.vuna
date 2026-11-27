@@ -23,6 +23,7 @@ import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Loader.Closure
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Core.Term
@@ -1659,38 +1660,10 @@ findModuleNamed [] _ = Nothing
 findModuleNamed (m :: rest) name =
   if moduleNameOf m == name then Just m else findModuleNamed rest name
 
-topoDepsOf : List Module -> Module -> List String
-topoDepsOf mods m =
-  filter (
-      \n =>
-        case findModuleNamed mods n of
-          Just _ => True
-          Nothing => False
-    ) (map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf))
+topoDepsOf : Module -> List String
+topoDepsOf m = map findModuleNameField (append m.moduleImportsOf m.moduleImplicitImportsOf)
 
--- fuel 守卫：模块图是有向无环的，但 SCT 不能从「visited 集合」证明互递归下降。
-topoVisit : Int -> List Module -> String -> List String -> List Module -> (List String, List Module)
-topoVisit fuel mods name visited acc =
-  if fuel <= 0 then
-    (visited, acc)
-  else if memName name visited then
-    (visited, acc)
-  else
-    case findModuleNamed mods name of
-      Nothing => ((::) name visited, acc)
-      Just m =>
-        let
-          step = topoVisitAll (fuel - 1) mods (topoDepsOf mods m) (name :: visited) acc
-        in (firstOf step, append (secondOf step) [m])
-
-topoVisitAll : Int -> List Module -> List String -> List String -> List Module -> (List String, List Module)
-topoVisitAll fuel mods [] visited acc = (visited, acc)
-topoVisitAll fuel mods (n :: rest) visited acc =
-  let
-    step = topoVisit fuel mods n visited acc
-  in topoVisitAll fuel mods rest (firstOf step) (secondOf step)
-
--- 起点顺序固定：`topoVisitAll` 按起点列表推进，互不依赖（或同在环上）的模块先后随
+-- 起点顺序固定：`topoOrderBy` 按输入顺序推进，互不依赖（或同在环上）的模块先后随
 -- 输入列表漂移。loader 的列表顺序不是输入的语义（新加载者前插、预置模块在尾），
 -- 所以先按 (内容键, 名字) 做全序排序 —— 同一模块集合在任何缓存状态下得到同一份
 -- 模块顺序，进而同一份单元 key / split 串接顺序 / build.sh 分层。
@@ -1705,7 +1678,7 @@ topoModules : List Module -> List Module
 topoModules mods =
   let
     sorted = sortBy moduleOrderLess mods
-  in secondOf (topoVisitAll (length sorted + 1) sorted (map moduleNameOf sorted) [] [])
+  in topoOrderBy moduleNameOf topoDepsOf sorted
 
 -- | 逐模块生成 split 文件。同一输入命中 `views/bin` 时不会走到这里；未命中时整包重跑
 -- 生成，不做单元级复用。

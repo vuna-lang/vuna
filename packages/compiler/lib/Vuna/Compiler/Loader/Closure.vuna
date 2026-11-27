@@ -1,0 +1,81 @@
+-- | 闭包图上的纯算法：可达名字闭包与依赖序拓扑排序。
+--
+-- 只吃 `(名字, 依赖名列表)` 两个投影，不认识 `ClosureMod` / `ModuleIface` / `Module`；
+-- 源码扫描、接口读取与 loader 语义留在各自的 Eff/Check 层。fuel 只防病态图，合法输入
+-- 每访问一个节点至少消费 1 步。
+module Vuna.Compiler.Loader.Closure where
+
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+
+-- ---------------------------------------------------------------
+-- 可达名字闭包
+-- ---------------------------------------------------------------
+-- | 从 `starts` 沿 `depsOf` 展开可达名字。结果按首次访问的逆序返回（与既有
+-- `importClosureOf` / `closureNamesOf` 一致）；不在 `nodes` 里的外部名字保留在结果里，
+-- 但不再展开。重复名字只保留一次。
+export reachableFrom : (a -> String) -> (a -> List String) -> List String -> List a -> List String
+reachableFrom nameOf depsOf starts nodes =
+  reachableGo (closureFuel starts nodes depsOf) nameOf depsOf nodes starts []
+
+closureFuel : List String -> List a -> (a -> List String) -> Int
+closureFuel starts nodes depsOf = length starts + length nodes + closureEdges nodes depsOf + 1
+
+closureEdges : List a -> (a -> List String) -> Int
+closureEdges [] _ = 0
+closureEdges (n :: rest) depsOf = length (depsOf n) + closureEdges rest depsOf
+
+reachableGo : Int -> (a -> String) -> (a -> List String) -> List a -> List String -> List String -> List String
+reachableGo fuel nameOf depsOf nodes work acc =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      name :: rest =>
+        if memName name acc then
+          reachableGo (fuel - 1) nameOf depsOf nodes rest acc
+        else
+          case findByName nameOf nodes name of
+            Nothing => reachableGo (fuel - 1) nameOf depsOf nodes rest (name :: acc)
+            Just node => reachableGo (fuel - 1) nameOf depsOf nodes (append (depsOf node) rest) (name :: acc)
+
+-- ---------------------------------------------------------------
+-- 依赖序拓扑排序
+-- ---------------------------------------------------------------
+-- | 按输入顺序作为起点顺序做 DFS 后序（依赖在前）。`starts` 的先后由调用方决定；
+-- 需要跨缓存状态确定时，调用方先把节点排成全序。不在 `nodes` 里的依赖名被忽略。
+export topoOrderBy : (a -> String) -> (a -> List String) -> List a -> List a
+topoOrderBy nameOf depsOf nodes =
+  secondOf (topoVisitAll (length nodes + 1) nameOf depsOf nodes (map nameOf nodes) [] [])
+
+topoVisit : Int -> (a -> String) -> (a -> List String) -> List a -> String -> List String -> List a -> (List String, List a)
+topoVisit fuel nameOf depsOf nodes name visited acc =
+  if fuel <= 0 then
+    (visited, acc)
+  else if memName name visited then
+    (visited, acc)
+  else
+    case findByName nameOf nodes name of
+      Nothing => (name :: visited, acc)
+      Just node =>
+        let
+          step = topoVisitAll (fuel - 1) nameOf depsOf nodes (depsOf node) (name :: visited) acc
+        in (firstOf step, append (secondOf step) [node])
+
+topoVisitAll : Int -> (a -> String) -> (a -> List String) -> List a -> List String -> List String -> List a -> (List String, List a)
+topoVisitAll fuel nameOf depsOf nodes work visited acc =
+  if fuel <= 0 then
+    (visited, acc)
+  else
+    case work of
+      [] => (visited, acc)
+      name :: rest =>
+        let
+          step = topoVisit fuel nameOf depsOf nodes name visited acc
+        in topoVisitAll (fuel - 1) nameOf depsOf nodes rest (firstOf step) (secondOf step)
+
+findByName : (a -> String) -> List a -> String -> Maybe a
+findByName _ [] _ = Nothing
+findByName nameOf (n :: rest) name =
+  if nameOf n == name then Just n else findByName nameOf rest name
