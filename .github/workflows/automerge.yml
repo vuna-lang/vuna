@@ -3,8 +3,9 @@ name: automerge
 # 门禁全绿的 PR 自动进入合并队列。非 draft、同仓库分支、没有 hold 标签时打开
 # auto-merge；draft / hold 时先从队列移除再关闭 auto-merge。队列的合并由 GitHub 执行，
 # 不在本 workflow 里直接 merge。
-# GitHub 回归（community#209348）后 armed PR 不会在 checks 变绿时自动入队，
-# 补 enqueue 由 merge-queue-sweep.yml 定期负责；本 workflow 只 arm / disarm。
+# GitHub 回归（community#209348）后 armed PR 不会在 checks 变绿时自动入队：
+# 事件恰好发生在变绿之后时由本 workflow 直接补一次 enqueue；其余由
+# merge-queue-sweep.yml 在 ci / gates 完成时和 cron 兜底补齐。
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, synchronize]
@@ -33,8 +34,10 @@ jobs:
           set -euo pipefail
 
           pr_json=$(gh pr view "$PR" --repo "$REPO" \
-            --json id,isDraft,labels,headRepository,autoMergeRequest)
+            --json id,headRefOid,isDraft,labels,headRepository,autoMergeRequest,mergeStateStatus)
           pr_id=$(jq -r '.id' <<<"$pr_json")
+          head_oid=$(jq -r '.headRefOid' <<<"$pr_json")
+          merge_state=$(jq -r '.mergeStateStatus // empty' <<<"$pr_json")
           is_draft=$(jq -r '.isDraft' <<<"$pr_json")
           head_repo=$(jq -r '.headRepository.nameWithOwner // empty' <<<"$pr_json")
           labels=$(jq -r '.labels[].name' <<<"$pr_json")
@@ -43,6 +46,7 @@ jobs:
           # 队列状态只能走 GraphQL：gh pr view 没有 isInMergeQueue 字段。
           in_queue=false
           queue_enabled=false
+          stack_number=""
           # shellcheck disable=SC2016
           if queue_json=$(gh api graphql \
             -f owner="${REPO%/*}" -f name="${REPO#*/}" -F number="$PR" \
@@ -52,11 +56,13 @@ jobs:
                   pullRequest(number:$number){
                     isInMergeQueue
                     isMergeQueueEnabled
+                    stack { number }
                   }
                 }
               }' 2>/dev/null); then
             in_queue=$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$queue_json")
             queue_enabled=$(jq -r '.data.repository.pullRequest.isMergeQueueEnabled // false' <<<"$queue_json")
+            stack_number=$(jq -r '.data.repository.pullRequest.stack.number // empty' <<<"$queue_json")
           fi
 
           hold=""
@@ -82,6 +88,26 @@ jobs:
 
           if [ "$in_queue" = "true" ]; then
             exit 0
+          fi
+
+          # 已 arm 的 PR 在事件发生时已经变绿，就直接补一次 enqueue：GitHub 回归后
+          # 它不会自动入队，等 sweep 还要多一个回合。
+          if [ -n "$auto" ] && [ "$merge_state" = "CLEAN" ]; then
+            if [ -n "$stack_number" ]; then
+              # stack 的整条入队走 REST merge-async，接入前不按单 PR enqueue。
+              echo "automerge: #$PR 属于 stack #$stack_number，跳过单 PR enqueue"
+            elif [ "$queue_enabled" = "true" ]; then
+              # shellcheck disable=SC2016
+              if gh api graphql \
+                -f query='mutation($id:ID!,$head:GitObjectID){
+                  enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$head}){clientMutationId}
+                }' \
+                -f id="$pr_id" -f head="$head_oid" >/dev/null; then
+                echo "automerge: #$PR 在事件时已 CLEAN，直接入队"
+              else
+                echo "automerge: #$PR 入队失败（留给 sweep 重试）" >&2
+              fi
+            fi
           fi
 
           if [ -z "$auto" ]; then
