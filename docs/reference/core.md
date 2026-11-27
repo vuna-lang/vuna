@@ -79,6 +79,11 @@ data Term where
   否则递归定义在卡住 case 上会被反复 delta 展开（每层引入新 binder，不终止）；
 - `VPi` / `VLam` 做 eta（fresh var）；neutral 逐 spine 比较；`VCon` / `VCase` 逐
   构造子 / 分支比较；卡住的 `VCase` 与 `VCon` 不相等；
+- 卡住 case 的分支体比较（`convBranchFuel`）把路径上正在比较的卡住值对记下来：同一对
+  （头部标识 + 实参；`NVar` 按 `level - depth` 归一，binder 名不参与）再次出现时按余归纳
+  判等，同级其余分支照常比较——两个不同递归族在同一中性 scrutinee 上逐层推进出新的卡住
+  应用时，不这样判停就会一路烧光 fuel 报 `IC_FuelExhausted`，而差别其实落在另一支上。
+  解表规模变了就不认命中（仍走展开路径，保守失败，不静默判等）；
 - 失败返回 `type mismatch: expected X, got Y`（带位置的版本 `mismatchAt`）。
 
 元变量求解（`solveMeta`）：

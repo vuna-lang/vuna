@@ -1,0 +1,26 @@
+-- 正例：卡住 case 的递归分支体按同一比较对重复出现时判等（余归纳），不烧 conv fuel。
+-- `walk t` / `stroll t` 是结构递归函数在同一中性 scrutinee 上，两个分支体都推进出新的
+-- 卡住应用（`walk k` / `stroll k`）；两个分支族的展开是同一棵无限树，定义性相等成立。
+import Prelude
+
+data Tree : Type where
+  Node : Tree -> Tree
+  Leaf : Tree
+
+walk : Tree -> Type
+walk t =
+  case t of
+    Node k => walk k
+    Leaf => Int
+
+stroll : Tree -> Type
+stroll t =
+  case t of
+    Node k => stroll k
+    Leaf => Int
+
+same : (t : Tree) -> walk t -> stroll t
+same t x = x
+
+main : String
+main = "ok"
