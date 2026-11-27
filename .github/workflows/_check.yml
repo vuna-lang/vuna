@@ -117,6 +117,8 @@ jobs:
               .#vuna-target-native .#vuna-target-wasm .#vuna-store); do
             sudo ln -sfn "$p" "/nix/var/nix/gcroots/vuna-ci-$(basename "$p")"
           done
+          # 读数：根是否真的登记上了（上一次实测 gc 仍删掉了工具链，登记成功与否要能看见）。
+          echo "=== gcroots vuna-ci: $(nix-store --gc --print-roots 2>/dev/null | grep -c 'gcroots/vuna-ci-')"
 
       - name: ${{ inputs.group }}
         env:
