@@ -164,14 +164,28 @@ export defNames : List (String, List (List Pat, Expr)) -> List String
 defNames defs = map firstOf defs
 
 -- ---------------------------------------------------------------
--- 转发器：`g k x = k x` 这类只调用某个形参、其余形参原样转交的定义。终止性分析把
--- 调用点 `g f a` 直接看成 `f a`（定义性 beta 归约），回调里的下降关系才不会被
--- 「callee 以值传递」挡住。
+-- 转发器：`g k x = k x` 这类「只调用一个回调、其余实参由形参拼出」的定义。终止性分析把
+-- 调用点 `g f a` 看成 `f a`（定义性 beta 归约），回调里的下降关系才不会被
+-- 「callee 以值传递」挡住。三条与源形状有关的结论：
+--   * 回调实参可以是形参上的**无 binder 表达式**（`g k c = k (tail c)`、`g k n = k (n - 1)`）：
+--     模板按调用点实参替换后再交给同一套尺寸判据，不认识的形状仍落保守方向；
+--   * 被调者可以是**另一个转发器**（`via k = apply k`：转发器被部分应用后再调用），
+--     归约时把两层实参拼起来继续归约；
+--   * 应用脊椎先拼平（`(g a) b` = `g [a, b]`）再归约，与 `ElabInput` 的按 arity 嵌套一致。
+-- 模板只收无 binder 的形状，替换因此不会捕获调用点表达式的自由变量；模板里出现本组名字
+-- 的定义不算转发器（否则改写会在自己的定义体上不停展开）。改写只进入终止性分析，
+-- 不改变精化与求值。
 -- ---------------------------------------------------------------
 record Forwarder where
   fwdCallee : String
+  -- | 形参个数（= 子句模式个数）。
+  fwdArity : Int
+  -- | 形参名（模板里的占位以此为准）。
+  fwdParams : List String
+  -- | 被调形参下标；< 0 表示被调者是另一个转发器（`fwdChain`）。
   fwdCbParam : Int
-  fwdArgParams : List Int
+  fwdChain : String
+  fwdArgs : List Expr
 
 pvarParamsOf : List Pat -> List String
 pvarParamsOf [] = []
@@ -190,85 +204,201 @@ paramPositionOf n (p :: rest) =
       Just i => Just (i + 1)
       Nothing => Nothing
 
-argParamIndices : List String -> List Expr -> Maybe (List Int)
-argParamIndices params [] = Just []
-argParamIndices params (a :: rest) =
-  case a of
-    EVar n sp =>
-      case paramPositionOf (n) params of
-        Just i =>
-          case argParamIndices params rest of
-            Just is => Just (i :: is)
-            Nothing => Nothing
-        Nothing => Nothing
-    _ => Nothing
+-- 应用脊椎：`(g a) b` 拼平成 `g [a, b]`；头部不是应用时实参表为空。
+spineOf : Expr -> (Expr, List Expr)
+spineOf (EApp fn args sp) =
+  let
+    inner = spineOf fn
+  in (firstOf inner, append (secondOf inner) args)
+spineOf e = (e, [])
 
-forwarderOfClause : String -> (List Pat, Expr) -> Maybe Forwarder
-forwarderOfClause name (pats, body) =
+-- 回调实参模板允许的形状：无 binder（替换不会捕获自由变量）。变量可以是形参（替换点）或
+-- 全局名（原样保留）。`case` / `let` / `λ` / `do` 一律不收，留着按普通调用保守处理。
+fwdTmplOk : Expr -> Bool
+fwdTmplOk (EVar n sp) = True
+fwdTmplOk (EInt k ksp) = True
+fwdTmplOk (EStr s ssp) = True
+fwdTmplOk (EFloat raw rsp) = True
+fwdTmplOk (EField base f sp) = fwdTmplOk base
+fwdTmplOk (EApp fn args sp) = fwdTmplOk fn && fwdTmplsOk args
+fwdTmplOk _ = False
+
+fwdTmplsOk : List Expr -> Bool
+fwdTmplsOk [] = True
+fwdTmplsOk (a :: rest) = fwdTmplOk a && fwdTmplsOk rest
+
+mentionsName : String -> Expr -> Bool
+mentionsName n (EVar m msp) = n == m
+mentionsName n (EApp fn args sp) = mentionsName n fn || anyMentionsName n args
+mentionsName n (EField base f sp) = mentionsName n base
+mentionsName n _ = False
+
+anyMentionsName : String -> List Expr -> Bool
+anyMentionsName n [] = False
+anyMentionsName n (a :: rest) = mentionsName n a || anyMentionsName n rest
+
+forwarderOfClause : List Forwarder -> String -> (List Pat, Expr) -> Maybe Forwarder
+forwarderOfClause fwds name (pats, body) =
   let
     params = pvarParamsOf pats
-  in if length params == length pats then
-    case body of
-      EApp (EVar k ksp) cargs sp =>
-        case paramPositionOf (k) params of
-          Just j =>
-            case argParamIndices params cargs of
-              Just idxs => Just (Forwarder name j idxs)
-              Nothing => Nothing
-          Nothing => Nothing
+  in if length params == length pats && notEmpty params then
+    case spineOf body of
+      (EVar h hsp, cargs) => forwarderOfCall fwds name params h cargs
       _ => Nothing
   else
     Nothing
 
-sameIntLists : List Int -> List Int -> Bool
-sameIntLists [] [] = True
-sameIntLists (x :: xs) (y :: ys) = x == y && sameIntLists xs ys
-sameIntLists _ _ = False
+-- 体是「把某个函数应用到一组实参模板上」：被调者要么是本组形参（回调），要么是另一个
+-- 已识别的转发器（中转 / 部分应用）。
+forwarderOfCall : List Forwarder -> String -> List String -> String -> List Expr -> Maybe Forwarder
+forwarderOfCall fwds name params h cargs =
+  if fwdTmplsOk cargs && notEmpty cargs then
+    if anyMentionsName name cargs then Nothing else forwarderOfHit fwds name params h cargs
+  else
+    Nothing
+
+forwarderOfHit : List Forwarder -> String -> List String -> String -> List Expr -> Maybe Forwarder
+forwarderOfHit fwds name params h cargs =
+  case paramPositionOf (h) params of
+    Just j => Just (Forwarder name (length params) params j "" cargs)
+    Nothing =>
+      case lookupForwarder h fwds of
+        Just f =>
+          if length cargs <= f.fwdArity then
+            Just (Forwarder name (length params) params (-1) h cargs)
+          else
+            Nothing
+        Nothing => Nothing
+
+-- 两个模板在「形参按位置对应」的口径下相同（多子句的形参名可以不同）。fuel 按模板节点数
+-- 派生：每次下降正好消费一层节点。
+sameFwdArg : Int -> List String -> Expr -> List String -> Expr -> Bool
+sameFwdArg fuel pa a pb b =
+  if fuel <= 0 then
+    False
+  else
+    case (a, b) of
+      (EVar n na, EVar m nb) => sameFwdVar pa n pb m
+      (EInt x xa, EInt y yb) => x == y
+      (EStr x xa, EStr y yb) => x == y
+      (EFloat x xa, EFloat y yb) => x == y
+      (EField ba fa sa, EField bb fb sb) => fa == fb && sameFwdArg (fuel - 1) pa ba pb bb
+      (EApp fa aa sa, EApp fb ab sb) => sameFwdArg (fuel - 1) pa fa pb fb && sameFwdArgs (fuel - 1) pa aa pb ab
+      _ => False
+
+sameFwdVar : List String -> String -> List String -> String -> Bool
+sameFwdVar pa n pb m =
+  case paramPositionOf (n) pa of
+    Just i =>
+      case paramPositionOf (m) pb of
+        Just k => i == k
+        Nothing => False
+    Nothing =>
+      case paramPositionOf (m) pb of
+        Just k => False
+        Nothing => n == m
+
+sameFwdArgs : Int -> List String -> List Expr -> List String -> List Expr -> Bool
+sameFwdArgs fuel pa xs pb ys =
+  if fuel <= 0 then
+    False
+  else
+    case xs of
+      [] =>
+        case ys of
+          [] => True
+          _ => False
+      a :: rest =>
+        case ys of
+          [] => False
+          b :: rest2 => sameFwdArg (fuel - 1) pa a pb b && sameFwdArgs (fuel - 1) pa rest pb rest2
+
+templWeight : Expr -> Int
+templWeight (EApp fn args sp) = 1 + templWeight fn + sumF (map templWeight args)
+templWeight (EField base f sp) = 1 + templWeight base
+templWeight _ = 1
+
+templsWeight : List Expr -> Int
+templsWeight xs = sumF (map templWeight xs)
 
 sameForwarder : Forwarder -> Forwarder -> Bool
-sameForwarder a b = a.fwdCbParam == b.fwdCbParam && sameIntLists a.fwdArgParams b.fwdArgParams
+sameForwarder a b =
+  a.fwdArity
+    == b.fwdArity
+    && a.fwdCbParam
+    == b.fwdCbParam
+    && a.fwdChain
+    == b.fwdChain
+    && sameFwdArgs
+      (2 + templsWeight a.fwdArgs + templsWeight b.fwdArgs)
+      a.fwdParams
+      a.fwdArgs
+      b.fwdParams
+      b.fwdArgs
 
-matchForwarders : Forwarder -> List (List Pat, Expr) -> Bool
-matchForwarders f [] = True
-matchForwarders f (cl :: rest) =
-  case forwarderOfClause f.fwdCallee cl of
-    Just g => sameForwarder f g && matchForwarders f rest
+matchForwarders : List Forwarder -> Forwarder -> List (List Pat, Expr) -> Bool
+matchForwarders fwds f [] = True
+matchForwarders fwds f (cl :: rest) =
+  case forwarderOfClause fwds f.fwdCallee cl of
+    Just g => sameForwarder f g && matchForwarders fwds f rest
     Nothing => False
 
-forwarderOfGroup : (String, List (List Pat, Expr)) -> Maybe Forwarder
-forwarderOfGroup (name, cl :: rest) =
-  case forwarderOfClause name cl of
-    Just f => if matchForwarders f rest then Just f else Nothing
+forwarderOfGroup : List Forwarder -> (String, List (List Pat, Expr)) -> Maybe Forwarder
+forwarderOfGroup fwds (name, cl :: rest) =
+  case forwarderOfClause fwds name cl of
+    Just f => if matchForwarders fwds f rest then Just f else Nothing
     Nothing => Nothing
-forwarderOfGroup _ = Nothing
+forwarderOfGroup fwds _ = Nothing
 
-forwardersOfDefs : List (String, List (List Pat, Expr)) -> List Forwarder
-forwardersOfDefs [] = []
-forwardersOfDefs (d :: rest) =
-  case forwarderOfGroup d of
-    Just f => f :: forwardersOfDefs rest
-    Nothing => forwardersOfDefs rest
+-- 中转转发器要等被中转的那个先认出来：不动点每轮拿上一轮的表重扫，直到条目数不再变
+-- （识别只依赖表里已有的名字，所以单调，条目数稳定即到达不动点）。
+forwardersFix : List (String, List (List Pat, Expr)) -> Int -> List Forwarder -> List Forwarder
+forwardersFix defs fuel fwds =
+  if fuel <= 0 then
+    fwds
+  else
+    let
+      fwds2 = forwardersScan defs fwds []
+    in if length fwds2 == length fwds then fwds2 else forwardersFix defs (fuel - 1) fwds2
+
+forwardersScan : List (String, List (List Pat, Expr)) -> List Forwarder -> List Forwarder -> List Forwarder
+forwardersScan [] old acc = reverse acc
+forwardersScan (d :: rest) old acc =
+  case forwarderOfGroup old d of
+    Just f => forwardersScan rest old (f :: acc)
+    Nothing => forwardersScan rest old acc
 
 forwardersOf : List Decl -> List Forwarder
-forwardersOf decls = forwardersOfDefs (groupDefs decls)
+forwardersOf decls =
+  let
+    defs = groupDefs decls
+  in forwardersFix defs (length defs) []
 
 lookupForwarder : String -> List Forwarder -> Maybe Forwarder
 lookupForwarder n [] = Nothing
 lookupForwarder n (f :: rest) = if f.fwdCallee == n then Just f else lookupForwarder n rest
 
-argsAt : List Expr -> List Int -> Maybe (List Expr)
-argsAt args [] = Just []
-argsAt args (i :: rest) =
-  case nthExpr args i of
-    Just a =>
-      case argsAt args rest of
-        Just more => Just (a :: more)
-        Nothing => Nothing
-    Nothing => Nothing
+-- 模板替换：形参名 → 调用点实参（模板里其余变量是全局名，原样保留）。
+substFwd : List String -> List Expr -> Expr -> Expr
+substFwd params actuals (EVar n nsp) =
+  case paramPositionOf (n) params of
+    Just i =>
+      case nthExpr actuals i of
+        Just a => a
+        Nothing => EVar n nsp
+    Nothing => EVar n nsp
+substFwd params actuals (EApp fn args sp) =
+  EApp (substFwd params actuals fn) (map (substFwd params actuals) args) sp
+substFwd params actuals (EField base f sp) = EField (substFwd params actuals base) f sp
+substFwd params actuals e = e
 
-fwArgs : List Forwarder -> List Expr -> List Expr
-fwArgs fwds [] = []
-fwArgs fwds (a :: rest) = fwExpr fwds a :: fwArgs fwds rest
+takeArgs : Int -> List Expr -> List Expr
+takeArgs n [] = []
+takeArgs n (a :: rest) = if n <= 0 then [] else a :: takeArgs (n - 1) rest
+
+dropArgs : Int -> List Expr -> List Expr
+dropArgs n [] = []
+dropArgs n (a :: rest) = if n <= 0 then a :: rest else dropArgs (n - 1) rest
 
 fwFields : List Forwarder -> List (String, Expr) -> List (String, Expr)
 fwFields fwds fields = fwFieldsF (exprBudget 32 (ERecord "" fields noNodeRef)) fwds fields
@@ -324,8 +454,48 @@ fwArgsF : Int -> List Forwarder -> List Expr -> List Expr
 fwArgsF fuel fwds [] = []
 fwArgsF fuel fwds (a :: rest) = fwExprF (fuel - 1) fwds a :: fwArgsF (fuel - 1) fwds rest
 
-fwExpr : List Forwarder -> Expr -> Expr
-fwExpr fwds e = fwExprF (exprBudget 64 e) fwds e
+-- | 归约一个转发器应用：`g e1..en r1..rk` → `cb (a1[σ]..am[σ]) r1..rk`（σ 是前 n 个实参）。
+--   被调者是另一个转发器（`via k = apply k`，部分应用后再调用）时，把两层实参拼起来继续
+--   归约；回调实参位置本身是「转发器的部分应用」时同样拼平后继续。
+fwdReduce : Int -> List Forwarder -> Expr -> List Expr -> NodeRef -> Expr
+fwdReduce fuel fwds headExpr spine sp =
+  if fuel <= 0 then
+    EApp headExpr spine sp
+  else
+    case headExpr of
+      EVar g gsp =>
+        case lookupForwarder (g) fwds of
+          Just f => fwdReduceTaken (fuel - 1) fwds f spine sp
+          Nothing => EApp (EVar g gsp) spine sp
+      EApp _ _ _ =>
+        let
+          flat = spineOf headExpr
+          innerHead = firstOf flat
+        in case innerHead of
+          EVar g gsp =>
+            case lookupForwarder (g) fwds of
+              Just f => fwdReduceTaken (fuel - 1) fwds f (append (secondOf flat) spine) sp
+              Nothing => EApp headExpr spine sp
+          _ => EApp headExpr spine sp
+      _ => EApp headExpr spine sp
+
+-- 形参个数够了才归约：取前缀做实参替换，剩下的实参原样接在回调调用后面。
+fwdReduceTaken : Int -> List Forwarder -> Forwarder -> List Expr -> NodeRef -> Expr
+fwdReduceTaken fuel fwds f spine sp =
+  if length spine >= f.fwdArity then
+    let
+      taken = takeArgs f.fwdArity spine
+      rest = dropArgs f.fwdArity spine
+      mapped = fwArgsF (fuel - 1) fwds (map (substFwd f.fwdParams taken) f.fwdArgs)
+      whole = append mapped rest
+    in if f.fwdCbParam >= 0 then
+      case nthExpr taken f.fwdCbParam of
+        Just cb => fwdReduce (fuel - 1) fwds cb whole sp
+        Nothing => EApp (EVar (f.fwdCallee) sp) whole sp
+    else
+      fwdReduce (fuel - 1) fwds (EVar (f.fwdChain) sp) whole sp
+  else
+    EApp (EVar (f.fwdCallee) sp) spine sp
 
 fwExprF : Int -> List Forwarder -> Expr -> Expr
 fwExprF fuel fwds e =
@@ -339,14 +509,18 @@ fwExprF fuel fwds e =
         in case fn of
           EVar g gsp =>
             case lookupForwarder (g) fwds of
-              Just f =>
-                case nthExpr args2 f.fwdCbParam of
-                  Just (EVar v vsp) =>
-                    case argsAt args2 f.fwdArgParams of
-                      Just mapped => EApp (EVar v vsp) mapped sp
-                      Nothing => EApp (EVar g gsp) args2 sp
-                  _ => EApp (EVar g gsp) args2 sp
-              Nothing => EApp (fwExprF (fuel - 1) fwds fn) args2 sp
+              Just f => fwdReduce (fuel - 1) fwds (EVar g gsp) args2 sp
+              Nothing => EApp (EVar g gsp) args2 sp
+          -- 头部本身是应用（`(g a) b`）：先拼平脊椎，再看拼平后的头部是不是转发器。
+          EApp _ _ _ =>
+            let
+              flat = spineOf e
+            in case firstOf flat of
+              EVar g gsp =>
+                case lookupForwarder (g) fwds of
+                  Just f => fwdReduce (fuel - 1) fwds (EVar g gsp) (fwArgsF (fuel - 1) fwds (secondOf flat)) sp
+                  Nothing => EApp (fwExprF (fuel - 1) fwds fn) args2 sp
+              _ => EApp (fwExprF (fuel - 1) fwds fn) args2 sp
           _ => EApp (fwExprF (fuel - 1) fwds fn) args2 sp
       ELam ns body sp => ELam ns (fwExprF (fuel - 1) fwds body) sp
       ELet binds body rec_ sp => ELet (fwBindsF (fuel - 1) fwds binds) (fwExprF (fuel - 1) fwds body) rec_ sp

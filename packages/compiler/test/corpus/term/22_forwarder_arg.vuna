@@ -1,0 +1,12 @@
+-- 回调实参不是纯形参（`k (n - 1)`）：按调用点实参替换后，`n - 1` 在 `n > 0` 的守卫区里
+-- 仍然是带守卫的 Int 下降，判据必须照样成立。
+import Prelude
+
+applySub : (Int -> Int) -> Int -> Int
+applySub k n = k (n - 1)
+
+count : Int -> Int
+count n = if n <= 0 then 0 else applySub count n
+
+main : Int
+main = count 2

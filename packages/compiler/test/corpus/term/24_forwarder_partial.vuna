@@ -1,0 +1,20 @@
+-- 转发器被部分应用后再调用（`via k = apply k`）：两层实参拼起来后仍是 `count n`，
+-- 下降关系必须照样成立。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+apply : (Nat -> Int) -> Nat -> Int
+apply k x = k x
+
+via : (Nat -> Int) -> Nat -> Int
+via k = apply k
+
+count : Nat -> Int
+count Zero = 0
+count (Succ n) = via count n
+
+main : Int
+main = count (Succ (Succ Zero))

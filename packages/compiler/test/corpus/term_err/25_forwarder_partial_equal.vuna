@@ -1,0 +1,18 @@
+-- 转发器被部分应用后再调用（`via k = apply k`）：拼起来是相等调用，必须拒绝。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+apply : (Nat -> Int) -> Nat -> Int
+apply k x = k x
+
+via : (Nat -> Int) -> Nat -> Int
+via k = apply k
+
+bad : Nat -> Int
+bad x = via bad x
+
+main : Int
+main = bad (Succ Zero)

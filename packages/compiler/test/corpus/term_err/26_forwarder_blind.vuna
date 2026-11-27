@@ -1,0 +1,12 @@
+-- 回调实参不是可替换的模板（`if` 表达式）：认不出实参位置，只能按盲调用（全弱边）计入
+-- 并拒绝。这是「模板收无 binder 形状」的保守方向，不能被放宽成「看不到就算相等」。
+import Prelude
+
+applyIf : (Int -> Int) -> Int -> Int
+applyIf k x = k (if x <= 0 then 0 else x)
+
+f : Int -> Int
+f x = applyIf f x
+
+main : Int
+main = f 0

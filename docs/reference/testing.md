@@ -569,12 +569,16 @@ pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其�
   守卫组合是 `16_guard_conj`（`&&` 真分支 / `||` 假分支 / `n > 1` 阈值），
   HOF 元素关系是 `17_hof_fold`（foldl/foldr 的元素参数），实例方法是 `18_instance_rec`
   （结构递归的方法与派生实例），字段投影是 `19_record_proj`（记录字段与 `case <投影>`），
-  转发器是 `20_forwarder`（`apply` / `flip` 按定义性归约）；负例
-  `14_blind_value`（callee 经函数参数转发）、`15_unknown_rel`（实参无尺寸关系仍按弱边留图）、
-  `16_alias_equal`（别名解析后是相等而非下降）、`17_or_then`（`||` 真分支只算共有结论）、
-  `18_and_else`（`&&` 假分支只算共有结论）、`19_local_map`（本地同名 `map` 不被信任）、
+  转发器是 `20_forwarder`（`apply` / `flip` 按定义性归约）、`22_forwarder_arg`（回调实参是
+  `n - 1` 这类形参表达式）、`23_forwarder_proj`（回调实参是投影 `tail c`）与
+  `24_forwarder_partial`（`via k = apply k`：转发器被部分应用后再调用）；负例
+  `14_blind_value`（回调实参是再调一次回调自己）、`15_unknown_rel`（实参无尺寸关系仍按弱边
+  留图）、`16_alias_equal`（别名解析后是相等而非下降）、`17_or_then`（`||` 真分支只算共有
+  结论）、`18_and_else`（`&&` 假分支只算共有结论）、`19_local_map`（本地同名 `map` 不被信任）、
   `20_instance_rec`（实例方法自递归）、`21_instance_mutual`（同名方法互递归）、
-  `22_alias_proj`（alias record 的投影是恒等）与 `23_forwarder_equal`（转发后仍是相等）；
+  `22_alias_proj`（alias record 的投影是恒等）、`23_forwarder_equal`（转发后仍是相等）、
+  `24_forwarder_arg_equal`（回调用构造子包住形参）、`25_forwarder_partial_equal`（中转转发器
+  拼平后仍是相等）与 `26_forwarder_blind`（`if` 一类非模板实参仍按盲调用计入）；
   错误码段（第 36 段）用 `vuna dev errors gen`（真源是诊断域枚举）检查 TC/CG/LN/FX
   分区与幂等。
 - **第 39 段：包上下文回归**。覆盖语义边界：无 manifest 的文件只可见 base
