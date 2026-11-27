@@ -116,7 +116,7 @@ cmd_show() {
     state,
     status: (.status.name // "-"),
     type: (.type.name // "-"),
-    priority: ([.issue_field_values[]? | select(.issue_field_name == "Priority") | .value] | first // "-"),
+    priority: ([.issue_field_values[]? | select(.issue_field_name == "Priority") | (.single_select_option.name // (.value | tostring))] | first // "-"),
     subs: (.sub_issues_summary.completed | tostring) + "/" + (.sub_issues_summary.total | tostring)
   }')
   relations=$(gh issue view "$n" --repo "$repo" --json parent,blockedBy,blocking)
@@ -261,7 +261,7 @@ cmd_audit() {
   fi
 
   texty=$(gh issue list --repo "$repo" --state all --limit 1000 --json number,body --jq '
-    .[] | select((.body // "") | test("(?im)^\\s*-\\s*(Parent|Blocked by|Related)[:：]")) | .number' | sort -n)
+    .[] | select((.body // "") | test("(?im)^\\s*-\\s*(Parent|Blocked by|Blocks|Related)[:：]")) | .number' | sort -n)
   if [ -n "$texty" ]; then
     echo "正文里仍有关系文本的 issue:" >&2
     printf '  #%s\n' $texty >&2
@@ -269,7 +269,8 @@ cmd_audit() {
   fi
 
   untyped=$(gh api --paginate "repos/$repo/issues?state=open&per_page=100" --jq '
-    .[] | select(.pull_request == null and .type == null) | .number' | sort -n)
+    .[] | select(.pull_request == null and .type == null
+      and ([.labels[].name] | any(startswith("debt")) | not)) | .number' | sort -n)
   if [ -n "$untyped" ]; then
     echo "缺 issue type 的 open issue:" >&2
     printf '  #%s\n' $untyped >&2
