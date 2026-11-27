@@ -101,4 +101,12 @@ case " $VUNA_TEST_TIERS " in
     ;;
 esac
 
+# 调度权重：把本轮实测耗时表打进构建日志。runner 的机器特征与开发机差数倍，
+# `test/suite/costs.baseline` 的 LPT 权重只能按 runner 上的读数重录。
+if [ -f .local/test-suite/costs.tsv ]; then
+  echo "=== suite-costs begin"
+  cat .local/test-suite/costs.tsv
+  echo "=== suite-costs end"
+fi
+
 exit "$rc"
