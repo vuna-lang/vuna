@@ -304,7 +304,7 @@ mapAltExpr f (a :: rest) =
     (f a.altBody)
     (\body2 => Vuna.Compiler.Base.Common.bind (mapAltExpr f rest) (\rest2 => OkC (Alt a.altPat body2 a.altRef :: rest2)))
 
-mapFieldExprs : (Expr -> Check Expr) -> List (String, Expr) -> Check (List (String, Expr))
+export mapFieldExprs : (Expr -> Check Expr) -> List (String, Expr) -> Check (List (String, Expr))
 mapFieldExprs _ [] = OkC []
 mapFieldExprs f (field :: rest) =
   Vuna.Compiler.Base.Common.bind
@@ -325,7 +325,7 @@ mapOneDoStmtExpr f (DExpr e sp) = Vuna.Compiler.Base.Common.bind (f e) (\e2 => O
 mapOneDoStmtExpr f (DLet binds sp) =
   Vuna.Compiler.Base.Common.bind (mapBindingExpr f binds) (\binds2 => OkC (DLet binds2 sp))
 
-mapInterpExpr : (Expr -> Check Expr) -> List InterpPart -> Check (List InterpPart)
+export mapInterpExpr : (Expr -> Check Expr) -> List InterpPart -> Check (List InterpPart)
 mapInterpExpr _ [] = OkC []
 mapInterpExpr f (p :: rest) =
   Vuna.Compiler.Base.Common.bind
@@ -482,6 +482,78 @@ mapDeclsWith f (d :: rest) =
 
 -- ---------------------------------------------------------------
 -- 作用域下降
+-- ---------------------------------------------------------------
+-- | 带 binder 作用域的重写：子节点按 `scopedExprChildren` 的规则拿到扩展后的 scope。
+-- `ELet` / `EDo` 的顺序绑定无法由静态表表达，**调用方必须先处理**；走到这里说明
+-- pass 漏了钩子，按内部错误报出（不静默按同一 scope 下降）。
+export mapScopedExpr : (List String -> Expr -> Check Expr) -> List String -> Expr -> Check Expr
+mapScopedExpr f scope (EVar name sp) = OkC (EVar name sp)
+mapScopedExpr f scope (EInt n sp) = OkC (EInt n sp)
+mapScopedExpr f scope (EStr s sp) = OkC (EStr s sp)
+mapScopedExpr f scope (EFloat raw sp) = OkC (EFloat raw sp)
+mapScopedExpr f scope (ELam params body sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f (append (map firstOf params) scope) body)
+    (\b => OkC (ELam params b sp))
+mapScopedExpr f scope (EApp fn args sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope fn)
+    (\fn2 => Vuna.Compiler.Base.Common.bind (mapScopedExprList f scope args) (\args2 => OkC (EApp fn2 args2 sp)))
+mapScopedExpr f scope (EPi name implicit qty dom cod sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope dom)
+    (\dom2 => Vuna.Compiler.Base.Common.bind (f (name :: scope) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
+mapScopedExpr f scope (ECase scrut alts sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope scrut)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (mapScopedAlts f scope alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+mapScopedExpr f scope (EIf c t el sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope c)
+    (\c2 => Vuna.Compiler.Base.Common.bind (f scope t) (\t2 => Vuna.Compiler.Base.Common.bind (f scope el) (\el2 => OkC (EIf c2 t2 el2 sp))))
+mapScopedExpr f scope (EField base fname sp) =
+  Vuna.Compiler.Base.Common.bind (f scope base) (\b => OkC (EField b fname sp))
+mapScopedExpr f scope (ERecord name fields sp) =
+  Vuna.Compiler.Base.Common.bind (mapFieldExprs (f scope) fields) (\fs => OkC (ERecord name fs sp))
+mapScopedExpr f scope (ERecUpdate base fields sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope base)
+    (\b => Vuna.Compiler.Base.Common.bind (mapFieldExprs (f scope) fields) (\fs => OkC (ERecUpdate b fs sp)))
+mapScopedExpr f scope (EInterp parts sp) =
+  Vuna.Compiler.Base.Common.bind (mapInterpExpr (f scope) parts) (\ps => OkC (EInterp ps sp))
+mapScopedExpr f scope (ELet _ _ _ _) = icInternal "mapScopedExpr: caller must handle ELet"
+mapScopedExpr f scope (EDo _ _) = icInternal "mapScopedExpr: caller must handle EDo"
+
+-- | 同 `mapScopedExpr`，但 `case` 分支的模式交给 `pf` 解析（返回解析后的模式与
+-- 引入的 binder）。`ELet` / `EDo` 仍由 pass 自己处理。
+export mapScopedExprPat : (List String -> Expr -> Check Expr) -> (Pat -> Check (Pat, List String)) -> List String -> Expr -> Check Expr
+mapScopedExprPat f pf scope (ECase scrut alts sp) =
+  Vuna.Compiler.Base.Common.bind
+    (f scope scrut)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (mapScopedAltsPat f pf scope alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+mapScopedExprPat f pf scope e = mapScopedExpr f scope e
+
+mapScopedAltsPat : (List String -> Expr -> Check Expr) -> (Pat -> Check (Pat, List String)) -> List String -> List Alt -> Check (List Alt)
+mapScopedAltsPat _ _ _ [] = OkC []
+mapScopedAltsPat f pf scope (a :: rest) =
+  Vuna.Compiler.Base.Common.bind (pf a.altPat) (
+      \p =>
+        case p of
+          (pat2, bound) => Vuna.Compiler.Base.Common.bind (f (append bound scope) a.altBody) (\body2 => Vuna.Compiler.Base.Common.bind (mapScopedAltsPat f pf scope rest) (\rest2 => OkC (Alt pat2 body2 a.altRef :: rest2)))
+    )
+
+mapScopedExprList : (List String -> Expr -> Check Expr) -> List String -> List Expr -> Check (List Expr)
+mapScopedExprList f scope es = mapExprList (f scope) es
+
+mapScopedAlts : (List String -> Expr -> Check Expr) -> List String -> List Alt -> Check (List Alt)
+mapScopedAlts _ _ [] = OkC []
+mapScopedAlts f scope (a :: rest) =
+  Vuna.Compiler.Base.Common.bind
+    (f (append (patBinders a.altPat) scope) a.altBody)
+    (\body2 => Vuna.Compiler.Base.Common.bind (mapScopedAlts f scope rest) (\rest2 => OkC (Alt a.altPat body2 a.altRef :: rest2)))
+
+-- ---------------------------------------------------------------
+-- 作用域表
 -- ---------------------------------------------------------------
 -- `Nothing` = 该构造子的 binder 可见性不是静态子节点表能表达的（顺序 `let` / do 链），
 -- 由 pass 自己的钩子处理；`Just kids` 里的每个子节点都已带好扩展后的 scope。
