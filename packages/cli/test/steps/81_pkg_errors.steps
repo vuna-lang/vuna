@@ -26,3 +26,9 @@ out-contains: PKG_IdentityMismatch
 run: sh -c 'S="$TMPDIR/pe"; mkdir -p "$S/badid/app"; printf "[package]\nname = \"badid\"\n\n[dependencies.dep]\npath = \"../dep\"\nidentity = \"nope\"\n" > "$S/badid/vuna.toml"; printf "main : Int\nmain = 1\n" > "$S/badid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/badid" 2>&1'
 exit: 1
 out-contains: PKG_IdentityMalformed
+
+# store 物化视图的出处记录（`.origin`）与声明不符 ⇒ PKG_ProvenanceMismatch。
+# check 只读 store（不联网）：摘要对得上但来源没被验证过，就不复用缓存。
+run: sh -c 'S="$TMPDIR/pe"; d="$S/pv"; p="$S/store/pkgs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; mkdir -p "$d/app/app" "$p/lib"; printf "[package]\nname = \"pv\"\n\n[dependencies.dep]\ngit = \"file:///src/dep\"\nrev = \"2222222\"\nhash = \"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n" > "$d/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = d\n" > "$d/app/app/Main.vuna"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$p/vuna.toml"; printf "module D where\n\nexport d : Int\nd = 1\n" > "$p/lib/D.vuna"; printf "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > "$p/.complete"; printf "git:file:///elsewhere/repo@1111111\n" > "$p/.origin"; VUNA_STORE="$S/store" "$VUNA" check "$d/app" 2>&1'
+exit: 1
+out-contains: PKG_ProvenanceMismatch

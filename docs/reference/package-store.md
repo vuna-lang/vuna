@@ -30,13 +30,16 @@ roundtrip 自检：`examples/infra` 的 `pkg-canon-rt` / `pkg-identity-rt`。
 ```text
 $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.vuna/store
   objects/pkg/<64hex>           # 包对象族：`pkg-source 1` 载荷 + Store framing，地址 = 内容摘要
-  pkgs/<64hex>/                 # 物化视图（可删可重建），最后写 .complete（内容 = 摘要）作为提交点
+  pkgs/<64hex>/                 # 物化视图（可删可重建）：文件树 + .origin + .complete（提交点）
   tmp/                          # 取包中转（git clone 等）
   roots/<项目摘要>/<digest>     # fetch 登记的项目保留集合（跨项目 GC 保护）
 ```
 
 - **对象是唯一真源**：内容摘要即对象地址；写用 `Base.Effect.Fs` 的 `fsWriteFileAtomic`
   （`WriteFileAtomic`；handler 内部是 `@vuna@host@tryWriteFileAtomic` + 状态槽）。
+- **`.origin` = 出处记录**：物化视图里每行一个 `depSourceText`（`git:<url>@<rev>` /
+  `url:<u>`），由 fetch / pin 在写 `.complete` **之前**追加（同一摘要可以有多个等价来源，
+  共享 store 上只追加不覆盖）。`.complete` 是提交点，因此「视图完整 ⇒ 出处已记录」。
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
 - framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
@@ -57,8 +60,8 @@ vuna deps fetch [--locked] [DIR]
 | 源 | 行为 |
 | --- | --- |
 | `path` | 不复制、不写 store；声明了 `hash` 就校验（不符报 `PKG_HashMismatch`），声明了 `identity` 就校验语义身份（不符报 `PKG_IdentityMismatch`）；没写则打印当前摘要 |
-| `git` + `rev` + `hash` | 已物化 ⇒ `cached`（缓存命中也会复验 `identity`）；否则克隆到 `tmp/` → checkout `rev` → 收集内容 → 校验摘要/身份 → 写对象 + 物化 |
-| `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验；声明 `identity` 时物化后复验 |
+| `git` + `rev` + `hash` | 已物化且声明来源在 `.origin` 里 ⇒ `cached`（缓存命中也会复验 `identity`）；来源没登记 ⇒ 重新克隆并校验（摘要一致就登记出处）；否则克隆到 `tmp/` → checkout `rev` → 收集内容 → 校验摘要/身份 → 写对象 + 物化 + 登记出处 |
+| `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验；声明 `identity` 时物化后复验；缓存命中的出处规则同上 |
 
 - **只有 fetch 联网**：`check` / `build` / `test` 只读 store，缺对象报
   `PKG_NotMaterialized`（消息里带 `vuna deps fetch` 提示），绝不隐式取包。
@@ -66,6 +69,10 @@ vuna deps fetch [--locked] [DIR]
 - 传输外置给宿主：`git`（clone/checkout）与 `curl`（URL 下载）。语言内只有裸 TCP 原语，
   **不实现 TLS**；HTTPS 由宿主工具的证书栈承担。
 - 摘要不符时**不写 store、不物化**：说明源被改写或声明过期，需人工确认后用正确摘要重写。
+- **出处也是身份**：`hash` 只固定内容，没证明这份内容来自 manifest 写的那条来源。声明的
+  `git:<url>@<rev>` / `url:<u>` 必须出现在 `.origin` 里，否则报 `PKG_ProvenanceMismatch`
+  （`--locked` 不联网，所以直接失败；不带 `--locked` 的 fetch 会从声明的源重取，
+  摘要一致就把来源登记进 `.origin`）。
 - `vuna deps pin` 对 git 依赖同时写 `hash`（完整性）与 `identity`（语义身份）；缓存命中路径
   也复验 `identity`，所以改错身份不会因 local store 已物化而被放过。
 
@@ -78,11 +85,14 @@ DepPath rel      → <包目录>/<rel>
 DepGit/DepUrl    → $VUNA_STORE/pkgs/<normalizeHash hash>   （校验 .complete）
 ```
 
-- 缺失/损坏 ⇒ `PKG_NotMaterialized`；hash 不符（path 显式锁定时）⇒ `PKG_HashMismatch`。
+- 缺失/损坏 ⇒ `PKG_NotMaterialized`；hash 不符（path 显式锁定时）⇒ `PKG_HashMismatch`；
+  声明的来源不在 `.origin` 里 ⇒ `PKG_ProvenanceMismatch`（`vuna deps fetch` 可修复：
+  它从声明的源取一次，内容摘要一致就登记出处）。
 - **包名唯一性不变**：一个依赖图内同名包只能出现一次（无版本号，D13）；需要多版本
   只能改名/分叉。
 - 只读 store（Nix 沙箱）：fetch 失败，已物化可直接 build；Nix 构建应把 store 目录作为
-  输入（`fetchgit` + 预物化），而不是在构建里联网。
+  输入（`fetchgit` + 预物化），而不是在构建里联网。手工预物化的视图也要写 `.origin`
+  （每行一个 `depSourceText`，见 §2），否则 check 报 `PKG_ProvenanceMismatch`。
 
 ## 5. 清理
 
@@ -168,13 +178,15 @@ B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保�
 - `90/steps_native/67_pkg_deps`：依赖声明三路写法、摘要规则、结构错误码、改依赖源码
   不动 manifest 的回归。
 - `90/steps_native/68_pkg_fetch`：本地 git 仓库取包、摘要/身份不符、`--locked`、离线 check、
-  `clean --packages`、`pin`（写 hash + identity；缓存命中复验身份）。
+  `clean --packages`、`pin`（写 hash + identity；缓存命中复验身份）、出处（同 hash 换仓库 /
+  缺 `.origin` / rev 前进但 hash 没更新都不得复用缓存）。
 - `90/steps_native/69_pkg_registry`：本地静态索引、`add` 的 dry-run/写回/自动 fetch/幂等、
   版本不存在、`--no-fetch`、`[registry]` 未知 key、索引 `identity` 写回。
 - `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被工作区/项目 roots 引用的对象、
   删除游离对象、跨项目 roots 保护、`--gc` 必须配 `--packages`。
 - `90/steps_native/81_pkg_errors`：`PKG_FetchFailed` / `PKG_HashMismatch` /
-  `PKG_IdentityMismatch` / `PKG_IdentityMalformed` / `PKG_IndexMalformed` 的结构化覆盖
+  `PKG_IdentityMismatch` / `PKG_IdentityMalformed` / `PKG_IndexMalformed` /
+  `PKG_ProvenanceMismatch` 的结构化覆盖
   （侧车 `81_pkg_errors.diagcodes` 供 diag-coverage 读取）。
 - `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
 

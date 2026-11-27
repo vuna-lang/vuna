@@ -4,8 +4,10 @@
 --
 --   objects/pkg/<64hex>  不可变对象：`pkg-source 1` 规范编码，地址 = 内容摘要（SHA-256）。
 --                        对象是**唯一真源**；写入原子替换（`fsWriteFileAtomic`）。
---   pkgs/<64hex>/        物化视图：从对象解出的文件树，最后写 `.complete`（内容 = 摘要）
---                        作为提交点。视图可删可重建；读前校验 `.complete`，不符就重建。
+--   pkgs/<64hex>/        物化视图：从对象解出的文件树 + `.origin`（每行一个来源文本），
+--                        最后写 `.complete`（内容 = 摘要）作为提交点。视图可删可重建；
+--                        读前校验 `.complete`，不符就重建。出处写在提交点之前，所以完整
+--                        的视图一定带出处。
 --
 -- 包对象放在 `objects/pkg/` 这个 kind 目录下，而不是 `objects/<hex>`：缓存族按
 -- `objects/<kind>/` 分目录，`clean --store` / `store gc` 才能按族作用域，不会误删包对象。
@@ -17,6 +19,7 @@ module Vuna.PackageStore where
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
 import Base.Data.List as List
@@ -87,17 +90,49 @@ isMaterializedEff root digest =
       else
         pure False
 
--- | 物化：逐文件写盘，最后写 `.complete`（提交点）；并发重复物化是幂等的。
-export materializeEff : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> List PackageFile -> Eff r Int
-materializeEff root digest files =
+-- | 物化：逐文件写盘，写**出处记录**，最后写 `.complete`（提交点）；并发重复物化是幂等的。
+-- `source` 是 `depSourceText`（声明的源文本）：只追加到 `.origin`，共享 store 上同一摘要
+-- 可以有多个等价来源。出处写在提交点之前，因此「视图完整 ⇒ 出处已记录」。
+export materializeEff : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> String -> List PackageFile -> Eff r Int
+materializeEff root digest source files =
   do
     let
       dir = materializedDir root digest
     in do
       _ <- ensureDirPath dir
       _ <- writePackageFiles dir files
+      _ <- recordOriginEff dir source
       _ <- fsWriteFileAtomic "${dir}/.complete" digest
       pure 0
+
+-- | 出处记录（`<dir>/.origin`）：每行一个来源文本，已有则不动，否则追加。
+-- 格式由 `Vuna.Compiler.Frontend.Packages.Pkg` 的 `originRecordPath` / 校验口径定义。
+export recordOriginEff : Member nFs FsOp r => String -> String -> Eff r Int
+recordOriginEff dir source =
+  do
+    let
+      recordPath = originRecordPath dir
+    in do
+      exists <- fsFileExists recordPath
+      if exists then
+        do
+          originText <- fsReadFile recordPath
+          if memOriginLine source (split "\n" originText) then pure 0 else fsWriteFileAtomic recordPath (appendOriginLine originText source)
+      else
+        fsWriteFileAtomic recordPath "${source}\n"
+
+-- | 内部：记录里是否已有这条来源（逐行精确比较）。
+memOriginLine : String -> List String -> Bool
+memOriginLine source [] = False
+memOriginLine source (line :: rest) =
+  if trim line == source then True else memOriginLine source rest
+
+-- | 内部：追加一行来源文本（保证与上一行之间恰好一个换行）。
+appendOriginLine : String -> String -> String
+appendOriginLine originText source =
+  let
+    kept = trimRight originText
+  in if kept == "" then "${source}\n" else "${kept}\n${source}\n"
 
 -- | 内部：把包文件列表逐个写进物化目录，每个文件前先建好父目录。
 writePackageFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List PackageFile -> Eff r Int

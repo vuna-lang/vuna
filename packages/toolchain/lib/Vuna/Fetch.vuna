@@ -1,6 +1,9 @@
 -- | `vuna deps fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
 --
 -- - **只有 fetch 联网**：check / build / test 只读 store，缺对象报 `PKG_NotMaterialized`。
+-- - **出处**：物化视图的 `.origin` 记声明来源（`git:<url>@<rev>` / `url:<u>`）。缓存命中
+--   时复验 `identity` 与出处；来源没登记就重新取（摘要一致即登记），`--locked` 直接报
+--   `PKG_ProvenanceMismatch`。
 -- - `path` 依赖是可变输入：不复制进 store，只按声明摘要校验（无摘要则跳过）。
 -- - `git` 依赖：clone → checkout rev → 收集内容 → 校验声明摘要 → 写对象 + 物化。
 -- - `url` 依赖：URL 直指 `pkg-source 1` 对象文件（不是 tar / 压缩包——vuna 没有解压
@@ -179,28 +182,13 @@ dirOfDep root pid proj locked baseDir dep =
             in do
               done <- isMaterializedEff root digest
               if done then
-                do
-                  ok <- verifyMaterializedIdentityEff root dep digest
-                  if ok then
-                    do
-                      _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-                      _ <- storeRootAppendEff pid proj [digest]
-                      pure (Just (materializedDir root digest))
-                  else
-                    pure Nothing
+                fetchOrRefetch root pid proj locked dep digest (fetchGit root dep url rev digest)
               else if locked then
                 do
                   _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
                   pure Nothing
               else
-                do
-                  stored <- fetchGit root dep url rev digest
-                  case stored of
-                    Nothing => pure Nothing
-                    Just got =>
-                      do
-                        _ <- storeRootAppendEff pid proj [got]
-                        pure (Just (materializedDir root got))
+                fetchedAndRegistered root pid proj (fetchGit root dep url rev digest)
     DepUrl u =>
       case depHashOf dep of
         Nothing =>
@@ -214,28 +202,61 @@ dirOfDep root pid proj locked baseDir dep =
             in do
               done <- isMaterializedEff root digest
               if done then
-                do
-                  ok <- verifyMaterializedIdentityEff root dep digest
-                  if ok then
-                    do
-                      _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-                      _ <- storeRootAppendEff pid proj [digest]
-                      pure (Just (materializedDir root digest))
-                  else
-                    pure Nothing
+                fetchOrRefetch root pid proj locked dep digest (fetchUrl root dep u digest)
               else if locked then
                 do
                   _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
                   pure Nothing
               else
-                do
-                  stored <- fetchUrl root dep u digest
-                  case stored of
-                    Nothing => pure Nothing
-                    Just got =>
-                      do
-                        _ <- storeRootAppendEff pid proj [got]
-                        pure (Just (materializedDir root got))
+                fetchedAndRegistered root pid proj (fetchUrl root dep u digest)
+
+-- | 内部：缓存命中时的复用判定。身份（`identity`）与出处（`.origin` 里的来源文本）都要
+-- 复验：只比内容摘要不足以说明「这份内容来自声明的源」。出处没登记时，非 `--locked`
+-- 从声明的源重新取一次（摘要一致就登记出处），`--locked` 不联网 ⇒ 报
+-- `PKG_ProvenanceMismatch`。命中时返回物化目录。
+fetchOrRefetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> Dependency -> String -> Eff r (Maybe String) -> Eff r (Maybe String)
+fetchOrRefetch root pid proj locked dep digest refetch =
+  let
+    recordPath = originRecordPath (materializedDir root digest)
+  in do
+    ok <- verifyMaterializedIdentityEff root dep digest
+    if ok then
+      do
+        originText <- readOriginRecordEff recordPath
+        if originRecorded dep originText then
+          do
+            _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
+            _ <- storeRootAppendEff pid proj [digest]
+            pure (Just (materializedDir root digest))
+        else if locked then
+          do
+            _ <- printDiagEff (provenanceDiagnostic dep originText)
+            pure Nothing
+        else
+          do
+            _ <- consolePrint "fetch: ${depAliasOf dep} source not recorded, fetching\n"
+            fetchedAndRegistered root pid proj refetch
+    else
+      pure Nothing
+
+-- | 内部：取包成功后登记项目 roots 并返回物化目录。
+fetchedAndRegistered : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Maybe String) -> Eff r (Maybe String)
+fetchedAndRegistered root pid proj fetched =
+  do
+    got <- fetched
+    case got of
+      Nothing => pure Nothing
+      Just digest =>
+        do
+          _ <- storeRootAppendEff pid proj [digest]
+          pure (Just (materializedDir root digest))
+
+-- | 内部：读出处记录（缺失 ⇒ 空串）。
+readOriginRecordEff : Member nFs FsOp r => String -> Eff r String
+readOriginRecordEff path =
+  do
+    exists <- fsFileExists path
+    if exists then fsReadFile path else pure ""
 
 -- | 内部：声明的 `identity` 与实际语义身份是否一致（未声明 `identity` 视为通过）。
 identityOkOf : Dependency -> PackageSource -> Bool
@@ -380,7 +401,7 @@ verifyAndStore root dep expected ps =
     if identityOkOf dep ps then
       do
         _ <- writeObjectEff root actual ps.psFiles
-        _ <- materializeEff root actual ps.psFiles
+        _ <- materializeEff root actual (depSourceText (depSourceOf dep)) ps.psFiles
         _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
         pure (Just actual)
     else
@@ -415,7 +436,7 @@ fetchUrl root dep url expected =
               pure Nothing
           Just files =>
             do
-              _ <- materializeEff root expected files
+              _ <- materializeEff root expected (depSourceText (depSourceOf dep)) files
               let
                 dir = materializedDir root expected
                 manifestPath = "${dir}/vuna.toml"
@@ -557,7 +578,7 @@ collectPins root baseDir (dep :: rest) acc =
         collectPins root baseDir rest acc
     DepGit url rev =>
       do
-        actual <- resolveGitDigest root (depAliasOf dep) url rev
+        actual <- resolveGitDigest root dep url rev
         case actual of
           Nothing =>
             do
@@ -567,9 +588,10 @@ collectPins root baseDir (dep :: rest) acc =
 
 -- | 内部：clone 到 `tmp/pin-<别名>`、checkout rev、读 manifest 求内容摘要与身份，并写
 -- 对象 + 物化。clone / checkout / manifest 失败时打印原因并返回 `Nothing`。
-resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r (Maybe (String, String))
-resolveGitDigest root alias url rev =
+resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> Dependency -> String -> String -> Eff r (Maybe (String, String))
+resolveGitDigest root dep url rev =
   let
+    alias = depAliasOf dep
     tmp = "${root}/tmp/pin-${alias}"
   in do
     _ <- ensureDirPath root
@@ -617,7 +639,7 @@ resolveGitDigest root alias url rev =
                               actual = contentHashOf ps
                             in do
                               _ <- writeObjectEff root actual ps.psFiles
-                              _ <- materializeEff root actual ps.psFiles
+                              _ <- materializeEff root actual (depSourceText (depSourceOf dep)) ps.psFiles
                               pure (Just (actual, identityHashOf ps))
 
 -- | 内部：文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行，并在其后写

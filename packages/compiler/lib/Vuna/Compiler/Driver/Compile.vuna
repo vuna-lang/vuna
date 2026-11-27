@@ -627,11 +627,7 @@ maybeSemanticText : Maybe String -> String
 maybeSemanticText Nothing = ""
 maybeSemanticText (Just s) = s
 
-depSourceText : DependencySource -> String
-depSourceText (DepPath p) = "path:${p}"
-depSourceText (DepGit url rev) = "git:${url}@${rev}"
-depSourceText (DepUrl u) = "url:${u}"
-
+-- `depSourceText`（来源的出处文本）随 manifest 模型走：缓存指纹与 store 出处记录共用它。
 depSemanticText : Dependency -> String
 depSemanticText d =
   "${d.depAlias}|${depSourceText d.depSource}|${maybeSemanticText d.depHash}|${maybeSemanticText d.depIdentity}"

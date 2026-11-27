@@ -3,3 +3,4 @@ PKG_HashMismatch
 PKG_IdentityMismatch
 PKG_IdentityMalformed
 PKG_IndexMalformed
+PKG_ProvenanceMismatch

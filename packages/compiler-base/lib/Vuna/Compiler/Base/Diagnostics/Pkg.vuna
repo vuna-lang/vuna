@@ -59,6 +59,7 @@ export data PkgErr(..) : Nat -> Type where
   UnknownSourceKey : String -> String -> PkgErr 2
   HashMismatch : String -> String -> PkgErr 2
   IdentityMismatch : String -> String -> PkgErr 2
+  ProvenanceMismatch : String -> String -> PkgErr 2
   -- arity 3
   DuplicatePackageName : String -> String -> String -> PkgErr 3
 
@@ -108,6 +109,7 @@ pkgCode (FetchFailed _) = "PKG_FetchFailed"
 pkgCode (IndexMalformed _) = "PKG_IndexMalformed"
 pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
 pkgCode (IdentityMismatch _ _) = "PKG_IdentityMismatch"
+pkgCode (ProvenanceMismatch _ _) = "PKG_ProvenanceMismatch"
 pkgCode (DuplicatePackageName _ _ _) = "PKG_DuplicatePackageName"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
@@ -170,6 +172,8 @@ pkgTemplate (FetchFailed _) = "cannot fetch package: <0>"
 pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
 pkgTemplate (IdentityMismatch _ _) = "package \"<0>\" identity mismatch: <1>"
+pkgTemplate (ProvenanceMismatch _ _) =
+  "package \"<0>\" was not fetched from the declared source: <1> (run: vuna deps fetch)"
 pkgTemplate (DuplicatePackageName _ _ _) =
   "duplicate package name \"<0>\" in <1> and <2> (package names must be unique within a dependency graph)"
 
@@ -347,6 +351,10 @@ pkgAll =
       (pkgCode (IdentityMismatch "" ""))
       (pkgTemplate (IdentityMismatch "" ""))
       "包语义身份不符",
+    PkgEntry
+      (pkgCode (ProvenanceMismatch "" ""))
+      (pkgTemplate (ProvenanceMismatch "" ""))
+      "包出处与 store 记录不符",
     PkgEntry
       (pkgCode (DuplicatePackageName "" "" ""))
       (pkgTemplate (DuplicatePackageName "" "" ""))
