@@ -1518,7 +1518,7 @@ cleanSelfOk builtSec (m :: rest) acc =
 
 -- 依赖链定点：每遍按枚举顺序收「依赖已满足」的模块，链式依赖在同一遍里推进；
 -- 一遍没有任何进展 ⇒ 其余模块的依赖不在闭包内，整批拒绝（fuel 只防脏数据）。
-cleanFixpoint : Int -> List (String, String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
+export cleanFixpoint : Int -> List (String, String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
 cleanFixpoint fuel depTbl pending cleanRev =
   if fuel <= 0 then
     append (reverse pending) cleanRev
@@ -1527,7 +1527,7 @@ cleanFixpoint fuel depTbl pending cleanRev =
       ([], kept) => append (reverse kept) cleanRev
       (rest, kept) =>
         if length kept == 0 then
-          append (reverse rest) cleanRev
+          cleanRev
         else
           let
             _ = obsCounter "vuna.tool.clean.kept" (length kept)
