@@ -44,7 +44,7 @@ jobs:
             }' 2>/dev/null); then
               continue
             fi
-            [ "$(jq -r '.state' <<<"$meta")" = "OPEN" ] || continue
+            [ "$(jq -r '.state' <<<"$meta")" = "open" ] || continue
             is_main_red=$(jq -r '[.labels] | index("main-red") != null' <<<"$meta")
             [ "$is_main_red" = "true" ] || continue
 

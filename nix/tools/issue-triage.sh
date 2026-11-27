@@ -35,7 +35,7 @@ meta=$(gh api "repos/$repo/issues/$issue" --jq '{
   has_refinement: ([.labels[].name] | index("needs-refinement") != null)
 }')
 state=$(jq -r .state <<<"$meta")
-[ "$state" = "OPEN" ] || exit 0
+[ "$state" = "open" ] || exit 0
 
 title=$(jq -r .title <<<"$meta")
 type=$(jq -r .type <<<"$meta")
