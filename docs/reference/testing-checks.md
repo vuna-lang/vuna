@@ -40,7 +40,7 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | CI 定时 / 手动；本地 `nix run .#ci -- native` |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、`browser` 标签 |
 
-CI 的 `ci.yml` 把 gate / e2e 各拆成 4 个 matrix job：每个 shard 是一个独立 derivation
+CI 的 `ci.yml` 把 gate 拆成 4 个、e2e 拆成 8 个 matrix job：每个 shard 是一个独立 derivation
 （`VUNA_TEST_SHARD=i/4`），共用 `nix-suite-<os>-` 的 store cache（`cache-key: suite`），
 gate 的第 0 片负责写 cache（其余 job 只 restore，避免同 key 并发写）。分片是**完整 case
 集合的划分**而不是采样：`--shard i/N` 在 runner 内按耗时均分，每片仍执行自己那部分全部

@@ -100,5 +100,5 @@ in
   map (i: {
     name = "e2e-shard-${toString i}";
     value = [ "check:vuna-tests-e2e-shard-${toString i}" ];
-  }) (builtins.genList (i: i) 4)
+  }) (builtins.genList (i: i) 8)
 )

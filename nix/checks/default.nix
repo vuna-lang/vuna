@@ -240,7 +240,7 @@ in
   inherit seed-selfhost;
 
   # 测试分两层：gate 只跑 fast+integration，e2e（steps/长 case）单独一个 derivation。
-  # CI 里两层各拆成 4 个 shard（matrix 并行）；本地 `nix run .#ci -- gate|suite` 跑未分片形态。
+  # CI 里 gate 拆 4 片、e2e 拆 8 片（matrix 并行）；本地 `nix run .#ci -- gate|suite` 跑未分片形态。
   vuna-tests-gate = vunaCheck {
     name = "vuna-tests-gate";
     srcs = testTree;
@@ -691,6 +691,9 @@ in
 # CI 分片：每个 shard 是独立 derivation，job 之间并行；`--shard i/N` 在 runner 内按耗时
 # 把选中 case 均分成 N 份，每份仍跑完整 case 集合的一部分（不是采样）。分片数量与
 # 每片下限同 `nix/checks/vuna-tests.sh` 的 `VUNA_TEST_SHARD` / `VUNA_TEST_MIN_CASES`。
+# e2e 用 8 片：它的 case 总耗时是 gate 的两倍多，而单片 4 lane 的实测并行只有 ~2x
+# （I/O 与进程启动吃掉一半），所以横向多开 shard（每片独占一台 4 核 runner）比在片内
+# 加并发有效。
 // builtins.listToAttrs (
   map (
     i:
@@ -720,13 +723,13 @@ in
         VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
         VUNA_TEST_TIERS = "e2e";
         VUNA_SUITE_AREAS = knownAreas;
-        VUNA_TEST_SHARD = "${toString i}/4";
-        VUNA_TEST_MIN_CASES = "12";
+        VUNA_TEST_SHARD = "${toString i}/8";
+        VUNA_TEST_MIN_CASES = "6";
         VUNA_TEST_UNIT_PKGS = "";
         VUNA_WEB_CLI = "${vuna-web-cli}/bin/vuna-web-cli";
       };
       nativeBuildInputs = e2eTools;
       script = ./vuna-tests.sh;
     })
-  ) (lib.range 0 3)
+  ) (lib.range 0 7)
 )

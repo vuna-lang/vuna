@@ -112,13 +112,14 @@ jobs:
       cache-size: 2G
       save: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
-  # e2e（steps / 长 case）同样按耗时均分成 4 片并行。
+  # e2e（steps / 长 case）按耗时均分成 8 片并行：case 总耗时是 gate 的两倍多，而单片
+  # 4 lane 的实测并行只有 ~2x（I/O 与进程启动），横向多开 shard 比片内加并发有效。
   e2e-shards:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     uses: ./.github/workflows/_check.yml
     with:
       group: e2e-shard-${{ matrix.shard }}
