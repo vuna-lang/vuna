@@ -2663,18 +2663,20 @@ parseDoStmtBody fuel st stmtCol nid =
       ErrC e => if doStmtBindsAhead st stmtCol then ErrC e else parseDoExprStmt (fuel - 1) st stmtCol nid
 
 -- do 语句位置的 `let`：do-let（绑定块后没有 `in`）或 `let ... in ...` 表达式语句。
--- 两者共享同一个 `let` 前缀，只能在绑定块之后按是否出现 `in` 区分；parser 状态不可变，
--- 判定为表达式时从原状态重新解析。
+-- 两者共享同一个 `let` 前缀，只能在绑定块之后按是否出现 `in` 区分；判定为表达式时从原状态重新解析。
+--
+-- 绑定块失败即真错误：`let ... in` 表达式与 do-let 从同一个起点、同一个 blockCol 解析
+-- 绑定块，按表达式重解只会再失败一次，把签名 / 缩进 / 模式错误换成无关诊断。
 doLetOrExpr : Int -> PState -> Int -> Int -> Check (DoStmt, PState)
 doLetOrExpr fuel st stmtCol nid =
   if fuel <= 0 then
     icFuel "parser"
   else
     case expectKw st "let" of
-      ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol nid
+      ErrC e => ErrC e
       OkC st1 =>
         case parseLetBindings (fuel - 1) st1 stmtCol of
-          ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol nid
+          ErrC e => ErrC e
           OkC (binds, st2) => if atKw st2 "in" then parseDoExprStmt (fuel - 1) st stmtCol nid else OkC (DLet binds (NodeRef nid (spanOf st st2)), st2)
 
 parseDoExprStmt : Int -> PState -> Int -> Int -> Check (DoStmt, PState)

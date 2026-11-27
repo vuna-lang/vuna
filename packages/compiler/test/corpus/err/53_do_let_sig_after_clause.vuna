@@ -1,0 +1,6 @@
+-- 反例：do-let 的签名行必须写在同名子句之前；绑定块错误直接上报。
+main : Int
+main = do
+  let x = 1
+      x : Int
+  x
