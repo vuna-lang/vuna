@@ -190,7 +190,9 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   处理：data 构造子字段渲染成 `Obj.t`，构造子实参插 `Obj.magic`，binder 的每个使用点
   插隐藏 cast `prim_erase`（求值期恒等消去）。判据与 codegen 同源（`valueOpaqueScoped`）：
   不可表示的全局类型头，或 kind 的 Pi 链含非宇宙域的**类型族参数**（`res : f -> Type`）；
-  普通类型构造子参数（`m : Type -> Type`）与数据族的索引值实参不算。细节与边界见
+  普通类型构造子参数（`m : Type -> Type`）与数据族的索引值实参不算。判据逐节点规范化
+  元变量：已解按解判定，精化期仍未解的元变量在 binder 使用点按保守方向算不可表示
+  （多插的 cast 对语义透明），声明位置的字段表示按 codegen 视角处理。细节与边界见
   [effects.md](effects.md) §5。
 - **零成本表示**：擦除后**恰好一个运行时字段**的单构造子族（`record` 或
   `data`）在 OCaml 侧不再有包装变体，而是字段类型的类型别名（`type t_UserId = int`）。

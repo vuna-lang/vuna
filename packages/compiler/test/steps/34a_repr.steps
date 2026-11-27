@@ -22,3 +22,12 @@ exit: 0
 out-equals:
 run: sh -c 'grep -qE "Obj\.magic|Obj\.t" "$TMPDIR/d27-plain/Main.ml"'
 exit: nonzero
+# 精化期未解 meta 终解成不可命名类型：binder 的使用点同样要 cast。
+# 夹具：$VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_base/39_meta_cast.vuna
+# 的 λ 参数先建元变量，体不约束它，直到 `xs : List (resOp GetS)` 参与合一才解成
+# 类型族应用（不可命名）——`s` 的每次使用必须带 `prim_erase`（OCaml 侧 `Obj.magic`）。
+run: "$VUNA" compile $VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_base/39_meta_cast.vuna "$TMPDIR/d27-meta" 2>&1
+exit: 0
+out-equals:
+read: $TMPDIR/d27-meta/Main.ml
+out-contains: (Obj.magic s)

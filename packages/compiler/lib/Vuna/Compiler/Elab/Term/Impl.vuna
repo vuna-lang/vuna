@@ -36,7 +36,7 @@ opaqueBranchIndices ec ctx n tele = opaqueBranchIndicesGo ec ctx n tele 0
 opaqueBranchIndicesGo : Ec -> Ctx -> Int -> List (String, Rig) -> Int -> List Int
 opaqueBranchIndicesGo ec ctx n [] j = []
 opaqueBranchIndicesGo ec ctx n (binder :: rest) j =
-  if branchBinderOpaque ec ctx (n - 1 - j) then
+  if not (rigIsErased (secondOf binder)) && branchBinderOpaque ec ctx (n - 1 - j) then
     (::) (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
   else
     opaqueBranchIndicesGo ec ctx n rest (j + 1)
@@ -147,7 +147,8 @@ elabCatchAllFuel fuel globals ctx ec scrutTy dd idxs expected rest acc body pnam
                   -- 绑定 scrutinee：不记这个 binder，体里对变量的引用会变成自由变量。
                   binds = if pname == "_" then [] else [Binder pname (rigOfLinearValue ec scrutTy) (spanAtName pname psp)]
                   -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
-                  bodyTerm1 = if pname == "_" then bodyTerm else if isOpaqueRuntimeTyIn ec2 ctx scrutTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+                  bindsRig = rigOfLinearValue ec scrutTy
+                  bodyTerm1 = if pname == "_" then bodyTerm else if opaqueRuntimeBinder ec2 ctx bindsRig scrutTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
                   bodyTerm2 = if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
                 in OkC (reverse (CaseAlt "" binds bodyTerm2 :: acc), ec2)
         )
@@ -2381,7 +2382,7 @@ checkLetOneFuel fuel globals ctx ec bnd rest body rec_ expected sp =
                         case pb of
                           (bodyTerm, ec2) =>
                             let
-                              bodyTerm2 = if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+                              bodyTerm2 = if opaqueRuntimeBinder ec2 ctx rig valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
                             in OkC (TApp (TLam name rig Nothing (spanAtName name (nodeRefSpan psp)) bodyTerm2) valueTerm Rig1, ec2)
                     )
           )
@@ -2439,7 +2440,7 @@ inferLetBoundFuel fuel globals ctx ec name value rest body rec_ binderSp sp =
                     case pb of
                       (bodyTerm, bodyTy, ec2) =>
                         let
-                          bodyTerm2 = if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
+                          bodyTerm2 = if opaqueRuntimeBinder ec2 ctx rig valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
                         in OkC (TApp (TLam name rig Nothing binderSp bodyTerm2) valueTerm Rig1, bodyTy, ec2)
                 )
       )
@@ -2887,7 +2888,7 @@ checkLamFuel fuel globals ctx ec ((name, nameSp) :: rest) body expected sp =
                         -- 线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
                         (inner, ec1) =>
                           let
-                            inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
+                            inner2 = if opaqueRuntimeBinder ec1 ctx lamRig dom then wrapOpaqueUses [0] inner else inner
                             -- 捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
                             -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
                             -- TC_LinearCaptureEscapes（诊断码不变）。
@@ -3793,7 +3794,7 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
   let
     depth = ctxDepth ctx
     ctx2 = ctxBindValue binder aVal ctx
-    inner2 = if isOpaqueRuntimeTyIn ecPaper ctx aVal then wrapOpaqueUses [0] inner else inner
+    inner2 = if opaqueRuntimeBinder ecPaper ctx lamRig aVal then wrapOpaqueUses [0] inner else inner
     slot0 =
       lamTyOf Nothing (Just (shift 0 1 (quote depth (applyValue plan.planMVal plan.planAVal))))
     slot =

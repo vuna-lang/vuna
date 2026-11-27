@@ -63,7 +63,7 @@ main : Eff [] Nat
 | 权威 | 宿主 op 构造器不导出；宿主层原语是隐藏的 `@vuna@prim_eff_*` / `@vuna@host@*`（源码写不出；无 manifest 门控，见 [effects.md](effects.md) §8.6 与 gh#104） |
 | 纯效应 | 库级 monad 与 mock handler 并存；核心求值可执行 mock 程序 |
 | 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（gh#102） |
-| handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（gh#39） |
+| handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast |
 
 决策（本文内以名字互相引用）：
 
@@ -207,8 +207,8 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
   核心求值可跑 mock 效应程序，mock/real 对拍变成核心求值 vs 产物。
 - 续延类型化未做：`k` 当前是 ω，线性续延 / 一次性闭包的 QTT 类型化见
   gh#102。
-- handler 续延域用索引投影 `resIdx i o` 保持「不透明擦除值」（漏 cast 边界、trait
-  自动 λ 插入点）见 gh#39。
+- handler 续延域用索引投影 `resIdx i o` 保持「不透明擦除值」；判据与 cast 插入点见
+  [effects.md](effects.md) §5。
 
 ## 6. 箭头行 direct-style（未实现）
 

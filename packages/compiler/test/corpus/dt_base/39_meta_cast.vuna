@@ -1,0 +1,40 @@
+-- 精化期未解 meta 的使用点 cast（gh#39）。
+--
+-- `map` 的 λ 参数类型在检查 λ 体时还是元变量：体只是把它交给另一个多态函数
+-- （`keep`），不约束它，直到 `xs : List (resOp GetS)` 参与合一才解成类型族应用。
+-- 类型族应用在运行时不可命名，所以这个 binder 的每个使用点仍要包表现层 cast
+-- （`prim_erase`，OCaml 侧 `Obj.magic`）；漏掉时 OCaml 会把同一个参数按第一种用法
+-- 单态化。这里同时覆盖递归：结构递归的判定不能被使用点的 cast 影响。
+import Base.Data.List as List
+import Base.Data.String as Str
+
+data Op : Type where
+  GetS : Op
+  GetI : Op
+
+resOp : Op -> Type
+resOp GetS = String
+resOp GetI = Int
+
+-- 只把类型参数原样穿过去：不约束实参的具体类型。
+keep : {a : Type} -> a -> a
+keep x = x
+
+headOr : {a : Type} -> a -> List a -> a
+headOr d xs =
+  case xs of
+    [] => d
+    y :: _ => y
+
+go : List (resOp GetS) -> resOp GetS
+go xs = headOr "default" (map (\s => keep s) xs)
+
+-- 同一形状 + 递归：`count` 的参数类型本身不可命名，递归实参会被包 cast。
+count : List (resOp GetS) -> Int
+count ys =
+  case ys of
+    [] => 0
+    _ :: rest => 1 + count rest
+
+main : Int
+main = strLength (go ("a" :: "b" :: Nil)) + count ("a" :: "b" :: "c" :: Nil)
