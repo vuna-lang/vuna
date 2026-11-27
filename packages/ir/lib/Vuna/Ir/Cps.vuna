@@ -24,7 +24,6 @@ import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Passes
-import Vuna.Ir.Validate
 import Vuna.Compiler.Base.Common
 import Vuna.Ir.Tail
 import Vuna.Ir.Analysis
@@ -1719,23 +1718,12 @@ runMachineStages stop ((spec, step) :: rest) ds =
   case Passes.passSpan spec (\_ => step ds) of
     Err msg => Err msg
     Ok next =>
-      case checkAfter spec next of
+      case Passes.checkPassAfter spec next of
         Err msg => Err msg
         Ok _ =>
           case stop of
             Just name => if name == spec.psName then Ok next else runMachineStages stop rest next
             Nothing => runMachineStages stop rest next
-
--- 每步之后做 scoped-only 校验：CPS / 机器路径不查运行时符号契约（内部符号不在契约里），
--- 只守「定义名唯一 + 每个 IrVar 在语法作用域内」。
-checkAfter : PassSpec -> List IrDef -> Result Int
-checkAfter spec ds =
-  if spec.psCheckAfter then
-    case Vuna.Ir.Validate.validateScopedDefs ds of
-      ErrC e => Err "pass ${spec.psName}: ${diagText e}"
-      OkC n => Ok n
-  else
-    Ok 0
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs = runMachineStages Nothing (cpsMachineStages defs) defs

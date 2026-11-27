@@ -3,6 +3,7 @@ import Base
 import Base.Effect.Core
 import Base.Data.List as List
 import Base.Data.String as String
+import Vuna.Ir.Model
 import Vuna.Ir.Passes
 import Base.Effect.Console
 import Base.Effect.Exit
@@ -28,8 +29,36 @@ results =
     Pair "find-roundtrip" (allOf findRoundtrip allPassSpecs),
     Pair "find-miss" findMiss,
     Pair "native-order" (map psNameOf nativePasses == expectedNativeOrder),
-    Pair "ir-order" (map psNameOf irPasses == expectedIrOrder)
+    Pair "ir-order" (map psNameOf irPasses == expectedIrOrder),
+    Pair "check-after-good" (checkOk (checkPassAfter irCps [goodDef])),
+    Pair "check-after-scope" (checkErrNamed "ir.cps" (checkPassAfter irCps [badVarDef])),
+    Pair "check-after-dup" (checkErrNamed "ir.cps" (checkPassAfter irCps [goodDef, goodDef])),
+    Pair "check-after-off" (checkOk (checkPassAfter offSpec [badVarDef])),
+    Pair
+      "check-after-all"
+      (checkErrNamed "ir.machine.mark" (checkAfterAll [(irCps, [goodDef]), (irMachineMark, [badVarDef])]))
   ]
+
+goodDef : IrDef
+goodDef = IrDef "f" 0 [] Nothing (IrInt 1) False False Nothing
+
+badVarDef : IrDef
+badVarDef = IrDef "f" 0 [] Nothing (IrVar (mkIrBinder 99 "x")) False False Nothing
+
+offSpec : PassSpec
+offSpec = PassSpec "test.off" "ir" "lower" False False False
+
+checkOk : Result Int -> Bool
+checkOk r =
+  case r of
+    Ok _ => True
+    Err _ => False
+
+checkErrNamed : String -> Result Int -> Bool
+checkErrNamed name r =
+  case r of
+    Ok _ => False
+    Err msg => startsWith "pass ${name}:" msg
 
 allPassSpecs : List PassSpec
 allPassSpecs = append irPasses (append nativePasses wasmPasses)
