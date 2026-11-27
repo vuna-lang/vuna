@@ -376,6 +376,14 @@ listLength (x :: rest) = 1 + listLength rest
 export checkScopedUnit : IrUnit -> Check Int
 checkScopedUnit u = checkScopedDefs (concatMap irGroupDefs u.irUnitGroups)
 
+-- | 只有 defs 时的作用域校验（后端 pass 之间用）：定义名唯一 + 每个 `IrVar`
+-- 指向语法作用域内的 binder。不查运行时符号契约（CPS / 机器符号不在契约里）。
+export validateScopedDefs : List IrDef -> Check Int
+validateScopedDefs defs =
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Ir.Analysis.checkUniqueDefNames defs)
+    (\_ => checkScopedDefs defs)
+
 checkScopedDefs : List IrDef -> Check Int
 checkScopedDefs [] = OkC 0
 checkScopedDefs (d :: rest) =

@@ -32,22 +32,22 @@ passSpan spec f = obsPure (passEventName spec.psName) f
 -- IR 链（`Ir.Cps.cpsDefsMachine`）
 -- ---------------------------------------------------------------
 export irCps : PassSpec
-irCps = PassSpec "ir.cps" "ir" "lower" False False True
+irCps = PassSpec "ir.cps" "ir" "lower" False True True
 
 export irMachineHandlers : PassSpec
-irMachineHandlers = PassSpec "ir.machine.handlers" "ir" "lower" False False True
+irMachineHandlers = PassSpec "ir.machine.handlers" "ir" "lower" False True True
 
 export irMachineMark : PassSpec
-irMachineMark = PassSpec "ir.machine.mark" "ir" "mark" False False True
+irMachineMark = PassSpec "ir.machine.mark" "ir" "mark" False True True
 
 export irMachineApply : PassSpec
-irMachineApply = PassSpec "ir.machine.apply" "ir" "lower" False False True
+irMachineApply = PassSpec "ir.machine.apply" "ir" "lower" False True True
 
 export irMachineSteps : PassSpec
-irMachineSteps = PassSpec "ir.machine.steps" "ir" "mark" False False True
+irMachineSteps = PassSpec "ir.machine.steps" "ir" "mark" False True True
 
 export irTailAnnotate : PassSpec
-irTailAnnotate = PassSpec "ir.tail.annotate" "ir" "mark" False False True
+irTailAnnotate = PassSpec "ir.tail.annotate" "ir" "mark" False True True
 
 export irPasses : List PassSpec
 irPasses = [irCps, irMachineHandlers, irMachineMark, irMachineApply, irMachineSteps, irTailAnnotate]
