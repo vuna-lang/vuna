@@ -396,6 +396,8 @@ nix/tools/merge-queue.sh status
   由 sweep 负责，不依赖 arm。
 - `gh stack` 不存在：`gh extension install github/gh-stack`；`gh stack` 与 `gh pr merge` 的
   行为不同，合 stack 不要用后者。
+- `gh stack view` 报 “belongs to multiple stacks”：本地追踪同时存在多条 stack；用
+  `gh stack checkout <stack-number>` 选择，或对已完成的追踪 `gh stack unstack --local` 清理。
 - `gh pr checks` 看不到队列：用 `nix/tools/merge-queue.sh status`；队列状态只在 GraphQL。
 - auto-merge 没打开：确认 PR 非 draft、同仓库、没有 hold 标签；队列启用后不再需要
   `strict up-to-date`。
