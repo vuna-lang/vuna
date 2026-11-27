@@ -247,6 +247,8 @@ boolAltGoFuel fuel globals ctx ec [] target expected sp catchAll =
   else
     case catchAll of
       Just t => OkC (t, Nothing, ec)
+      -- 特化：Bool 没有索引，写出的目标构造子 / 兜底就是 `Coverage.CoverProved`，
+      -- 缺目标即 `Coverage.CoverMissing`（与通用覆盖率同一个 `TC_NotExhaustive` 结论）。
       Nothing => tcErr1 sp (NotExhaustive (ctorDisplayName target)) (ctorDisplayName target)
 boolAltGoFuel fuel globals ctx ec (alt :: rest) target expected sp catchAll =
   if fuel <= 0 then
@@ -280,6 +282,8 @@ boolAltGoFuel fuel globals ctx ec (alt :: rest) target expected sp catchAll =
 
 -- Int / String 上的字面量模式降级成嵌套 if。
 -- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
+-- 覆盖结论与通用判据同源：`specializationCover`（Int/String 值域无限，只有兜底覆盖，
+-- 所以 `hasDefault` 就是 `CoverProved`，否则 `CoverMissing` → `TC_IntStringCaseNeedsFallback`）。
 export checkLitCaseFuel : Int -> List (String, Term) -> Ctx -> Ec -> Term -> String -> List (Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 checkLitCaseFuel fuel globals ctx ec scrutTerm tyName alts expected sp =
   if fuel <= 0 then
@@ -288,8 +292,10 @@ checkLitCaseFuel fuel globals ctx ec scrutTerm tyName alts expected sp =
     Vuna.Compiler.Base.Common.bind (checkLitAltsFuel (fuel - 1) globals ctx ec scrutTerm tyName alts expected sp) (
         \p =>
           case p of
-            (term, True, ec1) => OkC (term, ec1)
-            (term, False, ec1) => tcErr0 sp IntStringCaseNeedsFallback
+            (term, hasDefault, ec1) =>
+              case specializationCover hasDefault of
+                CoverMissing => tcErr0 sp IntStringCaseNeedsFallback
+                _ => OkC (term, ec1)
       )
 
 -- Int / String 字面量列：每个字面量降成 `if n == lit then body else <rest>`；
@@ -358,6 +364,7 @@ checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected bin
 -- Nat 字面量 case 的快速路径：模式全是字面量/变量/通配且带兜底时降成 `bi_eq_int` if 链，
 -- 长字面量（`300` / `1000`）不必展开成深层构造子链；字面量与构造子混用、或没有兜底时走
 -- 模式矩阵（`resolveOverPatFuel` 把字面量展开成 `Zero` / `Succ`，穷尽性由矩阵判定）。
+-- 覆盖结论同样走 `specializationCover`（零参数族 + 有限字面量集合，兜底 ⇒ `CoverProved`）。
 natLitCaseFast : Ec -> Value -> List (Pat, Expr) -> Bool
 natLitCaseFast ec scrutTy alts =
   isNatTy ec scrutTy && natLitCaseAlts alts && natLitCaseHasCatchAll alts
@@ -387,8 +394,10 @@ checkNatLitCaseFuel fuel globals ctx ec cmpTerm bindTerm binderTy alts expected 
     Vuna.Compiler.Base.Common.bind (checkNatLitAltsFuel (fuel - 1) globals ctx ec cmpTerm bindTerm binderTy alts expected sp) (
         \p =>
           case p of
-            (term, True, ec1) => OkC (term, ec1)
-            (term, False, ec1) => tcErr0 sp IntStringCaseNeedsFallback
+            (term, hasDefault, ec1) =>
+              case specializationCover hasDefault of
+                CoverMissing => tcErr0 sp IntStringCaseNeedsFallback
+                _ => OkC (term, ec1)
       )
 
 checkNatLitAltsFuel : Int -> List (String, Term) -> Ctx -> Ec -> Term -> Term -> Value -> List (Pat, Expr) -> Value -> Span -> Check (Term, Bool, Ec)
@@ -2265,6 +2274,9 @@ expandBindingF fuel ec b =
 
 -- 绑定右值：普通表达式递归展开；局部函数组降级成 lambda + case/if。
 -- 含重载构造子的局部函数组需要显式签名（与旧的 `ELocalFun` 推断位分支同口径）。
+-- 局部函数组拿不到「第一个显式参数的类型」（`Binding` 只有可选的签名），因此不带根列
+-- 可达集合：索引族 / 未知族的子句有用性保持 `CoverUnknown`（不报，保守），
+-- 与顶层定义的差别只在「能多证明多少不可达子句」，不影响覆盖 / 可达的正确方向。
 expandBindingValueF : Int -> Ec -> Binding -> Check Expr
 expandBindingValueF fuel ec b =
   case b.bindValue of

@@ -1,23 +1,31 @@
 module Vuna.Compiler.Elab.Coverage where
 
--- Vuna.Compiler.Elab.Coverage：模式矩阵的穷尽性见证。
+-- Vuna.Compiler.Elab.Coverage：覆盖 / 可达性判定的**唯一**结论类型与模式矩阵工具。
 --
--- 输入是模式矩阵（每行一个 clause 的模式向量）与构造子表
+-- 结论只有三种（`CoverVerdict`）：`CoverProved`（已证明覆盖）、`CoverMissing`
+-- （已证明缺一个**可达**构造子）、`CoverUnknown`（无法证明：索引族 / 未知族 / 重载
+-- 构造子 / 燃料耗尽）。**`CoverUnknown` 不等于「已覆盖」**：它会出现在需要「缺分支」
+-- 结论的位置，调用方不得据此放行；只有 `CoverProved` / `CoverMissing` 是证明。
+-- 家族归属也只有一个入口（`ctorFamily`）：参数族可按名字判覆盖，索引族的名字集合
+-- 不等于可达集合（`Vec 2 a` 没有 `VNil`），重载/缺失构造子无从定位族。
+--
+-- 五处判定都消费这里：`Elab.Case` 的分支可达性（`BranchVerdict`，索引合一 + 空族）、
+-- `clauseCover`（clause 有用性）、`Match.familyCoverVerdict`（是否补通配兜底）、
+-- 见证（`matrixWitness`）与 `Impl` 的 Bool / Int / String / Nat 字面量特化
+-- （`specializationCover`：这些族没有索引，结论与通用判据同源）。
+--
+-- 见证：输入是模式矩阵（每行一个 clause 的模式向量）与构造子表
 -- （族 → (是否可判, [(构造子, 显式参数个数)])），输出**第一个**缺失模式的向量：
--- Maranget 的 usefulness 在全通配查询上的特化。
---
--- 调用方式：矩阵照常降级、精化；**只有**精化已经报 `TC_NotExhaustive` 时才用见证改写
--- 首行消息（`improveExhaustive`）。这样类型错、分支参数个数错等更具体的诊断优先——
--- 精化前的预检会把它们盖掉。
+-- Maranget 的 usefulness 在全通配查询上的特化。调用方式是**后置**的：矩阵照常降级、
+-- 精化，只有精化已经报 `TC_NotExhaustive` 时才用见证改写首行消息（`improveExhaustive`）。
+-- 这样类型错、分支参数个数错等更具体的诊断优先——精化前的预检会把它们盖掉。
 --
 -- 判据与降级一致：
 --   * 构造子列：族的全部构造子逐个尝试（**没出现的先试**，见证更具体）；通配行同时参与
 --     特化，所以「有构造子没出现」不等于不穷尽（`Cons _ _ ; _ _` 是穷尽的）；
 --   * 字面量列：无限域，只有通配行覆盖；
---   * 未知族 / 重载构造子（`@vuna@ctor@…` 一名挂多族）不推断，按「已覆盖」处理——
---     宁可少报一个见证，也不能把穷尽矩阵判成漏分支；
---   * 索引族（构造子结果索引不是裸变量，如 `Vec (Succ n) a`）不判：索引精化会让某些
---     构造子在该类型下不可构造（`Vec 2 a` 没有 `VNil`）；
+--   * 索引族 / 未知族 / 重载构造子：给不出见证（`WitnessUnknown`），**不当成已覆盖**；
+--     索引族的可达集合由 `Elab.Case` 的同一套判据提供，矩阵只在根列消费它；
 --   * 各行必须等长：`where` / `let` 允许不同 arity 的方程，矩阵算法不适用于那种组。
 --
 -- 参数个数用**显式** Pi binder 数（模式只写显式子模式，隐式族参数由精化器插入）。
@@ -32,6 +40,23 @@ import Vuna.Compiler.Frontend.Name
 
 emptyPatSpan : Span
 emptyPatSpan = Span "" 0 0 0 0 0 0
+
+-- ---------------------------------------------------------------
+-- 覆盖 / 可达性的唯一结论类型
+-- ---------------------------------------------------------------
+-- `CoverUnknown` 是「无法证明」，不是「已覆盖」：需要「缺分支」结论的调用方只能消费
+-- `CoverProved` / `CoverMissing`；需要「多写了分支」结论的调用方遇到 `CoverUnknown`
+-- 只能不报（不能把无法证明当成不可达，否则是保守误拒）。
+export data CoverVerdict(..) : Type where
+  CoverProved : CoverVerdict
+  CoverMissing : CoverVerdict
+  CoverUnknown : CoverVerdict
+
+-- 特化家族（Bool / Int / String / Nat 字面量）的覆盖结论。这些族没有索引：
+-- 目标分支或兜底写了 ⇔ 覆盖，没写 ⇒ 缺，不存在「无法证明」。
+export specializationCover : Bool -> CoverVerdict
+specializationCover True = CoverProved
+specializationCover False = CoverMissing
 
 -- 一行等长的通配模式。
 export wilds : Int -> List Pat
@@ -98,11 +123,35 @@ lookupEntry cname [] = Nothing
 lookupEntry cname ((c, n) :: rest) = if c == cname then Just n else lookupEntry cname rest
 
 -- 构造子所属族的构造子表。**必须唯一**：重载构造子无法从名字定位族，按「未知」处理。
+--
+-- 家族归属的唯一入口是 `ctorFamily`；索引族能定位族（`CtorFamilyIndexed`）但名字集合
+-- 不等于可达集合（`Vec 2 a` 没有 `VNil`），所以见证只对参数族开放。
+export data CtorFamily(..) : Type where
+  CtorFamilyJudgeable : List (String, Int) -> CtorFamily
+  CtorFamilyIndexed : List (String, Int) -> CtorFamily
+  CtorFamilyUnknown : CtorFamily
+
+export ctorFamily : List (String, Bool, List (String, Int)) -> String -> CtorFamily
+ctorFamily table cname =
+  case filter (\e => lookupEntry cname (secondOf (secondOf e)) /= Nothing) table of
+    [one] =>
+      if firstOf (secondOf one) then
+        CtorFamilyJudgeable (secondOf (secondOf one))
+      else
+        CtorFamilyIndexed (secondOf (secondOf one))
+    _ => CtorFamilyUnknown
+
+-- 该构造子是否需要「按可达集合」判覆盖：索引族与未知族都不能只按名字得出结论。
+export ctorNeedsReachOracle : List (String, Bool, List (String, Int)) -> String -> Bool
+ctorNeedsReachOracle table cname =
+  case ctorFamily table cname of
+    CtorFamilyJudgeable _ => False
+    _ => True
+
 familyCtors : List (String, Bool, List (String, Int)) -> String -> Maybe (List (String, Int))
 familyCtors table cname =
-  case filter (\e => lookupEntry cname (secondOf (secondOf e)) /= Nothing) table of
-    -- 索引族的构造子不可按名字判可达（`Vec 2 a` 没有 `VNil`），对见证按「未知」处理。
-    [one] => if firstOf (secondOf one) then Just (secondOf (secondOf one)) else Nothing
+  case ctorFamily table cname of
+    CtorFamilyJudgeable ctors => Just ctors
     _ => Nothing
 
 -- | 按构造子**短名**定位族：列表字面量哨兵（`@vuna@list@nil` / `@vuna@list@cons`）
@@ -160,51 +209,73 @@ dropPats n xs =
       [] => []
       _ :: rest => dropPats (n - 1) rest
 
+-- 见证搜索的结论。三值：`WitnessProved`（已证明覆盖）与 `WitnessUnknown`
+-- （燃料耗尽 / 索引族 / 未知族）必须分开——把后者当成「已覆盖」正是静默放行的来源。
+-- 只有 `WitnessMissing` 参与诊断改写。
+export data Witness(..) : Type where
+  WitnessProved : Witness
+  WitnessMissing : List Pat -> Witness
+  WitnessUnknown : Witness
+
 -- 见证：全通配查询下矩阵是否穷尽；不穷尽时给出前缀（长度 = 原矩阵列数）。
 --
 -- `pending` 把「列下降」与「同列逐构造子尝试」合成**一个**自递归函数：
 --   * `Nothing` = 处理当前列（列下降）；
 --   * `Just ctors` = 已按族展开，正在逐个构造子尝试（取第一个出现缺失的分支）。
 -- 燃料用 `Nat` 并按其构造子递归（`Zero`/`Succ`），终止性由结构下降直接可证。
-export coverageWitness : List (String, Bool, List (String, Int)) -> Nat -> Maybe (List (String, Int)) -> List (List Pat) -> List Pat -> Maybe (List Pat)
+export coverageWitness : List (String, Bool, List (String, Int)) -> Nat -> Maybe (List (String, Int)) -> List (List Pat) -> List Pat -> Witness
 coverageWitness table fuel pending rows qs =
   case fuel of
-    0 => Nothing
+    0 => WitnessUnknown
     Succ fuel2 =>
       case pending of
-        Just ctors =>
-          case ctors of
-            [] => Nothing
-            entry :: rest =>
-              let
-                ar = secondOf entry
-                specialized = specializeCtor ar (firstOf entry) rows
-                deeper = coverageWitness table fuel2 Nothing specialized (append (wilds ar) qs)
-              in case deeper of
-                Nothing => coverageWitness table fuel2 (Just rest) rows qs
-                Just w =>
-                  Just
-                    (PCon ((firstOf entry)) (takePats ar w) (detachedNodeRef emptyPatSpan) :: dropPats ar w)
+        Just ctors => coverageCtorTries table fuel2 ctors rows qs False
         Nothing =>
           case qs of
-            [] => if hasNilRow rows then Nothing else Just []
+            [] => if hasNilRow rows then WitnessProved else WitnessMissing []
             _ :: qsRest =>
-              let
-                heads = ctorHeadsOf rows
-              in case heads of
+              case ctorHeadsOf rows of
                 [] =>
                   case coverageWitness table fuel2 Nothing (defaultRows rows) qsRest of
-                    Nothing => Nothing
-                    Just w => Just (PWild (detachedNodeRef emptyPatSpan) :: w)
+                    WitnessMissing w => WitnessMissing (PWild (detachedNodeRef emptyPatSpan) :: w)
+                    other => other
                 h :: _ =>
                   case familyCtors table h of
-                    -- 未知族（跨包表缺失 / 重载构造子）：不推断，按已覆盖处理。
-                    Nothing => Nothing
+                    -- 索引族 / 未知族（跨包表缺失 / 重载构造子）：给不出见证，
+                    -- 但这不是「已覆盖」的证据——调用方只能不改写诊断。
+                    Nothing => WitnessUnknown
                     Just ctors =>
-                      coverageWitness table fuel2 (Just (orderedCtors ctors heads)) rows qsRest
+                      coverageWitness
+                        table
+                        fuel2
+                        (Just (orderedCtors ctors (ctorHeadsOf rows)))
+                        rows
+                        qsRest
 
--- 矩阵穷尽性：`Just w` = 缺 w（w 的长度等于矩阵列数）。
-export matrixWitness : List (String, Bool, List (String, Int)) -> List (List Pat) -> Maybe (List Pat)
+-- 逐个构造子尝试：任一构造子给出缺失模式即采用；全部判定成功才是 `WitnessProved`；
+-- 有「无法判定」而其余都不是缺失时整体 `WitnessUnknown`。
+coverageCtorTries : List (String, Bool, List (String, Int)) -> Nat -> List (String, Int) -> List (List Pat) -> List Pat -> Bool -> Witness
+coverageCtorTries table fuel [] rows qs unknownSeen =
+  if unknownSeen then WitnessUnknown else WitnessProved
+coverageCtorTries table fuel (entry :: rest) rows qs unknownSeen =
+  let
+    ar = secondOf entry
+    deeper =
+      coverageWitness
+        table
+        fuel
+        Nothing
+        (specializeCtor ar (firstOf entry) rows)
+        (append (wilds ar) qs)
+  in case deeper of
+    WitnessMissing w =>
+      WitnessMissing
+        (PCon (firstOf entry) (takePats ar w) (detachedNodeRef emptyPatSpan) :: dropPats ar w)
+    WitnessProved => coverageCtorTries table fuel rest rows qs unknownSeen
+    WitnessUnknown => coverageCtorTries table fuel rest rows qs True
+
+-- 矩阵穷尽性：`WitnessMissing w` = 缺 w（w 的长度等于矩阵列数）。
+export matrixWitness : List (String, Bool, List (String, Int)) -> List (List Pat) -> Witness
 matrixWitness table clauses =
   if uniformArity clauses then
     coverageWitness
@@ -214,26 +285,21 @@ matrixWitness table clauses =
       clauses
       (wilds (matrixArity clauses))
   else
-    Nothing
+    WitnessUnknown
 
 -- ---------------------------------------------------------------
 -- 子句可达性（usefulness）：`qs` 是否被 `rows` 完全覆盖。
 -- 与 `coverageWitness` 的区别：查询是**具体子句的模式向量**，所以要按查询自己的
--- 构造子 / 字面量下降；并且「未知族 / 重载构造子 / 燃料耗尽」必须报 `CovUnknown`
--- 而不是当成已覆盖（后者会把未知族误判成不可达子句）。
+-- 构造子 / 字面量下降；「索引族 / 未知族 / 重载构造子 / 燃料耗尽」给 `CoverUnknown`
+-- ——既不能当成已覆盖（会把未知族误判成不可达子句），也不当成缺。
 -- ---------------------------------------------------------------
-export data ClauseCover(..) : Type where
-  CovUncovered : ClauseCover
-  CovCovered : ClauseCover
-  CovUnknown : ClauseCover
-
-export clauseCover : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> ClauseCover
+export clauseCover : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> CoverVerdict
 clauseCover table fuel rows qs =
   case fuel of
-    0 => CovUnknown
+    0 => CoverUnknown
     Succ fuel2 =>
       case qs of
-        [] => if hasNilRow rows then CovCovered else CovUncovered
+        [] => if hasNilRow rows then CoverProved else CoverMissing
         q :: qsRest =>
           case patHead q of
             -- 查询头是构造子：只走该构造子的分支。
@@ -244,7 +310,7 @@ clauseCover table fuel rows qs =
                 (specializeCtor (natToInt (length subs)) (c) rows)
                 (append subs qsRest)
             -- record 模式：字段匹配的覆盖性判据不在这一层，按未知处理（不报错）。
-            PRecord _ _ _ => CovUnknown
+            PRecord _ _ _ => CoverUnknown
             -- 查询头是字面量：只有该列的通配行能覆盖这个具体值
             -- （同值字面量的重复子句由语法层 `PS_ClauseShadowed` 挡掉）。
             PInt _ _ => clauseCover table fuel2 (defaultRows rows) qsRest
@@ -255,7 +321,7 @@ clauseCover table fuel rows qs =
                 [] => clauseCover table fuel2 (defaultRows rows) qsRest
                 h :: _ =>
                   case familyCtors table h of
-                    Nothing => CovUnknown
+                    Nothing => CoverUnknown
                     Just ctors =>
                       clauseCoverCtorsGo
                         table
@@ -263,19 +329,58 @@ clauseCover table fuel rows qs =
                         (orderedCtors ctors (ctorHeadsOf rows))
                         rows
                         qsRest
-                        CovCovered
+                        CoverProved
 
--- 逐个构造子尝试：任一支有缺口 ⇒ `CovUncovered`；否则只要有未知 ⇒ `CovUnknown`；
--- 全部分支都被覆盖才是 `CovCovered`。
-clauseCoverCtorsGo : List (String, Bool, List (String, Int)) -> Nat -> List (String, Int) -> List (List Pat) -> List Pat -> ClauseCover -> ClauseCover
+-- 逐个构造子尝试：任一支有缺口 ⇒ `CoverMissing`；否则只要有未知 ⇒ `CoverUnknown`；
+-- 全部分支都被覆盖才是 `CoverProved`。
+clauseCoverCtorsGo : List (String, Bool, List (String, Int)) -> Nat -> List (String, Int) -> List (List Pat) -> List Pat -> CoverVerdict -> CoverVerdict
 clauseCoverCtorsGo table fuel [] rows qsRest acc = acc
 clauseCoverCtorsGo table fuel (entry :: rest) rows qsRest acc =
   let
     ar = secondOf entry
   in case clauseCover table fuel (specializeCtor ar (firstOf entry) rows) (append (wilds ar) qsRest) of
-    CovUncovered => CovUncovered
-    CovUnknown => clauseCoverCtorsGo table fuel rest rows qsRest CovUnknown
-    CovCovered => clauseCoverCtorsGo table fuel rest rows qsRest acc
+    CoverMissing => CoverMissing
+    CoverUnknown => clauseCoverCtorsGo table fuel rest rows qsRest CoverUnknown
+    CoverProved => clauseCoverCtorsGo table fuel rest rows qsRest acc
+
+-- 根列（第一列）带可达构造子集合的入口。
+-- `clauseCover` 在索引族 / 未知族上无法只按名字给结论（`Vec 2 a` 没有 `VNil`；
+-- 重载构造子定位不到族）。调用方（`Elab.Match`）把 `Elab.Case` 的**同一套可达性判据**
+-- 的结果传进来：该类型族的全部构造子 + 其中可达的名字。矩阵只用它在根列筛掉不可构造
+-- 的构造子；同一次下降进入子列（字段类型不同）后立刻丢回 `clauseCover` 的保守路径。
+--
+-- 根列：按该类型下**可达**的构造子集合判覆盖（名字集合在这里不能直接用）。
+clauseCoverRootReach : List (String, Int) -> List String -> List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> CoverVerdict
+clauseCoverRootReach ctors reachable table fuel rows qsRest =
+  case ctorHeadsOf rows of
+    [] => clauseCover table fuel (defaultRows rows) qsRest
+    heads =>
+      case filterReachable reachable ctors of
+        [] => CoverUnknown
+        liveCtors =>
+          clauseCoverCtorsGo table fuel (orderedCtors liveCtors heads) rows qsRest CoverProved
+
+filterReachable : List String -> List (String, Int) -> List (String, Int)
+filterReachable reachable [] = []
+filterReachable reachable (e :: rest) =
+  if memName (firstOf e) reachable then
+    e :: filterReachable reachable rest
+  else
+    filterReachable reachable rest
+
+export clauseCoverWith : Maybe (List (String, Int), List String) -> List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List Pat -> CoverVerdict
+clauseCoverWith Nothing table fuel rows qs = clauseCover table fuel rows qs
+clauseCoverWith (Just (ctors, reachable)) table fuel rows qs =
+  case fuel of
+    0 => CoverUnknown
+    Succ fuel2 =>
+      case qs of
+        [] => clauseCover table fuel rows qs
+        q :: qsRest =>
+          case patHead q of
+            PVar _ _ => clauseCoverRootReach ctors reachable table fuel2 rows qsRest
+            PWild _ => clauseCoverRootReach ctors reachable table fuel2 rows qsRest
+            _ => clauseCover table fuel rows qs
 
 -- 模式节点数（每个 `Pat` 节点计 1；构造子子模式 / record 字段递归）。
 patNodes : Pat -> Int
@@ -322,8 +427,8 @@ matrixArity (row :: _) = natToInt (length row)
 -- 把「合成 case 不可穷尽」的诊断换成带**源模式见证**的版本。
 --
 -- 只在错误码已经是 `TC_NotExhaustive` 时改写：类型错 / 分支参数个数错等更具体的诊断
--- 优先（那些错误在精化前无法预知，预检会把它们盖掉）。见证首位必须是构造子，否则
--- 保持原诊断（字面量列 / 未知族 / 重载构造子的情形留给既有文案）。
+-- 优先（那些错误在精化前无法预知，预检会把它们盖掉）。只有 `WitnessMissing` 才改写；
+-- `WitnessProved` / `WitnessUnknown` 都保持原诊断（后者是「给不出见证」，不是「已覆盖」）。
 -- `clausesOf` 是**惰性**的源矩阵：矩阵只在诊断需要改写时才构建（正常精化不付这份
 -- 遍历；`matrixOf` 在 Match 里，Coverage 不能反向 import，因此用 thunk 而不是直接吃
 -- 已建好的 `List (List Pat)`）。
@@ -337,17 +442,17 @@ improveDiag table clauses sp d =
     d
   else
     case matrixWitness table clauses of
-      Just w =>
+      WitnessMissing w =>
         if witnessNamesCtor w then
           let
             rx = renderWitness w
           in withFallbackSpan sp (tcMsg (NotExhaustive rx) [rx])
         else
           d
-      Nothing => d
+      _ => d
 
 -- 只有见证**首位**就是构造子时才值得抢先报错：那是最清晰的「漏了某个构造子」。
--- 首位是通配（字面量列 / 未知族）时不推断，留给降级后的既有诊断。
+-- 首位是通配（字面量列 / 索引族 / 未知族）时不推断，留给降级后的既有诊断。
 export witnessNamesCtor : List Pat -> Bool
 witnessNamesCtor [] = False
 witnessNamesCtor (p :: _) =

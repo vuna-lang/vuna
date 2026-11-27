@@ -1,0 +1,16 @@
+-- 索引族的子句有用性：`Vec a n`（n 中性）上 `VNil` 与兜底都可能匹配，不能报不可达。
+-- 索引里有中性项时可达判定保守判「可达」（`Elab.Case.branchReachable`）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+f : {n : Nat} -> Vec Int n -> Int
+f VNil = 1
+f v = 2
+
+main : Int
+main = f VNil + f (VCons 3 VNil)

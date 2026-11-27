@@ -10,6 +10,11 @@ module Vuna.Compiler.Elab.Case where
 -- 与写出一个分支（elabConAlt）都跑同一套「索引合一 + 上下文空族」判定；上下文空族又
 -- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。精化路径只有两条：
 -- 先降级成模式矩阵，或直接走规范形。
+--
+-- 覆盖结论统一落到 `Elab.Coverage.CoverVerdict`：`checkCoverage` 用 `branchVerdict`
+-- 逐构造子判可达后给出 `CoverProved` / 报缺；clause 有用性用的根列可达集合
+-- （`firstColumnCover`）也由同一个 `branchReachable` 算出，矩阵不再按「构造子名字集合」
+-- 放行索引族。
 import Base.Data.List as List
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
@@ -20,6 +25,7 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Usage
+import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Name
@@ -300,6 +306,51 @@ branchVerdict ctx ec idxs ctor =
 export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Check Bool
 branchReachable ctx ec idxs ctor =
   Vuna.Compiler.Base.Common.bind (branchVerdict ctx ec idxs ctor) (\v => OkC (branchIsReachable v))
+
+-- ---------------------------------------------------------------
+-- clause 有用性用的「根列可达集合」
+-- ---------------------------------------------------------------
+-- 模式矩阵（`Elab.Coverage.clauseCover`）在多 clause 函数的**根列**（第一个显式参数）
+-- 上判「前面的子句是否已覆盖一切」。参数族可以按构造子名字判，但索引族的名字集合不等于
+-- 可达集合（`Vec 2 a` 没有 `VNil`）——这正是不再静默放行的关键：把这里算出的可达集合
+-- 交给矩阵，矩阵只在根列用它筛掉不可构造的构造子。
+--
+-- 第一列的类型与 `resolveClausePatsFuel` 同口径：隐式 binder 实例化成新鲜中性变量
+-- （索引里因此保留中性项 → `branchReachable` 保守判「可达」）。
+firstColumnEnv : Nat -> Ec -> Ctx -> Value -> Maybe (Ctx, Value)
+firstColumnEnv 0 ec ctx ty = Nothing
+firstColumnEnv (Succ fuel2) ec ctx ty =
+  case forceVal ec ty of
+    VPi name implicit rig dom clo =>
+      if implicit then
+        let
+          ctx2 = ctxBindValue name dom ctx
+          v = VNeutral (NVar name (ctxDepth ctx) [])
+        in firstColumnEnv fuel2 ec ctx2 (applyClosure clo v)
+      else
+        Just (ctx, dom)
+    _ => Nothing
+
+-- 第一列类型的全部构造子（显式参数个数）与其中**可达**的构造子名。
+-- 可达性唯一判据是 `branchReachable`（省略分支 / 写出分支同一实现）。
+export firstColumnCover : Ec -> Ctx -> Value -> Check (Maybe (List (String, Int), List String))
+firstColumnCover ec ctx ty =
+  case firstColumnEnv (natFromInt 512) ec ctx ty of
+    Nothing => OkC Nothing
+    Just (colCtx, colTy) =>
+      case forceVal ec colTy of
+        VNeutral (NGlobal fam idxs) =>
+          case dtDataLookup fam (ecDatas ec) of
+            Nothing => OkC Nothing
+            Just dd => firstColumnCoverGo colCtx ec idxs (dtDataCtors dd) [] []
+        _ => OkC Nothing
+
+firstColumnCoverGo : Ctx -> Ec -> List Value -> List DtCtor -> List (String, Int) -> List String -> Check (Maybe (List (String, Int), List String))
+firstColumnCoverGo colCtx ec idxs [] ctors reachable = OkC (Just (reverse ctors, reverse reachable))
+firstColumnCoverGo colCtx ec idxs (ctor :: rest) ctors reachable =
+  Vuna.Compiler.Base.Common.bind
+    (branchReachable colCtx ec idxs ctor)
+    (\ok => firstColumnCoverGo colCtx ec idxs rest ((dtCtorName ctor, ctorExplicitArity (dtCtorType ctor)) :: ctors) (if ok then dtCtorName ctor :: reachable else reachable))
 
 export wildArgs : Int -> List Pat
 wildArgs n = if n <= 0 then [] else (::) (PWild noNodeRef) (wildArgs (n - 1))
@@ -619,18 +670,23 @@ anyNestedArg (a :: rest) =
 -- 覆盖率
 -- ---------------------------------------------------------------
 -- 覆盖率：可达的构造子必须都出现；不可达的可以省略（写了会被 elabConAlt 拒）。
+-- 结论是 `Coverage.CoverVerdict`（与 clause 有用性、矩阵见证、特化路径同一类型）：
+-- 穷尽 ⇔ `CoverProved`；缺可达构造子 ⇔ `CoverMissing`（直接报 `TC_NotExhaustive`）。
+-- 这里没有「未知族按已覆盖放行」：scrutinee 的族必须先 `dtDataLookup` 成功
+-- （否则 `checkCaseOfFuel` 报 `TC_NotInductiveFamily`），每个构造子的可达性都走
+-- `branchVerdict`（索引合一 + 上下文空族），所以索引族不会漏报可达分支。
 -- 性能：**已写出的分支直接跳过**（不跑可达性），只有「没写的构造子」才需要判可达性——
 -- 否则每个 case 的每个构造子都要模拟一次分支（绑定 telescope + 上下文空类型检查），
 -- 编译器自检会慢 4 倍以上。
-export checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pat, Expr) -> Span -> Check Int
+export checkCoverage : Ctx -> Ec -> DtData -> List Value -> List (Pat, Expr) -> Span -> Check CoverVerdict
 checkCoverage ctx ec dd idxs alts sp =
   checkCovered ctx ec dd idxs (altNames alts) alts sp (dtDataCtors dd)
 
-export checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pat, Expr) -> Span -> List DtCtor -> Check Int
+export checkCovered : Ctx -> Ec -> DtData -> List Value -> List String -> List (Pat, Expr) -> Span -> List DtCtor -> Check CoverVerdict
 checkCovered ctx ec dd idxs written alts sp ctors =
   Vuna.Compiler.Base.Common.bind
     (missingCtors ctx ec idxs written ctors)
-    (\missing => if length missing == 0 then OkC 0 else tcCoverageMissing sp missing)
+    (\missing => if length missing == 0 then OkC CoverProved else tcCoverageMissing sp missing)
 
 missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> Check (List (String, Maybe Span))
 missingCtors ctx ec idxs written [] = OkC []

@@ -99,12 +99,25 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **`Int` / `String` 字面量 case 必须有变量 / 通配兜底**（`TC_IntStringCaseNeedsFallback`）；
   Nat 字面量模式是构造子模式的一部分，不要求兜底。
   `Bool` 的 `case` 只认 `True` / `False` / 变量 / 通配（`TC_BoolCaseRestriction`）。
+- **覆盖 / 可达性只有一个结论类型**（`Elab.Coverage.CoverVerdict`：`CoverProved` /
+  `CoverMissing` / `CoverUnknown`）。`CoverUnknown`（索引族 / 未知族 / 重载构造子 / 燃料
+  耗尽）表示**无法证明**，不等于「已覆盖」：需要「缺分支」结论的路径只消费前两者，
+  需要「多写了分支」结论的路径遇到它只能不报（否则是保守误拒）。
+  家族归属也只有一处（`Coverage.ctorFamily`：参数族可按名字判，索引族的名字集合不等于
+  可达集合，重载/缺失构造子按未知处理）。
 - **诊断**：重复构造子分支、重复字面量、兜底之后的分支分别是
   `TC_RedundantCtorBranch` / `TC_RedundantLiteralBranch` / `TC_BranchAfterCatchAll`；
   兜底不在最后报 `TC_CatchAllNotLast`；漏写可达分支报 `TC_NotExhaustive`。
+  多 clause 函数的子句有用性（`Coverage.clauseCover`）在**根列**（第一个显式参数）消费
+  `Elab.Case.firstColumnCover` 给出的「全部构造子 + 其中可达的名字」，因此索引族上
+  `f Nil = …; f v = …`（`v : Vec a Zero`）会报 `TC_ClauseUnreachable`，而 `Vec a n`
+  （中性索引）上的同一式子句照常接受。索引族里不可构造的构造子不算「缺分支」。
   「需要矩阵消解的同构造子多分支」不是冗余——矩阵会让两条都可达。
+- `Bool` / `Int` / `String` / Nat 字面量的降低是**特化路径**（Bool → `if`、字面量 → `if`
+  链），覆盖结论与通用判据同源（`Coverage.specializationCover`：这些族没有索引，
+  「目标分支或兜底写了」⇔ `CoverProved`，否则 `CoverMissing`），没有第二套「按已覆盖放行」。
 - 语法与 as-pattern 的当前适用范围见 [language.md](language.md)；实现见
-  `Elab/Case`、`Elab/Match`、[core.md](core.md)。
+  `Elab/Coverage`、`Elab/Case`、`Elab/Match`、[core.md](core.md)。
 
 ## 相等与比较
 

@@ -42,14 +42,21 @@ clauseArityTooMany n [] = False
 clauseArityTooMany n ((pats, _) :: rest) = natToInt (length pats) > n || clauseArityTooMany n rest
 
 export multiToExpr : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Expr
-multiToExpr table clauses =
+multiToExpr table clauses = multiToExprWith Nothing table clauses
+
+-- | `multiToExpr` 的可达构造子版本：`reach` 是第一列（第一个显式参数）类型的
+-- 「全部构造子 + 其中可达的名字」，由 `Elab.Case.firstColumnCover` 用 `branchReachable`
+-- 算出（与省略/写出分支同一判据）。索引族 / 未知族的子句有用性只能靠它判
+-- （`Vec 2 a` 没有 `VNil`）；`Nothing` 表示没有这份信息，矩阵保持 `CoverUnknown`。
+export multiToExprWith : Maybe (List (String, Int), List String) -> List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Expr
+multiToExprWith reach table clauses =
   case arityOf clauses of
     Nothing => ErrC (tcMsg FunctionNoClauses [])
     Just n =>
       if clauseArityTooMany n clauses then
         tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
       else
-        Vuna.Compiler.Base.Common.bind (checkReachable table clauses) (
+        Vuna.Compiler.Base.Common.bind (checkReachableWith reach table clauses) (
             \_ =>
               let
                 names = paramNames n
@@ -58,26 +65,29 @@ multiToExpr table clauses =
 
 -- | 每个子句必须匹配到前面子句没覆盖的值。
 --   语法层已经挡掉「被单条前置子句蕴含」（`PS_ClauseShadowed`），这里补**并集**覆盖
---   （`True` / `False` 之后再来 `_`）。未知族 / 重载构造子 / 燃料耗尽不报
---   （`CovUnknown`）：不能证明不可达就不报。
+--   （`True` / `False` 之后再来 `_`）。只有 `CoverProved` 才报不可达；
+--   `CoverUnknown`（索引族 / 未知族 / 重载构造子 / 燃料耗尽）不能证明不可达，不报。
 --   列数不一致的组（`where` / `let` 允许少模式的 catch-all）不判。
 export checkReachable : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Bool
-checkReachable table clauses =
+checkReachable table clauses = checkReachableWith Nothing table clauses
+
+export checkReachableWith : Maybe (List (String, Int), List String) -> List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Check Bool
+checkReachableWith reach table clauses =
   let
     rows = matrixOf clauses
   in if uniformArity rows then
-    reachableGo table (natFromInt (coverageFuelFor rows)) [] clauses
+    reachableGo reach table (natFromInt (coverageFuelFor rows)) [] clauses
   else
     OkC True
 
-reachableGo : List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List (List Pat, Expr) -> Check Bool
-reachableGo table fuel rows [] = OkC True
-reachableGo table fuel rows ((pats, body) :: rest) =
+reachableGo : Maybe (List (String, Int), List String) -> List (String, Bool, List (String, Int)) -> Nat -> List (List Pat) -> List (List Pat, Expr) -> Check Bool
+reachableGo reach table fuel rows [] = OkC True
+reachableGo reach table fuel rows ((pats, body) :: rest) =
   let
     qs = map stripAsPat pats
-  in case clauseCover table fuel rows qs of
-    CovCovered => tcErr0 (clauseHeadSpan pats body) ClauseUnreachable
-    _ => reachableGo table fuel ((::) qs rows) rest
+  in case clauseCoverWith reach table fuel rows qs of
+    CoverProved => tcErr0 (clauseHeadSpan pats body) ClauseUnreachable
+    _ => reachableGo reach table fuel ((::) qs rows) rest
 
 clauseHeadSpan : List Pat -> Expr -> Span
 clauseHeadSpan (p :: _) body = patSpan p
@@ -270,7 +280,9 @@ ctorColumn table clauses pos restParams fbSp fuel =
         \alts =>
           let
             caseSp = firstPatSpan clauses
-          in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) alts (detachedNodeRef caseSp)) else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1)) (\fbAlts => OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) (append alts fbAlts) (detachedNodeRef caseSp)))
+          in case familyCoverVerdict table (ctorHeads clauses) of
+            CoverProved => OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) alts (detachedNodeRef caseSp))
+            _ => Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1)) (\fbAlts => OkC (ECase (EVar (pos) (detachedNodeRef caseSp)) (append alts fbAlts) (detachedNodeRef caseSp)))
       )
 
 -- 构造子名 → 所属族的构造子表；列表字面量哨兵按短名找族，其余找不到族时按未知处理。
@@ -303,20 +315,56 @@ canonHeads ctors (h :: rest) =
         Nothing => Nothing
         Just tail => Just (c :: tail)
 
--- 该族是否已被本列构造子 head 全覆盖。族未知（表与模式不一致）时不推断：
--- 补 `_` 兜底会用不完整的残矩阵独立判覆盖，反而在不可达兜底里报假 missing；
--- 交给外层穷尽检查（它按真实构造子判）更准确。
-familyCovered : List (String, Bool, List (String, Int)) -> List String -> Bool
-familyCovered table [] = False
-familyCovered table (heads@(h :: rest)) =
+-- 该列构造子分支的覆盖结论（`Coverage.CoverVerdict`）：
+--   * `CoverProved`：该族**每个**构造子都有分支——这对索引族也是充分证明（分支存在即穷尽），
+--     所以不必补 `_` 兜底；
+--   * `CoverMissing`：族已知但有构造子没出现；
+--   * `CoverUnknown`：族未知（表与模式不一致 / 重载构造子）——不推断，补 `_` 兜底，
+--     把剩余列的匹配交给兜底独立判定（不完整的残矩阵自己判覆盖会报假 missing）。
+familyCoverVerdict : List (String, Bool, List (String, Int)) -> List String -> CoverVerdict
+familyCoverVerdict table [] = CoverUnknown
+familyCoverVerdict table (heads@(h :: rest)) =
   case familyOfHead table h of
-    Nothing => False
+    Nothing => CoverUnknown
     Just fam =>
       let
         names = map firstOf fam
       in case canonHeads fam heads of
-        Nothing => False
-        Just canon => allMem names canon
+        Nothing => CoverUnknown
+        Just canon => if allMem names canon then CoverProved else CoverMissing
+
+-- 是否需要索引族 / 未知族的可达构造子集合：第一列出现「不能按名字判」的构造子头，
+-- 且有变量/通配子句（那是 `clauseCover` 在根列无法给结论的唯一形态）。
+export needsReachOracle : List (String, Bool, List (String, Int)) -> List (List Pat, Expr) -> Bool
+needsReachOracle table clauses =
+  anyNeedsReachHead table (column0Heads clauses) && anyCatchAllHead clauses
+
+anyNeedsReachHead : List (String, Bool, List (String, Int)) -> List String -> Bool
+anyNeedsReachHead table [] = False
+anyNeedsReachHead table (h :: rest) = ctorNeedsReachOracle table h || anyNeedsReachHead table rest
+
+column0Heads : List (List Pat, Expr) -> List String
+column0Heads [] = []
+column0Heads ((pats, body) :: rest) =
+  case pats of
+    p :: _ =>
+      case stripAsPat p of
+        PCon c _ _ => addNameDistinct c (column0Heads rest)
+        _ => column0Heads rest
+    [] => column0Heads rest
+
+anyCatchAllHead : List (List Pat, Expr) -> Bool
+anyCatchAllHead [] = False
+anyCatchAllHead ((pats, body) :: rest) =
+  case pats of
+    p :: _ => isCatchAllHead p || anyCatchAllHead rest
+    [] => anyCatchAllHead rest
+
+isCatchAllHead : Pat -> Bool
+isCatchAllHead (PVar _ _) = True
+isCatchAllHead (PWild _) = True
+isCatchAllHead (PAs _ inner _) = isCatchAllHead inner
+isCatchAllHead _ = False
 
 -- 该列至少有一个构造子模式（与变量/通配混合时也要走构造子分支 + 兜底，
 -- 不能落到 `litAltExpr`——它不会展开构造子子模式，丢失子模式绑定）。

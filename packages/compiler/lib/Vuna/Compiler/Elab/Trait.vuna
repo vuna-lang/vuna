@@ -13,6 +13,7 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.InstCoherence
 import Vuna.Compiler.Elab.InstName
+import Vuna.Compiler.Elab.Case
 import Vuna.Compiler.Elab.Match
 import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Elab.Meta
@@ -1705,6 +1706,9 @@ elabFunDefIn globals ctx0 ec clauses expected sp =
   elabFunDefMulti globals ctx0 ec clauses expected sp
 
 -- | 多个 clause / 方程左端模式的精化入口（MULTI / CHECKDEF 打点）。
+-- 索引族 / 未知族的 clause 有用性需要**第一列的可达构造子集合**（名字集合不够：
+-- `Vec 2 a` 没有 `VNil`）。这份集合用 `Elab.Case.firstColumnCover`（`branchReachable`
+-- 同一判据）算出，只在矩阵确实需要它时才算（`Match.needsReachOracle`）。
 elabFunDefMulti : List (String, Term) -> Ctx -> Ec -> List (List Pat, Expr) -> Value -> Span -> Check (Term, Ec)
 elabFunDefMulti globals ctx0 ec clauses expected sp =
   let
@@ -1717,12 +1721,16 @@ elabFunDefMulti globals ctx0 ec clauses expected sp =
           (clauses2, ec1) =>
             let
               table = ctorFamilyTable ec1
-            in Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.pats" (\_ => multiToExpr table clauses2)) (
-                \bodyExpr =>
-                  let
-                    _ = log! "debug" "CHECKDEF"
-                    checked = obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec1 [] bodyExpr expected sp)
-                  in obsCheck "vuna.elab.coverage" (\_ => improveExhaustive table (\_ => matrixOf clauses2) (firstPatSpan clauses2) checked)
+              reachCheck = if needsReachOracle table clauses2 then obsCheck "vuna.elab.pats" (\_ => firstColumnCover ec1 ctx0 expected) else OkC Nothing
+            in Vuna.Compiler.Base.Common.bind reachCheck (
+                \reach =>
+                  Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.pats" (\_ => multiToExprWith reach table clauses2)) (
+                      \bodyExpr =>
+                        let
+                          _ = log! "debug" "CHECKDEF"
+                          checked = obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec1 [] bodyExpr expected sp)
+                        in obsCheck "vuna.elab.coverage" (\_ => improveExhaustive table (\_ => matrixOf clauses2) (firstPatSpan clauses2) checked)
+                    )
               )
     )
 

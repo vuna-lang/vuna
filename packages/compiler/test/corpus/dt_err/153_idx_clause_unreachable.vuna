@@ -1,0 +1,17 @@
+-- 反例：索引族的子句有用性不再按「构造子名字」放行——`Vec Int Zero` 只有 `VNil`
+-- （`VCons` 的索引 `Succ n` 与 `Zero` 合一失败），所以 `v` 子句不可达。
+-- 可达集合来自与省略/写出分支同一判据（`Elab.Case.branchReachable`）。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+data Vec : Type -> Nat -> Type where
+  VNil : {a : Type} -> Vec a Zero
+  VCons : {a : Type} -> {n : Nat} -> a -> Vec a n -> Vec a (Succ n)
+
+f : Vec Int Zero -> Int
+f VNil = 0
+f v = 1
+
+main : Int
+main = 0
