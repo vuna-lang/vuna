@@ -1,0 +1,64 @@
+-- EC-40：`refineValue` 把索引精化代进「卡住的 case」与「记录投影」。
+-- 这两个形状只能在这一层构造值覆盖：类型语法不接受 `case`，类型位置的 `r.f` 不精化成投影，
+-- 所以源码的类型里不会出现 `VCase` / `VProj`。
+--   * 投影：base 精化成构造子值后取字段（iota），字段自身还要继续代入精化；
+--   * case：分支体的闭包环境同样代入，否则归约后留下未精化的中性变量。
+import Base
+import Vuna.Compiler.Base.Source
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Elab.Types
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case filter (\p => not (secondOf p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- consolePrint ("refine value failed: " ++ join "; " (map firstOf bad) ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "proj-base-iota" projBaseIota,
+    Pair "proj-field-refined" projFieldRefined,
+    Pair "case-alt-env-refined" caseAltEnvRefined
+  ]
+
+-- `r : Sized` 精化成 `MkSized Zero` 后，`r.size` 应投影成 `Zero`。
+projBaseIota : Bool
+projBaseIota =
+  isCtor
+    "Zero"
+    0
+    (refineValue [(0, VCon "MkSized" [VCon "Zero" []])] defaultFuel (VProj (VNeutral (NVar "r" 0 [])) "MkSized" [] 0 0))
+
+-- 投影出的字段本身也是被精化的 binder（`size` 精化成 `Zero`）时同样要继续代入。
+projFieldRefined : Bool
+projFieldRefined =
+  isCtor
+    "Zero"
+    0
+    (refineValue [(0, VCon "MkSized" [VNeutral (NVar "size" 1 [])]), (1, VCon "Zero" [])] defaultFuel (VProj (VNeutral (NVar "r" 0 [])) "MkSized" [] 0 0))
+
+-- 卡住的 case：分支体求值读闭包环境，环境里的 scrutinee 也要代入精化。
+caseAltEnvRefined : Bool
+caseAltEnvRefined =
+  case refineValue [(0, VCon "Zero" [])] defaultFuel (VCase (VNeutral (NVar "n" 0 [])) [alt]) of
+    VCase (VCon "Zero" []) alts => isCtor "Zero" 0 (applyCaseAlt "Zero" [] alts)
+    _ => False
+
+alt : VCaseAlt
+alt = VCaseAlt "Zero" [] (Closure [VNeutral (NVar "n" 0 [])] (TVar "n" 0 spanEmpty))
+
+-- 构造子名 + 实参个数判据（值没有 Eq 实例）。
+isCtor : String -> Int -> Value -> Bool
+isCtor name arity v =
+  case v of
+    VCon c args => c == name && length args == arity
+    _ => False

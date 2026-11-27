@@ -1064,6 +1064,7 @@ ctxEnvRefined ctx = ctx.ctxEnvRF
 
 -- 把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
 -- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
+-- 卡住的 case / 投影也要下钻：它们的求值环境与投影 base 里同样可能出现被精化的变量。
 export refineValue : List (Int, Value) -> Int -> Value -> Value
 refineValue [] fuel v = v
 refineValue refs fuel v =
@@ -1082,10 +1083,27 @@ refineValue refs fuel v =
           NGlobal g sp => VNeutral (NGlobal g (map (refineValue refs (fuel - 1)) sp))
       VCon c args => VCon c (map (refineValue refs (fuel - 1)) args)
       VApp f a => VApp (refineValue refs (fuel - 1) f) (refineValue refs (fuel - 1) a)
-      VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) alts
+      VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) (map (refineAlt refs (fuel - 1)) alts)
+      VProj base c tele i fi => refineProj refs (fuel - 1) (refineValue refs (fuel - 1) base) c tele i fi
       VIf c th el => VIf (refineValue refs (fuel - 1) c) (refineValue refs (fuel - 1) th) (refineValue refs (fuel - 1) el)
       VMeta m sp => VMeta m (map (refineValue refs (fuel - 1)) sp)
       _ => v
+
+-- case 分支体的求值环境同样代入精化：分支体求值时直接读闭包环境（`applyCaseAlt` 把构造子
+-- 实参前插进去），不代入就会在归约后留下未精化的中性变量。
+refineAlt : List (Int, Value) -> Int -> VCaseAlt -> VCaseAlt
+refineAlt refs fuel (VCaseAlt name binders (Closure env body)) =
+  VCaseAlt name binders (Closure (map (refineValue refs fuel) env) body)
+
+-- 记录投影：base 代入精化后若是构造子值就直接取字段（iota）并继续代入——字段本身也可能是
+-- 待精化的 binder，漏掉它投影会停在构造子字段上；base 仍是中性时保留卡住的投影
+-- （它的字段可能晚些才可归约）。
+refineProj : List (Int, Value) -> Int -> Value -> String -> List (String, Rig) -> Int -> Int -> Value
+refineProj refs fuel (VCon cname args) c tele i fi =
+  case argAt i args of
+    Just a => refineValue refs fuel a
+    Nothing => VProj (VCon cname args) c tele i fi
+refineProj refs fuel base c tele i fi = VProj base c tele i fi
 
 export refineLookup : Int -> List (Int, Value) -> Maybe Value
 refineLookup lvl [] = Nothing

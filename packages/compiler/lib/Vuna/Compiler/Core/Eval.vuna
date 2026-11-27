@@ -895,8 +895,8 @@ dropBytes n xs =
 -- 两个 fuel：`fuel` 是深度正规化自己的递归深度预算（也是终止性判据的守卫 Int 见证），
 -- `evalFuel` 原样传给 force / primReduce（由它们的 fuel 控制定义展开深度）。
 -- ---------------------------------------------------------------
--- | R3：取列表第 i 个元素（投影 iota 用）。
-argAt : Int -> List Value -> Maybe Value
+-- | R3：取列表第 i 个元素（投影 iota 用；`Elab.Types.refineValue` 也按它取字段）。
+export argAt : Int -> List Value -> Maybe Value
 argAt i [] = Nothing
 argAt i (x :: rest) = if i <= 0 then Just x else argAt (i - 1) rest
 
