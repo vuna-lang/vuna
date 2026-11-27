@@ -24,6 +24,7 @@ merged=${4:-false}
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 labels_tool="$ROOT/nix/tools/pr-labels.sh"
+issue_tool="$ROOT/nix/tools/issue.sh"
 
 command -v gh >/dev/null 2>&1 || { echo "pr-triage: 需要 gh" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "pr-triage: 需要 jq" >&2; exit 1; }
@@ -56,12 +57,29 @@ linked_issues() {
 
 mapfile -t issues < <(linked_issues)
 
+type_from_issue_type() {
+  case "$1" in
+    Bug) echo type:bug ;;
+    Feature) echo type:feature ;;
+    Task) echo type:chore ;;
+    Refactor) echo type:refactor ;;
+    Perf) echo type:perf ;;
+    Docs) echo type:docs ;;
+    Test) echo type:test ;;
+    Epic) echo type:epic ;;
+  esac
+}
+
 issue_labels=""
 issue_milestone=""
+issue_type_label=""
 for n in "${issues[@]}"; do
   [ -n "$n" ] || continue
-  issue_json=$(gh issue view "$n" --repo "$repo" --json labels,milestone)
-  issue_labels+=$'\n'$(jq -r '.labels[].name | select(test("^(type|pkg|area):"))' <<<"$issue_json")
+  issue_json=$(gh api "repos/$repo/issues/$n")
+  issue_labels+=$'\n'$(jq -r '.labels[].name | select(test("^(pkg|area):"))' <<<"$issue_json")
+  if [ -z "$issue_type_label" ]; then
+    issue_type_label=$(type_from_issue_type "$(jq -r '.type.name // empty' <<<"$issue_json")")
+  fi
   if [ -z "$issue_milestone" ]; then
     issue_milestone=$(jq -r '.milestone.title // empty' <<<"$issue_json")
   fi
@@ -72,7 +90,7 @@ if [ -z "$type_label" ]; then
   type_label=$(printf '%s\n' "$current_labels" | grep -E '^type:' | head -n 1 || true)
 fi
 if [ -z "$type_label" ]; then
-  type_label=$(printf '%s\n' "$issue_labels" | grep -E '^type:' | head -n 1 || true)
+  type_label="$issue_type_label"
 fi
 
 path_labels=$(printf '%s\n' "$files" | "$labels_tool")
@@ -84,9 +102,6 @@ while IFS= read -r label; do
       if [ "$label" != "$type_label" ]; then
         gh pr edit "$pr" --repo "$repo" --remove-label "$label" || true
       fi
-      ;;
-    status:*)
-      gh pr edit "$pr" --repo "$repo" --remove-label "$label" || true
       ;;
   esac
 done <<<"$current_labels"
@@ -105,41 +120,31 @@ if [ -z "$pr_milestone" ] && [ -n "$issue_milestone" ]; then
 fi
 
 set_issue_status() {
-  local number="$1" wanted="$2" labels
-  labels=$(gh issue view "$number" --repo "$repo" --json labels --jq '.labels[].name')
-  if ! printf '%s\n' "$labels" | grep -Fqx "$wanted"; then
-    gh issue edit "$number" --repo "$repo" --add-label "$wanted"
-  fi
-  while IFS= read -r label; do
-    case "$label" in
-      status:*)
-        if [ "$label" != "$wanted" ]; then
-          gh issue edit "$number" --repo "$repo" --remove-label "$label"
-        fi
-        ;;
-    esac
-  done <<<"$labels"
+  local number="$1" wanted="$2" state
+  state=$(gh api "repos/$repo/issues/$number" --jq .state)
+  [ "$state" = "OPEN" ] || return 0
+  "$issue_tool" --repo "$repo" status "$number" "$wanted" >/dev/null
 }
 
 if [ "$action" = "closed" ] && [ "$merged" = "true" ]; then
-  # Closes #N 由 GitHub 原生关闭；Refs #N 保持 in-review，等验证后手动关闭。
+  # Closes #N 由 GitHub 原生关闭；Refs #N 保持 In review，等验证后手动关闭。
   exit 0
 fi
 
 if [ "$action" = "closed" ]; then
   for n in "${issues[@]}"; do
     [ -n "$n" ] || continue
-    set_issue_status "$n" status:todo
+    set_issue_status "$n" todo
     gh issue comment "$n" --repo "$repo" \
-      --body "PR #$pr 已关闭但未合并，任务回到 \`status:todo\`。" >/dev/null || true
+      --body "PR #$pr 已关闭但未合并，任务回到 \`Todo\`。" >/dev/null || true
   done
   exit 0
 fi
 
 if [ "$is_draft" = "true" ]; then
-  status=status:in-progress
+  status=in-progress
 else
-  status=status:in-review
+  status=in-review
 fi
 
 for n in "${issues[@]}"; do
