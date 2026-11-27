@@ -1,0 +1,6 @@
+-- 反例：do-let 绑定块的缩进错误直接上报。
+main : Int
+main = do
+  let x = 1
+        y = 2
+  x
