@@ -141,7 +141,7 @@ nix run .#ci -- --list                    # 门禁分组：pr / gate / units / g
 nix flake check                           # 本地全量兜底（CI 不再用；清单见 testing-checks.md）
 git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devShell/direnv 自动设置）
 git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）
-gh issue list --label status:todo          # 可开工 issue；流程见技能 vuna-issue
+gh issue list --search 'status:todo'       # 可开工 issue；流程见技能 vuna-issue
 gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
 gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
 nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA

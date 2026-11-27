@@ -8,10 +8,11 @@
 
 **issue 不是开工前置**：PR-only 的改动直接切分支，PR 加 `no-issue` 标签即可。
 需要追踪的复杂工作（epic 子任务、多轮验收）再按技能 `vuna-issue` 查重后创建/精炼，
-领取时标 `status:in-progress` 并 assign 给自己。
+领取时 assign 给自己并把状态设为 In progress（`nix/tools/issue.sh status <n> in-progress`）。
 
 ```console
-gh issue edit <n> --add-assignee @me --add-label status:in-progress  # 有关联 issue 时
+gh issue edit <n> --add-assignee @me                                  # 有关联 issue 时
+nix/tools/issue.sh status <n> in-progress
 git fetch origin
 git switch -c <type>/<slug> origin/main   # 在副 worktree 内
 ```
@@ -109,9 +110,9 @@ git -C <MAIN_ROOT> pull --ff-only
 `main` 的 `ci` 失败时，`main-red.yml` 会维护一个 `main-red` issue（失败追加、恢复绿自动关闭）。
 
 - 开始修之前先 `gh issue list --label main-red --state open`。
-- issue 已有 assignee 或 `status:in-progress`：**不要开修复 PR**，在 issue / PR 里说明并让出。
-- 没有认领：先评论 claim，再
-  `gh issue edit <n> --add-assignee @me --add-label status:in-progress`。
+- issue 已有 assignee 或状态 `In progress`：**不要开修复 PR**，在 issue / PR 里说明并让出。
+- 没有认领：先评论 claim，再 `gh issue edit <n> --add-assignee @me` 与
+  `nix/tools/issue.sh status <n> in-progress`。
 - 修复 PR 写 `Closes #<n>` 并加 `main-red` 标签；`main-red-guard.yml` 会把第二个修复 PR
   加 `blocked` 并移出队列。
 - `main` 还没绿时，不要给无关 PR arm auto-merge；队列会在红灯基线上失败并反复踢出。
