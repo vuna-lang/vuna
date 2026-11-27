@@ -138,6 +138,7 @@ Lowering_dTy.ml
 Main.ml
 Vuna_dIr_dAnalysis.ml
 Vuna_dIr_dCodec.ml
+Vuna_dIr_dDirect.ml
 Vuna_dIr_dDispatch.ml
 Vuna_dIr_dModel.ml
 Vuna_dIr_dRepresent.ml
