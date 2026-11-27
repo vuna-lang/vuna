@@ -25,6 +25,7 @@ import Vuna.Target.Ocaml.Assembly
 import Vuna.Target.Ocaml.Decl
 import Vuna.Compiler.Lowering.Program
 import Vuna.Ir.Model
+import Vuna.Compiler.Core.Term
 import Vuna.Ir.Direct as Direct
 import Vuna.Target.Ocaml.Term
 import Vuna.Compiler.Elab.Driver
@@ -172,6 +173,53 @@ checkSplitAcyclic files =
     icInternal "split dependency graph has a cycle (unit order is not a DAG)"
 
 -- 分文件生成的共享上下文（归属表一次建好，所有单元复用）。
+-- ---------------------------------------------------------------
+-- Eff 返回函数的 arity（token ABI 的双发射）
+-- ---------------------------------------------------------------
+effTyHead : Term -> Bool
+effTyHead (TGlobal g) = g == irEffTypeName
+effTyHead (TApp f _ _) = effTyHead f
+effTyHead (TRecord g _) = g == irEffTypeName
+effTyHead _ = False
+
+effArityPeel : Int -> Term -> Maybe Int
+effArityPeel n (TPi _ _ rig _ cod) = effArityPeel (if rigIsErased rig then n else n + 1) cod
+effArityPeel n t = if effTyHead t then Just n else Nothing
+
+effArityOfTy : Term -> Maybe Int
+effArityOfTy ty = effArityPeel 0 ty
+
+effArityTblOf : LwEnv -> List DtDef -> HashMap String Int
+effArityTblOf env [] = HashMap.fromList []
+effArityTblOf env (d :: rest) =
+  let
+    tail = effArityTblOf env rest
+  in case lwGlobalTyOf (dtDefName d) env of
+    Just ty =>
+      case effArityOfTy ty of
+        Just ar => HashMap.insert (dtDefName d) ar tail
+        Nothing => tail
+    Nothing => tail
+
+effArityOfDefList : List DtDef -> String -> Maybe Int
+effArityOfDefList [] n = Nothing
+effArityOfDefList (d :: rest) n =
+  if dtDefName d == n then effArityOfTy (dtDefType d) else effArityOfDefList rest n
+
+-- | 当前单元自己的定义不在 `lwGlobals`（只有导入名）里，补一张本单元表。
+effPredFor : HashMap String Int -> List DtDef -> String -> Maybe Int
+effPredFor tbl defs n =
+  case HashMap.lookup n tbl of
+    Just ar => Just ar
+    Nothing => effArityOfDefList defs n
+
+-- | 为 Eff 返回定义补一条 `__direct` 双发射名的归属（渲染限定与单元依赖用）。
+directPairOf : HashMap String Int -> (String, String) -> List (String, String)
+directPairOf effTbl p =
+  case HashMap.lookup (firstOf p) effTbl of
+    Just ar => if ar > 0 then [(firstOf p ++ "__direct", secondOf p)] else []
+    Nothing => []
+
 record SplitGenCtx where
   -- Lowering 环境（程序级表 + 当前单元名；每单元用 `lwEnvWithUnit` 换单元）。
   sgcEnv : LwEnv
@@ -186,6 +234,8 @@ record SplitGenCtx where
   sgcDataBuckets : HashMap String (List DtData)
   -- `#line` 路径归一（包相对）：与 `dt_def_locs` 位置表用同一函数（`splitLocPath`）。
   sgcNormPath : String -> String
+  -- Eff 返回定义的原始 arity（`Ir.Direct` 的双发射判据）。
+  sgcEffArity : HashMap String Int
 
 defsOfUnit : SplitGenCtx -> String -> List DtDef
 defsOfUnit ctx u =
@@ -432,9 +482,11 @@ splitProgramChecked env modules entryDecls printResult runtimeDefs allDatas meta
 splitWithOwners : {r : Row} -> LwEnv -> List (String, List Decl) -> Bool -> List DtData -> List DtDef -> List (String, String) -> List (String, String) -> (String -> String) -> IrShared -> Bool -> List (String, String, Int) -> Eff r (Check (List SplitFile))
 splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs normPath shared entryIsAction locRows =
   let
-    defOwnerT = ownerTblOf defPairs
+    effTbl = effArityTblOf env allDefs
+    defPairs2 = append defPairs (concatMap (directPairOf effTbl) defPairs)
+    defOwnerT = ownerTblOf defPairs2
     dataOwnerT = ownerTblOf dataPairs
-    defUnitT = unitTblOf (mapToUnit defPairs)
+    defUnitT = unitTblOf (mapToUnit defPairs2)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
     ordered =
       append
@@ -452,6 +504,7 @@ splitWithOwners env modules printResult allDatas allDefs defPairs dataPairs norm
         (defBucketsOf defOwnerT allDefs)
         (dataBucketsOf dataOwnerT allDatas)
         normPath
+        effTbl
   in do
     moduleFilesR <- splitModuleFiles ctx modules
     case moduleFilesR of
@@ -498,7 +551,7 @@ splitModuleFiles ctx ((mname, decls) :: rest) =
     ErrC e => pure (ErrC e)
     OkC unitIr0 =>
       let
-        unitIr = Direct.directUnit (\_ => Nothing) unitIr0
+        unitIr = Direct.directUnit (effPredFor ctx.sgcEffArity unitDefs) unitIr0
       in case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
         ErrC e => pure (ErrC e)
         OkC parts =>
@@ -527,7 +580,7 @@ splitMainFile ctx printResult =
     ErrC e => pure (ErrC e)
     OkC unitIr0 =>
       let
-        unitIr = Direct.directUnit (\_ => Nothing) unitIr0
+        unitIr = Direct.directUnit (effPredFor ctx.sgcEffArity entryDefs) unitIr0
       in case lowerEntryOf ctx.sgcAllDefs of
         ErrC e => pure (ErrC e)
         OkC entryM =>
