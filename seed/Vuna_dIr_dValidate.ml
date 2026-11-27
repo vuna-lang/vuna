@@ -305,14 +305,14 @@ let v_validateTyDecls = (fun (decls : Vuna_dIr_dModel.t_IrTyDecl B_dData_dList.t
 # 390 "Vuna/Ir/Validate.vuna"
 let v_scopedFuelOf = (fun (body : Vuna_dIr_dModel.t_Ir) -> ((8 * (Vuna_dIr_dModel.v_irSize body)) + 64))
 
-# 428 "Vuna/Ir/Validate.vuna"
+# 435 "Vuna/Ir/Validate.vuna"
 let v_maybeAlts = (fun (mc0 : Vuna_dIr_dModel.t_IrAlt B_dData_dMaybe.t_Maybe) -> (match mc0 with
   | B_dData_dMaybe.C_Maybe_Just (dtb__126) -> (B_dData_dList.C_List__x58__x58_ (dtb__126, B_dData_dList.C_List_Nil))
   | B_dData_dMaybe.C_Maybe_Nothing -> B_dData_dList.C_List_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 432 "Vuna/Ir/Validate.vuna"
+# 439 "Vuna/Ir/Validate.vuna"
 let[@tail_mod_cons] rec v_altWork = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_IrAlt B_dData_dList.t_List) -> (match mc1 with
   | B_dData_dList.C_List__x58__x58_ (dtb__127, dtb__128) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append (Vuna_dIr_dModel.v_irAltBindersOf dtb__127)) mc0); B_dData_dPair.f_Pair_second = (Vuna_dIr_dModel.v_irAltBodyOf dtb__127) }, ((v_altWork mc0) dtb__128)))
   | B_dData_dList.C_List_Nil -> B_dData_dList.C_List_Nil
@@ -321,40 +321,48 @@ let[@tail_mod_cons] rec v_altWork = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dDa
 
 # 406 "Vuna/Ir/Validate.vuna"
 let v_scopedChildren = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) (mc1 : Vuna_dIr_dModel.t_Ir) -> (match mc1 with
-  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__129) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__129 }, B_dData_dList.C_List_Nil))
-  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__130, dtb__131, dtb__132, dtb__133, dtb__134) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__134 }, B_dData_dList.C_List_Nil))
-  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__135) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__135)
-  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__136, dtb__137, dtb__138, dtb__139, dtb__140) -> ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__136 }, B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append ((v_altWork mc0) (v_maybeAlts dtb__138))) ((B_dData_dList.v_append ((v_altWork mc0) (v_maybeAlts dtb__139))) ((v_altWork mc0) (v_maybeAlts dtb__140)))))
-  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__141, dtb__142, dtb__143, dtb__144) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__143 }, ((v_altWork mc0) dtb__144)))
-  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__145, dtb__146, dtb__147) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__145 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__146 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__147 }, B_dData_dList.C_List_Nil))))))
-  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__148, dtb__149, dtb__150) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__149 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__150 }, B_dData_dList.C_List_Nil))))
-  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__151, dtb__152, dtb__153) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append dtb__151) mc0); B_dData_dPair.f_Pair_second = dtb__153 }, B_dData_dList.C_List_Nil))
-  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__154, dtb__155, dtb__156) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__155 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append dtb__154) mc0); B_dData_dPair.f_Pair_second = dtb__156 }, B_dData_dList.C_List_Nil))))
-  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__157, dtb__158, dtb__159) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__159 }, B_dData_dList.C_List_Nil))
-  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__160, dtb__161) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__161)
-  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__162, dtb__163, dtb__164, dtb__165) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__162 }, ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__164)))
-  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__166, dtb__167, dtb__168, dtb__169) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__166 }, B_dData_dList.C_List_Nil))
-  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__170, dtb__171, dtb__172) -> ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__172)
-  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__173, dtb__174, dtb__175, dtb__176) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__176)
-  | _ -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrEffBind (dtb__129, dtb__130, dtb__131) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrFloatLit (dtb__132) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrBool (dtb__133) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrStr (dtb__134) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrInt (dtb__135) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrRt (dtb__136) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrGlobal (dtb__137) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__138) -> B_dData_dList.C_List_Nil
+  | Vuna_dIr_dModel.C_Ir_IrTail (dtb__139) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__139 }, B_dData_dList.C_List_Nil))
+  | Vuna_dIr_dModel.C_Ir_IrEffThunk (dtb__140, dtb__141, dtb__142, dtb__143, dtb__144) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__144 }, B_dData_dList.C_List_Nil))
+  | Vuna_dIr_dModel.C_Ir_IrConcatMany (dtb__145) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__145)
+  | Vuna_dIr_dModel.C_Ir_IrNatCase (dtb__146, dtb__147, dtb__148, dtb__149, dtb__150) -> ((B_dData_dList.v_append (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__146 }, B_dData_dList.C_List_Nil))) ((B_dData_dList.v_append ((v_altWork mc0) (v_maybeAlts dtb__148))) ((B_dData_dList.v_append ((v_altWork mc0) (v_maybeAlts dtb__149))) ((v_altWork mc0) (v_maybeAlts dtb__150)))))
+  | Vuna_dIr_dModel.C_Ir_IrCase (dtb__151, dtb__152, dtb__153, dtb__154) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__153 }, ((v_altWork mc0) dtb__154)))
+  | Vuna_dIr_dModel.C_Ir_IrIf (dtb__155, dtb__156, dtb__157) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__155 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__156 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__157 }, B_dData_dList.C_List_Nil))))))
+  | Vuna_dIr_dModel.C_Ir_IrApp (dtb__158, dtb__159, dtb__160) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__159 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__160 }, B_dData_dList.C_List_Nil))))
+  | Vuna_dIr_dModel.C_Ir_IrLam (dtb__161, dtb__162, dtb__163) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append dtb__161) mc0); B_dData_dPair.f_Pair_second = dtb__163 }, B_dData_dList.C_List_Nil))
+  | Vuna_dIr_dModel.C_Ir_IrLet (dtb__164, dtb__165, dtb__166) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__165 }, (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = ((B_dData_dList.v_append dtb__164) mc0); B_dData_dPair.f_Pair_second = dtb__166 }, B_dData_dList.C_List_Nil))))
+  | Vuna_dIr_dModel.C_Ir_IrCast (dtb__167, dtb__168, dtb__169) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__169 }, B_dData_dList.C_List_Nil))
+  | Vuna_dIr_dModel.C_Ir_IrRtApp (dtb__170, dtb__171) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__171)
+  | Vuna_dIr_dModel.C_Ir_IrRecUpd (dtb__172, dtb__173, dtb__174, dtb__175) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__172 }, ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__174)))
+  | Vuna_dIr_dModel.C_Ir_IrProj (dtb__176, dtb__177, dtb__178, dtb__179) -> (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = dtb__176 }, B_dData_dList.C_List_Nil))
+  | Vuna_dIr_dModel.C_Ir_IrRecord (dtb__180, dtb__181, dtb__182) -> ((B_dData_dList.v_map (fun (p : (string, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = (B_dData_dPair.v_secondOf p) })) dtb__182)
+  | Vuna_dIr_dModel.C_Ir_IrCtor (dtb__183, dtb__184, dtb__185, dtb__186) -> ((B_dData_dList.v_map (fun (a : Vuna_dIr_dModel.t_Ir) -> { B_dData_dPair.f_Pair_first = mc0; B_dData_dPair.f_Pair_second = a })) dtb__186)
+  | _ -> failwith "DT: impossible branch"
 ))
 
-# 441 "Vuna/Ir/Validate.vuna"
+# 448 "Vuna/Ir/Validate.vuna"
 let v_sameBinder = Vuna_dIr_dModel.v_sameBinderId
 
-# 437 "Vuna/Ir/Validate.vuna"
+# 444 "Vuna/Ir/Validate.vuna"
 let rec v_memBinder = (fun (mc0 : Vuna_dIr_dModel.t_IrBinder) (mc1 : Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List) -> (match mc1 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__177, dtb__178) -> (if ((v_sameBinder mc0) dtb__177) then true else ((v_memBinder mc0) dtb__178))
+  | B_dData_dList.C_List__x58__x58_ (dtb__187, dtb__188) -> (if ((v_sameBinder mc0) dtb__187) then true else ((v_memBinder mc0) dtb__188))
   | B_dData_dList.C_List_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 393 "Vuna/Ir/Validate.vuna"
 let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinder B_dData_dList.t_List, Vuna_dIr_dModel.t_Ir) B_dData_dPair.t_Pair B_dData_dList.t_List) -> (if (fuel <= 0) then (Base_dDiag.v_icFuel "ir-scope") else (let nd_uscrut2 = work in (match nd_uscrut2 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__179, dtb__180) -> (match dtb__179 with
-  | { B_dData_dPair.f_Pair_first = dtb__181; B_dData_dPair.f_Pair_second = dtb__182 } -> (match dtb__182 with
-  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__183) -> (if (dtb__183).Vuna_dIr_dModel.f_IrBinder_irBinderErased then (Base_dDiag.v_icInternal "erased binder reached runtime IR") else (if ((v_memBinder dtb__183) dtb__181) then ((v_checkScopedWork (fuel - 1)) dtb__180) else (Base_dDiag.v_icInternal "IR variable references a binder outside its scope")))
-  | _ -> ((v_checkScopedWork (fuel - 1)) ((B_dData_dList.v_append ((v_scopedChildren dtb__181) dtb__182)) dtb__180))
+  | B_dData_dList.C_List__x58__x58_ (dtb__189, dtb__190) -> (match dtb__189 with
+  | { B_dData_dPair.f_Pair_first = dtb__191; B_dData_dPair.f_Pair_second = dtb__192 } -> (match dtb__192 with
+  | Vuna_dIr_dModel.C_Ir_IrVar (dtb__193) -> (if (dtb__193).Vuna_dIr_dModel.f_IrBinder_irBinderErased then (Base_dDiag.v_icInternal "erased binder reached runtime IR") else (if ((v_memBinder dtb__193) dtb__191) then ((v_checkScopedWork (fuel - 1)) dtb__190) else (Base_dDiag.v_icInternal "IR variable references a binder outside its scope")))
+  | _ -> ((v_checkScopedWork (fuel - 1)) ((B_dData_dList.v_append ((v_scopedChildren dtb__191) dtb__192)) dtb__190))
 )
   | _ -> failwith "DT: impossible branch"
 )
@@ -364,9 +372,9 @@ let rec v_checkScopedWork = (fun (fuel : int) (work : (Vuna_dIr_dModel.t_IrBinde
 
 # 380 "Vuna/Ir/Validate.vuna"
 let rec v_checkScopedDefs = (fun (mc0 : Vuna_dIr_dModel.t_IrDef B_dData_dList.t_List) -> (match mc0 with
-  | B_dData_dList.C_List__x58__x58_ (dtb__184, dtb__185) -> (match (Vuna_dIr_dModel.v_irDefBody dtb__184) with
-  | B_dData_dMaybe.C_Maybe_Nothing -> (v_checkScopedDefs dtb__185)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__186) -> ((Base_dCommon.v_bind ((v_checkScopedWork ((v_scopedFuelOf dtb__186) + 1)) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb__186 }, B_dData_dList.C_List_Nil)))) (fun (_u : int) -> (v_checkScopedDefs dtb__185)))
+  | B_dData_dList.C_List__x58__x58_ (dtb__194, dtb__195) -> (match (Vuna_dIr_dModel.v_irDefBody dtb__194) with
+  | B_dData_dMaybe.C_Maybe_Nothing -> (v_checkScopedDefs dtb__195)
+  | B_dData_dMaybe.C_Maybe_Just (dtb__196) -> ((Base_dCommon.v_bind ((v_checkScopedWork ((v_scopedFuelOf dtb__196) + 1)) (B_dData_dList.C_List__x58__x58_ ({ B_dData_dPair.f_Pair_first = B_dData_dList.C_List_Nil; B_dData_dPair.f_Pair_second = dtb__196 }, B_dData_dList.C_List_Nil)))) (fun (_u : int) -> (v_checkScopedDefs dtb__195)))
   | _ -> failwith "DT: impossible branch"
 )
   | B_dData_dList.C_List_Nil -> (Base_dDiag.C_Check_OkC (0))
@@ -382,6 +390,6 @@ let v_validateUnit = (fun (shared : Vuna_dIr_dModel.t_IrShared) (u : Vuna_dIr_dM
 # 87 "Vuna/Ir/Validate.vuna"
 let v_validateProgram = (fun (p : Vuna_dIr_dModel.t_IrProgram) -> (let u = (p).Vuna_dIr_dModel.f_IrProgram_irProgUnit in (let shared = (p).Vuna_dIr_dModel.f_IrProgram_irProgShared in (let defs = ((B_dData_dList.v_concatMap Vuna_dIr_dModel.v_irGroupDefs) (u).Vuna_dIr_dModel.f_IrUnit_irUnitGroups) in (match (u).Vuna_dIr_dModel.f_IrUnit_irUnitEntry with
   | B_dData_dMaybe.C_Maybe_Nothing -> ((v_validateUnit shared) u)
-  | B_dData_dMaybe.C_Maybe_Just (dtb__187) -> (if ((B_dData_dList.v_memName (dtb__187).Vuna_dIr_dModel.f_IrEntry_irEntryMain) ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) then ((v_validateUnit shared) u) else (Base_dDiag.v_icInternal (String.concat "" ["IR entry references an undefined main: `"; (dtb__187).Vuna_dIr_dModel.f_IrEntry_irEntryMain; "`"])))
+  | B_dData_dMaybe.C_Maybe_Just (dtb__197) -> (if ((B_dData_dList.v_memName (dtb__197).Vuna_dIr_dModel.f_IrEntry_irEntryMain) ((B_dData_dList.v_map Vuna_dIr_dModel.v_irDefName) defs)) then ((v_validateUnit shared) u) else (Base_dDiag.v_icInternal (String.concat "" ["IR entry references an undefined main: `"; (dtb__197).Vuna_dIr_dModel.f_IrEntry_irEntryMain; "`"])))
   | _ -> failwith "DT: impossible branch"
 )))))
