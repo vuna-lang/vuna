@@ -40,11 +40,82 @@ etaBinders n =
     (\i => IrBinder (backendBinderId (200 + i)) (IrBUser ("__eta" ++ strFromInt i)) False Nothing)
     (range 0 n)
 
--- | 效应原语包装成 `MkEff (\_ => prim args)`；arity > 0 时再包一层参数 lambda。
-export effThunkIr : String -> String -> Int -> Ir -> Ir
-effThunkIr family ctor arity prim =
+-- | 效应原语包装成 `\_ => prim args`；arity > 0 时再包一层参数 lambda。
+--   `Eff` 在运行时就是 thunk 本身（不分配构造子），所以这里不套 `MkEff`。
+export effThunkIr : Int -> Ir -> Ir
+effThunkIr arity prim =
   let
     bs = effArgBinders arity
     applied = applyAllIr prim (map (\b => IrVar b) bs)
-    mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
-  in if arity <= 0 then mkEff else IrLam bs Nothing mkEff
+    thunk = IrLam [effUnitBinder] Nothing applied
+  in if arity <= 0 then thunk else IrLam bs Nothing thunk
+
+-- ---------------------------------------------------------------
+-- `case e of MkEff f -> body` 规范化成 `let f = e in body`
+-- ---------------------------------------------------------------
+-- `Eff` 在运行时就是 thunk（`MkEff` 不分配，见 `Ir.Synthetic.effThunkIr`），
+-- 所以拆构造子就是取值本身。早先只有 OCaml 后端在 `IrCase` 上特判；CPS 输出
+-- 统一成 `let` 之后，三端吃同一形态（native / wasm 不会对闭包做 tag 分派）。
+export effCaseToLet : Int -> Ir -> Ir
+effCaseToLet fuel e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      IrCase caseTy resTy scrut [IrAlt (Just (fam, ctor)) bs body] => if fam == irEffTypeName && ctor == irEffMkCtor then IrLet bs (effCaseToLet (fuel - 1) scrut) (effCaseToLet (fuel - 1) body) else IrCase caseTy resTy (effCaseToLet (fuel - 1) scrut) [IrAlt (Just (fam, ctor)) bs (effCaseToLet (fuel - 1) body)]
+      IrCase caseTy resTy scrut alts => IrCase caseTy resTy (effCaseToLet (fuel - 1) scrut) (effCaseToLetAlts (fuel - 1) alts)
+      IrNatCase sc fr z su ca => IrNatCase (effCaseToLet (fuel - 1) sc) fr (effCaseToLetAltM (fuel - 1) z) (effCaseToLetAltM (fuel - 1) su) (effCaseToLetAltM (fuel - 1) ca)
+      IrCtor fam ctor tys args => IrCtor fam ctor tys (effCaseToLetList (fuel - 1) args)
+      IrRecord fam ty fs => IrRecord fam ty (effCaseToLetFields (fuel - 1) fs)
+      IrProj b fam x ty => IrProj (effCaseToLet (fuel - 1) b) fam x ty
+      IrRecUpd b fam fs ty => IrRecUpd (effCaseToLet (fuel - 1) b) fam (effCaseToLetFields (fuel - 1) fs) ty
+      IrCast cFrom cTo x => IrCast cFrom cTo (effCaseToLet (fuel - 1) x)
+      IrLet bs rhs body => IrLet bs (effCaseToLet (fuel - 1) rhs) (effCaseToLet (fuel - 1) body)
+      IrLam bs rt body => IrLam bs rt (effCaseToLet (fuel - 1) body)
+      IrApp ty f a => IrApp ty (effCaseToLet (fuel - 1) f) (effCaseToLet (fuel - 1) a)
+      IrTail inner => IrTail (effCaseToLet (fuel - 1) inner)
+      IrIf c t el => IrIf (effCaseToLet (fuel - 1) c) (effCaseToLet (fuel - 1) t) (effCaseToLet (fuel - 1) el)
+      IrConcatMany xs => IrConcatMany (effCaseToLetList (fuel - 1) xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (effCaseToLet (fuel - 1) prim)
+      _ => e
+
+effCaseToLetList : Int -> List Ir -> List Ir
+effCaseToLetList fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => effCaseToLet (fuel - 1) x :: effCaseToLetList (fuel - 1) rest
+
+effCaseToLetFields : Int -> List (String, Ir) -> List (String, Ir)
+effCaseToLetFields fuel fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => (firstOf p, effCaseToLet (fuel - 1) (secondOf p)) :: effCaseToLetFields (fuel - 1) rest
+
+effCaseToLetAlts : Int -> List IrAlt -> List IrAlt
+effCaseToLetAlts fuel alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (effCaseToLet (fuel - 1) a.irAltBody) :: effCaseToLetAlts (fuel - 1) rest
+
+effCaseToLetAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+effCaseToLetAltM fuel m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (effCaseToLet (fuel - 1) a.irAltBody))
+
+export effCaseToLetDef : IrDef -> IrDef
+effCaseToLetDef (IrDef n ar deps sigTy body r g sp) =
+  IrDef n ar deps sigTy (effCaseToLet (64 + 8 * irSize body) body) r g sp
+effCaseToLetDef d = d

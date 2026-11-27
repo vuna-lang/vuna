@@ -176,7 +176,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | `IrRt` | 支持 | `RtValue` 直接内联；`RtFunc` 作值 eta 展开成闭包；符号表外的符号在引用点拒绝 |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Data.Float.floatRender` |
-| Eff thunk / 可变单元 | 支持 | `MkEff` 包装原语；`@vuna@Cell` 是长度 1 的 `$arr` |
+| Eff thunk / 可变单元 | 支持 | `Eff` 就是 thunk（`MkEff` 与 `case` 恒等展开，不分配）；`@vuna@Cell` 是长度 1 的 `$arr` |
 | Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [effect-machine.md](effect-machine.md) |
 | `IrEffBind` | 拒绝 | effect 的 bind 降级；与 native 同一限制 |
 | extern / FFI | 拒绝 | `IrExternDef` 在生成期报 `WasmUnsupported` |
@@ -477,7 +477,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 [effect-machine.md](effect-machine.md) §7）。三条降低路径：
 
 - **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应在
-  「可达代码没有用户 handler」时被降成 `MkEff (\_ => runMain (opH op pureK))`——`opH`
+  「可达代码没有用户 handler」时被降成 `\_ => runMain (opH op pureK)`——`opH`
   是该族的宿主解释器，`pureK` 是模块生成的纯动作续延。入口也不再预装这些家族。
 - **显式效应机器**（`Ir.Cps` + `Base.Effect.Core.Control`）：其余程序整片走 `@ir@m@*`——续延只返回
   `Control`（`Done`/`Apply`/`Perform`/`Handle`），机器循环单层派发；handler 帧在链上，

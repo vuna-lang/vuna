@@ -33,7 +33,8 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
   运行时的 handler 匹配因此只比整数；源码层入口仍是 String。
 - **CPS lowering（native / wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把
-  `prim_effect*` 换成 `@ir@cps@*`。纯代码与调用约定不变；详见
+  `prim_effect*` 换成 `@ir@cps@*`。末尾把 `case e of MkEff f` 统一规范化成
+  `let f = e`（`Eff` 就是 thunk，不需要 tag 分派）；纯代码与调用约定不变；详见
   [effect-machine.md](effect-machine.md)。
 - **尾位置标记（`Ir.Tail`）**：`Ir.Cps.cpsDefsMachine` 末尾跑一次纯 pass，把结果位置的调用
   包成 `IrTail`。native / wasm 只消费标记并发射各自的尾调用指令；标记是语义提示，后端
@@ -76,7 +77,7 @@ Loader → Elab → Core ──Lowering──> IR ──Vuna.Target.Ocaml.{Decl,
 | `IrCase scrutTy resultTy scrut alts` | 通用 `match` | `scrutTy` / `resultTy` 是 scrutinee 与结果的运行时类型（未知时 `Nothing`）；分支 binder 带按构造子字段实例化的类型；无 catch-all 时后端补不可达兜底臂 |
 | `IrNatCase scrut fresh zero succ catch` | Nat case 降级 | Nat 运行时是 `int`，不能生成变体 match；`fresh` 是 `dtnat__<n>` 的编号 |
 | `IrConcatMany parts` | `++` 链展平 | `String.concat "" [a; b; c]` |
-| `IrEffThunk family ctor unitTy arity prim` | 装箱动作构造 | 原语运行时仍是 eager 函数，结果包成 `MkEff` |
+| `IrEffThunk family ctor unitTy arity prim` | 动作 thunk 构造 | 原语运行时仍是 eager 函数，`Eff` 直接就是 `\_ => prim args`（不分配 `MkEff`） |
 | `IrEffBind family ctor unitTy` | `@vuna@prim_eff_bind1` 的装箱实现 | 当前无库调用方 |
 
 ### binder 身份 `IrBName`

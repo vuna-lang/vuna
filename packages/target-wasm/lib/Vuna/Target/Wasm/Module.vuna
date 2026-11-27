@@ -263,16 +263,16 @@ genFloatLit : GenState -> String -> Result (List Instr, GenState)
 genFloatLit st raw = Ok ([IConstF64 (irFloatLitText raw), IStructNew "$float"], st)
 
 -- ---------------------------------------------------------------
--- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
+-- Eff thunk（效应原语包装成 `fun _ => prim args`）
 -- ---------------------------------------------------------------
 
--- | 效应原语包装成 `MkEff (\_ => prim args)`（构造细节在 `Ir.Synthetic`）。
-genEffThunk : Int -> GenState -> String -> String -> Int -> Ir -> Result (List Instr, GenState)
-genEffThunk fuel st family ctor arity prim =
+-- | 效应原语包装成 `\_ => prim args`（构造细节在 `Ir.Synthetic`）。
+genEffThunk : Int -> GenState -> Int -> Ir -> Result (List Instr, GenState)
+genEffThunk fuel st arity prim =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
-    genExpr (fuel - 1) st (Synthetic.effThunkIr family ctor arity prim)
+    genExpr (fuel - 1) st (Synthetic.effThunkIr arity prim)
 
 -- | 值位置的生成入口：由 `st.gsI64` 决定这个值用未装箱 `i64` 还是装箱 anyref。
 --
@@ -405,7 +405,7 @@ genAnyref fuel st ir =
       IrRecUpd base family fields _ => genRecUpd (fuel - 1) st base family fields
       IrCase caseTy _ scrut alts => genCase (fuel - 1) st caseTy scrut alts
       IrLam bs rt body => genLamValue (fuel - 1) st bs rt body
-      IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
+      IrEffThunk _family _ctor _unitTy arity prim => genEffThunk (fuel - 1) st arity prim
       IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
       IrFloatLit raw => genFloatLit st raw
       IrTail inner =>
@@ -945,6 +945,11 @@ genCtor : Int -> GenState -> String -> String -> List Ir -> Result (List Instr, 
 genCtor fuel st family ctor args =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
+  else if family == irEffTypeName && ctor == irEffMkCtor then
+    case args of
+      -- `Eff` 就是 thunk 本身：`MkEff f` 不分配，直接求值 `f`。
+      [x] => genExpr (fuel - 1) st x
+      _ => Err "Eff thunk must have exactly one argument"
   else
     case famOrFail st family of
       Err e => Err e
@@ -2278,9 +2283,10 @@ build program printResult =
             []
             (irEntryRowTagsOf e)
       in if directable then
-        buildAnf (append rewritten [pureKDef]) (Just entryClean) listFamM
+        buildAnf (append (map Synthetic.effCaseToLetDef rewritten) [pureKDef]) (Just entryClean) listFamM
       else
         case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
+          -- 直连路径不经 CPS：`Eff` 同样是 thunk，`case … of MkEff f` 也要降成 `let`。
           Ok cpsOrdered => buildAnf cpsOrdered (Just e) listFamM
           Err msg => WasmRejected (WasmUnsupported msg)
 
