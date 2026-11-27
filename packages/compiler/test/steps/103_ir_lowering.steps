@@ -47,3 +47,13 @@ run: sh -c 'd="$TMPDIR/effcase"; mkdir -p "$d/app"; printf "[package]\nname = \"
 exit: 0
 run: sh -c '! grep -q "(case .*MkEff" "$TMPDIR/effcase.ir"'
 exit: 0
+
+# `--only`：整条机器链照常跑，只打印点名 pass；可重复，未知名字显式报错。
+run: sh -c '"$VUNA" dev ir dump --only ir.cps "$TMPDIR/irtail" > "$TMPDIR/irtail-only.ir"; grep -q "^== ir.cps ==" "$TMPDIR/irtail-only.ir"; ! grep -q "^== ir.tail.annotate ==" "$TMPDIR/irtail-only.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --only ir.cps --only ir.tail.annotate "$TMPDIR/irtail" > "$TMPDIR/irtail-only2.ir"; grep -q "^== ir.cps ==" "$TMPDIR/irtail-only2.ir"; grep -q "^== ir.tail.annotate ==" "$TMPDIR/irtail-only2.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --only ir.no.such.pass "$TMPDIR/irtail" 2>&1 | grep -q "unknown pass"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after machine --only ir.cps "$TMPDIR/irtail" > /dev/null 2>&1; test $? -eq 2'
+exit: 0

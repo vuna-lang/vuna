@@ -21,8 +21,8 @@ import Base.Effect.Fs as EffFs
 import Base.Effect.Env as EffEnv
 import Base.Effect.Process as EffProcess
 
-export dumpIr : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> PackageContext -> String -> Eff r (Check String)
-dumpIr after ctx entry =
+export dumpIr : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> String -> PackageContext -> String -> Eff r (Check String)
+dumpIr onlys after ctx entry =
   do
     checked <- dtCheckWithProgramParts ctx entry
     pure (
@@ -33,7 +33,10 @@ dumpIr after ctx entry =
               pkg = secondOf pair
             in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs pkg.checkedProgram.dtProgGlobals of
               ErrC e => ErrC e
-              OkC program => dumpAfter after program
+              OkC program =>
+                case onlys of
+                  [] => dumpAfter after program
+                  _ => dumpOnly onlys program
       )
 
 -- | `vuna dev ir decode FILE`：把后端插件收到的 IR 载荷（`Ir.Codec` 文本）解回渲染形式。
@@ -47,6 +50,20 @@ decodeIrFile path =
           Nothing => "decode failed: ${path}"
           Just program => renderDefs (concatMap irGroupDefs (irProgUnitOf program).irUnitGroups)
       )
+
+-- | `--only <pass>...`：整条机器链照常跑，只打印点名 pass 之后的定义文本。
+-- 不跳过任何 pass；名字来自 `Ir.Passes`（未知名字在输出里显式报错）。
+dumpOnly : List String -> IrProgram -> Check String
+dumpOnly names program =
+  let
+    defs = concatMap irGroupDefs program.irProgUnit.irUnitGroups
+  in OkC (joinWith "\n\n" (map (dumpOnePass defs) names))
+
+dumpOnePass : List IrDef -> String -> String
+dumpOnePass defs name =
+  case cpsMachineAfter name defs of
+    Err msg => "== ${name} ==\nMACHINE ERROR: ${msg}"
+    Ok ds => "== ${name} ==\n${renderDefs ds}"
 
 dumpAfter : String -> IrProgram -> Check String
 dumpAfter "cps" program = dumpCps program

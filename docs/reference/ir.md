@@ -312,6 +312,8 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
   数据依赖串接；表负责命名、观测、前后校验与 dump 的公共词汇。
 - `vuna dev ir dump --after ir.<pass>` 可以停在机器链的任意一步（`cpsMachineAfter`）；
   `--after ir.tail.annotate` 与 `--after machine` 输出逐字节一致。
+- `vuna dev ir dump --only ir.<pass>...` 不跳过任何 pass：整条机器链照常跑，只打印点名
+  步骤之后的文本（可重复；与 `--after` 互斥，未知名字显式报 `unknown pass`）。
 - 三层链的 `psCheckAfter` 都已消费：`Passes.checkPassAfter` 跑
   `Ir.Validate.validateScopedDefs`（定义名唯一 + `IrVar` 作用域），失败信息带 pass 名。
   它**不查**运行时符号契约（`@ir@cps@*` / `@ir@m@*` 与后端内部符号不在
