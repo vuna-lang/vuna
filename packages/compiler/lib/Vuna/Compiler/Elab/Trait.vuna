@@ -21,6 +21,7 @@ import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Base.Obs
 
@@ -261,8 +262,7 @@ projectionDefsOpaqueGo : List Bool -> String -> Int -> List (String, Expr) -> Li
 projectionDefsOpaqueGo flags ctor nParams [] fieldTys idx nFields = []
 projectionDefsOpaqueGo flags ctor nParams (m :: rest) [] idx nFields = []
 projectionDefsOpaqueGo flags ctor nParams ((mname, mexpr) :: rest) (t :: rest2) idx nFields =
-  (mname,
-    projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf piBinderRig t) nFields nParams)
+  (mname, projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf t) nFields nParams)
     :: projectionDefsOpaqueGo flags ctor nParams rest rest2 (idx + 1) nFields
 
 flagAt : Int -> List Bool -> Bool
@@ -659,10 +659,24 @@ fallbackTeleKind : List Expr -> String -> Term
 fallbackTeleKind scanExprs v = arityFun (exprMaxAppArityIn v scanExprs) (TType levelZero)
 
 exprFreeLower : Expr -> List String
-exprFreeLower (EVar n sp) = if isLowerStart (n) then [n] else []
-exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeLower args)
-exprFreeLower (EPi n i _ dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
-exprFreeLower _ = []
+exprFreeLower e = foldExpr addFreeLower [] e
+
+addFreeLower : List String -> Expr -> List String
+addFreeLower acc (EVar n _) = if isLowerStart n then n :: acc else acc
+addFreeLower acc (EInt _ _) = acc
+addFreeLower acc (EStr _ _) = acc
+addFreeLower acc (EFloat _ _) = acc
+addFreeLower acc (ELam _ _ _) = acc
+addFreeLower acc (EApp _ _ _) = acc
+addFreeLower acc (EPi _ _ _ _ _ _) = acc
+addFreeLower acc (ELet _ _ _ _) = acc
+addFreeLower acc (ECase _ _ _) = acc
+addFreeLower acc (EIf _ _ _ _) = acc
+addFreeLower acc (EField _ _ _) = acc
+addFreeLower acc (ERecord _ _ _) = acc
+addFreeLower acc (ERecUpdate _ _ _) = acc
+addFreeLower acc (EDo _ _) = acc
+addFreeLower acc (EInterp _ _) = acc
 
 keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []

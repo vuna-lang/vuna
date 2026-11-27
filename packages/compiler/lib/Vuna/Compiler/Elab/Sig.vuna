@@ -5,6 +5,7 @@ module Vuna.Compiler.Elab.Sig where
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
 import Vuna.Compiler.Frontend.Name
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -39,63 +40,35 @@ export exprMaxAppArityIn : String -> List Expr -> Int
 exprMaxAppArityIn pname exprs = maxIntList (map (exprMaxAppArity pname) exprs)
 
 export exprMaxAppArity : String -> Expr -> Int
-exprMaxAppArity pname e = exprMaxAppArityF (exprBudget 64 e) pname e
+exprMaxAppArity pname e = foldExpr (addMaxAppArity pname) 0 e
 
-exprMaxAppArityF : Int -> String -> Expr -> Int
-exprMaxAppArityF fuel pname e =
-  if fuel <= 0 then
-    0
-  else
-    case e of
-      EApp (EVar f fsp) args sp => if f == pname then maxIntList (natToInt (length args) :: map (exprMaxAppArityF (fuel - 1) pname) args) else maxIntList (map (exprMaxAppArityF (fuel - 1) pname) args)
-      EApp fn args sp => maxIntList (exprMaxAppArityF (fuel - 1) pname fn :: map (exprMaxAppArityF (fuel - 1) pname) args)
-      ELam names body sp => exprMaxAppArityF (fuel - 1) pname body
-      EPi n implicit _ dom cod sp => maxIntList [exprMaxAppArityF (fuel - 1) pname dom, exprMaxAppArityF (fuel - 1) pname cod]
-      EIf c t f sp => maxIntList [exprMaxAppArityF (fuel - 1) pname c, exprMaxAppArityF (fuel - 1) pname t, exprMaxAppArityF (fuel - 1) pname f]
-      ELet binds body rec_ sp => maxIntList (exprMaxAppArityF (fuel - 1) pname body :: exprMaxAppArityBindsF (fuel - 1) pname binds)
-      ECase scrut alts sp => maxIntList (exprMaxAppArityF (fuel - 1) pname scrut :: concatMap (\a => [exprMaxAppArityF (fuel - 1) pname (altBodyOf a)]) alts)
-      EField b f sp => exprMaxAppArityF (fuel - 1) pname b
-      ERecord rn fields sp => maxIntList (map (\q => exprMaxAppArityF (fuel - 1) pname (secondOf q)) fields)
-      ERecUpdate b fields sp => exprMaxAppArityF (fuel - 1) pname b
-      _ => 0
+addMaxAppArity : String -> Int -> Expr -> Int
+addMaxAppArity pname acc (EApp (EVar f _) args _) =
+  if f == pname then maxInt2 acc (natToInt (length args)) else acc
+addMaxAppArity pname acc (EVar _ _) = acc
+addMaxAppArity pname acc (EInt _ _) = acc
+addMaxAppArity pname acc (EStr _ _) = acc
+addMaxAppArity pname acc (EFloat _ _) = acc
+addMaxAppArity pname acc (ELam _ _ _) = acc
+addMaxAppArity pname acc (EApp _ _ _) = acc
+addMaxAppArity pname acc (EPi _ _ _ _ _ _) = acc
+addMaxAppArity pname acc (ELet _ _ _ _) = acc
+addMaxAppArity pname acc (ECase _ _ _) = acc
+addMaxAppArity pname acc (EIf _ _ _ _) = acc
+addMaxAppArity pname acc (EField _ _ _) = acc
+addMaxAppArity pname acc (ERecord _ _ _) = acc
+addMaxAppArity pname acc (ERecUpdate _ _ _) = acc
+addMaxAppArity pname acc (EDo _ _) = acc
+addMaxAppArity pname acc (EInterp _ _) = acc
 
-exprMaxAppArityBindsF : Int -> String -> List Binding -> List Int
-exprMaxAppArityBindsF fuel pname [] = []
-exprMaxAppArityBindsF fuel pname (b :: rest) =
-  exprMaxAppArityBindingF (fuel - 1) pname b :: exprMaxAppArityBindsF (fuel - 1) pname rest
-
-exprMaxAppArityBindingF : Int -> String -> Binding -> Int
-exprMaxAppArityBindingF fuel pname (Binding pat value sig ref) =
-  maxIntList
-    [exprMaxAppArityValueF (fuel - 1) pname value, exprMaxAppAritySigF (fuel - 1) pname sig]
-
-exprMaxAppArityValueF : Int -> String -> BindingValue -> Int
-exprMaxAppArityValueF fuel pname (BVal e) = exprMaxAppArityF (fuel - 1) pname e
-exprMaxAppArityValueF fuel pname (BClauses cs) =
-  maxIntList (map (\c => exprMaxAppArityF (fuel - 1) pname (clauseBodyOf c)) cs)
-
-exprMaxAppAritySigF : Int -> String -> Maybe BindingSig -> Int
-exprMaxAppAritySigF fuel pname (Just sig) = exprMaxAppArityF (fuel - 1) pname sig.sigType
-exprMaxAppAritySigF fuel pname Nothing = 0
-
-altBodyOf : Alt -> Expr
-altBodyOf a = a.altBody
-
-clauseBodyOf : LocalClause -> Expr
-clauseBodyOf c = c.lcBody
+maxInt2 : Int -> Int -> Int
+maxInt2 a b = if a >= b then a else b
 
 -- 方法的显式参数各自的 multiplicity：逐 binder 按域判断，判据由调用方传入
 -- （`Elab` 的 `piBinderRig`——`Elab.Sig` 不重复定义擦除规则，保持单一入口）。
-export methodArgRigsOf : (Bool -> Value -> Rig) -> Term -> List Rig
-methodArgRigsOf rigOf ty = methodArgRigsOfGo rigOf ty []
-
-methodArgRigsOfGo : (Bool -> Value -> Rig) -> Term -> List Value -> List Rig
-methodArgRigsOfGo rigOf (TPi name implicit rigB dom cod) env =
-  let
-    domVal = eval env dom
-    v = VNeutral (NVar name (length env) [])
-  in rigB :: methodArgRigsOfGo rigOf cod (v :: env)
-methodArgRigsOfGo rigOf _ env = []
+export methodArgRigsOf : Term -> List Rig
+methodArgRigsOf (TPi name implicit rigB dom cod) = rigB :: methodArgRigsOf cod
+methodArgRigsOf _ = []
 
 -- ---------------------------------------------------------------------------
 -- 顶层签名量化（原 Elab/Quant.vuna）
@@ -184,47 +157,24 @@ lowerVarNames : Expr -> List String
 lowerVarNames e = nubNames (exprLowerVars e)
 
 export exprLowerVars : Expr -> List String
-exprLowerVars e = exprLowerVarsF (exprBudget 64 e) e
+exprLowerVars e = foldExpr addLowerName [] e
 
-exprLowerVarsF : Int -> Expr -> List String
-exprLowerVarsF fuel e =
-  if fuel <= 0 then
-    []
-  else
-    case e of
-      EVar n sp => if isLowerIdent (n) then [n] else []
-      EApp fn args sp => append (exprLowerVarsF (fuel - 1) fn) (concatMap (exprLowerVarsF (fuel - 1)) args)
-      ELam names body sp => exprLowerVarsF (fuel - 1) body
-      EPi n implicit _ dom cod sp => append (exprLowerVarsF (fuel - 1) dom) (exprLowerVarsF (fuel - 1) cod)
-      EIf c t f sp => append (exprLowerVarsF (fuel - 1) c) (append (exprLowerVarsF (fuel - 1) t) (exprLowerVarsF (fuel - 1) f))
-      ELet binds body rec_ sp => append (exprLowerVarsBindsF (fuel - 1) binds) (exprLowerVarsF (fuel - 1) body)
-      ECase scrut alts sp => append (exprLowerVarsF (fuel - 1) scrut) (concatMap (\a => exprLowerVarsF (fuel - 1) (altBodyOf a)) alts)
-      EField b f sp => exprLowerVarsF (fuel - 1) b
-      ERecord rn fields sp => concatMap (\q => exprLowerVarsF (fuel - 1) (secondOf q)) fields
-      ERecUpdate b fields sp => exprLowerVarsF (fuel - 1) b
-      _ => []
-
-exprLowerVarsBindsF : Int -> List Binding -> List String
-exprLowerVarsBindsF fuel [] = []
-exprLowerVarsBindsF fuel (b :: rest) =
-  append (exprLowerVarsBindingF (fuel - 1) b) (exprLowerVarsBindsF (fuel - 1) rest)
-
-exprLowerVarsBindingF : Int -> Binding -> List String
-exprLowerVarsBindingF fuel (Binding pat value sig ref) =
-  append (exprLowerVarsValueF (fuel - 1) value) (exprLowerVarsSigF (fuel - 1) sig)
-
-exprLowerVarsValueF : Int -> BindingValue -> List String
-exprLowerVarsValueF fuel (BVal e) = exprLowerVarsF (fuel - 1) e
-exprLowerVarsValueF fuel (BClauses cs) = exprLowerVarsClausesF (fuel - 1) cs
-
-exprLowerVarsSigF : Int -> Maybe BindingSig -> List String
-exprLowerVarsSigF fuel (Just sig) = exprLowerVarsF (fuel - 1) sig.sigType
-exprLowerVarsSigF fuel Nothing = []
-
-exprLowerVarsClausesF : Int -> List LocalClause -> List String
-exprLowerVarsClausesF fuel [] = []
-exprLowerVarsClausesF fuel (c :: rest) =
-  append (exprLowerVarsF (fuel - 1) c.lcBody) (exprLowerVarsClausesF (fuel - 1) rest)
+addLowerName : List String -> Expr -> List String
+addLowerName acc (EVar n _) = if isLowerIdent n then n :: acc else acc
+addLowerName acc (EInt _ _) = acc
+addLowerName acc (EStr _ _) = acc
+addLowerName acc (EFloat _ _) = acc
+addLowerName acc (ELam _ _ _) = acc
+addLowerName acc (EApp _ _ _) = acc
+addLowerName acc (EPi _ _ _ _ _ _) = acc
+addLowerName acc (ELet _ _ _ _) = acc
+addLowerName acc (ECase _ _ _) = acc
+addLowerName acc (EIf _ _ _ _) = acc
+addLowerName acc (EField _ _ _) = acc
+addLowerName acc (ERecord _ _ _) = acc
+addLowerName acc (ERecUpdate _ _ _) = acc
+addLowerName acc (EDo _ _) = acc
+addLowerName acc (EInterp _ _) = acc
 
 isLowerIdent : String -> Bool
 isLowerIdent n =
@@ -278,47 +228,26 @@ export argParamKindsIn : List (String, List Expr) -> List Expr -> List (String, 
 argParamKindsIn tbl exprs = concatMap (argParamKinds tbl) exprs
 
 export argParamKinds : List (String, List Expr) -> Expr -> List (String, Expr)
-argParamKinds tbl e = argParamKindsF (exprBudget 64 e) tbl e
+argParamKinds tbl e = foldExpr (addArgKinds tbl) [] e
 
-argParamKindsF : Int -> List (String, List Expr) -> Expr -> List (String, Expr)
-argParamKindsF fuel tbl e =
-  if fuel <= 0 then
-    []
-  else
-    case e of
-      EApp (EVar t _) args sp => append (zipArgKinds (lookupParamKinds tbl (t)) args) (concatMap (argParamKindsF (fuel - 1) tbl) args)
-      EApp fn args sp => append (argParamKindsF (fuel - 1) tbl fn) (concatMap (argParamKindsF (fuel - 1) tbl) args)
-      ELam names body sp => argParamKindsF (fuel - 1) tbl body
-      EPi n i _ dom cod sp => append (argParamKindsF (fuel - 1) tbl dom) (argParamKindsF (fuel - 1) tbl cod)
-      ELet binds body rec_ sp => append (argParamKindsBindsF (fuel - 1) tbl binds) (argParamKindsF (fuel - 1) tbl body)
-      ECase scrut alts sp => append (argParamKindsF (fuel - 1) tbl scrut) (concatMap (\a => argParamKindsF (fuel - 1) tbl (altBodyOf a)) alts)
-      EIf c t f sp => append (argParamKindsF (fuel - 1) tbl c) (append (argParamKindsF (fuel - 1) tbl t) (argParamKindsF (fuel - 1) tbl f))
-      EField b f sp => argParamKindsF (fuel - 1) tbl b
-      ERecord rn fields sp => concatMap (\q => argParamKindsF (fuel - 1) tbl (secondOf q)) fields
-      ERecUpdate b fields sp => argParamKindsF (fuel - 1) tbl b
-      _ => []
-
-argParamKindsBindsF : Int -> List (String, List Expr) -> List Binding -> List (String, Expr)
-argParamKindsBindsF fuel tbl [] = []
-argParamKindsBindsF fuel tbl (b :: rest) =
-  append (argParamKindsBindingF (fuel - 1) tbl b) (argParamKindsBindsF (fuel - 1) tbl rest)
-
-argParamKindsBindingF : Int -> List (String, List Expr) -> Binding -> List (String, Expr)
-argParamKindsBindingF fuel tbl (Binding pat value sig ref) =
-  append (argParamKindsValueF (fuel - 1) tbl value) (argParamKindsSigF (fuel - 1) tbl sig)
-
-argParamKindsValueF : Int -> List (String, List Expr) -> BindingValue -> List (String, Expr)
-argParamKindsValueF fuel tbl (BVal e) = argParamKindsF (fuel - 1) tbl e
-argParamKindsValueF fuel tbl (BClauses cs) = argParamKindsClausesF (fuel - 1) tbl cs
-
-argParamKindsSigF : Int -> List (String, List Expr) -> Maybe BindingSig -> List (String, Expr)
-argParamKindsSigF fuel tbl (Just sig) = argParamKindsF (fuel - 1) tbl sig.sigType
-argParamKindsSigF fuel tbl Nothing = []
-
-argParamKindsClausesF : Int -> List (String, List Expr) -> List LocalClause -> List (String, Expr)
-argParamKindsClausesF fuel tbl [] = []
-argParamKindsClausesF fuel tbl (c :: rest) =
-  append (argParamKindsF (fuel - 1) tbl c.lcBody) (argParamKindsClausesF (fuel - 1) tbl rest)
+addArgKinds : List (String, List Expr) -> List (String, Expr) -> Expr -> List (String, Expr)
+addArgKinds tbl acc (EApp (EVar t _) args _) =
+  append (zipArgKinds (lookupParamKinds tbl t) args) acc
+addArgKinds tbl acc (EVar _ _) = acc
+addArgKinds tbl acc (EInt _ _) = acc
+addArgKinds tbl acc (EStr _ _) = acc
+addArgKinds tbl acc (EFloat _ _) = acc
+addArgKinds tbl acc (ELam _ _ _) = acc
+addArgKinds tbl acc (EApp _ _ _) = acc
+addArgKinds tbl acc (EPi _ _ _ _ _ _) = acc
+addArgKinds tbl acc (ELet _ _ _ _) = acc
+addArgKinds tbl acc (ECase _ _ _) = acc
+addArgKinds tbl acc (EIf _ _ _ _) = acc
+addArgKinds tbl acc (EField _ _ _) = acc
+addArgKinds tbl acc (ERecord _ _ _) = acc
+addArgKinds tbl acc (ERecUpdate _ _ _) = acc
+addArgKinds tbl acc (EDo _ _) = acc
+addArgKinds tbl acc (EInterp _ _) = acc
 
 lookupParamKinds : List (String, List Expr) -> String -> Maybe (List Expr)
 lookupParamKinds [] name = Nothing
