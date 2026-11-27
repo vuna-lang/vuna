@@ -39,7 +39,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 项 | 值 |
 | --- | --- |
 | 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Effect.Core` 的 data；行是 Type-1 擦除索引） |
-| 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
+| 表示 | 运行时就是 thunk：`MkEff : (EffUnit -> a) -> Eff r a` 不分配包装（OCaml 侧直接是 `Obj.t`，native / wasm 的构造子与 `case` 按恒等展开）；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
 | main 入口 | `main : Eff r a`（内建宿主标签由 entry 预装 handler）；钩子 `dtp_sched_main (fun () -> <runMain> (handlers… v_main))` |
 | 执行 | `runPure : Eff [] a -> a`（纯动作，行必须 Nil）；不导出的 `runMain` 执行折叠后带 `HostOp` 的动作。两者运行时都是 `runThunk` 应用 dummy 令牌 |
 | 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行（`HostOp` 不归约），运行时按 `(key, name)` 路由 |

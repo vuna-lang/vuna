@@ -22,6 +22,7 @@ import Base.Data.Pair as Pair
 import Base.Data.Result as Result
 import Base.Data.String as String
 import Vuna.Ir.Model
+import Vuna.Ir.Synthetic as Synthetic
 import Vuna.Ir.Passes
 import Vuna.Ir.Validate
 import Vuna.Compiler.Base.Common
@@ -592,16 +593,9 @@ isEffThunkBody : Ir -> Bool
 isEffThunkBody (IrCtor family ctor _ [IrLam _ _ _]) = family == irEffTypeName && ctor == irEffMkCtor
 isEffThunkBody _ = False
 
--- | 用续延 K 跑一个 Eff 值：`case eff of MkEff th => runEff th K`。
+-- | 用续延 K 跑一个 Eff 值：`Eff` 就是 thunk，直接 `runEff eff K`。
 mRunEffTerm : Ir -> Ir -> Ir
-mRunEffTerm eff k =
-  let
-    th = mkBinderAt (cpsFixedId 2) "__mEffTh"
-  in IrCase
-    (Just IrTyOpaque)
-    (Just IrTyOpaque)
-    eff
-    [IrAlt (Just (irEffTypeName, irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
+mRunEffTerm eff k = IrRtApp irMRunEffName [eff, k]
 
 mNoResumption : IrBinder
 mNoResumption = mkBinderAt (cpsFixedId 3) "@vuna@noresume"
@@ -1661,7 +1655,7 @@ cpsMachineStages defs =
     (Passes.irMachineMark, \ds => Ok (map mMarkedDef ds)),
     (Passes.irMachineApply, \ds => Ok (map mApplysDef ds)),
     (Passes.irMachineSteps, \ds => Ok (map mStepsDef ds)),
-    (Passes.irTailAnnotate, annotateDefs)
+    (Passes.irTailAnnotate, \ds => annotateDefs (map Synthetic.effCaseToLetDef ds))
   ]
 
 runMachineStages : Maybe String -> List (PassSpec, List IrDef -> Result (List IrDef)) -> List IrDef -> Result (List IrDef)
@@ -1705,13 +1699,18 @@ cpsMachineAfter name defs =
   else
     Err "unknown pass: ${name}"
 
+effCaseToLetGroup : IrGroup -> IrGroup
+effCaseToLetGroup g = IrGroup g.irGroupIsRec (map Synthetic.effCaseToLetDef g.irGroupDefs)
+
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit
 cpsUnit u =
   case transformGroups (cpsFuelOfDefs (concatMap irGroupDefs u.irUnitGroups)) u.irUnitGroups of
     Err msg => Err msg
     Ok groups1 =>
-      Ok (IrUnit u.irUnitTyDecls groups1 u.irUnitHasListFamily u.irUnitTypeRefs u.irUnitEntry)
+      let
+        groups2 = map effCaseToLetGroup groups1
+      in Ok (IrUnit u.irUnitTyDecls groups2 u.irUnitHasListFamily u.irUnitTypeRefs u.irUnitEntry)
 
 -- | 定义列表入口（后端只持有可达 defs 时用）。
 export cpsDefs : List IrDef -> Result (List IrDef)

@@ -2048,15 +2048,12 @@ nativeArityOf st name =
     Just d => Just (irDefArity d)
     Nothing => Nothing
 
-genEffThunk : Int -> FGen -> String -> String -> Int -> Ir -> NRes (List Instr, FGen)
-genEffThunk fuel st family ctor arity prim =
+genEffThunk : Int -> FGen -> Int -> Ir -> NRes (List Instr, FGen)
+genEffThunk fuel st arity prim =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    genExpr
-      (fuel - 1)
-      st
-      (annotateBody (nativeArityOf st) (Synthetic.effThunkIr family ctor arity prim))
+    genExpr (fuel - 1) st (annotateBody (nativeArityOf st) (Synthetic.effThunkIr arity prim))
 
 -- | 生成预算按定义体规模派生（每节点最多几步递归，与 `Ir.Cps` 的 `cpsFuelOfBody` 同口径）。
 --   固定 100000 会让大定义体在没有任何不变式被破坏时报 fuel exhausted。
@@ -2414,7 +2411,7 @@ genExprAt fuel st isTail ir =
             else
               genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
       IrFloatLit raw => genFloatLit st raw
-      IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
+      IrEffThunk _family _ctor _unitTy arity prim => genEffThunk (fuel - 1) st arity prim
       IrTail inner => genExprAt (fuel - 1) st True inner
       IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 
@@ -2936,6 +2933,11 @@ genCtor : Int -> FGen -> String -> String -> List Ir -> NRes (List Instr, FGen)
 genCtor fuel st family ctor args =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
+  else if family == irEffTypeName && ctor == irEffMkCtor then
+    case args of
+      -- `Eff` 就是 thunk 本身：`MkEff f` 不分配，直接求值 `f`。
+      [x] => genExpr (fuel - 1) st x
+      _ => internal "Eff thunk must have exactly one argument"
   else
     case Layout.irDeclOf family st.fgFams of
       Nothing => internal "unknown data family in native codegen: ${family}"

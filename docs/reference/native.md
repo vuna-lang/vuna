@@ -494,7 +494,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
 | `IrLam` | 支持 | 作为值 → 闭包对象 `[code][arity][自由变量...]`（无自由变量时静态化，不分配）；立即应用的 lambda 内联成体；其余应用按调用点已知 arity 直调或走 `rt_apply` |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；[native-runtime.md](native-runtime.md) §5 的「对象表示」 |
-| `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
+| `IrEffThunk` | 支持 | 生成 `fun _ => prim args`（`Eff` 就是 thunk，`MkEff` 不分配）；效应原语作为值出现时用 |
 | `IrEffBind` | 拒绝 | 只服务 `@vuna@prim_eff_bind1`，base 不用 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；作为值同样生成 wrapper 闭包 |
 | Float | 支持 | 堆对象 `[f64]`；字面量是 `.rodata` 的 `.double` 常量（`lea`）；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |

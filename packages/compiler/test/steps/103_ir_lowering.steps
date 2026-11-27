@@ -41,4 +41,9 @@ exit: 0
 run: sh -c '"$VUNA" dev ir dump --after ir.machine.handlers "$TMPDIR/irtail" > "$TMPDIR/irtail-mid.ir"; test -s "$TMPDIR/irtail-mid.ir"; ! cmp -s "$TMPDIR/irtail.ir" "$TMPDIR/irtail-mid.ir"'
 exit: 0
 run: sh -c '"$VUNA" dev ir dump --after ir.no.such.pass "$TMPDIR/irtail" 2>&1 | grep -q "unknown pass"'
+# Eff 的 CPS 形态：`Eff` 就是 thunk，`case e of MkEff f` 规范化成 `let f = e`。
+# 三端 codegen 都吃这个形态；留着 `IrCase` 会让 native / wasm 对闭包做 tag 分派。
+run: sh -c 'd="$TMPDIR/effcase"; mkdir -p "$d/app"; printf "[package]\nname = \"effcase\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "import Base.Effect.Core as Eff" "" "main : Eff [] Int" "main = do" "  x <- pure 1" "  pure (x + 1)" > "$d/app/Main.vuna"; "$VUNA" dev ir dump --after cps "$d" > "$TMPDIR/effcase.ir"'
+exit: 0
+run: sh -c '! grep -q "(case .*MkEff" "$TMPDIR/effcase.ir"'
 exit: 0
