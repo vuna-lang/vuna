@@ -141,9 +141,11 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 ## roots 与 GC
 
-- 每个项目一个目录 `roots/<项目摘要>/`：`<digest>` 空文件（项目 = 规范化绝对包目录的
-  摘要）+ 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**，没有读-改-写，并发
-  fetch 不会丢 root。
+- 每个项目一个目录 `roots/<项目摘要>/`：`<digest>` 空文件（项目摘要 = `projectIdAddrOf`：
+  `Pkg.normalizeDir` 词法归一后的绝对包目录——`a/../b`、尾 `/`、`//` 与 `.` 段都是同一个 id）
+  + 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**，没有读-改-写，并发
+  fetch 不会丢 root。绝对化在调用方的 IO 边界（`Pkg.absolutePath`：相对路径按物理 cwd 折绝对）；
+  身份函数是纯函数、不解析符号链接，指向同一目录的符号链接绝对路径仍是另一个 id（gh#30）。
 - 登记时机：**只有 `vuna deps fetch`** 把取到的包摘要写进发起项目的 roots。check/build/test
   不再登记 roots（缓存对象只靠 age/size 淘汰）。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：

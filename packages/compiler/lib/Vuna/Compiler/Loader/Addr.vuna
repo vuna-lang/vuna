@@ -17,6 +17,7 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Base.Source as Source
 import Vuna.Compiler.Base.Hash
 
 -- | 地址格式版本：分段文法或摘要算法变化时递增（地址随之换代）。
@@ -31,10 +32,15 @@ hashHex s = digestHex (digestOfString s)
 export addrOf : List String -> String
 addrOf parts = hashHex (encTop (encList encStr) (addrSchema :: parts))
 
--- | 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
+-- | 项目身份：**词法规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
 -- 编译器与 `vuna deps fetch` 必须用同一个公式，否则 GC 的保护集合会对不上。
+--
+-- 入参先过 `Base.Source.normalizePath`（唯一路径规范化口径）：`a/../b`、尾 `/`、`//` 与
+-- `.` 段都归一到同一个 id，调用方不必各自记得先规范化。绝对化仍由调用方的 IO 边界负责
+-- （`Frontend.Packages.Pkg.absolutePath`：相对路径按 `envGetCwd` 折绝对，因此经 cwd 进入
+-- 符号链接目录的相对写法已经落到物理路径）。本函数是纯函数，不解析符号链接（gh#30）。
 export projectIdAddrOf : String -> String
-projectIdAddrOf dir = addrOf ["project", dir]
+projectIdAddrOf dir = addrOf ["project", Source.normalizePath dir]
 
 -- ---------------------------------------------------------------
 -- 模块头（header）
