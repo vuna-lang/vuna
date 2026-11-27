@@ -1,0 +1,105 @@
+name: main-red
+
+# main 门禁失败时维护唯一的 `main-red` 事故单：失败就创建/追加，恢复绿就关闭。
+# 多个会话按 issue 的 assignee / status:in-progress 认领，避免同时开修复 PR。
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: main-red
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  track:
+    # PR 的 ci 运行 head_branch 是特性分支；这里只处理落到 main 的 push / 定时 / 手动运行。
+    if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: update main-red issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # shellcheck disable=SC2016
+          set -euo pipefail
+          title='main 门禁红（自动跟踪）'
+
+          if [ "$CONCLUSION" = "success" ]; then
+            issues=$(gh issue list --repo "$REPO" --label main-red --state open \
+              --limit 20 --json number --jq '.[].number')
+            if [ -z "$issues" ]; then
+              echo "main-red: main 已绿，没有 open 事故单"
+              exit 0
+            fi
+            while IFS= read -r n; do
+              [ -n "$n" ] || continue
+              gh issue comment "$n" --repo "$REPO" \
+                --body "main 已恢复绿：$RUN_URL"
+              gh issue close "$n" --repo "$REPO" --reason completed
+              echo "main-red: 已关闭 #$n"
+            done <<<"$issues"
+            exit 0
+          fi
+
+          if [ "$CONCLUSION" != "failure" ] && [ "$CONCLUSION" != "timed_out" ]; then
+            echo "main-red: 忽略 conclusion=$CONCLUSION"
+            exit 0
+          fi
+
+          # shellcheck disable=SC2016
+          failing=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" --jq '
+            [.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") |
+              "- `\(.name)` ([log](\(.html_url)))"] | join("\n")')
+          [ -n "$failing" ] || failing='- （未能读取失败 job；请打开 run 查看）'
+
+          # shellcheck disable=SC2016
+          related=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '
+            [.[] | "- #\(.number) \(.title)"] | join("\n")' 2>/dev/null || true)
+          [ -n "$related" ] || related='- （未找到关联 PR）'
+
+          body=$(cat <<EOF
+          main 门禁失败：$RUN_URL
+
+          - workflow: ci（$RUN_EVENT）
+          - head: $HEAD_SHA
+          - 失败 job：
+          $failing
+          - 相关 PR：
+          $related
+
+          ## 认领
+
+          1. 先看本 issue 是否已有 assignee 或 status:in-progress；有就让出，不要开第二个修复 PR。
+          2. 认领：评论 claim，然后
+             gh issue edit <n> --add-assignee @me --add-label status:in-progress。
+          3. 修复 PR 写 Closes #<本 issue> 并加 main-red 标签；main 还没绿时不要给无关 PR arm auto-merge。
+          4. 只有 main 的 ci 重新为绿（本 workflow 会自动关闭 issue）或修复 PR 合入后才算完成。
+          EOF
+          )
+
+          issue=$(gh issue list --repo "$REPO" --label main-red --state open \
+            --limit 1 --json number --jq '.[0].number // empty')
+
+          if [ -z "$issue" ]; then
+            gh issue create --repo "$REPO" --title "$title" --body "$body" \
+              --label main-red --label type:bug --label area:ci \
+              --label priority:P0 --label status:todo
+            echo "main-red: 已创建事故单"
+          else
+            gh issue comment "$issue" --repo "$REPO" --body "$body"
+            echo "main-red: 已追加到 #$issue"
+          fi
