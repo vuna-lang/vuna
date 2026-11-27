@@ -33,6 +33,25 @@ joinComma [] = ""
 joinComma [x] = x
 joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
+-- | 分析「放弃」的结论：预算 / 容量 / 可观察范围不足时，不能把没证出来当成
+--   「证明不终止」。用户面统一渲染成 `TC_TerminationBudgetExhausted`。
+export data GiveUp(..) : Type where
+  NoGiveUp : GiveUp
+  GaveUp : String -> GiveUp
+
+export isGaveUp : GiveUp -> Bool
+isGaveUp NoGiveUp = False
+isGaveUp (GaveUp _) = True
+
+export gaveUpDetail : GiveUp -> String
+gaveUpDetail NoGiveUp = ""
+gaveUpDetail (GaveUp d) = d
+
+-- 合并两处放弃原因：保留先出现的那条（调用方只关心「是否放弃」与原因文本）。
+export mergeGiveUp : GiveUp -> GiveUp -> GiveUp
+mergeGiveUp NoGiveUp b = b
+mergeGiveUp a _ = a
+
 -- 正数事实表：函数名 + 形参下标。
 export posHas : String -> Int -> List (String, Int) -> Bool
 posHas f i [] = False
@@ -1415,26 +1434,38 @@ weakAdjGo comp edges f [] = []
 weakAdjGo comp edges f (g :: rest) =
   if edgeStrict f g edges then weakAdjGo comp edges f rest else g :: weakAdjGo comp edges f rest
 
-export weakReach : List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> Bool
-weakReach comp edges start frontier visited = weakReachFuel 100000 comp edges start frontier visited
+-- 弱边可达性检查的步数上限：每个判据调用按输入规模派生，正常程序远低于此值；
+-- 耗尽时返回 `(True, GaveUp …)`（保守当成「可达」保证 sound），调用方必须按放弃报。
+weakReachBound : Int
+weakReachBound = 100000
 
-export weakReachFuel : Int -> List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> Bool
+export weakReach : List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> (Bool, GiveUp)
+weakReach comp edges start frontier visited =
+  weakReachFuel weakReachBound comp edges start frontier visited
+
+export weakReachFuel : Int -> List String -> List (((String, String), Int), Span) -> String -> List String -> List String -> (Bool, GiveUp)
 weakReachFuel fuel comp edges start frontier visited =
   if fuel <= 0 then
-    True
+    (True, GaveUp "弱环可达性检查超出步数上限（${strFromInt weakReachBound}），按「可能存在环」保守处理")
   else
     case frontier of
-      -- 耗尽不能回答「无环」：那会让 `hasWeakCycle` 放过一个环。按保守方向当成「可达」。
-      [] => False
-      n :: rest => if n == start then True else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
+      -- 耗尽不能回答「无环」：那会让 `hasWeakCycle` 放过一个环。按保守方向当成「可达」，
+      -- 同时带上放弃标记，避免把「没算完」渲染成「证明有环」。
+      [] => (False, NoGiveUp)
+      n :: rest => if n == start then (True, NoGiveUp) else if memName n visited then weakReachFuel (fuel - 1) comp edges start rest visited else weakReachFuel (fuel - 1) comp edges start (append rest (weakAdj comp edges n)) (n :: visited)
 
-export hasWeakCycle : List String -> List (((String, String), Int), Span) -> Bool
+export hasWeakCycle : List String -> List (((String, String), Int), Span) -> (Bool, GiveUp)
 hasWeakCycle comp edges = hasWeakCycleGo comp edges comp
 
-export hasWeakCycleGo : List String -> List (((String, String), Int), Span) -> List String -> Bool
-hasWeakCycleGo comp edges [] = False
+export hasWeakCycleGo : List String -> List (((String, String), Int), Span) -> List String -> (Bool, GiveUp)
+hasWeakCycleGo comp edges [] = (False, NoGiveUp)
 hasWeakCycleGo comp edges (f :: rest) =
-  weakReach comp edges f (weakAdj comp edges f) [f] || hasWeakCycleGo comp edges rest
+  case weakReach comp edges f (weakAdj comp edges f) [f] of
+    (True, g) => (True, g)
+    (False, g1) =>
+      case hasWeakCycleGo comp edges rest of
+        (True, g2) => (True, g2)
+        (False, g2) => (False, mergeGiveUp g1 g2)
 
 -- 调用点关系编号：0 = 相等；正数 = 严格下降（1 子项 / 4 守卫减法）；
 -- 负数 = 证不出关系（诊断收集用，不参与严格性判定）。

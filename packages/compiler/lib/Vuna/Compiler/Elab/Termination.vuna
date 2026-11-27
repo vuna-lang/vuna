@@ -568,12 +568,16 @@ betterFail p edges best =
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
 tryMeasure : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Int -> Int -> Check Int
 tryMeasure comp defTbl ctors projs facts p maxP =
-  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p [] (emptyFail p)
+  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p [] (emptyFail p) NoGiveUp
 
-tryMeasureGo : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Int -> Int -> Int -> List (((String, String), Int), Span) -> FailCandidate -> Check Int
-tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best =
+-- `gaveUp` 只累积、不提前退出：后面的测度位置仍可能证出终止；全部位置失败后才把
+-- 「放弃」渲染成预算耗尽。
+tryMeasureGo : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List Int) -> Int -> Int -> Int -> List (((String, String), Int), Span) -> FailCandidate -> GiveUp -> Check Int
+tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best gaveUp =
   if remaining <= 0 then
-    if best.fcRank > 0 then ErrC (cannotProveMsgEdges comp best.fcPos best.fcEdges) else ErrC (cannotProveMsgEdges comp lastP lastEdges)
+    let
+      base = if best.fcRank > 0 then cannotProveMsgEdges comp best.fcPos best.fcEdges else cannotProveMsgEdges comp lastP lastEdges
+    in if isGaveUp gaveUp then ErrC (gaveUpDiagnostic (joinComma comp) (gaveUpDetail gaveUp) base) else ErrC base
   else
     let
       p = maxP - remaining
@@ -583,9 +587,16 @@ tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best =
         if valid then
           let
             modes = filterModes (map callMode edges)
-          in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best else OkC 0 else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
+          in if notEmpty modes then
+            if allSame modes then
+              case hasWeakCycle comp edges of
+                (cyc, g) => if isGaveUp g then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best (mergeGiveUp gaveUp g) else if cyc then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best gaveUp else OkC 0
+            else
+              tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best gaveUp
+          else
+            tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best gaveUp
         else
-          tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges (betterFail p edges best)
+          tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges (betterFail p edges best) gaveUp
 
 checkStrictGroup : List String -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> List (String, Int) -> Check Int
 checkStrictGroup comp defTbl ctors projs facts =
@@ -604,12 +615,17 @@ checkComp (comp@[f]) defTbl ctors projs g facts =
   if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else OkC 0
 checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 
+-- 正性事实不动点：每轮至少新增一条事实，否则直接收敛，所以 1024 只是防御上限。
+posFactsFuelBound : Int
+posFactsFuelBound = 1024
+
 -- worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
 -- callers」；每轮全量扫描所有 defs 是 check 的最大热点。
-computePosFactsWork : List String -> HashMap String (List (List Pat, Expr)) -> HashMap String (List String) -> Int -> List (String, Int) -> List String -> List (String, Int)
+-- 耗尽时返回**部分** facts，必须带 `GaveUp`：部分事实只可能让证明失败，不能当完整结果。
+export computePosFactsWork : List String -> HashMap String (List (List Pat, Expr)) -> HashMap String (List String) -> Int -> List (String, Int) -> List String -> (List (String, Int), GiveUp)
 computePosFactsWork names defTbl rgT fuel facts work =
   if fuel <= 0 then
-    facts
+    (facts, GaveUp "正性事实不动点未收敛（上限 ${strFromInt posFactsFuelBound} 轮）")
   else
     let
       namesTbl = HashMap.ofNames names
@@ -619,7 +635,7 @@ computePosFactsWork names defTbl rgT fuel facts work =
       merged = posUnionTbl facts fresh
       nextWork = dedup (concatMap (\n => adjOf n rgT) (map firstOf newFacts))
     in case nextWork of
-      [] => merged
+      [] => (merged, NoGiveUp)
       _ => computePosFactsWork names defTbl rgT (fuel - 1) merged nextWork
 
 -- 只报告 own 里定义的函数的终止性失败；其余（依赖包已在自己 check 里验过）只作为
@@ -656,33 +672,43 @@ checkTerminationGroups own ownDecls depDecls tableDecls =
     nodes = defNames defs
     rgT = reverseAdjOf g
     callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
-    facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     -- own 只建一次哈希表，逐 SCC 的 own 判定是 O(1) 查表（逐 SCC 线性扫是 O(n²)）。
     ownTbl = HashMap.ofNames own
     _ = log! "debug" "term-facts"
     fuel = graphFuel g nodes
     postR = postOrder gT g nodes
     compsR = sccOf (secondOf postR) fuel rgT (HashMap.fromList []) []
-  in case firstOf postR of
-    False => icFuel "termination-scc"
-    True =>
-      case firstOf compsR of
+  in case computePosFactsWork nodes defTbl rgT posFactsFuelBound [] callerNames of
+    (facts, factsGiveUp) =>
+      case firstOf postR of
         False => icFuel "termination-scc"
-        True => checkSccsWith ownTbl (reverse (secondOf compsR)) defTbl ctors projs gT facts
+        True =>
+          case firstOf compsR of
+            False => icFuel "termination-scc"
+            True =>
+              checkSccsWith
+                ownTbl
+                (reverse (secondOf compsR))
+                defTbl
+                ctors
+                projs
+                gT
+                facts
+                factsGiveUp
 
 anyOwnTbl : HashMap String Bool -> List String -> Bool
 anyOwnTbl ownTbl [] = False
 anyOwnTbl ownTbl (n :: rest) = if HashMap.member n ownTbl then True else anyOwnTbl ownTbl rest
 
-checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List String) -> List (String, Int) -> Check Int
-checkSccsWith ownTbl [] defTbl ctors projs g facts = OkC 0
-checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
+checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (List Pat, Expr)) -> List String -> List (String, List Int) -> HashMap String (List String) -> List (String, Int) -> GiveUp -> Check Int
+checkSccsWith ownTbl [] defTbl ctors projs g facts factsGiveUp = OkC 0
+checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts factsGiveUp =
   if anyOwnTbl ownTbl comp then
-    Vuna.Compiler.Base.Common.bind
-      (checkComp comp defTbl ctors projs g facts)
-      (\n => Vuna.Compiler.Base.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
+    case checkComp comp defTbl ctors projs g facts of
+      ErrC e => ErrC (markGaveUp comp factsGiveUp e)
+      OkC n => Vuna.Compiler.Base.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts factsGiveUp) (\m => OkC (n + m))
   else
-    checkSccsWith ownTbl rest defTbl ctors projs g facts
+    checkSccsWith ownTbl rest defTbl ctors projs g facts factsGiveUp
 
 -- | 取调用边的参数关系编号。
 callMode : (((String, String), Int), Span) -> Int
