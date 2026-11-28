@@ -527,86 +527,67 @@ export defLookup : String -> HashMap String Term -> Maybe Term
 defLookup name tbl = HashMap.lookup name tbl
 
 -- 闭合项检查：TVar 只有在被 lambda/Pi 绑定时才允许。
-export hasFreeVar : Int -> Term -> Bool
-hasFreeVar depth (TVar name i _) = i >= depth
-hasFreeVar depth (TMeta m) = False
-hasFreeVar depth (TGlobal g) = False
-hasFreeVar depth (TType l) = False
-hasFreeVar depth (TPi name implicit rig dom cod) =
-  hasFreeVar depth dom || hasFreeVar (depth + 1) cod
-hasFreeVar depth (TLam name rig slot _ body) =
-  let
-    tys =
-      case slot of
-        Nothing => False
-        Just (_, b, r) => hasFreeVarMaybe depth b || hasFreeVarMaybe (depth + 1) r
-  in tys || hasFreeVar (depth + 1) body
-hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
-hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
-hasFreeVar depth (TMk c args) = hasFreeVarArgs depth args
-hasFreeVar depth (TRecord c args) = hasFreeVarArgs depth args
-hasFreeVar depth (TProj base c tele i fi) = hasFreeVar depth base
-hasFreeVar depth (TRecUpd base c tele idxs body) =
-  hasFreeVar depth base || hasFreeVar (depth + length tele) body
-hasFreeVar depth (TCase scrut alts) = hasFreeVar depth scrut || hasFreeVarAlts depth alts
-hasFreeVar depth (TInt n) = False
-hasFreeVar depth (TStr s) = False
-hasFreeVar depth (TFloat raw) = False
-hasFreeVar depth (TBool b) = False
-hasFreeVar depth (TIf c th el) = hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
+-- ---------------------------------------------------------------
+-- 作用域遍历：所有「按 binder 深度检查某个叶子」的遍历共用这一份递归。
+-- `pred depth node` 只判定当前节点；子项按构造子的 binder 规则推进深度：
+-- `TPi` 余域 +1、`TLam` 结果类型与体 +1、`TCase` 分支 +binder 数、
+-- `TRecUpd` 体 +tele 长度。新增 `Term` 构造子必须在这里接线（不写 `_` 兜底）。
+-- ---------------------------------------------------------------
+export termAnyScoped : (Int -> Term -> Bool) -> Int -> Term -> Bool
+termAnyScoped pred depth t = if pred depth t then True else termAnyScopedKids pred depth t
 
-export hasFreeVarMaybe : Int -> Maybe Term -> Bool
-hasFreeVarMaybe depth Nothing = False
-hasFreeVarMaybe depth (Just t) = hasFreeVar depth t
+termAnyScopedKids : (Int -> Term -> Bool) -> Int -> Term -> Bool
+termAnyScopedKids pred depth (TVar _ _ _) = False
+termAnyScopedKids pred depth (TMeta _) = False
+termAnyScopedKids pred depth (TGlobal _) = False
+termAnyScopedKids pred depth (TType _) = False
+termAnyScopedKids pred depth (TPi _ _ _ dom cod) =
+  termAnyScoped pred depth dom || termAnyScoped pred (depth + 1) cod
+termAnyScopedKids pred depth (TLam _ _ slot _ body) =
+  termAnyScopedSlot pred depth slot || termAnyScoped pred (depth + 1) body
+termAnyScopedKids pred depth (TApp f a _) = termAnyScoped pred depth f || termAnyScoped pred depth a
+termAnyScopedKids pred depth (TCon _ args) = termAnyScopedArgs pred depth args
+termAnyScopedKids pred depth (TMk _ args) = termAnyScopedArgs pred depth args
+termAnyScopedKids pred depth (TRecord _ args) = termAnyScopedArgs pred depth args
+termAnyScopedKids pred depth (TProj base _ _ _ _) = termAnyScoped pred depth base
+termAnyScopedKids pred depth (TRecUpd base _ tele _ body) =
+  termAnyScoped pred depth base || termAnyScoped pred (depth + length tele) body
+termAnyScopedKids pred depth (TCase scrut alts) =
+  termAnyScoped pred depth scrut || termAnyScopedAlts pred depth alts
+termAnyScopedKids pred depth (TInt _) = False
+termAnyScopedKids pred depth (TStr _) = False
+termAnyScopedKids pred depth (TBool _) = False
+termAnyScopedKids pred depth (TIf c th el) =
+  termAnyScoped pred depth c || termAnyScoped pred depth th || termAnyScoped pred depth el
+termAnyScopedKids pred depth (TFloat _) = False
 
-hasFreeVarArgs : Int -> List (Term, Rig) -> Bool
-hasFreeVarArgs depth [] = False
-hasFreeVarArgs depth ((a, rig) :: rest) = hasFreeVar depth a || hasFreeVarArgs depth rest
+termAnyScopedSlot : (Int -> Term -> Bool) -> Int -> Maybe (LamMark, Maybe Term, Maybe Term) -> Bool
+termAnyScopedSlot pred depth Nothing = False
+termAnyScopedSlot pred depth (Just p) =
+  termAnyScopedMaybe pred depth (firstOf (secondOf p))
+    || termAnyScopedMaybe pred (depth + 1) (secondOf (secondOf p))
 
-export hasFreeVarAlts : Int -> List CaseAlt -> Bool
-hasFreeVarAlts depth [] = False
-hasFreeVarAlts depth (alt :: rest) =
-  hasFreeVar (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasFreeVarAlts depth rest
+termAnyScopedMaybe : (Int -> Term -> Bool) -> Int -> Maybe Term -> Bool
+termAnyScopedMaybe pred depth Nothing = False
+termAnyScopedMaybe pred depth (Just t) = termAnyScoped pred depth t
+
+termAnyScopedArgs : (Int -> Term -> Bool) -> Int -> List (Term, Rig) -> Bool
+termAnyScopedArgs pred depth [] = False
+termAnyScopedArgs pred depth ((a, _) :: rest) =
+  termAnyScoped pred depth a || termAnyScopedArgs pred depth rest
+
+termAnyScopedAlts : (Int -> Term -> Bool) -> Int -> List CaseAlt -> Bool
+termAnyScopedAlts pred depth [] = False
+termAnyScopedAlts pred depth (alt :: rest) =
+  termAnyScoped pred (depth + length (caseAltBinders alt)) (caseAltBody alt)
+    || termAnyScopedAlts pred depth rest
 
 export hasMeta : Int -> Int -> Term -> Bool
-hasMeta m depth (TMeta j) = m == j
-hasMeta m depth (TVar name i _) = False
-hasMeta m depth (TGlobal g) = False
-hasMeta m depth (TType l) = False
-hasMeta m depth (TPi name implicit rig dom cod) = hasMeta m depth dom || hasMeta m (depth + 1) cod
-hasMeta m depth (TLam name rig slot _ body) =
-  let
-    tys =
-      case slot of
-        Nothing => False
-        Just (_, b, r) => hasMetaMaybe m depth b || hasMetaMaybe m (depth + 1) r
-  in tys || hasMeta m (depth + 1) body
-hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
-hasMeta m depth (TCon c args) = hasMetaArgs m depth args
-hasMeta m depth (TMk c args) = hasMetaArgs m depth args
-hasMeta m depth (TRecord c args) = hasMetaArgs m depth args
-hasMeta m depth (TProj base c tele i fi) = hasMeta m depth base
-hasMeta m depth (TRecUpd base c tele idxs body) =
-  hasMeta m depth base || hasMeta m (depth + length tele) body
-hasMeta m depth (TCase scrut alts) = hasMeta m depth scrut || hasMetaAlts m depth alts
-hasMeta m depth (TInt n) = False
-hasMeta m depth (TStr s) = False
-hasMeta m depth (TFloat raw) = False
-hasMeta m depth (TBool b) = False
-hasMeta m depth (TIf c th el) = hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
+hasMeta m depth t = termAnyScoped (metaAt m) depth t
 
-export hasMetaMaybe : Int -> Int -> Maybe Term -> Bool
-hasMetaMaybe m depth Nothing = False
-hasMetaMaybe m depth (Just t) = hasMeta m depth t
-
-hasMetaArgs : Int -> Int -> List (Term, Rig) -> Bool
-hasMetaArgs m depth [] = False
-hasMetaArgs m depth ((a, rig) :: rest) = hasMeta m depth a || hasMetaArgs m depth rest
-
-export hasMetaAlts : Int -> Int -> List CaseAlt -> Bool
-hasMetaAlts m depth [] = False
-hasMetaAlts m depth (alt :: rest) =
-  hasMeta m (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasMetaAlts m depth rest
+metaAt : Int -> Int -> Term -> Bool
+metaAt m _ (TMeta j) = m == j
+metaAt _ _ _ = False
 
 -- | 对 λ binder 类型槽做项变换（`Nothing` 保持不动）。
 export mapTermMaybe : (Term -> Term) -> Maybe Term -> Maybe Term
@@ -907,75 +888,34 @@ countLams _ = 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 export hasFreeTermVar : Int -> Term -> Bool
-hasFreeTermVar d (TVar n i _) = i >= d
-hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
-hasFreeTermVar d (TLam n r slot _ b) =
-  let
-    tys =
-      case slot of
-        Nothing => False
-        Just (_, bt, rt) => hasFreeTermVarMaybe d bt || hasFreeTermVarMaybe (d + 1) rt
-  in tys || hasFreeTermVar (d + 1) b
-hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
-hasFreeTermVar d (TCon c args) = anyPairFree d args
-hasFreeTermVar d (TMk c args) = anyPairFree d args
-hasFreeTermVar d (TRecord c args) = anyPairFree d args
-hasFreeTermVar d (TProj base c tele i fi) = hasFreeTermVar d base
--- `TRecUpd.body` 在 `tele` 绑定子之下（与 `hasFreeVar` / `hasMeta` / `shift` /
--- `substVarAt` 同口径）：record-update 定义体里的字段 binder 引用不是自由变量。
-hasFreeTermVar d (TRecUpd base c tele idxs body) =
-  hasFreeTermVar d base || hasFreeTermVar (d + length tele) body
-hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
-hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
-hasFreeTermVar d _ = False
+hasFreeTermVar depth t = termAnyScoped freeVarAt depth t
 
-hasFreeTermVarMaybe : Int -> Maybe Term -> Bool
-hasFreeTermVarMaybe d Nothing = False
-hasFreeTermVarMaybe d (Just t) = hasFreeTermVar d t
+freeVarAt : Int -> Term -> Bool
+freeVarAt d (TVar _ i _) = i >= d
+freeVarAt _ _ = False
 
-export anyPairFree : Int -> List (Term, Rig) -> Bool
-anyPairFree d [] = False
-anyPairFree d ((a, r) :: rest) = hasFreeTermVar d a || anyPairFree d rest
-
-export anyAltFree : Int -> List CaseAlt -> Bool
-anyAltFree d [] = False
-anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || anyAltFree d rest
+-- | 旧名（闭包检查）：与 `hasFreeTermVar` 同一实现。
+export hasFreeVar : Int -> Term -> Bool
+hasFreeVar = hasFreeTermVar
 
 -- 负 de Bruijn 索引：quote 的越界产物（`varIndexM` 对越界 level 返回 `Nothing`，项里
 -- 落成 `-1` 哨兵）。`hasFreeTermVar`
 -- 只查上界，负索引会被 `lookupEnv` 的 `i <= 0` 当成**最内层**变量（静默错位），所以
 -- 序列化/摘要校验必须单独拒绝它。
 export hasNegativeVar : Term -> Bool
-hasNegativeVar (TVar n i _) = i < 0
-hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
-hasNegativeVar (TLam n r slot _ b) =
-  let
-    tys =
-      case slot of
-        Nothing => False
-        Just (_, bt, rt) => hasNegativeVarMaybe bt || hasNegativeVarMaybe rt
-  in tys || hasNegativeVar b
-hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
-hasNegativeVar (TCon c args) = anyNegativeVarArgs args
-hasNegativeVar (TMk c args) = anyNegativeVarArgs args
-hasNegativeVar (TRecord c args) = anyNegativeVarArgs args
-hasNegativeVar (TProj base c tele i fi) = hasNegativeVar base
-hasNegativeVar (TRecUpd base c tele idxs body) = hasNegativeVar base || hasNegativeVar body
-hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
-hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
-hasNegativeVar _ = False
+hasNegativeVar t = termAnyScoped negativeVarAt 0 t
 
-hasNegativeVarMaybe : Maybe Term -> Bool
-hasNegativeVarMaybe Nothing = False
-hasNegativeVarMaybe (Just t) = hasNegativeVar t
+negativeVarAt : Int -> Term -> Bool
+negativeVarAt _ (TVar _ i _) = i < 0
+negativeVarAt _ _ = False
 
 export anyNegativeVarArgs : List (Term, Rig) -> Bool
 anyNegativeVarArgs [] = False
-anyNegativeVarArgs ((a, r) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
+anyNegativeVarArgs ((a, _) :: rest) = hasNegativeVar a || anyNegativeVarArgs rest
 
 export anyNegativeVarAlts : List CaseAlt -> Bool
 anyNegativeVarAlts [] = False
-anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
+anyNegativeVarAlts (alt :: rest) = hasNegativeVar (caseAltBody alt) || anyNegativeVarAlts rest
 
 -- 值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 -- 预算耗尽时按**保守方向**回答 `True`（当成「可能还有未解」），避免把不干净的值当可复用。
