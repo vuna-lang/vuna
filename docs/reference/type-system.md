@@ -291,7 +291,7 @@ Index / Repl / Lsp）按不可达规模设置上界，正常输入不触发。�
 | `Frontend.Packages.Pkg` | `pkgFuelBound = 1048576`：每条依赖边 / 展开一个包目录消费 ≥1 步，`memStackDir` 防环 |
 | `Elab.Term` 入口（`checkE` / `inferE` / `checkType` / `checkTypeInfer` / `checkByInfer`） | `256 + 8*exprWeight`；嵌套深度 ≤ 节点数，应用脊椎每层经若干层包装器合计约 5 步 |
 | `Elab.Records`（record / record pattern 降级） | `512 + 8*exprWeight`、`64 + 8*patWeight`；每个节点至少 1 步 |
-| `Elab.Termination`（`strWalk` / `siteWalkC` / `posWalkF`） | `32 + 8*exprWeight`；每个被访问节点至少消耗 1 步。三份 walker 显式列出全部 `Expr` 构造子（含 `EInterp`），binder 名收集统一走 `AstWalk.patBinders` |
+| `Elab.Termination.Walk`（`walk` 的三种模式） | `32 + 8*exprWeight`；每个被访问节点至少消耗 1 步。三套分析共用一份 `Expr` 构造子遍历（含 `EInterp`），只由 `WalkMode` 决定叶子 / 调用点与尺寸策略；binder 名收集统一走 `AstWalk.patBinders` |
 | `Elab.Meta.zonkTerm` / `Core.Eval.substSolvedMetasAtTbl` | `128 + 4*termSize`（上限 1e6）：预算按项规模派生，深项不再静默停在原项上 |
 | `Core.Eval.normalize`（interp 深度正规化） | `interpFuelBound = 262144`：`main` 的递归深度由数据决定，不复用精化预算 `defaultFuel`（512，100 层递归就要 ~600 步）；条件卡住时只正规化条件、保持 `VIf` 卡住（与 `normalizeCaseFuel` 对中性 scrutinee 同口径），不展开两个分支 |
 | `Core.Eval.natValueMaybe`（interp 物化 `Nat` 链） | `natChainLimit = 65536` 个构造子：超过返回 `Nothing`（不归约），不按数据规模无限分配 |

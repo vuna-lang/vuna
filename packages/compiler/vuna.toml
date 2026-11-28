@@ -50,6 +50,7 @@ modules = [
   "Vuna.Compiler.Elab.Termination.ElabInput",
   "Vuna.Compiler.Elab.Termination.Measure",
   "Vuna.Compiler.Elab.Termination.Scc",
+  "Vuna.Compiler.Elab.Termination.Walk",
   "Vuna.Compiler.Elab.Trait",
   "Vuna.Compiler.Elab.Types",
   "Vuna.Compiler.Elab.Usage",
