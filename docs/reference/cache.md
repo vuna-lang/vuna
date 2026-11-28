@@ -1,7 +1,8 @@
 # 输入寻址对象库
 
 本文记录 vuna **唯一对象库的形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
-命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。
+命中。进程内另有 `Driver.Graph` 的查询图，只决定「读什么、按什么层、是否复用」；没有会话
+索引、没有依赖快照比较、没有写锁，节点也不单独落盘（见「查询图的边界」）。
 
 输入寻址对象库只剩取包域：
 
@@ -141,6 +142,25 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   没有单独的覆盖集对象。
 - **依赖身份由源码 + manifest 现场算**：`manifest:<toml 摘要>:<根源闭包摘要>`，不读身份快照。
   依赖源码（含注释）变化 ⇒ 依赖方地址变化 ⇒ 一次未命中；换根目录 / 换缓存状态不影响结果。
+
+## 查询图的边界
+
+`Driver.Graph` 只拥有**调度形状**，不拥有执行：
+
+- 节点 key = 输入地址；kind = 源摘要 / 模块接口 / pass；边 = 直接依赖。`planLayers`
+  按依赖层给出 `NodeHit` / `NodeRecompute`，`isHit` 由调用方提供，图本身不做 I/O。
+- 生产路径只接了**模块接口**节点：读接口按层推进，缺失节点是 `NodeRecompute`，不影响
+  其余节点。源摘要与 pass 节点只有形状（`sourceNodesOf` / `passNodesOf`），服务计划、
+  观测与测试，**不落盘、不被执行**；IR pass 链仍由 `Ir.Passes.passSpan` 直接跑。
+- 节点级持久化只有接口对象（`<pkg>/.vuna/iface/<addr>`）；没有统一会话索引，也不做
+  pass 结果快照。跨进程只共享对象库，不共享调度状态。
+- 闭包枚举只有 `Loader/Closure` 一处；文件枚举（`Packages.Source.packageFilesEff`）与
+  loader 展开（`Flatten.loadAll`）是它的输入，不另起一套闭包扫描。
+- 干净判定只有 `Driver.Compile.cleanSelfOk` + `cleanFixpoint` 一套；LSP 复用同一
+  `sourceFresh` / `payloadSelfOk` / `dcClean`。成员包按 `topoLayers` 分层，成环显式报
+  `workspace member dependency cycle`，没有「燃料耗尽就一次全起」的静默兜底。
+- 依赖元变量段号（C37）由 `Driver.Dt.depSlotsOf` 按模块名升序分配，与接口 / worker
+  顺序无关（`test/DepSegments.vuna` 锁定）。
 
 ## roots 与 GC
 
