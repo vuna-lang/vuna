@@ -327,13 +327,33 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
 - native / wasm 的中间步骤同样可见：`--after native.<pass>`（16 步）与
   `--after wasm.<pass>`（5 步）分别由 `Native.Module.buildDump` / `Wasm.Module.buildDump`
   跑完整链后返回该步定义；`--only` 可混合三层。
-- `vuna dev ir dump --only ir.<pass>...` 不跳过任何 pass：整条机器链照常跑，只打印点名
-  步骤之后的文本（可重复；与 `--after` 互斥，未知名字显式报 `unknown pass`）。
+- `vuna dev ir dump --only ir.<pass>...` 是**dump 选择器，不是执行器**：整条机器链照常跑，
+  只打印点名步骤之后的文本（可重复；与 `--after` 互斥，未知名字显式报 `unknown pass`）。
+  链上每一步的输入形状由**前一步的输出**产生（`cpsMachineStages` 闭包捕获链前的 `defs`，
+  `ir.cps` 那步直接忽略输入），跳过中间步骤就没有可定义的产物，所以「只跑某一步」
+  不提供、也不在支持面。CPS 之后各后端链同理（native 的段间查询、wasm 的
+  `directable` 分流都读前面步骤的结果）。
+
+  单步本身的可观察性质只有**幂等**，且只在少数 pass 上有依据（门禁见
+  `packages/ir/test/Passes.vuna` 与 `packages/target-native/test/Inline.vuna`）：
+
+  | pass | 幂等 | 依据 |
+  | --- | --- | --- |
+  | `ir.tail.annotate` | 是 | 已有 `IrTail` 不再包一层（`Ir.Tail.annotateAt`） |
+  | `native.alias` / `native.alias.again` | 近似 | `resolveAliasDefs` 只读入参 defs 表，已解析的调用点不再命中别名 |
+  | `native.simplify` | 无证明 | 归约到规范形，但未锁 |
+  | `wasm.anf` | **否** | 第二次 ANF 的 fresh 编号必须从高一位开始（`Wasm.Anf`） |
+
+  幂等只说明「同一输入重复跑结果不变」，不构成「从任意输入单跑等于全链」的替代。
 - 三层链的 `psCheckAfter` 都已消费：`Passes.checkPassAfter` 跑
   `Ir.Validate.validateScopedDefs`（定义名唯一 + `IrVar` 作用域），失败信息带 pass 名。
   它**不查**运行时符号契约（`@ir@cps@*` / `@ir@m@*` 与后端内部符号不在
-  `Ir.Runtime` 里），因此不能直接复用 `validateUnit`。native / wasm 在链尾用
-  `checkAfterAll` 统一检查各步输出；`psDump` 仍未被驱动消费。
+  `Ir.Runtime` 里），因此不能直接复用 `validateUnit`。
+- 校验边界是**链首 before + 每步 after**：`psCheckBefore` 只由 IR 机器链逐步消费
+  （`runMachineStages`），native / wasm 在链尾对链首输入跑一次 `psCheckBefore`、再用
+  `checkAfterAll` 检查各步输出。`after(n-1)` 就是 `before(n)` 的输入、是同一次遍历
+  （`stages` 是 `(PassSpec, 该步输出)` 列表），所以除链首外没有单独的 before 检查；
+  `psDump` 仍未被驱动消费。
 
 ## 预算
 
