@@ -41,6 +41,41 @@ reachableGo fuel nameOf depsOf nodes work acc =
             Just node => reachableGo (fuel - 1) nameOf depsOf nodes (append (depsOf node) rest) (name :: acc)
 
 -- ---------------------------------------------------------------
+-- 依赖层（并行调度）
+-- ---------------------------------------------------------------
+-- | 按依赖层切分：每一层内的节点依赖只落在更早的层（或图外名字）。层内保持输入顺序，
+-- 供调用方并行执行。图成环 / 没有可运行层 ⇒ 显式内部错误，不静默全起。
+export topoLayers : (a -> String) -> (a -> List String) -> List a -> Check (List (List a))
+topoLayers nameOf depsOf nodes =
+  let
+    names = map nameOf nodes
+  in topoLayersGo (length nodes + 1) nameOf depsOf names nodes []
+
+topoLayersGo : Int -> (a -> String) -> (a -> List String) -> List String -> List a -> List (List a) -> Check (List (List a))
+topoLayersGo _ _ _ _ [] acc = OkC (reverse acc)
+topoLayersGo fuel nameOf depsOf names pending acc =
+  if fuel <= 0 then
+    icInternal "closure: dependency cycle"
+  else
+    let
+      done = concatMap (map nameOf) acc
+      ready = filter (\n => depsReady nameOf depsOf names done n) pending
+    in if length ready == 0 then
+      icInternal "closure: dependency cycle"
+    else
+      let
+        rest = filter (\n => not (depsReady nameOf depsOf names done n)) pending
+      in topoLayersGo (fuel - 1) nameOf depsOf names rest (ready :: acc)
+
+depsReady : (a -> String) -> (a -> List String) -> List String -> List String -> a -> Bool
+depsReady nameOf depsOf names done n = depsReadyGo names done (depsOf n)
+
+depsReadyGo : List String -> List String -> List String -> Bool
+depsReadyGo _ _ [] = True
+depsReadyGo names done (d :: rest) =
+  (not (memName d names) || memName d done) && depsReadyGo names done rest
+
+-- ---------------------------------------------------------------
 -- 依赖序拓扑排序
 -- ---------------------------------------------------------------
 -- | 按输入顺序作为起点顺序做 DFS 后序（依赖在前）。`starts` 的先后由调用方决定；

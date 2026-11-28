@@ -12,6 +12,7 @@ module Vuna.Compiler.Driver.CompilerCli where
 -- 传递，需要写回的地方（manifest 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`
 -- （`Pair Int CliOpts`）。
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Loader.Closure
 import Vuna.Compiler.Loader.Fingerprint
 import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Frontend.Packages.Pkg
@@ -978,48 +979,36 @@ checkPackagesSpawn pkgs code o =
       memberNames = map packageName members
     in do
       r1 <- checkRootsSeq roots code o
-      checkMembersByLevel (length members) members memberNames [] (firstOf r1) (secondOf r1)
+      checkMemberLayers members (firstOf r1) (secondOf r1)
 
--- 每轮挑出「依赖的成员包都已检查完」的那批一起跑，跑完进入下一轮。
--- 轮数上界 = 成员数（每轮至少摘掉一个），因此用成员数作 fuel；fuel 用尽说明依赖成环
--- （loader 已拒环），剩余一次全起，不静默跳过。
-checkMembersByLevel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> List Package -> List String -> List String -> Int -> CliOpts -> Eff r (Int, CliOpts)
-checkMembersByLevel fuel pending memberNames done code o =
-  if length pending == 0 then
-    pure (code, o)
-  else if fuel <= 0 then
-    memberCycleError o
-  else
-    let
-      ready = filter (\p => depsReady memberNames done p) pending
-      rest = filter (\p => not (depsReady memberNames done p)) pending
-    in if length ready == 0 then
-      memberCycleError o
-    else
-      do
-        r <- checkMembersParallel ready code o
-        checkMembersByLevel (fuel - 1) rest memberNames (append done (map packageName ready)) (firstOf r) (secondOf r)
-
--- 成员依赖图成环 / 没有可运行层：显式失败，不再一次全起（loader 已拒环，这里是防御）。
+-- 成员依赖图成环 / 没有可运行层：显式失败，不再一次全起。
 memberCycleError : Member nConsole ConsoleOp r => CliOpts -> Eff r (Int, CliOpts)
 memberCycleError o =
   do
     _ <- consoleEprint "error: workspace member dependency cycle: no runnable level\n"
     pure (2, o)
 
+-- 成员依赖图按层调度：层内并行，跨层等接口。图成环 / 没有可运行层 ⇒ 显式错误。
+checkMemberLayers : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
+checkMemberLayers members code o =
+  case topoLayers packageNameOf packageDepsOf members of
+    ErrC _ => memberCycleError o
+    OkC layers => runMemberLayers layers code o
+
+runMemberLayers : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List (List Package) -> Int -> CliOpts -> Eff r (Int, CliOpts)
+runMemberLayers [] code o = pure (code, o)
+runMemberLayers (layer :: rest) code o =
+  do
+    r <- checkMembersParallel layer code o
+    runMemberLayers rest (firstOf r) (secondOf r)
+
+packageNameOf : Package -> String
+packageNameOf p = packageName p
+
+packageDepsOf : Package -> List String
+packageDepsOf p = map packageName p.packageDependencies
+
 -- 依赖的成员包是否都已检查完；不在成员列表里的依赖（外部路径）视为已满足。
-depsReady : List String -> List String -> Package -> Bool
-depsReady memberNames done pkg = depsReadyList memberNames done pkg.packageDependencies
-
-depsReadyList : List String -> List String -> List Package -> Bool
-depsReadyList memberNames done [] = True
-depsReadyList memberNames done (d :: rest) =
-  let
-    isMember = memName (packageName d) memberNames
-    isDone = memName (packageName d) done
-  in (not isMember || isDone) && depsReadyList memberNames done rest
-
--- 一批成员包并行检查：全部 spawn 后逐个 wait，退出码汇总进 code。
 checkMembersParallel : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List Package -> Int -> CliOpts -> Eff r (Int, CliOpts)
 checkMembersParallel [] code o = pure (code, o)
 checkMembersParallel members code o =
