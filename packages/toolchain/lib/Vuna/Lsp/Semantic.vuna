@@ -294,13 +294,7 @@ semanticTokenData text =
   case parseSourceDetailed "<semantic>" text of
     ErrC _ => []
     OkC parsed =>
-      rowsGo
-        (split "\n" text)
-        (declTableOf parsed.parsedFile)
-        0
-        0
-        Nothing
-        (lexTokensOf text parsed.parsedRawToks parsed.parsedComments)
+      rowsGo (split "\n" text) (declTableOf parsed.parsedFile) 0 0 Nothing parsed.parsedToks
 
 -- | 内部：逐 token 累积 `(上一行, 上一列)` 状态，把分类结果拼成 delta 流。
 rowsGo : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> List CstToken -> List Int
