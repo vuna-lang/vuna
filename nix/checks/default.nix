@@ -636,7 +636,12 @@ in
   # 可执行文件在 DWARF `.debug_line` 里真的指向 `.vuna`（不需要 gdb/perf）。
   vuna-obs-dwarf = vunaCheck {
     name = "vuna-obs-dwarf";
-    srcs = [ src.codegenCorpus ];
+    # 依赖包（vuna-base）也要可写状态目录：把 base 拷进 check 工作树，
+    # 脚本里再把 VUNA_BASE / VUNA_PKG_STATE 指到可写位置。
+    srcs = [
+      src.codegenCorpus
+      src.base
+    ];
     env = {
       VUNA_BASE = "${repo}/packages/base";
     };

@@ -25,6 +25,11 @@ if [ ! -d "$OUT" ]; then
   mkdir -p "$OUT"
 fi
 OUT=$(CDPATH= cd -- "$OUT" && pwd)
+
+# 依赖包状态目录必须可写：check 工作树已拷 base / obs，状态重定向到 $OUT。
+export VUNA_BASE="$PWD/packages/base"
+export VUNA_OBS_PKG="$PWD/packages/obs"
+export VUNA_PKG_STATE="$OUT/state"
 : "${VUNA:?VUNA 未设置}"
 
 fail() {

@@ -21,6 +21,10 @@ fi
 OUT=$(CDPATH= cd -- "$OUT" && pwd)
 : "${VUNA:?VUNA 未设置}"
 
+# 依赖包状态目录必须可写：用 check 工作树里的 base，并把包状态重定向到 $OUT。
+export VUNA_BASE="$PWD/packages/base"
+export VUNA_PKG_STATE="$OUT/state"
+
 pkg=$OUT/pkg
 mkdir -p "$pkg/app"
 cat >"$pkg/vuna.toml" <<EOF
