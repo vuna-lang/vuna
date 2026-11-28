@@ -377,6 +377,34 @@ in
     script = ./native-codegen-growth.sh;
   };
 
+  # native codegen 的绝对预算：同一台机器上 native 与 OCaml 目标的 codegen 比值 ≤2×。
+  # 绝对秒数随编译器源码规模增长、不可跨机器比；比值可比，且能挡住「产物规模不变而
+  # 耗时数量级回退」（`native.inline` 的改写预算曾按路径复制成指数级）。
+  vuna-native-codegen-budget = vunaCheck {
+    name = "vuna-native-codegen-budget";
+    srcs = [
+      src.base
+      src.compiler
+      src.compilerBase
+      src.ir
+      src.targetOcaml
+      src.targetNative
+      src.targetWasm
+      src.dev
+      src.pluginWeb
+      src.obs
+      src.pluginKit
+      src.toolchain
+      src.cli
+      src.http
+      src.web
+      src.webCli
+      src.manifest
+    ];
+    nativeBuildInputs = e2eTools;
+    script = ./native-codegen-budget.sh;
+  };
+
   # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
   vuna-compiler-growth = vunaCheck {

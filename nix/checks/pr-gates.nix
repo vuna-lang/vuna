@@ -103,10 +103,12 @@ in
         "check:vuna-native-surface"
         "check:vuna-native-artifact"
         "check:vuna-native-codegen-growth"
+        "check:vuna-native-codegen-budget"
       ];
       perf = [
         "check:vuna-native-artifact"
         "check:vuna-native-codegen-growth"
+        "check:vuna-native-codegen-budget"
       ];
     };
 
