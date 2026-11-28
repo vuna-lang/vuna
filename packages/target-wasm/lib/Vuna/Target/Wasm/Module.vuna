@@ -2185,8 +2185,8 @@ depKeeps tbl n =
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
--- 每步之后的 scoped 校验（`psCheckAfter`）；失败信息带第一个出问题的 pass 名。
--- `WasmBuildDump` 只服务 `vuna dev ir dump --after wasm.<pass>`。
+-- 链首输入与每步之后的 scoped 校验（`psCheckBefore` / `psCheckAfter`）；失败信息带第一个
+-- 出问题的 pass 名。`WasmBuildDump` 只服务 `vuna dev ir dump --after wasm.<pass>`。
 export data WasmBuildResult(..) : Type where
   WasmBuildOutcome : WasmOutcome -> WasmBuildResult
   WasmBuildDump : List IrDef -> WasmBuildResult
@@ -2196,6 +2196,14 @@ withStageChecks stages k =
   case Passes.checkAfterAll stages of
     Err msg => WasmBuildOutcome (WasmRejected (WasmInternal msg))
     Ok _ => k 0
+
+-- | 链首输入的 before 校验（`psCheckBefore`）。`after(n-1)` 与 `before(n)` 是同一次遍历，
+-- 所以只有进入链之前的这份输入需要单独的 before 检查。
+withHeadCheck : List IrDef -> WasmBuildResult -> WasmBuildResult
+withHeadCheck head0 k =
+  case Passes.checkPassBefore Passes.wasmHostRewrite head0 of
+    Err msg => WasmBuildOutcome (WasmRejected (WasmInternal msg))
+    Ok _ => k
 
 export build : IrProgram -> Bool -> WasmOutcome
 build program printResult =
@@ -2323,18 +2331,20 @@ buildWith program printResult dump =
         Just "wasm.host-rewrite" => WasmBuildDump rewrittenAll
         Just "wasm.prune" => WasmBuildDump rewritten
         _ =>
-          withStageChecks [(Passes.wasmHostRewrite, rewrittenAll), (Passes.wasmPrune, rewritten)] (
-              \_ =>
-                if directable then
-                  buildAnf (append (map Synthetic.effCaseToLetDef rewritten) [pureKDef]) (Just entryClean) listFamM
-                else
-                  case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
-                    -- 直连路径不经 CPS：`Eff` 同样是 thunk，`case … of MkEff f` 也要降成 `let`。
-                    Ok cpsOrdered =>
-                      case dump of
-                        Just "wasm.cps" => WasmBuildDump cpsOrdered
-                        _ => withStageChecks [(Passes.wasmCps, cpsOrdered)] (\_ => buildAnf cpsOrdered (Just e) listFamM)
-                    Err msg => WasmBuildOutcome (WasmRejected (WasmUnsupported msg))
+          withHeadCheck defs (
+              withStageChecks [(Passes.wasmHostRewrite, rewrittenAll), (Passes.wasmPrune, rewritten)] (
+                  \_ =>
+                    if directable then
+                      buildAnf (append (map Synthetic.effCaseToLetDef rewritten) [pureKDef]) (Just entryClean) listFamM
+                    else
+                      case Passes.passSpan Passes.wasmCps (\_ => cpsDefsMachine ordered) of
+                        -- 直连路径不经 CPS：`Eff` 同样是 thunk，`case … of MkEff f` 也要降成 `let`。
+                        Ok cpsOrdered =>
+                          case dump of
+                            Just "wasm.cps" => WasmBuildDump cpsOrdered
+                            _ => withStageChecks [(Passes.wasmCps, cpsOrdered)] (\_ => buildAnf cpsOrdered (Just e) listFamM)
+                        Err msg => WasmBuildOutcome (WasmRejected (WasmUnsupported msg))
+                )
             )
 
 -- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。
