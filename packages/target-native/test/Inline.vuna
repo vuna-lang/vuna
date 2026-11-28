@@ -1,8 +1,9 @@
 -- `Native.Inline` 的单元测试：已知小函数调用点内联的边界。
 --
--- 锁六件事：小体 + 可重复求值实参 → 代进去且丢掉 `IrTail`；递归定义不内联；
+-- 锁七件事：小体 + 可重复求值实参 → 代进去且丢掉 `IrTail`；递归定义不内联；
 -- 会分配 / 有副作用的实参不内联；可重复求值的小表达式（加减 / 非零常量除法）内联、
--- 除零不内联；体超预算不内联；没有可内联点时定义表原样返回（changed=false）。
+-- 除零不内联；体超预算不内联；没有可内联点时定义表原样返回（changed=false）；
+-- 零参别名解析重复跑与跑一次等价。
 import Base
 import Base.Data.Int as Int
 import Base.Data.List as List
@@ -10,7 +11,9 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Base.Effect.Core
 import Vuna.Ir.Model
+import Vuna.Ir.Codec
 import Vuna.Target.Native.Inline
+import Vuna.Target.Native.Module
 import Base.Effect.Console
 import Base.Effect.Exit
 
@@ -267,7 +270,7 @@ problems : List String
 problems =
   filter
     (\s => s /= "")
-    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut), check "float let inlined" False (mentionsBinder 50 (bodyOf "useFloatOnce" floatOnceOut)), check "float let expr kept" True (mentionsRtApp "bi_mul_float" (bodyOf "useFloatOnce" floatOnceOut)), check "float twice kept" True (mentionsBinder 50 (bodyOf "useFloatTwice" floatTwiceOut)), check "float nested lambda kept" True (mentionsBinder 50 (bodyOf "useFloatNested" floatNestedOut)), check "int let kept" True (mentionsBinder 11 (bodyOf "useIntLet" floatIntOut)), check "tail if merged" True mergeOk]
+    [check "small call inlined" False (mentionsGlobal "inc" (bodyOf "useInc" (firstOf smallOut))), check "inlined tail stripped" False (hasTail (belowRoot (lamInner (bodyOf "useInc" (firstOf smallOut))))), check "changed flag" True (secondOf smallOut), check "recursive call kept" True (mentionsGlobal "loop" (bodyOf "useLoop" (firstOf recOut))), check "recursive changed flag" False (secondOf recOut), check "non-trivial arg kept" True (mentionsGlobal "inc" (bodyOf "useHard" (firstOf hardOut))), check "cheap arg inlined" False (mentionsGlobal "inc" (bodyOf "useCheap" (firstOf cheapOut))), check "div arg inlined" False (mentionsGlobal "inc" (bodyOf "useDiv" (firstOf divOut))), check "zero-div arg kept" True (mentionsGlobal "inc" (bodyOf "useZeroDiv" (firstOf zeroDivOut))), check "big body kept" True (mentionsGlobal "big" (bodyOf "useBig" (firstOf bigOut))), check "no inline point unchanged" False (secondOf sameOut), check "float let inlined" False (mentionsBinder 50 (bodyOf "useFloatOnce" floatOnceOut)), check "float let expr kept" True (mentionsRtApp "bi_mul_float" (bodyOf "useFloatOnce" floatOnceOut)), check "float twice kept" True (mentionsBinder 50 (bodyOf "useFloatTwice" floatTwiceOut)), check "float nested lambda kept" True (mentionsBinder 50 (bodyOf "useFloatNested" floatNestedOut)), check "int let kept" True (mentionsBinder 11 (bodyOf "useIntLet" floatIntOut)), check "tail if merged" True mergeOk, check "alias applied" True aliasApplied, check "alias idempotent" True aliasIdempotent]
 
 bodyOf : String -> List IrDef -> Ir
 bodyOf _ [] = IrInt 0
@@ -385,3 +388,41 @@ mergeOk =
         IrLet _ scrut _ => containsIf scrut
         _ => False
     _ => False
+
+-- ---------------------------------------------------------------
+-- 零参别名解析（`Native.Module.resolveAliasDefs`）：对合法输入重复跑与跑一次等价
+-- ---------------------------------------------------------------
+-- `Nat.plus = natAdd` 的形状：零参定义体是运行时叶子 `IrRt`。
+aliasTargetDef : IrDef
+aliasTargetDef = IrDef "natAddAlias" 0 [] Nothing (IrRt "natAdd") False False Nothing
+
+-- 应用位置上的别名：`f x = natAddAlias x x`。
+aliasUseDef : IrDef
+aliasUseDef =
+  IrDef
+    "f"
+    1
+    []
+    Nothing
+    (IrLam [xBinder] Nothing (IrTail (IrApp Nothing (IrApp Nothing (IrGlobal "natAddAlias") (IrVar xBinder)) (IrVar xBinder))))
+    True
+    False
+    Nothing
+
+aliasSampleDefs : List IrDef
+aliasSampleDefs = [aliasTargetDef, aliasUseDef]
+
+aliasOnce : List IrDef
+aliasOnce = resolveAliasDefs aliasSampleDefs
+
+-- 同一 IR ⇒ 同一串规范编码（`IrDef` 没有 `Eq`，与 `vuna dev ir dump` 的文本口径一致）。
+aliasEncoded : List IrDef -> String
+aliasEncoded ds = encodeUnit (IrUnit [] [IrGroup False ds] False [] Nothing)
+
+aliasIdempotent : Bool
+aliasIdempotent = aliasEncoded (resolveAliasDefs aliasOnce) == aliasEncoded aliasOnce
+
+aliasApplied : Bool
+aliasApplied =
+  mentionsRtApp "natAdd" (bodyOf "f" aliasOnce)
+    && not (mentionsGlobal "natAddAlias" (bodyOf "f" aliasOnce))
