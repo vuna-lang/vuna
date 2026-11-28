@@ -1,0 +1,8 @@
+-- 嵌套模式 alt 少写构造子字段：诊断指回源模式并给出缺失字段。
+data E : Type where
+  V : String -> Int -> E
+  A : E -> List E -> Int -> E
+
+f : E -> Int
+f (A (V "->" _) (dom :: cod :: rest)) = 1
+f _ = 0
