@@ -8,7 +8,9 @@ import Vuna.Compiler.Base.Common
 import Vuna.Target.Ocaml.Decl
 import Vuna.Target.Ocaml.Render
 import Vuna.Target.Ocaml.Term
+import Vuna.Target.Native.Module as NativeModule
 import Vuna.Target.Native.Repr
+import Vuna.Target.Wasm.Module as WasmModule
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Ir.Anf
@@ -54,16 +56,13 @@ decodeIrFile path =
 -- | `--only <pass>...`：整条机器链照常跑，只打印点名 pass 之后的定义文本。
 -- 不跳过任何 pass；名字来自 `Ir.Passes`（未知名字在输出里显式报错）。
 dumpOnly : List String -> IrProgram -> Check String
-dumpOnly names program =
-  let
-    defs = concatMap irGroupDefs program.irProgUnit.irUnitGroups
-  in OkC (joinWith "\n\n" (map (dumpOnePass defs) names))
+dumpOnly names program = OkC (joinWith "\n\n" (map (dumpOnePass program) names))
 
-dumpOnePass : List IrDef -> String -> String
-dumpOnePass defs name =
-  case cpsMachineAfter name defs of
-    Err msg => "== ${name} ==\nMACHINE ERROR: ${msg}"
-    Ok ds => "== ${name} ==\n${renderDefs ds}"
+dumpOnePass : IrProgram -> String -> String
+dumpOnePass program name =
+  case dumpAfter name program of
+    OkC text => "== ${name} ==\n${text}"
+    ErrC e => "== ${name} ==\nERROR: ${diagText e}"
 
 dumpAfter : String -> IrProgram -> Check String
 dumpAfter "cps" program = dumpCps program
@@ -74,7 +73,23 @@ dumpAfter "ocaml" program = dumpOcaml program
 dumpAfter "repr" program = dumpRepr "raw" program
 dumpAfter "repr-cps" program = dumpReprCps program
 dumpAfter name program =
-  if startsWith "ir." name then dumpIrPass name program else OkC (renderProgram program)
+  if startsWith "ir." name then
+    dumpIrPass name program
+  else if startsWith "native." name then
+    dumpNativePass name program
+  else if startsWith "wasm." name then dumpWasmPass name program else OkC (renderProgram program)
+
+dumpNativePass : String -> IrProgram -> Check String
+dumpNativePass name program =
+  case NativeModule.buildDump program name of
+    Just ds => OkC (renderDefs ds)
+    Nothing => OkC ("unknown pass: ${name}")
+
+dumpWasmPass : String -> IrProgram -> Check String
+dumpWasmPass name program =
+  case WasmModule.buildDump program name of
+    Just ds => OkC (renderDefs ds)
+    Nothing => OkC ("unknown pass: ${name}")
 
 -- IR 机器链的中间步骤：`--after ir.machine.handlers` 等，名字来自 `Ir.Passes`。
 dumpIrPass : String -> IrProgram -> Check String

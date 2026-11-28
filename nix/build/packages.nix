@@ -164,6 +164,7 @@ let
       "target-ocaml"
       "compiler"
       "target-native"
+      "target-wasm"
       "toolchain"
       "dev"
     ];
