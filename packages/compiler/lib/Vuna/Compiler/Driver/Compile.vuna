@@ -901,7 +901,7 @@ ifaceModsWithEff ctx pkgs =
       _ <- pure (log! "info" "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms assign=direct")
       _ <- obsMarkEff "vuna.iface.compute"
       let
-        nodes = ifaceNodesOf assigned
+        nodes = ifaceGraphOf assigned
         stats = graphStats nodes
         _ = log! "info" "iface-graph nodes=${strFromInt stats.gsNodes} edges=${strFromInt stats.gsEdges} ext=${strFromInt stats.gsExternal}"
       in pure assigned

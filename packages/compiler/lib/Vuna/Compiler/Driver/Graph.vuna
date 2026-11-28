@@ -8,6 +8,7 @@ module Vuna.Compiler.Driver.Graph where
 import Base.Data.List as List
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Loader.Closure
 
 export data NodeKind(..) : Type where
@@ -21,14 +22,32 @@ export record GraphNode(..) where
   gnDeps : List String
   gnCost : Int
 
--- | 模块接口节点：key 是接口地址，依赖是每个 import 的接口地址；闭包外的名字保留成
--- `ext:<name>` 哨兵（不阻塞调度，但观测里能看出缺口）。
+-- | 模块接口节点：key 是接口地址，依赖是**自身源摘要节点** + 每个 import 的接口地址；
+-- 闭包外的名字保留成 `ext:<name>` 哨兵（不阻塞调度，但观测里能看出缺口）。
 export ifaceNodesOf : List ClosureMod -> List GraphNode
 ifaceNodesOf mods = map (ifaceNodeOf mods) mods
 
 ifaceNodeOf : List ClosureMod -> ClosureMod -> GraphNode
 ifaceNodeOf mods m =
-  GraphNode m.cmAddr NodeIface (map (ifaceDepKey mods) m.cmImports) (1 + length m.cmImports)
+  GraphNode
+    m.cmAddr
+    NodeIface
+    (sourceKeyOf m :: map (ifaceDepKey mods) m.cmImports)
+    (1 + length m.cmImports)
+
+-- | 源摘要节点：key 由包身份 + 模块名 + 63-bit 内容键决定；接口节点依赖它。
+export sourceNodesOf : List ClosureMod -> List GraphNode
+sourceNodesOf mods = map sourceNodeOf mods
+
+sourceNodeOf : ClosureMod -> GraphNode
+sourceNodeOf m = GraphNode (sourceKeyOf m) NodeSource [] 1
+
+export sourceKeyOf : ClosureMod -> String
+sourceKeyOf m = addrOf ["source", m.cmPkgKey, m.cmName, strFromInt m.cmKey]
+
+-- | 源节点 + 接口节点的完整两级图。
+export ifaceGraphOf : List ClosureMod -> List GraphNode
+ifaceGraphOf mods = append (sourceNodesOf mods) (ifaceNodesOf mods)
 
 ifaceDepKey : List ClosureMod -> String -> String
 ifaceDepKey mods name =
