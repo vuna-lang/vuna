@@ -949,7 +949,11 @@ hasUnsolvedMetaValueFuel fuel sols v =
       -- tele 只有字段名 / multiplicity，不携带值；底座的 lambda 闭包体由值扫描下钻。
       VProj base c i fi n => hasUnsolvedMetaValueFuel (fuel - 1) sols base
       VIf c th el => hasUnsolvedMetaValueFuel (fuel - 1) sols c || hasUnsolvedMetaValueFuel (fuel - 1) sols th || hasUnsolvedMetaValueFuel (fuel - 1) sols el
-      _ => False
+      VType l => False
+      VInt n => False
+      VStr s => False
+      VBool b => False
+      VFloat d => False
 
 export hasUnsolvedMetaList : Sols -> List Value -> Bool
 hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel metaScanBound sols vs
