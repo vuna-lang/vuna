@@ -92,7 +92,8 @@ execute : Flags -> IrProgram -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp,
 execute f program =
   do
     _ <- ensureDirPath 256 f.flagOut
-    case build program f.flagPrint of
+    fullChecks <- stageChecksWanted
+    case buildWith fullChecks program f.flagPrint of
       NativeRejected err => failWith f [nativeErrDiag err]
       NativeOk m =>
         let
@@ -102,6 +103,13 @@ execute f program =
           _ <- writeFileList f (map firstOf files)
           _ <- writeDiagnostics f []
           pure 0
+
+-- | `VUNA_STAGE_CHECK=all` 时每步之后都跑 scoped 校验；缺省只校验首末两步。
+stageChecksWanted : Member nEnv EnvOp r => Eff r Bool
+stageChecksWanted =
+  do
+    mode <- envGetEnv "VUNA_STAGE_CHECK"
+    pure (mode == "all")
 
 -- | 写诊断回传文件（错误路径退出 2）。
 failWith : Flags -> List Diagnostic -> Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int

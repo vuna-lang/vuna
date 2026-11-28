@@ -106,6 +106,27 @@ nativeAliasAgain = PassSpec "native.alias.again" "native" "fold" False True True
 export nativeFloatLets : PassSpec
 nativeFloatLets = PassSpec "native.float-lets" "native" "fold" False True True
 
+-- | 可达性收尾（`allocatingDefNames` / `defsUseThread`）：也是整程序遍历，但不在变换链里。
+export nativeReach : PassSpec
+nativeReach = PassSpec "native.reach" "native" "prune" False False True
+
+-- | 形参区间不动点（整程序多轮），链尾但只能靠 span 归因。
+export nativeParams : PassSpec
+nativeParams = PassSpec "native.params" "native" "fold" False False True
+
+-- | pass 之间的作用域校验（`Passes.checkAfterAll`）。默认只校验首末两步，全量由
+--   `VUNA_STAGE_CHECK=all` 打开，用于 CI 与排查。
+export nativeValidate : PassSpec
+nativeValidate = PassSpec "native.validate" "native" "mark" False False True
+
+-- | 代码发射（`genDefs` → `NativeFunc` 列表）。
+export nativeEmit : PassSpec
+nativeEmit = PassSpec "native.emit" "native" "lower" False False True
+
+-- | 入口装配（`initNeeds` / `cafOrderOf` / 运行时函数裁剪）。
+export nativeInit : PassSpec
+nativeInit = PassSpec "native.init" "native" "prune" False False True
+
 export nativePasses : List PassSpec
 nativePasses =
   [
@@ -124,7 +145,12 @@ nativePasses =
     nativeFoldAffine,
     nativePrune,
     nativeAliasAgain,
-    nativeFloatLets
+    nativeFloatLets,
+    nativeReach,
+    nativeParams,
+    nativeValidate,
+    nativeEmit,
+    nativeInit
   ]
 
 -- ---------------------------------------------------------------
@@ -180,3 +206,16 @@ checkAfterAll ((spec, ds) :: rest) =
   case checkPassAfter spec ds of
     Err msg => Err msg
     Ok _ => checkAfterAll rest
+
+-- | 按模式挑出要校验的步骤：`full` 为真取全部，否则只取首末两项。
+export selectStages : Bool -> List (PassSpec, List IrDef) -> List (PassSpec, List IrDef)
+selectStages full stages =
+  if full then
+    stages
+  else
+    case stages of
+      [] => []
+      first :: rest => first :: takeLast 1 rest
+
+takeLast : Int -> List a -> List a
+takeLast n xs = List.take n (List.reverse xs)
