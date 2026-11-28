@@ -1,0 +1,49 @@
+-- C37 元变量段号：只由模块名升序后的名次决定，接口 / worker 的顺序不影响编号。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.Dt
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <- consolePrint ("dep segments failed: " ++ join ", " xs ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "order-independent" orderIndependentOk,
+    Pair "slot-values" slotValuesOk,
+    Pair "duplicate-rejected" duplicateRejectedOk
+  ]
+
+orderIndependentOk : Bool
+orderIndependentOk =
+  case depSlotsOf ["b", "a", "c"] of
+    OkC a =>
+      case depSlotsOf ["c", "b", "a"] of
+        OkC b => a == b
+        ErrC _ => False
+    ErrC _ => False
+
+slotValuesOk : Bool
+slotValuesOk =
+  case depSlotsOf ["b", "a", "c"] of
+    OkC slots => slots == [("a", 0), ("b", 1), ("c", 2)]
+    ErrC _ => False
+
+duplicateRejectedOk : Bool
+duplicateRejectedOk =
+  case depSlotsOf ["a", "a"] of
+    OkC _ => False
+    ErrC _ => True

@@ -1201,12 +1201,20 @@ dedupGlobals gs = dedupKeepLast (\g => firstOf g) gs
 -- 未解洞报错）。移位失败（项深超 codegen guard）⇒ 内部错误，不静默用未移位的项。
 shiftedDepPrograms : List ModuleIface -> Check (List CachedProgram)
 shiftedDepPrograms ifaces =
+  case depSlotsOf (map miNameOf ifaces) of
+    ErrC e => ErrC e
+    OkC tbl => shiftedDepProgramsGo tbl ifaces
+
+-- | 依赖模块的元变量段号（C37）：只由**模块名升序后的名次**决定，输入列表顺序
+-- 不影响任何编号；重名意味着两个模块抢同一段，直接按内部错误拒绝。
+export depSlotsOf : List String -> Check (List (String, Int))
+depSlotsOf names0 =
   let
-    names = dedupSortedNames (sortNames (map miNameOf ifaces))
-  in if length names /= length ifaces then
+    names = dedupSortedNames (sortNames names0)
+  in if length names /= length names0 then
     icInternal "iface: duplicate dependency module name"
   else
-    shiftedDepProgramsGo (nameSlotTbl names 0) ifaces
+    OkC (nameSlotTbl names 0)
 
 -- 模块名排序（`Base.Data.Sort.sortBy`：已有序输入直接返回，稳定升序）。
 -- 字符串升序（稳定）：与 `Driver/Compile` 的同名函数收敛到 `Base.Data.Sort.sortBy`。
