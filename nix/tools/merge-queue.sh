@@ -5,7 +5,7 @@
 #   nix/tools/merge-queue.sh status [branch]
 #   nix/tools/merge-queue.sh enqueue <pr> [--jump]
 #   nix/tools/merge-queue.sh dequeue <pr>
-#   nix/tools/merge-queue.sh wait <pr> [timeout-seconds]
+#   nix/tools/merge-queue.sh wait <pr> [timeout-seconds] [interval-seconds]
 #   nix/tools/merge-queue.sh arm <pr>
 #   nix/tools/merge-queue.sh disarm <pr>
 #   nix/tools/merge-queue.sh sweep [--dry-run] [<pr>...]
@@ -16,7 +16,11 @@
 # stack 的 arm/disarm 用 includeStack 覆盖整条；入队走 REST merge-async（GraphQL 没有
 # stack 参数）。sweep 补 enqueue：GitHub 回归（community#209348）后，已 arm 的 PR 在
 # required checks 变绿时不会自动进入规则集合并队列，需要外部再调用一次 enqueue。
-# wait 会阻塞轮询，适合明确要等结果的终端会话；agent 会话 arm 完即可退出。
+# wait 只读轮询，遇到**无法自行推进**的状态立即退出，避免后台守候永不结束：
+#   0 已合并 / 1 关闭未合并 / 2 冲突 / 3 检查失败 / 4 changes requested
+#   5 被移出合并队列 / 6 draft / 7 未 arm（宽限期后）/ 8 hold 标签 / 124 超时
+# 不 rebase、不 force push、不改分支；BEHIND 与 pending checks 继续等。
+# agent 用它在后台守候，不要另写 sleep 循环。
 # shellcheck disable=SC2016
 set -euo pipefail
 
@@ -27,7 +31,9 @@ usage: merge-queue.sh <command> [args]
   status [branch]            查看队列（默认 main）
   enqueue <pr> [--jump]      手动入队；--jump 插到队首（会重建后面的组）
   dequeue <pr>               移出队列
-  wait <pr> [timeout]        等待合并 / 被移除，默认 1800 秒
+  wait <pr> [timeout] [interval]
+                             守候到合并或无法推进的状态；默认 1800 秒、10 秒轮询
+                             退出码 0/1/2/3/4/5/6/7/8/124（见文件头）
   arm <pr>                   arm auto-merge；stack 用 includeStack 覆盖整条
   disarm <pr>                关闭 auto-merge；stack 用 includeStack 覆盖整条
   sweep [--dry-run] [<pr>...] 把已 arm 且可合并的 PR 补入队列（默认扫全部 open）
@@ -69,6 +75,10 @@ pr_state() {
           isInMergeQueue
           isMergeQueueEnabled
           mergeStateStatus
+          mergeable
+          reviewDecision
+          mergeCommit { oid }
+          commits(last:1) { nodes { commit { statusCheckRollup { state } } } }
           labels(first:50) { nodes { name } }
           stack {
             number
@@ -404,33 +414,94 @@ case "$cmd" in
     require_number "$pr"
     timeout="${2:-1800}"
     require_number "$timeout"
+    interval="${3:-10}"
+    require_number "$interval"
+    arm_grace="${PR_WATCH_ARM_GRACE:-60}"
+    require_number "$arm_grace"
     deadline=$(( $(date +%s) + timeout ))
+    arm_deadline=""
+    was_queued=false
+    last_note=""
+    note() {
+      # 同一条提示只在内容变化时打印，避免 10 秒一行把日志刷满；空串只清掉上一条。
+      [ -n "$1" ] || { last_note=""; return 0; }
+      [ "$1" = "$last_note" ] && return 0
+      last_note="$1"
+      printf '  %s\n' "$1"
+    }
+    finish() {
+      # $1 = 退出码, $2 = 诊断（空则不打印）
+      [ -n "$2" ] && printf 'merge-queue: %s\n' "$2" >&2
+      exit "$1"
+    }
     while :; do
-      json=$(pr_state "$pr")
-      state=$(jq -r '.data.repository.pullRequest.state' <<<"$json")
-      merged=$(jq -r '.data.repository.pullRequest.mergedAt // empty' <<<"$json")
-      if [ -n "$merged" ] || [ "$state" = "MERGED" ]; then
-        echo "merge-queue: PR #$pr 已合并"
+      if ! json=$(pr_state "$pr" 2>/dev/null); then
+        printf '%s gh 查询失败，%ss 后重试\n' "$(date -u +%H:%M:%S)" "$interval" >&2
+        sleep "$interval"
+        continue
+      fi
+      state=$(jq -r '.data.repository.pullRequest.state // "UNKNOWN"' <<<"$json")
+      merged_at=$(jq -r '.data.repository.pullRequest.mergedAt // empty' <<<"$json")
+      if [ -n "$merged_at" ] || [ "$state" = "MERGED" ]; then
+        oid=$(jq -r '.data.repository.pullRequest.mergeCommit.oid // "?"' <<<"$json")
+        echo "merge-queue: PR #$pr 已合并（${oid}）"
         exit 0
       fi
-      if [ "$state" = "CLOSED" ]; then
-        echo "merge-queue: PR #$pr 已关闭（未合并）" >&2
-        exit 1
-      fi
+      [ "$state" = "CLOSED" ] && finish 1 "PR #$pr 已关闭（未合并）"
+
+      merge_state=$(jq -r '.data.repository.pullRequest.mergeStateStatus // "-"' <<<"$json")
+      mergeable=$(jq -r '.data.repository.pullRequest.mergeable // "UNKNOWN"' <<<"$json")
+      review=$(jq -r '.data.repository.pullRequest.reviewDecision // "NONE"' <<<"$json")
+      checks=$(jq -r '.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.state // "NONE"' <<<"$json")
       in_queue=$(jq -r '.data.repository.pullRequest.isInMergeQueue // false' <<<"$json")
-      if [ "$in_queue" != "true" ]; then
-        echo "merge-queue: PR #$pr 不在队列中（可能已被移除）" >&2
-        exit 1
-      fi
+      armed=$(jq -r 'if .data.repository.pullRequest.autoMergeRequest == null then "false" else "true" end' <<<"$json")
+      draft=$(jq -r '.data.repository.pullRequest.isDraft // false' <<<"$json")
+      holds=$(jq -r '[.data.repository.pullRequest.labels.nodes[].name | select(. == "blocked" or . == "needs-info" or . == "wontfix")] | join(",")' <<<"$json")
       pos=$(jq -r '.data.repository.pullRequest.mergeQueueEntry.position // "-"' <<<"$json")
       qstate=$(jq -r '.data.repository.pullRequest.mergeQueueEntry.state // "-"' <<<"$json")
       eta=$(jq -r '.data.repository.pullRequest.mergeQueueEntry.estimatedTimeToMerge // "-"' <<<"$json")
-      printf '%s position=%s state=%s eta=%s\n' "$(date -u +%H:%M:%S)" "$pos" "$qstate" "$eta"
+      printf '%s pr=#%s state=%s merge=%s checks=%s review=%s armed=%s queue=%s pos=%s eta=%s\n' \
+        "$(date -u +%H:%M:%S)" "$pr" "$state" "$merge_state" "$checks" "$review" "$armed" "$in_queue" "$pos" "$eta"
+
+      # 无法自行推进的状态：立即退出，让调用方（agent）能继续。
+      [ -n "$holds" ] && finish 8 "PR #$pr 带 hold 标签（${holds}）：解除后再守候"
+      [ "$draft" = "true" ] && finish 6 "PR #$pr 是 draft：转 ready for review 后再守候"
+      [ "$mergeable" = "CONFLICTING" ] && finish 2 "PR #$pr 与 main 冲突：需要人工 rebase"
+      [ "$merge_state" = "DIRTY" ] && finish 2 "PR #$pr 与 main 冲突（DIRTY）：需要人工 rebase"
+      case "$checks" in
+        FAILURE | ERROR) finish 3 "PR #$pr 有检查失败：修好后重新 arm" ;;
+      esac
+      [ "$review" = "CHANGES_REQUESTED" ] && finish 4 "PR #$pr 被要求修改：处理后重新 arm"
+      if [ "$was_queued" = "true" ] && [ "$in_queue" != "true" ]; then
+        finish 5 "PR #$pr 已被移出合并队列（可能检查失败或超时）：修好后重新 arm / sweep"
+      fi
+      [ "$in_queue" = "true" ] && was_queued=true
+
+      if [ "$armed" != "true" ] && [ "$in_queue" != "true" ]; then
+        [ -z "$arm_deadline" ] && arm_deadline=$(( $(date +%s) + arm_grace ))
+        if [ "$(date +%s)" -ge "$arm_deadline" ]; then
+          finish 7 "PR #$pr 未 arm 且不在队列：nix/tools/merge-queue.sh arm $pr"
+        fi
+        note "尚未 arm：${arm_grace}s 内未恢复则退出（nix/tools/merge-queue.sh arm $pr）"
+      else
+        arm_deadline=""
+      fi
+
+      if [ "$merge_state" = "BEHIND" ]; then
+        note "落后 main：合并队列会在最新 main 上重跑，不需要 rebase"
+      elif [ "$merge_state" = "UNSTABLE" ]; then
+        note "有非必需检查未通过：等待必需检查结果"
+      elif [ "$in_queue" != "true" ] && [ "$armed" = "true" ] && [ "$merge_state" = "CLEAN" ]; then
+        note "已 arm 且 CLEAN：等待 sweep 入队（GitHub 不会总是自动入队）"
+      else
+        note ""
+      fi
+
       if [ "$(date +%s)" -ge "$deadline" ]; then
         echo "merge-queue: 等待 PR #$pr 超时（${timeout}s）" >&2
         exit 124
       fi
-      sleep 10
+      sleep "$interval"
     done
     ;;
 
