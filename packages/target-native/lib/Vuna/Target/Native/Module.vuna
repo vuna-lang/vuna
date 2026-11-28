@@ -26,6 +26,7 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Base.Common
 import Vuna.Ir.Model
 import Vuna.Ir.Kinds as Kinds
 import Vuna.Ir.Passes
@@ -3936,30 +3937,86 @@ funcsScratchAccess funcs = foldl (\acc, f => acc || funcScratchAccess f) False f
 funcsWithLabelIn : List NativeFunc -> List String -> List NativeFunc
 funcsWithLabelIn funcs known = filter (\f => memName (nativeFuncLabelOf f) known) funcs
 
--- | 从种子标签出发，沿指令里的标签引用做不动点；每轮至少多一个函数标签，
--- 因此轮数以函数个数为界（`fuel` 再留一格）。
-reachFuncLabelsFuel : Int -> List NativeFunc -> List String -> List String
-reachFuncLabelsFuel fuel funcs known =
-  if fuel <= 0 then
-    known
-  else
-    let
-      refs = concatMap funcLabelRefs (funcsWithLabelIn funcs known)
-      next = nubNames (append known refs)
-    in if length next == length known then known else reachFuncLabelsFuel (fuel - 1) funcs next
+-- | 函数标签 -> 函数体（标签唯一，一次建表）。
+labelTblOf : List NativeFunc -> HashMap String NativeFunc
+labelTblOf funcs =
+  HashMap.insertAll (map (\f => (nativeFuncLabelOf f, f)) funcs) (HashMap.fromList [])
 
+-- | 从种子标签出发，沿指令里的标签引用做闭包：一次建表 + 逐项 `member`，
+-- 每个函数体只展开一次。预算 = 种子数 + 标签引用边数（每个名字最多入栈一次）。
 export reachFuncLabels : List NativeFunc -> List String -> List String
-reachFuncLabels funcs seeds = reachFuncLabelsFuel (length funcs + 2) funcs (nubNames seeds)
-
--- | `l` 能否沿 `call` 边（再沿普通引用展开）回到自己。
-reachesItself : List NativeFunc -> String -> Bool
-reachesItself funcs l =
+reachFuncLabels funcs seeds =
   let
-    seeds = concatMap funcCallRefs (funcsWithLabelIn funcs [l])
-  in memName l (reachFuncLabels funcs seeds)
+    tbl = labelTblOf funcs
+    budget = 8 + length seeds + refEdgeCount funcs
+  in reverse (closeLabels budget tbl (HashMap.fromList []) [] seeds)
 
+refEdgeCount : List NativeFunc -> Int
+refEdgeCount funcs = foldl (\acc, f => acc + length (funcLabelRefs f)) 0 funcs
+
+closeLabels : Int -> HashMap String NativeFunc -> HashMap String Bool -> List String -> List String -> List String
+closeLabels fuel tbl seen acc work =
+  if fuel <= 0 then
+    acc
+  else
+    case work of
+      [] => acc
+      n :: rest =>
+        if HashMap.member n seen then
+          closeLabels (fuel - 1) tbl seen acc rest
+        else
+          case HashMap.lookup n tbl of
+            Nothing => closeLabels (fuel - 1) tbl (HashMap.insert n True seen) (n :: acc) rest
+            Just f => closeLabels (fuel - 1) tbl (HashMap.insert n True seen) (n :: acc) (append (funcLabelRefs f) rest)
+
+-- | 可达集合里是否存在 `call` 环：在**引用图**上按 SCC 判定一次。
+--   判据与「逐个标签做闭包再查自己」等价：`call` 边 `u -> v` 成立当且仅当 `v`
+--   沿引用边能回到 `u`，也就是两者同属一个 SCC。
 hasCallCycle : List NativeFunc -> List String -> Bool
-hasCallCycle funcs labels = foldl (\acc, l => acc || reachesItself funcs l) False labels
+hasCallCycle funcs labels =
+  let
+    names = map nativeFuncLabelOf funcs
+    groups =
+      case Analysis.groupNames (map (\f => (nativeFuncLabelOf f, funcLabelRefs f)) funcs) names of
+        ErrC _ => []
+        OkC gs => gs
+  in case groups of
+    [] => False
+    _ =>
+      let
+        grpTbl = groupIndexTbl groups 0 (HashMap.fromList [])
+        liveSet = HashMap.ofNames labels
+      in callCycleIn funcs grpTbl liveSet
+
+groupIndexTbl : List (List String) -> Int -> HashMap String Int -> HashMap String Int
+groupIndexTbl [] _ tbl = tbl
+groupIndexTbl (g :: rest) i tbl = groupIndexTbl rest (i + 1) (insertGroupMembers g i tbl)
+
+insertGroupMembers : List String -> Int -> HashMap String Int -> HashMap String Int
+insertGroupMembers [] _ tbl = tbl
+insertGroupMembers (n :: rest) i tbl = insertGroupMembers rest i (HashMap.insert n i tbl)
+
+callCycleIn : List NativeFunc -> HashMap String Int -> HashMap String Bool -> Bool
+callCycleIn funcs grpTbl liveSet =
+  foldl (\acc, f => acc || liveCallCycle f grpTbl liveSet) False funcs
+
+liveCallCycle : NativeFunc -> HashMap String Int -> HashMap String Bool -> Bool
+liveCallCycle f grpTbl liveSet =
+  HashMap.member (nativeFuncLabelOf f) liveSet
+    && callEdgeInGroup (nativeFuncLabelOf f) grpTbl (funcCallRefs f)
+
+callEdgeInGroup : String -> HashMap String Int -> List String -> Bool
+callEdgeInGroup from grpTbl targets =
+  case HashMap.lookup from grpTbl of
+    Nothing => False
+    Just gi => memGroup gi targets grpTbl
+
+memGroup : Int -> List String -> HashMap String Int -> Bool
+memGroup _ [] _ = False
+memGroup gi (t :: rest) grpTbl =
+  case HashMap.lookup t grpTbl of
+    Just g => g == gi || memGroup gi rest grpTbl
+    Nothing => memGroup gi rest grpTbl
 
 -- | 直接碰堆指针（内联 bump）也算分配。
 touchesHeapPtr : NativeFunc -> Bool
@@ -4355,14 +4412,22 @@ nativeBridgeFuncs lfM fams =
 -- -----------------------------------------------------------
 -- 每步之后的 scoped 校验（`psCheckAfter`）。校验在链尾统一跑：值都已求出，
 -- 失败信息仍带第一个出问题的 pass 名；codegen 在 thunk 里，校验不过就不生成。
-withStageChecks : List (PassSpec, List IrDef) -> (Int -> NativeOutcome) -> NativeOutcome
-withStageChecks stages k =
-  case Passes.checkAfterAll stages of
+--
+-- 缺省只校验首步与末步：全量校验是每个快照一次全程序遍历，与 pass 本身同阶。
+-- `VUNA_STAGE_CHECK=all` 打开全量（CI 与排查用）。
+withStageChecks : Bool -> List (PassSpec, List IrDef) -> (Int -> NativeOutcome) -> NativeOutcome
+withStageChecks fullChecks stages k =
+  case Passes.passSpan Passes.nativeValidate (\_ => Passes.checkAfterAll (Passes.selectStages fullChecks stages)) of
     Err msg => NativeRejected (NativeUnsupported msg)
     Ok _ => k 0
 
 export build : IrProgram -> Bool -> NativeOutcome
-build program printResult =
+build program printResult = buildWith False program printResult
+
+-- | 带校验模式入口：`fullChecks` 为真时每步之后都跑 scoped 校验
+-- （`VUNA_STAGE_CHECK=all`），否则只校验首末两步。
+export buildWith : Bool -> IrProgram -> Bool -> NativeOutcome
+buildWith fullChecks program printResult =
   let
     unit = irProgUnitOf program
     defs = concatMap irGroupDefs unit.irUnitGroups
@@ -4439,17 +4504,17 @@ build program printResult =
                       cpsAliased = Passes.passSpan Passes.nativeAliasAgain (\_ => map (resolveDefAliases cpsOrdered) cpsOrdered)
                       -- Float `let` 代进唯一使用点，让浮点表达式树跨过绑定、只装盒一次。
                       cpsFloatLets = Passes.passSpan Passes.nativeFloatLets (\_ => Inline.inlineFloatLetsDefs cpsAliased)
-                      pools = modulePools cpsOrdered
+                      pools = Passes.passSpan Passes.nativeReach (\_ => modulePools cpsOrdered)
                       fpools = moduleFloatPools cpsOrdered
                       allocs = allocatingDefNames cpsAliased
                       threaded = defsUseThread cpsFloatLets
                       -- 形参区间：整程序不动点（调用点常量 + 自调用实参），给
                       -- `Module` 的溢出 / 归一化判据补上循环形参的事实。
-                      pfacts = Params.paramFactsOf cpsFloatLets
+                      pfacts = Passes.passSpan Passes.nativeParams (\_ => Params.paramFactsOf cpsFloatLets)
                       stages = [(Passes.nativeCps, cps0), (Passes.nativeSpecialize, cpsSpecialized), (Passes.nativeLsr, cpsLsr), (Passes.nativeInline, firstOf inlinedOnce), (Passes.nativeInlineAgain, firstOf inlined), (Passes.nativeLetFloat, cpsFloated), (Passes.nativeCse, cpsCse), (Passes.nativeInlineTail, firstOf tailInlined), (Passes.nativeSimplify, cps1), (Passes.nativeMergeTailIf, cpsMerged), (Passes.nativeAlias, cpsAlias0), (Passes.nativeFoldNatSums, firstOf sumP), (Passes.nativeFoldAffine, cpsAcc), (Passes.nativePrune, cpsOrdered), (Passes.nativeAliasAgain, cpsAliased), (Passes.nativeFloatLets, cpsFloatLets)]
-                    in withStageChecks stages (
+                    in withStageChecks fullChecks stages (
                         \_ =>
-                          case genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] [] of
+                          case Passes.passSpan Passes.nativeEmit (\_ => genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] []) of
                             NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
                             NOk pair =>
                               let
@@ -4465,7 +4530,7 @@ build program printResult =
                                     "float" => ["rt_print_str"]
                                     _ => ["rt_print_int"]
                                 renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
-                                needs = initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds)
+                                needs = Passes.passSpan Passes.nativeInit (\_ => initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds))
                                 start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
                                 -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
                                 -- init_* / env 解析 / 文件 / spawn 等不再进二进制。

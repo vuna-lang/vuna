@@ -118,5 +118,10 @@ expectedNativeOrder =
     "native.fold-affine",
     "native.prune",
     "native.alias.again",
-    "native.float-lets"
+    "native.float-lets",
+    "native.reach",
+    "native.params",
+    "native.validate",
+    "native.emit",
+    "native.init"
   ]
