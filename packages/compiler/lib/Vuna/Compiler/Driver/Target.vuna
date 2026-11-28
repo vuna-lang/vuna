@@ -169,7 +169,10 @@ runBackend target bin irText printResult outDir =
     payload <- if hasDiag then fsReadFile (diagPathOf outDir target) else pure ""
     hasFiles <- fsFileExists (filesPathOf outDir target)
     filesPayload <- if hasFiles then fsReadFile (filesPathOf outDir target) else pure ""
-    _ <- fsRemoveFile (irPathOf outDir target)
+    -- `VUNA_KEEP_PLUGIN_IR` 非空时保留载荷：后端插件的 pass 链可以脱离整条编译命令单独重跑
+    -- （`vuna-target-<t> --ir <载荷> --out <目录>`），二分插件改动不必每次重建编译器。
+    keepIr <- envGetEnv "VUNA_KEEP_PLUGIN_IR"
+    _ <- if keepIr == "" then fsRemoveFile (irPathOf outDir target) else pure 0
     _ <- if hasFiles then fsRemoveFile (filesPathOf outDir target) else pure 0
     _ <- if hasDiag then fsRemoveFile (diagPathOf outDir target) else pure 0
     if timedOut then
