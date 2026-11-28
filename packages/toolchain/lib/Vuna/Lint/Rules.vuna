@@ -2612,17 +2612,26 @@ explicitCtorsOf (alt :: rest) =
 -- 内部：显式构造子全属同一族、且该族还有未覆盖构造子时，返回（族名，缺失构造子）。
 -- 一个显式构造子都没有时不判定：兜底分支此时不是「代替了族里未写的构造子」，而是
 -- 匹配别的类型（字面量 / record / 跨文件族的 scrutinee），族名无从推断。
+--
+-- 候选族含**跨文件**的（import 闭包里的 `data`），所以必须**唯一匹配**才算命中：
+-- 两个不同模块声明了同名的族、或同名构造子同时属于两个族时，无法用名字区分，
+-- 宁可漏报也不误报成错误的族。
 familyGapOf : List (String, List String) -> List String -> Maybe (String, List String)
 familyGapOf fams [] = Nothing
-familyGapOf fams (c :: rest) = familyGapOfCovering fams (dedupeCtorGo [c] rest)
+familyGapOf fams (c :: rest) = uniqueGapOf (gapsOf fams (dedupeCtorGo [c] rest))
 
-familyGapOfCovering : List (String, List String) -> List String -> Maybe (String, List String)
-familyGapOfCovering [] used = Nothing
-familyGapOfCovering ((fam, ctors) :: rest) used =
+gapsOf : List (String, List String) -> List String -> List (String, List String)
+gapsOf [] used = []
+gapsOf ((fam, ctors) :: rest) used =
   if allCtorIn used ctors && length (dedupeCtor ctors) > length used then
-    Just (fam, filter (\c => not (memName c used)) ctors)
+    (fam, filter (\c => not (memName c used)) ctors) :: gapsOf rest used
   else
-    familyGapOfCovering rest used
+    gapsOf rest used
+
+uniqueGapOf : List (String, List String) -> Maybe (String, List String)
+uniqueGapOf [] = Nothing
+uniqueGapOf [only] = Just only
+uniqueGapOf _ = Nothing
 
 allCtorIn : List String -> List String -> Bool
 allCtorIn [] used = True
@@ -2671,11 +2680,30 @@ addCaseFinding fams acc (EInterp _ _) = acc
 catchAllExprFindings : List (String, List String) -> Expr -> List Finding
 catchAllExprFindings fams e = foldExpr (addCaseFinding fams) [] e
 
-closedAdtCatchAllFindings : List Decl -> List Finding
-closedAdtCatchAllFindings decls =
+-- | 内部：跨文件族判定用的族表；`imported` 是同文件可见 import 闭包里各模块的声明。
+--
+-- 族按 `(族短名, 构造子短名序列)` 去重：跨文件后不同模块可能有同名族，去重只压掉
+-- **完全相同**的条目；同名但构造子集合不同仍保留两条，由 `uniqueGapOf` 判为歧义并跳过。
+familyTableOf : List Decl -> List Decl -> List (String, List String)
+familyTableOf local imported =
+  dedupeFamilies (append (dataFamiliesOf local) (dataFamiliesOf imported))
+
+dedupeFamilies : List (String, List String) -> List (String, List String)
+dedupeFamilies [] = []
+dedupeFamilies (entry :: rest) =
+  if memName (familyKeyOf entry) (map familyKeyOf rest) then
+    dedupeFamilies rest
+  else
+    entry :: dedupeFamilies rest
+
+familyKeyOf : (String, List String) -> String
+familyKeyOf entry = "${firstOf entry}|${join "," (secondOf entry)}"
+
+closedAdtCatchAllFindings : List Decl -> List Decl -> List Finding
+closedAdtCatchAllFindings local imported =
   let
-    fams = dataFamiliesOf decls
-  in concatMap (\d => foldDecl (addCaseFinding fams) ignorePatFindings [] d) decls
+    fams = familyTableOf local imported
+  in concatMap (\d => foldDecl (addCaseFinding fams) ignorePatFindings [] d) local
 
 ignorePatFindings : List Finding -> Pat -> List Finding
 ignorePatFindings acc _ = acc
@@ -2816,9 +2844,22 @@ lintSourceWithConfig cfg programFixities source =
     ErrC e => ErrC e
     OkC p => lintParsedWithConfig cfg programFixities source p
 
+-- | 同 `lintSourceWithConfig`，另外带**本文件显式 import 闭包**里各模块的声明，
+-- 供跨文件 `data` 族判定（`closed-adt-catch-all`）使用。拿不到模块图时传 `[]`。
+export lintSourceWithImports : LintConfig -> List FixityDecl -> List Decl -> String -> Check (List Finding)
+lintSourceWithImports cfg programFixities importedDecls source =
+  case parseSourceDetailed "<lint>" source of
+    ErrC e => ErrC e
+    OkC p => lintParsedWithImports cfg programFixities importedDecls source p
+
 -- | 同 `lintSourceWithConfig`，但源码**已经**解析过（调用方要和 fixity 上下文共用同一次词法）。
 export lintParsedWithConfig : LintConfig -> List FixityDecl -> String -> ParsedSource -> Check (List Finding)
 lintParsedWithConfig cfg programFixities source parsed =
+  lintParsedWithImports cfg programFixities [] source parsed
+
+-- | 同 `lintParsedWithConfig`，另外带 import 闭包声明（跨文件族判定用）。
+export lintParsedWithImports : LintConfig -> List FixityDecl -> List Decl -> String -> ParsedSource -> Check (List Finding)
+lintParsedWithImports cfg programFixities importedDecls source parsed =
   case parsed.parsedFile of
     SourceFile _ _ fx decls0 _ _ _ =>
       let
@@ -2836,7 +2877,7 @@ lintParsedWithConfig cfg programFixities source parsed =
                   if lintRuleSeverity cfg ClosedAdtCatchAll == LintOff then
                     []
                   else
-                    closedAdtCatchAllFindings decls
+                    closedAdtCatchAllFindings decls importedDecls
                 raw =
                   append
                     (dedupFindings (sortFindings (scanDecls src decls decls)))

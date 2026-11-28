@@ -157,6 +157,25 @@ run: sh -c 'printf "%s\n" "module Probe where" "" "pick : Int -> Int" "pick n = 
 exit: 0
 run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
 exit: 0
+# 跨文件族：case 匹配的是 **import 进来**的模块声明的 data，兜底仍要报缺的构造子。
+run: sh -c 'mkdir -p "$TMPDIR/lint-pkg/lib" && printf "%s\n" "module Color where" "" "export data Color : Type where" "  Red : Color" "  Green : Color" "  Blue : Color" > "$TMPDIR/lint-pkg/lib/Color.vuna" && printf "%s\n" "module Probe where" "" "import Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_ClosedAdtCatchAll
+out-contains: Green
+out-contains: Blue
+# 两个 import 模块各自声明同名族：名字无法区分归属，宁可漏报也不误报。
+run: sh -c 'printf "%s\n" "module Color2 where" "" "export data Color : Type where" "  Red : Color" "  Yellow : Color" > "$TMPDIR/lint-pkg/lib/Color2.vuna" && printf "%s\n" "module Probe where" "" "import Color" "import Color2" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna"
+exit: 0
+# 复原单模块 Probe，后续步骤仍按同文件族判定。
+run: sh -c 'printf "%s\n" "module Probe where" "" "data Color : Type where" "  Red : Color" "  Green : Color" "  Blue : Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select closed-adt-catch-all --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_ClosedAdtCatchAll
 # 源码抑制：disable-next-line 落在兜底分支所在行。
 run: sh -c 'printf "%s\n" "module Probe where" "" "data Color : Type where" "  Red : Color" "  Green : Color" "" "pick : Color -> Int" "pick c = case c of" "  Red => 1" "  -- vuna-lint: disable-next-line closed-adt-catch-all" "  _ => 0" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
 exit: 0

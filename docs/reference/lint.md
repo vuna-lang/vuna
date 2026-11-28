@@ -171,7 +171,7 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_NatLiteral` | `nat-literal` | 是 | 表达式/类型/模式位置的闭合 `Zero` / `Succ` 链（`Succ k` 等开放链不动） |
 | `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / all 预设启用 |
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
-| `LN_ClosedAdtCatchAll` | `closed-adt-catch-all` | 否 | case 的兜底分支代替了**同文件** `data` 族未写的构造子；默认关闭，`--select` / all 预设启用 |
+| `LN_ClosedAdtCatchAll` | `closed-adt-catch-all` | 否 | case 的兜底分支代替了本文件 / 显式 import 闭包 `data` 族未写的构造子；默认关闭，`--select` / all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
 渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` / `pair-sugar` / `nat-literal`
@@ -300,17 +300,22 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 
 ### 3.6 `closed-adt-catch-all`
 
-- **触发**：同一个文件里声明的 `data` 族，`case` 的显式 `PCon` 分支全属该族、但仍缺构造子，
-  并且存在兜底分支（`_` 或裸变量）。finding 落在兜底分支上，消息列出缺失构造子。
-- **不触发**：显式分支覆盖全族（即使保留兜底）；分支里出现非本地族的构造子；模式是
+- **触发**：`case` 的显式 `PCon` 分支全属同一个 `data` 族、但仍缺构造子，并且存在兜底
+  分支（`_` 或裸变量）。finding 落在兜底分支上，消息列出缺失构造子。族的范围是
+  **同文件声明的 `data` + 本文件显式 import 闭包里各模块声明的 `data`**（跨文件的
+  `export data` 也算；判定仍是名字级，不需要类型信息）。
+- **不触发**：显式分支覆盖全族（即使保留兜底）；分支里出现不同族的构造子；模式是
   字面量 / record（没有 `PCon`）；**一个显式 `PCon` 分支都没有**（兜底此时匹配的是别的
-  类型，族名无从推断）；跨文件族（`List` / `Maybe` / `Bool` 等 canonical 族需要
-  类型信息，lint 不做）。
+  类型，族名无从推断）；**同一个构造子集合能同时匹配两个族**（跨文件后可能出现同名族，
+  名字无从区分归属，宁可漏报也不误报——`List` / `Maybe` / `Bool` 这类标准库族因为
+  名字不唯一或没被 import，通常落在这一条）。
 - **为什么有用**：封闭 ADT 的遍历定义一旦用 `_` 兜底，新增构造子会静默降级；这条规则把
   「漏写构造子」变成可见 finding。默认关闭，遍历类代码用
   `--select closed-adt-catch-all` 或 `[lint] preset = "all"` 启用。
 - **不做自动修复**：每个缺失分支应写什么体无法安全生成。
-- **结构遍历**：走 `Frontend.AstWalk`（`foldExpr` / `foldDecl`），因此覆盖 trait 参数 kind、record update 字段与模板洞；**family 范围仍限同文件**。
+- **结构遍历**：走 `Frontend.AstWalk`（`foldExpr` / `foldDecl`），因此覆盖 trait 参数 kind、
+  record update 字段与模板洞；族表来自 `FixityEnv.importedDeclsOf`（与 fixity 共用同一份
+  已加载模块图，没有额外加载），同一文件单独 lint 与和别的文件一起 lint 结果一致。
 - **已知边界**：只覆盖 `case` 分支形态；函数多子句的反射兜底（`f _ = …`）尚未覆盖。
   行级抑制 `-- vuna-lint: disable-next-line closed-adt-catch-all` 按兜底分支所在行生效。
 
@@ -376,9 +381,9 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   （[type-system.md](type-system.md)）；单 clause 函数直接体里的可提升 `case` 会先被
   `dispatch-lift` 整段覆盖，`--select nat-literal` 下其中的模式 finding 可能被吞掉
   （`dedupFindings` 在配置过滤之前），默认推荐配置的多轮 `--fix` 会先提升再改写。
-- **`closed-adt-catch-all` 只认同文件 `data` 族与 `case` 形态**：显式分支一个都没写的兜底
-  不算命中（族名无从推断）；跨文件族、函数多子句的反射兜底（`f _ = …`）不在判据内；
-  规则默认关闭，先用于遍历定义的定向检查。
+- **`closed-adt-catch-all` 只认本文件与显式 import 闭包里的 `data` 族、且只认 `case` 形态**：
+  显式分支一个都没写的兜底不算命中（族名无从推断）；同名族歧义时漏报；函数多子句的
+  反射兜底（`f _ = …`）不在判据内；规则默认关闭，先用于遍历定义的定向检查。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool

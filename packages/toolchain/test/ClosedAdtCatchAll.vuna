@@ -7,6 +7,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Parser
 import Base.Effect.Console
 import Base.Effect.Exit
 
@@ -24,6 +26,8 @@ results : List (Pair String Bool)
 -- 同文件声明了闭合 data 族，但 case 的显式分支匹配的是别的类型（这里一个构造子
 -- 也没有）：兜底不是「漏写族构造子」，不能拿族名硬套。
 -- 显式分支只写了族里部分构造子时仍要报。
+-- 族来自 import 进来的模块：同文件没有 data 声明，仍要报缺的构造子。
+-- 同一个名字的族在两个模块里各有一份：名字无法区分，漏报而不是误报。
 results =
   [
     Pair "partial-case-reported" (memName "LN_ClosedAdtCatchAll" (codesOf partialCase)),
@@ -32,7 +36,14 @@ results =
     Pair "non-ctor-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf intCase))),
     Pair "unrelated-catch-all-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf unrelatedCase))),
     Pair "partial-two-reported" (memName "LN_ClosedAdtCatchAll" (codesOf partialTwoCase)),
-    Pair "partial-two-missing-blue" (contains "Blue" (messagesOf partialTwoCase))
+    Pair "partial-two-missing-blue" (contains "Blue" (messagesOf partialTwoCase)),
+    Pair
+      "imported-family-reported"
+      (memName "LN_ClosedAdtCatchAll" (codesOfImported importedFamilyCase)),
+    Pair "imported-family-missing" (contains "Blue" (messagesOfImported importedFamilyCase)),
+    Pair
+      "ambiguous-family-silent"
+      (not (memName "LN_ClosedAdtCatchAll" (codesOfAmbiguous ambiguousFamilyCase)))
   ]
 
 codesOf : String -> List String
@@ -40,6 +51,31 @@ codesOf source =
   case closedAdtLint source of
     OkC fs => map codeOf fs
     ErrC _ => []
+
+codesOfImported : String -> List String
+codesOfImported source =
+  case closedAdtLintWith (declsOfSource colorFamilyModule) source of
+    OkC fs => map codeOf fs
+    ErrC _ => []
+
+codesOfAmbiguous : String -> List String
+codesOfAmbiguous source =
+  case closedAdtLintWith (append (declsOfSource colorFamilyModule) (declsOfSource colorFamilyModule2)) source of
+    OkC fs => map codeOf fs
+    ErrC _ => []
+
+messagesOfImported : String -> String
+messagesOfImported source =
+  case closedAdtLintWith (declsOfSource colorFamilyModule) source of
+    OkC fs => msgOf fs
+    ErrC _ => ""
+
+-- 解析一段模块源码、取其声明（模拟「import 进来的模块」）。
+declsOfSource : String -> List Decl
+declsOfSource source =
+  case parseSourceDetailed "<imported>" source of
+    ErrC _ => []
+    OkC p => p.parsedFile.sourceFileDecls
 
 messagesOf : String -> String
 messagesOf source =
@@ -55,10 +91,14 @@ msgOf [] = ""
 msgOf (f :: rest) = f.findingMessage ++ msgOf rest
 
 closedAdtLint : String -> Check (List Finding)
-closedAdtLint source =
+closedAdtLint source = closedAdtLintWith [] source
+
+-- 跨文件族：`imported` 是 import 闭包里各模块的声明。
+closedAdtLintWith : List Decl -> String -> Check (List Finding)
+closedAdtLintWith importedDecls source =
   case selectRules ["closed-adt-catch-all"] defaultLintConfig of
     ErrC e => ErrC e
-    OkC cfg => lintSourceWithConfig cfg [] source
+    OkC cfg => lintSourceWithImports cfg [] importedDecls source
 
 partialCase : String
 partialCase =
@@ -81,3 +121,19 @@ unrelatedCase =
 partialTwoCase : String
 partialTwoCase =
   "module Probe where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Green => 2\n  _ => 0\n"
+
+colorFamilyModule : String
+colorFamilyModule =
+  "module Color where\n\nexport data Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n"
+
+colorFamilyModule2 : String
+colorFamilyModule2 =
+  "module Color2 where\n\nexport data Color : Type where\n  Red : Color\n  Yellow : Color\n"
+
+importedFamilyCase : String
+importedFamilyCase =
+  "module Probe where\n\nimport Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  _ => 0\n"
+
+ambiguousFamilyCase : String
+ambiguousFamilyCase =
+  "module Probe where\n\nimport Color\nimport Color2\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  _ => 0\n"
