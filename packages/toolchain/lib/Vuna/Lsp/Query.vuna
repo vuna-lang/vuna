@@ -327,15 +327,15 @@ formattingEdits uri text =
     )
 
 -- | 内部：按文档 uri 求本文件可见 fixity 表；uri 解不出路径或加载失败时返回错误。
-formattingFixities : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (List FixityDecl))
-formattingFixities uri text =
+formattingFixitiesFor : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> SourceFile -> Eff r (Check (List FixityDecl))
+formattingFixitiesFor uri sf =
   let
     path = decodeUri uri
   in if path == "" then
     pure (err "empty document uri")
   else
     do
-      looked <- fixitiesForFile emptyFixityEnv path text
+      looked <- fixitiesForParsed emptyFixityEnv path sf
       pure (secondOf looked)
 
 -- ---------------------------------------------------------------
@@ -1088,7 +1088,7 @@ documentSymbols uri text =
       case parsed.parsedFile of
         SourceFile _ _ fx decls0 _ _ _ =>
           do
-            fxR <- formattingFixities uri text
+            fxR <- formattingFixitiesFor uri parsed.parsedFile
             pure (
                 case fxR of
                   ErrC _ => []
