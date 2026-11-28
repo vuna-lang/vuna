@@ -10,6 +10,7 @@ import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Loader.Closure
+import Vuna.Ir.Passes
 
 export data NodeKind(..) : Type where
   NodeSource : NodeKind
@@ -58,6 +59,21 @@ ifaceDepKey mods name =
 findMod : List ClosureMod -> String -> Maybe ClosureMod
 findMod [] _ = Nothing
 findMod (m :: rest) name = if m.cmName == name then Just m else findMod rest name
+
+-- | 优化 pass 节点：线性链（每个 pass 依赖前一个），key = `pass:<name>`。
+export passNodesOf : List PassSpec -> List GraphNode
+passNodesOf specs = passNodesGo Nothing specs
+
+passNodesGo : Maybe String -> List PassSpec -> List GraphNode
+passNodesGo _ [] = []
+passNodesGo prev (spec :: rest) =
+  let
+    key = "pass:${spec.psName}"
+  in GraphNode key (NodePass spec.psName) (prevDeps prev) 1 :: passNodesGo (Just key) rest
+
+prevDeps : Maybe String -> List String
+prevDeps Nothing = []
+prevDeps (Just key) = [key]
 
 -- | 依赖层：层内节点互不依赖，可并行；成环 / 空层显式错误（与 `Closure.topoLayers` 同口径）。
 export graphLayers : List GraphNode -> Check (List (List GraphNode))

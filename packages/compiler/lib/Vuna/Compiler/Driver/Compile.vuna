@@ -903,7 +903,11 @@ ifaceModsWithEff ctx pkgs =
       let
         nodes = ifaceGraphOf assigned
         stats = graphStats nodes
-        _ = log! "info" "iface-graph nodes=${strFromInt stats.gsNodes} edges=${strFromInt stats.gsEdges} ext=${strFromInt stats.gsExternal}"
+        layerText =
+          case graphLayers nodes of
+            OkC layers => strFromInt (length layers)
+            ErrC _ => "cycle"
+        _ = log! "info" "iface-graph nodes=${strFromInt stats.gsNodes} edges=${strFromInt stats.gsEdges} ext=${strFromInt stats.gsExternal} layers=${layerText}"
       in pure assigned
 
 -- | 摘要路径与 iface 影子写共用的闭包扫描：无包上下文时给出空表

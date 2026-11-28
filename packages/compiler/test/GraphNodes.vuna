@@ -6,6 +6,7 @@ import Base.Effect.Exit
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Graph
 import Vuna.Compiler.Loader.Closure
+import Vuna.Ir.Passes
 
 main : Eff [ConsoleOp, ExitOp] String
 main =
@@ -28,6 +29,7 @@ results =
     Pair "graph-layers" graphLayersOk,
     Pair "graph-stats" graphStatsOk,
     Pair "source-nodes" sourceNodesOk,
+    Pair "pass-nodes" passNodesOk,
     Pair "graph-cycle" graphCycleOk
   ]
 
@@ -83,6 +85,14 @@ sourceNodesOk =
   let
     ns = ifaceGraphOf [mod "a" "addr-a" [], mod "b" "addr-b" []]
   in length ns == 4
+
+passNodesOk : Bool
+passNodesOk =
+  let
+    ns = passNodesOf irPasses
+  in case graphLayers ns of
+    OkC layers => length ns == 6 && length layers == 6
+    ErrC _ => False
 
 graphCycleOk : Bool
 graphCycleOk =
