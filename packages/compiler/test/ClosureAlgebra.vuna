@@ -3,6 +3,7 @@ import Base
 import Base.Effect.Core
 import Base.Effect.Console
 import Base.Effect.Exit
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Loader.Closure
 
 main : Eff [ConsoleOp, ExitOp] String
@@ -25,7 +26,9 @@ results =
     Pair "reachable-external" reachableExternal,
     Pair "reachable-cycle" reachableCycle,
     Pair "topo-chain" topoChain,
-    Pair "topo-missing-dep" topoMissingDep
+    Pair "topo-missing-dep" topoMissingDep,
+    Pair "topo-layers" topoLayersOk,
+    Pair "topo-layers-cycle" topoLayersCycle
   ]
 
 record Node where
@@ -56,6 +59,20 @@ topoChain =
     order =
       map nodeName (topoOrderBy nodeName nodeDeps [node "a" ["b"], node "b" ["c"], node "c" []])
   in order == ["c", "b", "a"]
+
+topoLayersOk : Bool
+topoLayersOk =
+  let
+    nodes = [node "a" ["b", "c"], node "b" ["d"], node "c" ["d"], node "d" []]
+  in case topoLayers nodeName nodeDeps nodes of
+    OkC layers => map (map nodeName) layers == [["d"], ["b", "c"], ["a"]]
+    ErrC _ => False
+
+topoLayersCycle : Bool
+topoLayersCycle =
+  case topoLayers nodeName nodeDeps [node "a" ["b"], node "b" ["a"]] of
+    ErrC _ => True
+    OkC _ => False
 
 topoMissingDep : Bool
 topoMissingDep =
