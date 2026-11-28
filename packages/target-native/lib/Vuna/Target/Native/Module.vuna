@@ -4412,41 +4412,61 @@ nativeBridgeFuncs lfM fams =
 -- -----------------------------------------------------------
 -- 每步之后的 scoped 校验（`psCheckAfter`）。校验在链尾统一跑：值都已求出，
 -- 失败信息仍带第一个出问题的 pass 名；codegen 在 thunk 里，校验不过就不生成。
---
--- 缺省只校验首步与末步：全量校验是每个快照一次全程序遍历，与 pass 本身同阶。
--- `VUNA_STAGE_CHECK=all` 打开全量（CI 与排查用）。
-withStageChecks : Bool -> List (PassSpec, List IrDef) -> (Int -> NativeOutcome) -> NativeOutcome
+export data NativeBuildResult(..) : Type where
+  NativeBuildOutcome : NativeOutcome -> NativeBuildResult
+  NativeBuildDump : List IrDef -> NativeBuildResult
+
+withStageChecks : Bool -> List (PassSpec, List IrDef) -> (Int -> NativeBuildResult) -> NativeBuildResult
 withStageChecks fullChecks stages k =
   case Passes.passSpan Passes.nativeValidate (\_ => Passes.checkAfterAll (Passes.selectStages fullChecks stages)) of
-    Err msg => NativeRejected (NativeUnsupported msg)
+    Err msg => NativeBuildOutcome (NativeRejected (NativeUnsupported msg))
     Ok _ => k 0
 
 export build : IrProgram -> Bool -> NativeOutcome
 build program printResult = buildWith False program printResult
 
--- | 带校验模式入口：`fullChecks` 为真时每步之后都跑 scoped 校验
--- （`VUNA_STAGE_CHECK=all`），否则只校验首末两步。
 export buildWith : Bool -> IrProgram -> Bool -> NativeOutcome
 buildWith fullChecks program printResult =
+  case buildWithDump fullChecks program printResult Nothing of
+    NativeBuildOutcome o => o
+    NativeBuildDump _ =>
+      NativeRejected (NativeUnsupported "native target: internal: dump result leaked into build")
+
+-- | 调试视图：跑完整链，返回指定 pass 之后的定义（未知 pass ⇒ `Nothing`）。
+export buildDump : IrProgram -> String -> Maybe (List IrDef)
+buildDump program name =
+  case buildWithDump False program False (Just name) of
+    NativeBuildDump ds => Just ds
+    NativeBuildOutcome _ => Nothing
+
+stageDefs : String -> List (PassSpec, List IrDef) -> Maybe (List IrDef)
+stageDefs name [] = Nothing
+stageDefs name ((spec, ds) :: rest) = if spec.psName == name then Just ds else stageDefs name rest
+
+buildWithDump : Bool -> IrProgram -> Bool -> Maybe String -> NativeBuildResult
+buildWithDump fullChecks program printResult dump =
   let
     unit = irProgUnitOf program
     defs = concatMap irGroupDefs unit.irUnitGroups
   in case unit.irUnitEntry of
-    Nothing => NativeRejected (NativeUnsupported "native target: no main definition")
+    Nothing =>
+      NativeBuildOutcome (NativeRejected (NativeUnsupported "native target: no main definition"))
     Just e =>
       let
         mainName = irEntryMainOf e
         runMainM = if irEntryIsActionOf e then irEntryRunMainOf e else Nothing
       in case findDef mainName defs of
-        Nothing => NativeRejected (NativeUnsupported "native target: main definition not found")
+        Nothing =>
+          NativeBuildOutcome
+            (NativeRejected (NativeUnsupported "native target: main definition not found"))
         Just mainDef =>
           if irDefArity mainDef /= 0 then
-            NativeRejected (NativeUnsupported "native target: main must be a zero-argument value")
+            NativeBuildOutcome (NativeRejected (NativeUnsupported "native target: main must be a zero-argument value"))
           else
             let
               kindM = if printResult then entryShowKind (irEntryShowOf e) else Just "none"
             in case kindM of
-              Nothing => NativeRejected (NativeUnsupported "native target: custom Show entry is not supported yet")
+              Nothing => NativeBuildOutcome (NativeRejected (NativeUnsupported "native target: custom Show entry is not supported yet"))
               Just kind =>
                 let
                   -- 机器循环只在 lowering 产出 `@ir@m@run` 时才需要：CPS 把它改写成
@@ -4461,7 +4481,7 @@ buildWith fullChecks program printResult =
                   seeds = if usesMachineLoop reach0 then append machineSeedRoots seeds0 else seeds0
                   ordered = if usesMachineLoop reach0 then reachableDefs seeds defs else reach0
                 in case Passes.passSpan Passes.nativeCps (\_ => cpsDefsMachine ordered) of
-                  Err msg => NativeRejected (NativeUnsupported msg)
+                  Err msg => NativeBuildOutcome (NativeRejected (NativeUnsupported msg))
                   Ok cps0 =>
                     let
                       -- 高阶参数特化：已知的闭合函数实参把被调定义的形参替换成直调，
@@ -4514,32 +4534,40 @@ buildWith fullChecks program printResult =
                       stages = [(Passes.nativeCps, cps0), (Passes.nativeSpecialize, cpsSpecialized), (Passes.nativeLsr, cpsLsr), (Passes.nativeInline, firstOf inlinedOnce), (Passes.nativeInlineAgain, firstOf inlined), (Passes.nativeLetFloat, cpsFloated), (Passes.nativeCse, cpsCse), (Passes.nativeInlineTail, firstOf tailInlined), (Passes.nativeSimplify, cps1), (Passes.nativeMergeTailIf, cpsMerged), (Passes.nativeAlias, cpsAlias0), (Passes.nativeFoldNatSums, firstOf sumP), (Passes.nativeFoldAffine, cpsAcc), (Passes.nativePrune, cpsOrdered), (Passes.nativeAliasAgain, cpsAliased), (Passes.nativeFloatLets, cpsFloatLets)]
                     in withStageChecks fullChecks stages (
                         \_ =>
-                          case Passes.passSpan Passes.nativeEmit (\_ => genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] []) of
-                            NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
-                            NOk pair =>
-                              let
-                                progFuncs = firstOf pair
-                                statics = dedupeClosures (secondOf (secondOf pair))
-                                bridgeFuncs = nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
-                                baseFuncs = dedupeFuncs (append bridgeFuncs (append nativeRtFuncs progFuncs))
-                                -- 入口打印用到的运行时函数（float 的 render 是程序定义，已在 progFuncs 里）。
-                                printerSeeds =
-                                  case kind of
-                                    "bool" => ["rt_print_bool"]
-                                    "str" => ["rt_show_str", "rt_print_str"]
-                                    "float" => ["rt_print_str"]
-                                    _ => ["rt_print_int"]
-                                renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
-                                needs = Passes.passSpan Passes.nativeInit (\_ => initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds))
-                                start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
-                                -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
-                                -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
-                                liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
-                                keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
-                                moduleLits = map (\p => (split "." (firstOf p), poolItems (secondOf p))) pools
-                                moduleFloats = map (\p => (split "." (firstOf p), floatPoolItems (secondOf p))) fpools
-                                -- 需求集合与保留集合只差 `start` 的引用（init_*）；入口 init 自己
-                                -- 碰 scratch 时这里会先炸，不会漏映射后带病出产物。
-                                drift = funcsScratchAccess keptFuncs /= needs.inScratch
-                              in if drift then NativeRejected (NativeUnsupported "native target: internal: scratch gating drifted") else NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
+                          case dump of
+                            Just name =>
+                              case stageDefs name stages of
+                                Just ds => NativeBuildDump ds
+                                Nothing => NativeBuildOutcome (NativeRejected (NativeUnsupported "unknown pass: ${name}"))
+                            Nothing =>
+                              NativeBuildOutcome (
+                                  case Passes.passSpan Passes.nativeEmit (\_ => genDefs cpsFloatLets pools fpools recNamesAll allocs unit.irUnitTyDecls [] threaded pfacts cpsFloatLets [] []) of
+                                    NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
+                                    NOk pair =>
+                                      let
+                                        progFuncs = firstOf pair
+                                        statics = dedupeClosures (secondOf (secondOf pair))
+                                        bridgeFuncs = nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls
+                                        baseFuncs = dedupeFuncs (append bridgeFuncs (append nativeRtFuncs progFuncs))
+                                        -- 入口打印用到的运行时函数（float 的 render 是程序定义，已在 progFuncs 里）。
+                                        printerSeeds =
+                                          case kind of
+                                            "bool" => ["rt_print_bool"]
+                                            "str" => ["rt_show_str", "rt_print_str"]
+                                            "float" => ["rt_print_str"]
+                                            _ => ["rt_print_int"]
+                                        renderSeeds = append (map nativeFuncLabelOf progFuncs) printerSeeds
+                                        needs = Passes.passSpan Passes.nativeInit (\_ => initNeeds baseFuncs (reachFuncLabels baseFuncs renderSeeds))
+                                        start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e) (cafOrderOf mainName cpsOrdered) needs
+                                        -- 产物只保留 `_start` 与程序代码可达的运行时函数：未用的
+                                        -- init_* / env 解析 / 文件 / spawn 等不再进二进制。
+                                        liveFinal = reachFuncLabels baseFuncs (append renderSeeds (funcLabelRefs start))
+                                        keptFuncs = filter (\f => memName (nativeFuncLabelOf f) liveFinal) baseFuncs
+                                        moduleLits = map (\p => (split "." (firstOf p), poolItems (secondOf p))) pools
+                                        moduleFloats = map (\p => (split "." (firstOf p), floatPoolItems (secondOf p))) fpools
+                                        -- 需求集合与保留集合只差 `start` 的引用（init_*）；入口 init 自己
+                                        -- 碰 scratch 时这里会先炸，不会漏映射后带病出产物。
+                                        drift = funcsScratchAccess keptFuncs /= needs.inScratch
+                                      in if drift then NativeRejected (NativeUnsupported "native target: internal: scratch gating drifted") else NativeOk (NativeProgram nativeRodata (append nativeBss (cafBssOf cpsOrdered)) statics (append keptFuncs [start]) moduleLits moduleFloats)
+                                )
                       )

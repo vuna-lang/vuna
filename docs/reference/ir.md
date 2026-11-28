@@ -324,6 +324,9 @@ wasm 用原始 `f64`，这是各后端的表示决策，不写进共享判据。
   数据依赖串接；表负责命名、观测、前后校验与 dump 的公共词汇。
 - `vuna dev ir dump --after ir.<pass>` 可以停在机器链的任意一步（`cpsMachineAfter`）；
   `--after ir.tail.annotate` 与 `--after machine` 输出逐字节一致。
+- native / wasm 的中间步骤同样可见：`--after native.<pass>`（16 步）与
+  `--after wasm.<pass>`（5 步）分别由 `Native.Module.buildDump` / `Wasm.Module.buildDump`
+  跑完整链后返回该步定义；`--only` 可混合三层。
 - `vuna dev ir dump --only ir.<pass>...` 不跳过任何 pass：整条机器链照常跑，只打印点名
   步骤之后的文本（可重复；与 `--after` 互斥，未知名字显式报 `unknown pass`）。
 - 三层链的 `psCheckAfter` 都已消费：`Passes.checkPassAfter` 跑

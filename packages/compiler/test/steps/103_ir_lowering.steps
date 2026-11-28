@@ -67,3 +67,13 @@ run: sh -c '! grep "def twice" "$TMPDIR/effdict.ir" | grep -q "g:Base.Trait.Mona
 exit: 0
 run: sh -c '! grep "def twice" "$TMPDIR/effdict.ir" | grep -q "g:Base.Trait.Applicative.pure"'
 exit: 0
+
+# native / wasm 的中间 pass：与 IR 共用 `--after <layer>.<pass>`，未知名字显式报错。
+run: sh -c '"$VUNA" dev ir dump --after native.cps "$TMPDIR/irtail" > "$TMPDIR/native-cps.ir"; test -s "$TMPDIR/native-cps.ir"; ! cmp -s "$TMPDIR/irtail.ir" "$TMPDIR/native-cps.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after wasm.anf "$TMPDIR/irtail" > "$TMPDIR/wasm-anf.ir"; test -s "$TMPDIR/wasm-anf.ir"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after native.no.such.pass "$TMPDIR/irtail" 2>&1 | grep -q "unknown pass"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --only native.cps --only wasm.host-rewrite "$TMPDIR/irtail" > "$TMPDIR/mixed-only.ir"; grep -q "^== native.cps ==" "$TMPDIR/mixed-only.ir"; grep -q "^== wasm.host-rewrite ==" "$TMPDIR/mixed-only.ir"'
+exit: 0
