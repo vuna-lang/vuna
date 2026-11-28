@@ -31,13 +31,13 @@ native 自举 conformance、Nix 命令与本地开发、手动性能基准，以
 | `pr` | `vuna-fmt` / `vuna-lint` / `vuna-typecheck` | main push、所有 PR（`pr / run`） |
 | `gate` | `vuna-tests-gate`（完整 fast+integration）+ `vuna-tests-units` | 本地全量 / 未分片的单 derivation |
 | `slices` | 7 个 `vuna-tests-*` area 切片 | PR 计划器按 area 选；本地 `nix run .#ci -- slices` |
-| `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
+| `deep` | `pr` + 全部便宜门禁（静态 / 诊断 / 增长 / obs / metrics / 后端产物与自举基线 / `seed-selfhost`） | 定时、手动、`deep` 标签 |
 | `suite` | `vuna-tests-gate` + `vuna-tests-units` + `vuna-tests-e2e`（未分片） | 本地全量；CI 定时/手动改跑下面 3 组分片 |
 | `gate-shard-0..3` | `vuna-tests-gate-shard-i`（`--shard i/4`） | CI main push / 定时 / 手动，以及 PR 计划里含完整 gate 时（matrix 并行） |
 | `e2e-shard-0..3` | `vuna-tests-e2e-shard-i`（`--shard i/4`） | CI 定时 / 手动，以及 PR 计划里含完整 e2e 时（matrix 并行） |
 | `units` | `vuna-tests-units`（各包 `vuna test`） | CI main push / 定时 / 手动 |
-| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | CI 定时 / 手动；本地 `nix run .#ci -- backends` |
-| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | CI 定时 / 手动；本地 `nix run .#ci -- native` |
+| `backends` | `vuna-tests-wasm` + `vuna-tests-native` | CI 定时 / 手动；本地 `nix run .#ci -- backends`；PR 上 `area:codegen-native` 只跑 `vuna-tests-native` |
+| `native` | `vuna-native-conformance`（package：selfhost + parity + corpus） | CI 定时 / 手动；本地 `nix run .#ci -- native`；PR 上是窄档 `vuna-native-conformance-pr`（selfhost + parity） |
 | `browser` | `vuna-wasm-browser-smoke`（package） | 定时、手动、`browser` 标签 |
 
 CI 的 `ci.yml` 把 gate 拆成 4 个、e2e 拆成 8 个 matrix job：每个 shard 是一个独立 derivation
@@ -52,9 +52,14 @@ PR 的必需检查是 `pr / run` 与 `gates / run`。`gates.yml` 的 `detect` �
 `type:*` + `pkg:*` / `area:*` 计算检查子集；计划里出现完整 gate / e2e 时，`detect` 把它们
 换成同一批 `gate-shard-*` / `e2e-shard-*`（`nix run .#ci -- plan-json` 的结果再切分），由
 `suite` 矩阵并行跑，`gates / run` 只跑计划里剩下的检查并把 shard 结论一并收成 required
-check。`deep` / `suite` / `browser` 标签仍可手动强制整组。`backend` 标签不触发 GitHub
-job：wasm / native 矩阵与自举 conformance 只在定时 / 手动跑（见下两节）；改后端时本地用
-`nix run .#ci -- backends|native` 先跑一遍（见 [github-workflow.md](github-workflow.md)）。
+check。`deep` / `suite` / `browser` 标签仍可手动强制整组。
+
+**改 native / IR 就走 native 门禁**：`area:codegen-native`（`packages/target-native`）与
+`area:ir` 的计划里带 `vuna-native-conformance-pr` 与 `vuna-tests-native`，PR 上就会跑
+「逐成员 `vuna-native check` + `pure_cross` 三端对拍」与 native 后端矩阵；`codegen-native`
+另带 `vuna-native-surface` / `-artifact` / `-codegen-growth` / `-codegen-budget`。
+完整 `--scope all`（含 900+ 夹具的 `corpus`）留在 `native` 组，定时 / 手动跑；本地一次性
+跑全轮用 `nix run .#ci -- native`（见 [github-workflow.md](github-workflow.md)）。
 
 ### PR 的 area 切片
 
@@ -189,10 +194,11 @@ rules，否则上层会卡在合并框。层数因此直接放大总成本，仓
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
 自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
 CI 里由 `ci.yml` 的 `native` job（定时 / 手动）构建 `vuna-native-conformance`（构建即运行
-`backend-check --scope all`）。整轮的大头是单线程的 native 自举编译（20+ 分钟），
-conformance 本身约 5 分钟，所以不放 push / PR；本地手动入口是
-`nix run .#ci -- native`。fast+integration 的 native / wasm 矩阵由 `backends` job
-（同样定时 / 手动）覆盖。
+`backend-check --scope all`）；PR 上由 `vuna-native-conformance-pr` 跑窄档
+（`selfhost` + `parity`，约 2.5 分钟），所以改 native 后端的 PR 不必等整轮。本地手动入口是
+`nix run .#ci -- native`（全轮）与 `nix build .#checks.<system>.vuna-native-conformance-pr`
+（窄档）。fast+integration 的 native / wasm 矩阵由 `backends` job 与 PR 计划里的
+`vuna-tests-native` 覆盖。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
@@ -207,7 +213,8 @@ runner 是 `nix run .#backend-check -- --compiler native`，四个 scope：
 | `parity` | `corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
 | `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
 
-`--scope all` = `selfhost,parity,corpus`（不含 `selfhost-stress`），默认 `selfhost,parity`。
+`--scope all` = `selfhost,parity,corpus`（不含 `selfhost-stress`），默认 `selfhost,parity`
+（PR 档 `vuna-native-conformance-pr` 就是这个缺省组合，`--target` 收窄到 `ocaml,native`）。
 `--jobs N` 控制 parity / corpus 的并行度，`--filter PAT` 只跑匹配的夹具，`--target` 收窄
 parity 的输出目标。selfhost 的并行度独立：`VUNA_BACKEND_SELFHOST_JOBS`（默认 `1`；内存允许时调大，单成员峰值 5–6 GiB；CI 设 `2`）。
 

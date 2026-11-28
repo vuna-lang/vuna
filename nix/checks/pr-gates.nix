@@ -81,10 +81,12 @@ in
         "check:vuna-single-pass"
         "check:vuna-iface-selftest"
         "check:vuna-tests-ir"
+        "check:vuna-native-conformance-pr"
       ];
       perf = [
         "check:vuna-single-pass"
         "check:vuna-iface-selftest"
+        "check:vuna-native-conformance-pr"
       ];
     };
 
@@ -104,11 +106,15 @@ in
         "check:vuna-native-artifact"
         "check:vuna-native-codegen-growth"
         "check:vuna-native-codegen-budget"
+        "check:vuna-native-conformance-pr"
+        "check:vuna-tests-native"
       ];
       perf = [
         "check:vuna-native-artifact"
         "check:vuna-native-codegen-growth"
         "check:vuna-native-codegen-budget"
+        "check:vuna-native-conformance-pr"
+        "check:vuna-tests-native"
       ];
     };
 

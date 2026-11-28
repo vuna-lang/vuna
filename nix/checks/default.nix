@@ -16,6 +16,7 @@ let
     vuna
     vuna-seed
     vuna-compiler
+    vuna-native
     vuna-web-cli
     ;
 
@@ -375,6 +376,47 @@ in
     ];
     nativeBuildInputs = e2eTools;
     script = ./native-codegen-growth.sh;
+  };
+
+  # native 自举 conformance 的 PR 档：逐成员 `selfhost` + `pure_cross` 对拍。
+  # 改动落在 `packages/target-native` / `packages/ir` 时由 `pr-gates` 选进 PR 计划；
+  # 完整 `--scope all`（含 900+ 夹具的 corpus）留在 `native` 组，定时 / 手动跑。
+  vuna-native-conformance-pr = vunaCheck {
+    name = "vuna-native-conformance-pr";
+    srcs = [
+      src.base
+      src.obs
+      src.compiler
+      src.compilerBase
+      src.ir
+      src.targetOcaml
+      src.targetNative
+      src.targetWasm
+      src.dev
+      src.pluginWeb
+      src.pluginKit
+      src.toolchain
+      src.cli
+      src.http
+      src.web
+      src.webCli
+      src.test
+      src.examples
+      src.manifest
+      ../../wasm-host
+      ../../nix/tools/backend-check.sh
+      ../../nix/checks/native-conformance-pr.sh
+    ];
+    env = {
+      VUNA_ALT_NATIVE = "${vuna-native}/bin/vuna-native";
+    };
+    nativeBuildInputs = e2eTools ++ [
+      vuna-native
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    script = ./native-conformance-pr.sh;
   };
 
   # native codegen 的绝对预算：同一台机器上 native 与 OCaml 目标的 codegen 比值 ≤2×。
