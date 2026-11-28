@@ -84,6 +84,15 @@ gcCacheHiLabel = "rt_gc_cache_hi"
 gcCacheSegLabel : String
 gcCacheSegLabel = "rt_gc_cache_seg"
 
+-- | 全部堆段的地址包络 `[lo, hi)`：段只增不缩，`seg_index_add` / `seg_index_init` 维护。
+--   保守扫描的每个机器字先过这一对边界比较，明显不是堆地址的字（整数、字符串字节）
+--   连 `gc_try` 都不用进。
+heapLoLabel : String
+heapLoLabel = "rt_heap_lo"
+
+heapHiLabel : String
+heapHiLabel = "rt_heap_hi"
+
 -- | 本次 GC 保守扫描的栈字节数（用于让阈值覆盖一次扫栈成本）。
 gcSpanLabel : String
 gcSpanLabel = "rt_gc_span"
@@ -183,6 +192,8 @@ nativeGcBss =
     NativeBss gcCacheLoLabel 8 8,
     NativeBss gcCacheHiLabel 8 8,
     NativeBss gcCacheSegLabel 8 8,
+    NativeBss heapLoLabel 8 8,
+    NativeBss heapHiLabel 8 8,
     NativeBss gcSpanLabel 8 8,
     NativeBss gcSegsLabel 8 8,
     NativeBss gcMappedLabel 8 8,
@@ -277,14 +288,14 @@ segIndexAddFn : NativeFunc
 segIndexAddFn =
   rtRawFunc
     "seg_index_add"
-    [IPush Rax, IPush Rcx, IPush Rdx, IPush Rsi, IPush Rdi, IPush R8, IPush R9, IPush R10, IPush R11, IMov (OpReg R8) (OpRip segIdxCountLabel), ICmp (OpReg R8) (OpImm segIdxCapacity), IJcc "jae" (nativeRtLabel "trap_oom"), IMov (OpReg Rcx) (OpReg Rdi), IBinReg "add" Rcx (OpImm nativeSegHeaderBytes), IBinReg "xor" Rdx (OpReg Rdx), ILabel ".Lsa_find", ICmp (OpReg Rdx) (OpReg R8), IJcc "jae" ".Lsa_pos", IMov (OpReg R9) (OpReg Rdx), IBinReg "shl" R9 (OpImm 4), ILea R10 segIdxLabel, IBinReg "add" R10 (OpReg R9), ICmp (OpReg Rcx) (OpMem R10 0), IJcc "jb" ".Lsa_pos", IBinReg "add" Rdx (OpImm 1), IJmp ".Lsa_find", ILabel ".Lsa_pos", IMov (OpReg R9) (OpReg R8), ILabel ".Lsa_shift", ICmp (OpReg R9) (OpReg Rdx), IJcc "jbe" ".Lsa_shift_done", IMov (OpReg R10) (OpReg R9), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 16)), IMov (OpMem R11 0) (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 8)), IMov (OpMem R11 8) (OpReg R10), IBinReg "sub" R9 (OpImm 1), IJmp ".Lsa_shift", ILabel ".Lsa_shift_done", IMov (OpReg R10) (OpReg Rdx), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpMem R11 0) (OpReg Rcx), IMov (OpMem R11 8) (OpReg Rdi), IBinReg "add" R8 (OpImm 1), IMov (OpRip segIdxCountLabel) (OpReg R8), IPop R11, IPop R10, IPop R9, IPop R8, IPop Rdi, IPop Rsi, IPop Rdx, IPop Rcx, IPop Rax, IRet]
+    [IPush Rax, IPush Rcx, IPush Rdx, IPush Rsi, IPush Rdi, IPush R8, IPush R9, IPush R10, IPush R11, IMov (OpReg R8) (OpRip segIdxCountLabel), ICmp (OpReg R8) (OpImm segIdxCapacity), IJcc "jae" (nativeRtLabel "trap_oom"), IMov (OpReg Rcx) (OpReg Rdi), IBinReg "add" Rcx (OpImm nativeSegHeaderBytes), IBinReg "xor" Rdx (OpReg Rdx), ILabel ".Lsa_find", ICmp (OpReg Rdx) (OpReg R8), IJcc "jae" ".Lsa_pos", IMov (OpReg R9) (OpReg Rdx), IBinReg "shl" R9 (OpImm 4), ILea R10 segIdxLabel, IBinReg "add" R10 (OpReg R9), ICmp (OpReg Rcx) (OpMem R10 0), IJcc "jb" ".Lsa_pos", IBinReg "add" Rdx (OpImm 1), IJmp ".Lsa_find", ILabel ".Lsa_pos", IMov (OpReg R9) (OpReg R8), ILabel ".Lsa_shift", ICmp (OpReg R9) (OpReg Rdx), IJcc "jbe" ".Lsa_shift_done", IMov (OpReg R10) (OpReg R9), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 16)), IMov (OpMem R11 0) (OpReg R10), IMov (OpReg R10) (OpMem R11 (0 - 8)), IMov (OpMem R11 8) (OpReg R10), IBinReg "sub" R9 (OpImm 1), IJmp ".Lsa_shift", ILabel ".Lsa_shift_done", IMov (OpReg R10) (OpReg Rdx), IBinReg "shl" R10 (OpImm 4), ILea R11 segIdxLabel, IBinReg "add" R11 (OpReg R10), IMov (OpMem R11 0) (OpReg Rcx), IMov (OpMem R11 8) (OpReg Rdi), IMov (OpReg R9) (OpRip heapLoLabel), ITest R9 R9, IJcc "jz" ".Lsa_lo_set", ICmp (OpReg Rcx) (OpReg R9), IJcc "jae" ".Lsa_lo_keep", ILabel ".Lsa_lo_set", IMov (OpRip heapLoLabel) (OpReg Rcx), ILabel ".Lsa_lo_keep", IMov (OpReg R10) (OpMem Rdi 8), IMov (OpReg R9) (OpRip heapHiLabel), ICmp (OpReg R10) (OpReg R9), IJcc "jbe" ".Lsa_hi_keep", IMov (OpRip heapHiLabel) (OpReg R10), ILabel ".Lsa_hi_keep", IBinReg "add" R8 (OpImm 1), IMov (OpRip segIdxCountLabel) (OpReg R8), IPop R11, IPop R10, IPop R9, IPop R8, IPop Rdi, IPop Rsi, IPop Rdx, IPop Rcx, IPop Rax, IRet]
 
 -- | 清空索引并按 `rt_segs` 现有段重建（`_start` 建好初始段后调用一次）。
 segIndexInitFn : NativeFunc
 segIndexInitFn =
   rtRawFunc
     "seg_index_init"
-    [IBinReg "xor" Rax (OpReg Rax), IMov (OpRip segIdxCountLabel) (OpReg Rax), IMov (OpReg R10) (OpRip nativeSegsLabel), ILabel ".Lsi_loop", ITest R10 R10, IJcc "jz" ".Lsi_done", IMov (OpReg R11) (OpReg R10), IMov (OpReg R10) (OpMem R10 0), IMov (OpRip segTmpLabel) (OpReg R10), IMov (OpReg Rdi) (OpReg R11), ICall (nativeRtLabel "seg_index_add"), IMov (OpReg R10) (OpRip segTmpLabel), IJmp ".Lsi_loop", ILabel ".Lsi_done", IRet]
+    [IBinReg "xor" Rax (OpReg Rax), IMov (OpRip segIdxCountLabel) (OpReg Rax), IMov (OpRip heapLoLabel) (OpReg Rax), IMov (OpRip heapHiLabel) (OpReg Rax), IMov (OpReg R10) (OpRip nativeSegsLabel), ILabel ".Lsi_loop", ITest R10 R10, IJcc "jz" ".Lsi_done", IMov (OpReg R11) (OpReg R10), IMov (OpReg R10) (OpMem R10 0), IMov (OpRip segTmpLabel) (OpReg R10), IMov (OpReg Rdi) (OpReg R11), ICall (nativeRtLabel "seg_index_add"), IMov (OpReg R10) (OpRip segTmpLabel), IJmp ".Lsi_loop", ILabel ".Lsi_done", IRet]
 
 -- ---------------------------------------------------------------
 -- 保守扫描一段内存
@@ -296,7 +307,7 @@ gcScanWordsFn : NativeFunc
 gcScanWordsFn =
   rtRawFunc
     "gc_scan_words"
-    [IPush R12, IPush R13, IMov (OpReg R12) (OpReg Rdi), IMov (OpReg R13) (OpReg Rsi), ICmp (OpReg R12) (OpReg R13), IJcc "jae" ".Lgc_scan_done", ILabel ".Lgc_scanw_loop", IMov (OpReg Rdi) (OpMem R12 0), ICall (nativeRtLabel "gc_try"), IBinReg "add" R12 (OpImm 8), ICmp (OpReg R12) (OpReg R13), IJcc "jb" ".Lgc_scanw_loop", ILabel ".Lgc_scan_done", IPop R13, IPop R12, IRet]
+    [IPush R12, IPush R13, IPush R14, IPush R15, IMov (OpReg R12) (OpReg Rdi), IMov (OpReg R13) (OpReg Rsi), IMov (OpReg R14) (OpRip heapLoLabel), IMov (OpReg R15) (OpRip heapHiLabel), ICmp (OpReg R12) (OpReg R13), IJcc "jae" ".Lgc_scan_done", ILabel ".Lgc_scanw_loop", IMov (OpReg Rdi) (OpMem R12 0), IMov (OpReg Rax) (OpReg Rdi), ICmp (OpReg Rax) (OpReg R14), IJcc "jb" ".Lgc_scanw_next", ICmp (OpReg Rax) (OpReg R15), IJcc "jae" ".Lgc_scanw_next", ICall (nativeRtLabel "gc_try"), ILabel ".Lgc_scanw_next", IBinReg "add" R12 (OpImm 8), ICmp (OpReg R12) (OpReg R13), IJcc "jb" ".Lgc_scanw_loop", ILabel ".Lgc_scan_done", IPop R15, IPop R14, IPop R13, IPop R12, IRet]
 
 -- ---------------------------------------------------------------
 -- 清扫：清标记、回收未标记块、累计 live
