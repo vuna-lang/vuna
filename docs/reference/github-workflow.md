@@ -254,10 +254,16 @@ PR 被队列移除时看原因：冲突才 rebase，检查失败就修，超时�
 
 ```console
 nix/tools/merge-queue.sh status
-nix/tools/merge-queue.sh wait <n> [timeout]
+nix/tools/merge-queue.sh wait <n> [timeout] [interval]
 nix/tools/merge-queue.sh dequeue <n>
 nix/tools/merge-queue.sh sweep [--dry-run]
 ```
+
+`wait` 只读轮询（默认 10 秒），**遇到无法自行推进的状态立即退出**，后台会话才不会
+永久挂住：`0` 已合并、`1` 关闭未合并、`2` 冲突、`3` 检查失败、`4` changes requested、
+`5` 被移出合并队列、`6` draft、`7` 未 arm（宽限期 60 秒，`PR_WATCH_ARM_GRACE` 可调）、
+`8` 带 `blocked`/`needs-info`/`wontfix` 标签、`124` 超时。`BEHIND` 与 pending checks
+继续等；脚本不 rebase、不改分支。后台守候 PR 用它，不要另写 `sleep` 循环。
 
 需要 hold 时加 `blocked` / `needs-info` 或转 draft；只 `--disable-auto` 不会把已经在队列里的
 PR 拿掉。手动 `gh pr merge --rebase` 只用于 break-glass。

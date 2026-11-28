@@ -114,7 +114,12 @@ gh pr view <n> --json autoMergeRequest,labels,isDraft
   不是原因，不要靠 disable/enable 反复重 arm。
 - 不要手动 merge 绕过 required checks；手动 `gh pr merge <n> --rebase` 只用于 break-glass
   或用户明确要求。
-- 用 `nix/tools/merge-queue.sh dequeue <n>` 手动移出队列；`wait <n>` 只在明确要阻塞等结果时用。
+- 用 `nix/tools/merge-queue.sh dequeue <n>` 手动移出队列。
+- 要阻塞等结果时用 `nix/tools/merge-queue.sh wait <n> [timeout] [interval]`：
+  只读轮询（默认 10 秒），不 rebase、不改分支。它在**无法自行推进**的状态立即退出
+  （冲突 2、检查失败 3、changes requested 4、被移出队列 5、draft 6、未 arm 7、
+  hold 标签 8、超时 124），后台会话因此能继续；`BEHIND` / pending checks 才继续等。
+  不要在会话里临时写 `sleep` / `gh pr view` 循环，也不要让守候脚本替你重写分支。
 
 ## 6. 阶段流水线（stacked phases）
 

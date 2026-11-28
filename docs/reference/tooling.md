@@ -505,7 +505,8 @@ nix/tools/merge-queue.sh arm <pr>               # 普通 PR 打开 auto-merge；
 nix/tools/merge-queue.sh disarm <pr>            # 关闭 auto-merge（stack 带 includeStack）
 nix/tools/merge-queue.sh enqueue <pr> [--jump]  # 入队；stack 走 REST merge-async
 nix/tools/merge-queue.sh dequeue <pr>           # 移出队列（stack 的上层一起移出）
-nix/tools/merge-queue.sh wait <pr> [timeout]    # 阻塞等待合并 / 被移除，默认 1800 秒
+nix/tools/merge-queue.sh wait <pr> [timeout] [interval]
+                                                # 守候到合并/关闭/冲突/检查失败等；只读，不 rebase
 nix/tools/merge-queue.sh sweep [--dry-run]      # 扫 CLEAN 的 PR 补 enqueue（stack 不要求已 arm）
 ```
 

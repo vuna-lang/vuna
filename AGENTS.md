@@ -142,8 +142,8 @@ git config core.hooksPath .githooks       # 启用 pre-commit / pre-push（devSh
 git switch -c <type>/<slug> origin/main   # 从 main 切分支（副 worktree 内）
 gh issue list --search 'status:todo'       # 可开工 issue；流程见技能 vuna-issue
 gh pr create --base main --title ...      # 开 PR；描述含 Closes #N
-gh pr checks <n>                          # PR 自己的检查（队列状态见下一条）
-nix/tools/merge-queue.sh status           # 合并队列位置 / 状态 / ETA
+gh pr checks <n>                          # PR 自己的检查
+nix/tools/merge-queue.sh status           # 队列位置 / 状态 / ETA；wait <pr> 守候终态
 gh stack view --short                     # stack 层 / PR / 顺序（sync / arm 见技能 vuna-phase）
 nix/tools/merge-queue.sh sweep            # stack 绿后整条入队；普通 PR 由 automerge arm
 gh pr merge <n> --rebase                  # 仅 break-glass；不适用于 stack
