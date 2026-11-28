@@ -68,15 +68,21 @@ markEndLabel = "rt_mark_end"
 export markSizeLabel : String
 markSizeLabel = "rt_mark_size"
 
--- | `gc_scan_words` 的游标、`gc_try` 的溢出临时量、日志缓冲。
-gcLoLabel : String
-gcLoLabel = "rt_gc_lo"
-
-gcHiLabel : String
-gcHiLabel = "rt_gc_hi"
-
+-- | `gc_try` 的溢出临时量（标记栈扩容时先存一个候选字）与日志缓冲。
 gcTmpLabel : String
 gcTmpLabel = "rt_gc_tmp"
+
+-- | 段定位的最近命中缓存：`[lo, hi)` 是上次命中段的块区，`seg` 是段头。
+--   一次保守扫描里绝大多数候选字落在同一个段，命中时省掉一次 `seg_find` 二分
+--   （每字一次 call/ret + log(段数) 次访存）。
+gcCacheLoLabel : String
+gcCacheLoLabel = "rt_gc_cache_lo"
+
+gcCacheHiLabel : String
+gcCacheHiLabel = "rt_gc_cache_hi"
+
+gcCacheSegLabel : String
+gcCacheSegLabel = "rt_gc_cache_seg"
 
 -- | 本次 GC 保守扫描的栈字节数（用于让阈值覆盖一次扫栈成本）。
 gcSpanLabel : String
@@ -173,9 +179,10 @@ nativeGcBss =
     NativeBss markTopLabel 8 8,
     NativeBss markEndLabel 8 8,
     NativeBss markSizeLabel 8 8,
-    NativeBss gcLoLabel 8 8,
-    NativeBss gcHiLabel 8 8,
     NativeBss gcTmpLabel 8 8,
+    NativeBss gcCacheLoLabel 8 8,
+    NativeBss gcCacheHiLabel 8 8,
+    NativeBss gcCacheSegLabel 8 8,
     NativeBss gcSpanLabel 8 8,
     NativeBss gcSegsLabel 8 8,
     NativeBss gcMappedLabel 8 8,
@@ -254,13 +261,15 @@ gcTryFn =
 -- ---------------------------------------------------------------
 -- 段索引
 -- ---------------------------------------------------------------
--- | `rdi` = 块头地址 → `rax` = 所在段（没有则 0）。二分查找，O(log n)。
+-- | `rdi` = 块头地址 → `rax` = 所在段（没有则 0）。先查最近命中缓存，未命中再二分，
+--   O(log n)。缓存只影响速度：命中判据就是「块区起点 ≤ 块头 < 段尾」，与二分的判据同形，
+--   错置时只是多走一次二分。
 --   只碰 caller-saved 寄存器；保留 `rdi` 与 `r10`（调用方用它存块头）。
 segFindFn : NativeFunc
 segFindFn =
   rtRawFunc
     "seg_find"
-    [IMov (OpReg R8) (OpRip segIdxCountLabel), ITest R8 R8, IJcc "jz" ".Lsf_miss", IBinReg "xor" Rcx (OpReg Rcx), IMov (OpReg R9) (OpReg R8), ILabel ".Lsf_loop", ICmp (OpReg Rcx) (OpReg R9), IJcc "jae" ".Lsf_before", IMov (OpReg R11) (OpReg Rcx), IBinReg "add" R11 (OpReg R9), IBinReg "shr" R11 (OpImm 1), IMov (OpReg Rsi) (OpReg R11), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), ICmp (OpReg Rdi) (OpMem Rdx 0), IJcc "jb" ".Lsf_upper", IMov (OpReg Rcx) (OpReg R11), IBinReg "add" Rcx (OpImm 1), IJmp ".Lsf_loop", ILabel ".Lsf_upper", IMov (OpReg R9) (OpReg R11), IJmp ".Lsf_loop", ILabel ".Lsf_before", ITest Rcx Rcx, IJcc "jz" ".Lsf_miss", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rsi) (OpReg Rcx), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdx 8), ICmp (OpReg Rdi) (OpMem Rax 16), IJcc "jae" ".Lsf_miss", IRet, ILabel ".Lsf_miss", IBinReg "xor" Rax (OpReg Rax), IRet]
+    [IMov (OpReg Rax) (OpRip gcCacheSegLabel), ITest Rax Rax, IJcc "jz" ".Lsf_slow", ICmp (OpReg Rdi) (OpRip gcCacheLoLabel), IJcc "jb" ".Lsf_slow", ICmp (OpReg Rdi) (OpRip gcCacheHiLabel), IJcc "jb" ".Lsf_hit", ILabel ".Lsf_slow", IMov (OpReg R8) (OpRip segIdxCountLabel), ITest R8 R8, IJcc "jz" ".Lsf_miss", IBinReg "xor" Rcx (OpReg Rcx), IMov (OpReg R9) (OpReg R8), ILabel ".Lsf_loop", ICmp (OpReg Rcx) (OpReg R9), IJcc "jae" ".Lsf_before", IMov (OpReg R11) (OpReg Rcx), IBinReg "add" R11 (OpReg R9), IBinReg "shr" R11 (OpImm 1), IMov (OpReg Rsi) (OpReg R11), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), ICmp (OpReg Rdi) (OpMem Rdx 0), IJcc "jb" ".Lsf_upper", IMov (OpReg Rcx) (OpReg R11), IBinReg "add" Rcx (OpImm 1), IJmp ".Lsf_loop", ILabel ".Lsf_upper", IMov (OpReg R9) (OpReg R11), IJmp ".Lsf_loop", ILabel ".Lsf_before", ITest Rcx Rcx, IJcc "jz" ".Lsf_miss", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rsi) (OpReg Rcx), IBinReg "shl" Rsi (OpImm 4), ILea Rdx segIdxLabel, IBinReg "add" Rdx (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdx 8), ICmp (OpReg Rdi) (OpMem Rax 16), IJcc "jae" ".Lsf_miss", IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpImm nativeSegHeaderBytes), IMov (OpRip gcCacheLoLabel) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rax 16), IMov (OpRip gcCacheHiLabel) (OpReg Rcx), IMov (OpRip gcCacheSegLabel) (OpReg Rax), IRet, ILabel ".Lsf_hit", IRet, ILabel ".Lsf_miss", IBinReg "xor" Rax (OpReg Rax), IRet]
 
 -- | `rdi` = 新段（段头地址）。按块区起点插入有序数组；保留全部 caller-saved 寄存器
 --   （`alloc` 在段创建点调用它，之后还要用 `rcx` 的块大小等）。
@@ -281,11 +290,13 @@ segIndexInitFn =
 -- 保守扫描一段内存
 -- ---------------------------------------------------------------
 -- | `rdi` = lo、`rsi` = hi（不含）；对每个 8 字节字调 `gc_try`。
+--   游标与上界放在 `r12` / `r13`（callee-saved，`gc_try` 与它的扩容路径都不碰），
+--   所以每个字只是「读一个字 + 一次 call」；放 `.bss` 时每个字要多 4 次访存与一次重载。
 gcScanWordsFn : NativeFunc
 gcScanWordsFn =
   rtRawFunc
     "gc_scan_words"
-    [ICmp (OpReg Rdi) (OpReg Rsi), IJcc "jae" ".Lgc_scan_done", IMov (OpRip gcLoLabel) (OpReg Rdi), IMov (OpRip gcHiLabel) (OpReg Rsi), ILabel ".Lgc_scanw_loop", IMov (OpReg Rdi) (OpRip gcLoLabel), ICmp (OpReg Rdi) (OpRip gcHiLabel), IJcc "jae" ".Lgc_scan_done", IMov (OpReg Rdi) (OpMem Rdi 0), ICall (nativeRtLabel "gc_try"), IMov (OpReg Rax) (OpRip gcLoLabel), IBinReg "add" Rax (OpImm 8), IMov (OpRip gcLoLabel) (OpReg Rax), IJmp ".Lgc_scanw_loop", ILabel ".Lgc_scan_done", IRet]
+    [IPush R12, IPush R13, IMov (OpReg R12) (OpReg Rdi), IMov (OpReg R13) (OpReg Rsi), ICmp (OpReg R12) (OpReg R13), IJcc "jae" ".Lgc_scan_done", ILabel ".Lgc_scanw_loop", IMov (OpReg Rdi) (OpMem R12 0), ICall (nativeRtLabel "gc_try"), IBinReg "add" R12 (OpImm 8), ICmp (OpReg R12) (OpReg R13), IJcc "jb" ".Lgc_scanw_loop", ILabel ".Lgc_scan_done", IPop R13, IPop R12, IRet]
 
 -- ---------------------------------------------------------------
 -- 清扫：清标记、回收未标记块、累计 live
