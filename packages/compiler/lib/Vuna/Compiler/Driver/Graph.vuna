@@ -79,6 +79,52 @@ prevDeps (Just key) = [key]
 export graphLayers : List GraphNode -> Check (List (List GraphNode))
 graphLayers nodes = topoLayers gnKey gnDeps nodes
 
+-- | 节点的有效性判定：`Hit` = 对象库已有可用产物；`Recompute` = 需要重算。
+-- 这是调度器与对象库之间唯一的契约；节点自身不保存状态。
+export data NodeAction(..) : Type where
+  NodeHit : NodeAction
+  NodeRecompute : NodeAction
+
+export record PlannedNode(..) where
+  pnNode : GraphNode
+  pnAction : NodeAction
+
+-- | 按依赖层给出每个节点的动作；层内顺序保持输入顺序。`isHit` 由调用方提供
+-- （接口对象存在 / clean 判定 / 已有 pass 产物），图本身不做 I/O。
+export planLayers : (String -> Bool) -> List GraphNode -> Check (List (List PlannedNode))
+planLayers isHit nodes =
+  case topoLayers gnKey gnDeps nodes of
+    ErrC e => ErrC e
+    OkC layers => OkC (map (map (planNode isHit)) layers)
+
+planNode : (String -> Bool) -> GraphNode -> PlannedNode
+planNode isHit n = PlannedNode n (if isHit n.gnKey then NodeHit else NodeRecompute)
+
+-- | 计划摘要：命中 / 重算节点数。
+export planSummary : List (List PlannedNode) -> (Int, Int)
+planSummary layers = planSummaryGo layers 0 0
+
+planSummaryGo : List (List PlannedNode) -> Int -> Int -> (Int, Int)
+planSummaryGo [] hits misses = (hits, misses)
+planSummaryGo (layer :: rest) hits misses =
+  planSummaryGo rest (hits + countHits layer) (misses + countMisses layer)
+
+countHits : List PlannedNode -> Int
+countHits [] = 0
+countHits (p :: rest) = countHit p + countHits rest
+
+countHit : PlannedNode -> Int
+countHit (PlannedNode _ NodeHit) = 1
+countHit (PlannedNode _ NodeRecompute) = 0
+
+countMisses : List PlannedNode -> Int
+countMisses [] = 0
+countMisses (p :: rest) = countMiss p + countMisses rest
+
+countMiss : PlannedNode -> Int
+countMiss (PlannedNode _ NodeRecompute) = 1
+countMiss (PlannedNode _ NodeHit) = 0
+
 -- | 节点 / 边 / 外部缺口计数（观测用；不参与调度）。
 export record GraphStats(..) where
   gsNodes : Int

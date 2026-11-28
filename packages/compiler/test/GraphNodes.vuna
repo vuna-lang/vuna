@@ -30,6 +30,8 @@ results =
     Pair "graph-stats" graphStatsOk,
     Pair "source-nodes" sourceNodesOk,
     Pair "pass-nodes" passNodesOk,
+    Pair "plan-summary" planSummaryOk,
+    Pair "plan-actions" planActionsOk,
     Pair "graph-cycle" graphCycleOk
   ]
 
@@ -93,6 +95,36 @@ passNodesOk =
   in case graphLayers ns of
     OkC layers => length ns == 6 && length layers == 6
     ErrC _ => False
+
+planSummaryOk : Bool
+planSummaryOk =
+  let
+    ns = ifaceGraphOf [mod "a" "addr-a" ["b"], mod "b" "addr-b" []]
+  in case planLayers (\key => key == "addr-b") ns of
+    OkC layers => planSummary layers == (1, 3)
+    ErrC _ => False
+
+planActionsOk : Bool
+planActionsOk =
+  let
+    ns = ifaceGraphOf [mod "a" "addr-a" ["b"], mod "b" "addr-b" []]
+  in case planLayers (\key => key == "addr-b") ns of
+    OkC layers => allPlanned layers
+    ErrC _ => False
+
+allPlanned : List (List PlannedNode) -> Bool
+allPlanned [] = True
+allPlanned (layer :: rest) = allPlannedLayer layer && allPlanned rest
+
+allPlannedLayer : List PlannedNode -> Bool
+allPlannedLayer [] = True
+allPlannedLayer (p :: rest) = actionOk p.pnNode.gnKey p.pnAction && allPlannedLayer rest
+
+actionOk : String -> NodeAction -> Bool
+actionOk key act =
+  case act of
+    NodeHit => key == "addr-b"
+    NodeRecompute => key /= "addr-b"
 
 graphCycleOk : Bool
 graphCycleOk =

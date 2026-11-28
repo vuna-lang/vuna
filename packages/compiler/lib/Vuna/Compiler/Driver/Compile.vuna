@@ -1025,16 +1025,60 @@ readIfaceOfModEff ctx m =
 -- 干净模块作废（依赖它的模块会被 `moduleDepsOk` 一并拒掉，安全性不变）。
 -- 依赖面仍用 all-or-nothing 的 `readIfaceListInEff` 版本：缺依赖必须整包回退。
 export readIfaceListPartialEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List ModuleIface)
-readIfaceListPartialEff ctx [] = pure []
-readIfaceListPartialEff ctx (m :: rest) =
+readIfaceListPartialEff ctx mods =
+  case topoLayers modNameOf modImportsOf mods of
+    ErrC _ => readIfaceListPartialSeq ctx mods
+    OkC layers =>
+      do
+        let ordered = concatMap (map modPair) layers
+        hits <- mapEff (\p => readPlannedIface ctx (secondOf p)) ordered
+        _ <-
+          pure
+            (log! "info" "iface-plan nodes=${strFromInt (length mods)} hits=${strFromInt (countIfaceHits hits)} miss=${strFromInt (length hits - countIfaceHits hits)}")
+        pure (collectPlanned mods hits)
+
+readIfaceListPartialSeq : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (List ModuleIface)
+readIfaceListPartialSeq ctx [] = pure []
+readIfaceListPartialSeq ctx (m :: rest) =
   do
     mi <- readIfaceOfModEff ctx m
-    xs <- readIfaceListPartialEff ctx rest
+    xs <- readIfaceListPartialSeq ctx rest
     pure (
         case mi of
           Nothing => xs
           Just x => x :: xs
       )
+
+modImportsOf : ClosureMod -> List String
+modImportsOf m = m.cmImports
+
+modPair : ClosureMod -> (String, ClosureMod)
+modPair m = (m.cmName, m)
+
+readPlannedIface : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> ClosureMod -> Eff r (String, Maybe ModuleIface)
+readPlannedIface ctx m =
+  do
+    mi <- readIfaceOfModEff ctx m
+    pure (m.cmName, mi)
+
+countIfaceHits : List (String, Maybe ModuleIface) -> Int
+countIfaceHits [] = 0
+countIfaceHits (p :: rest) = countIfaceHit p + countIfaceHits rest
+
+countIfaceHit : (String, Maybe ModuleIface) -> Int
+countIfaceHit (_, Just _) = 1
+countIfaceHit (_, Nothing) = 0
+
+collectPlanned : List ClosureMod -> List (String, Maybe ModuleIface) -> List ModuleIface
+collectPlanned [] _ = []
+collectPlanned (m :: rest) hits =
+  case lookupPlanned m.cmName hits of
+    Just mi => mi :: collectPlanned rest hits
+    Nothing => collectPlanned rest hits
+
+lookupPlanned : String -> List (String, Maybe ModuleIface) -> Maybe ModuleIface
+lookupPlanned _ [] = Nothing
+lookupPlanned name ((n, mi) :: rest) = if n == name then mi else lookupPlanned name rest
 
 readIfaceListInEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> List ClosureMod -> Eff r (Maybe (List ModuleIface))
 readIfaceListInEff ctx [] = pure (Just [])
