@@ -78,7 +78,11 @@ vuna dev obs summarize <VUNA_OBS_DIR>/vuna-*.jsonl
 `VUNA_OBS=1` 下每条 `vuna.pass.native.*` 是一段：16 步变换之外，可达性收尾
 （`native.reach`）、形参区间不动点（`native.params`）、作用域校验（`native.validate`）、
 代码发射（`native.emit`）与入口装配（`native.init`）各占一段，所以份额能闭合到墙钟。
-校验缺省只跑首末两步（`VUNA_STAGE_CHECK=all` 打开全量，CI 与排查用）。
+校验缺省只跑首末两步；`VUNA_STAGE_CHECK=all` 打开全量（每步之后都跑 scoped 校验）。
+CI 的 PR 增量档（`checks.vuna-native-conformance-pr`）设 `all`：在编译器自身的 codegen 上
+全量比缺省只多约 2–3 % 墙钟（`vuna.pass.native.validate` 从 ~40 ms 涨到 ~230 ms，
+`VUNA_OBS=1` 下插件整段 6.11 s → 6.28 s；插件进程墙钟 8.69 s → 8.90 s），
+换来每一步的形状回归都当场报出来。
 
 内存与回收形状用运行时的诊断开关观察（[native-runtime.md](native-runtime.md) §1.1）：
 `VUNA_NATIVE_GC_LOG=1` 逐次打印 `live` / `gen`，以及归因用的 `span`（本次扫的栈字节）、

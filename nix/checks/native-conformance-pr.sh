@@ -30,6 +30,9 @@ export VUNA_ALT_NATIVE VUNA_BACKEND_SELFHOST_JOBS="$SELFHOST_JOBS" VUNA_BACKEND_
 export VUNA_BACKEND_TIMEOUT="${VUNA_BACKEND_TIMEOUT:-240}"
 export VUNA_BACKEND_SELFHOST_TIMEOUT="${VUNA_BACKEND_SELFHOST_TIMEOUT:-600}"
 export VUNA_BACKEND_MAX_FAILS="$MAX_FAILS"
+# 全量 stage 校验（`vuna.pass.native.validate`）：缺省只查首末两步；全量在插件墙钟上
+# 多约 2–4 %（读数见 docs/reference/native-selfhost.md），换来每一步的形状回归当场报出。
+export VUNA_STAGE_CHECK=all
 
 bash nix/tools/backend-check.sh \
   --compiler native \
