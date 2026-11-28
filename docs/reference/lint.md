@@ -303,7 +303,8 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 - **触发**：同一个文件里声明的 `data` 族，`case` 的显式 `PCon` 分支全属该族、但仍缺构造子，
   并且存在兜底分支（`_` 或裸变量）。finding 落在兜底分支上，消息列出缺失构造子。
 - **不触发**：显式分支覆盖全族（即使保留兜底）；分支里出现非本地族的构造子；模式是
-  字面量 / record（没有 `PCon`）；跨文件族（`List` / `Maybe` / `Bool` 等 canonical 族需要
+  字面量 / record（没有 `PCon`）；**一个显式 `PCon` 分支都没有**（兜底此时匹配的是别的
+  类型，族名无从推断）；跨文件族（`List` / `Maybe` / `Bool` 等 canonical 族需要
   类型信息，lint 不做）。
 - **为什么有用**：封闭 ADT 的遍历定义一旦用 `_` 兜底，新增构造子会静默降级；这条规则把
   「漏写构造子」变成可见 finding。默认关闭，遍历类代码用
@@ -326,8 +327,8 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   以及开放链、`Nat.Zero`、裸 `Succ`、注释/跨行不误报）。
 
 `closed-adt-catch-all` 是 opt-in 规则，规则级回归在 `packages/toolchain/test/ClosedAdtCatchAll.vuna`
-（部分覆盖 / 全覆盖 / 非构造子匹配）；CLI 面在 `packages/cli/test/steps/39_lint_cli.steps`
-（`--select`、全覆盖零 finding、源码抑制）。
+（部分覆盖 / 全覆盖 / 非构造子匹配 / 零显式构造子的兜底 / 缺一个构造子）；CLI 面在
+`packages/cli/test/steps/39_lint_cli.steps`（`--select`、全覆盖零 finding、源码抑制）。
 - `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
@@ -375,8 +376,9 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   （[type-system.md](type-system.md)）；单 clause 函数直接体里的可提升 `case` 会先被
   `dispatch-lift` 整段覆盖，`--select nat-literal` 下其中的模式 finding 可能被吞掉
   （`dedupFindings` 在配置过滤之前），默认推荐配置的多轮 `--fix` 会先提升再改写。
-- **`closed-adt-catch-all` 只认同文件 `data` 族与 `case` 形态**：跨文件族、函数多子句的
-  反射兜底（`f _ = …`）不在判据内；规则默认关闭，先用于遍历定义的定向检查。
+- **`closed-adt-catch-all` 只认同文件 `data` 族与 `case` 形态**：显式分支一个都没写的兜底
+  不算命中（族名无从推断）；跨文件族、函数多子句的反射兜底（`f _ = …`）不在判据内；
+  规则默认关闭，先用于遍历定义的定向检查。
 - **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool

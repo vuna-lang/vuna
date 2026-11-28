@@ -21,12 +21,18 @@ main =
         pure ""
 
 results : List (Pair String Bool)
+-- 同文件声明了闭合 data 族，但 case 的显式分支匹配的是别的类型（这里一个构造子
+-- 也没有）：兜底不是「漏写族构造子」，不能拿族名硬套。
+-- 显式分支只写了族里部分构造子时仍要报。
 results =
   [
     Pair "partial-case-reported" (memName "LN_ClosedAdtCatchAll" (codesOf partialCase)),
     Pair "partial-case-missing" (contains "Green" (messagesOf partialCase)),
     Pair "full-case-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf fullCase))),
-    Pair "non-ctor-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf intCase)))
+    Pair "non-ctor-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf intCase))),
+    Pair "unrelated-catch-all-silent" (not (memName "LN_ClosedAdtCatchAll" (codesOf unrelatedCase))),
+    Pair "partial-two-reported" (memName "LN_ClosedAdtCatchAll" (codesOf partialTwoCase)),
+    Pair "partial-two-missing-blue" (contains "Blue" (messagesOf partialTwoCase))
   ]
 
 codesOf : String -> List String
@@ -64,3 +70,14 @@ fullCase =
 
 intCase : String
 intCase = "module Probe where\n\npick : Int -> Int\npick n = case n of\n  0 => 0\n  _ => n\n"
+
+-- 同文件有闭合 data 族，但被兜底的 case 一个显式构造子都没写（匹配的是 Int）：
+-- 兜底不能归因到该族。
+unrelatedCase : String
+unrelatedCase =
+  "module Probe where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n\npick : Int -> Int\npick n = case n of\n  0 => 1\n  _ => 2\n"
+
+-- 显式分支写了族里两个构造子、仍缺一个。
+partialTwoCase : String
+partialTwoCase =
+  "module Probe where\n\ndata Color : Type where\n  Red : Color\n  Green : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Green => 2\n  _ => 0\n"
