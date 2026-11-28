@@ -179,7 +179,7 @@ goalRun file =
             case parsed.parsedFile of
               SourceFile _ _ fx decls0 _ _ _ =>
                 do
-                  looked <- fixitiesForFile emptyFixityEnv file source
+                  looked <- fixitiesForParsed emptyFixityEnv file parsed.parsedFile
                   case secondOf looked of
                     ErrC e => toolFailure (diagText e)
                     OkC programFixities =>

@@ -261,7 +261,7 @@ lintFile path =
 -- | `vuna lint --fix <file>` 的进程内形态（与 `Lint.fixReport` 同一条 `fixLoop` 路径）：
 -- 返回（修复数, 新源码），调用方负责把新源码写回工作副本。
 --
--- 必须先取本文件可见 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新 lint
+-- 必须先取本文件可见 fixity（`fixitiesForParsed`）：`fixLoop` 每轮都用 fixities 重新 lint
 -- 结果源码，空表会让已知运算符退化成 unknown fixity，第二轮起直接放弃修复。
 export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Int, String))
 fixFile path text =
