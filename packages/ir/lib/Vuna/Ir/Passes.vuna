@@ -59,7 +59,7 @@ irPasses = [irCps, irMachineHandlers, irMachineMark, irMachineApply, irMachineSt
 -- native 链（`Target.Native.Module.build`）
 -- ---------------------------------------------------------------
 export nativeCps : PassSpec
-nativeCps = PassSpec "native.cps" "native" "lower" False True True
+nativeCps = PassSpec "native.cps" "native" "lower" True True True
 
 export nativeSpecialize : PassSpec
 nativeSpecialize = PassSpec "native.specialize" "native" "inline" False True True
@@ -114,8 +114,8 @@ nativeReach = PassSpec "native.reach" "native" "prune" False False True
 export nativeParams : PassSpec
 nativeParams = PassSpec "native.params" "native" "fold" False False True
 
--- | pass 之间的作用域校验（`Passes.checkAfterAll`）。默认只校验首末两步，全量由
---   `VUNA_STAGE_CHECK=all` 打开，用于 CI 与排查。
+-- | pass 之间的作用域校验（`Passes.checkHeadBefore` + `checkAfterAll`）：默认只校验链首
+-- 输入与首末两步的输出；`VUNA_STAGE_CHECK=all` 打开全量。
 export nativeValidate : PassSpec
 nativeValidate = PassSpec "native.validate" "native" "mark" False False True
 
@@ -160,7 +160,7 @@ export wasmCps : PassSpec
 wasmCps = PassSpec "wasm.cps" "wasm" "lower" False True True
 
 export wasmHostRewrite : PassSpec
-wasmHostRewrite = PassSpec "wasm.host-rewrite" "wasm" "lower" False True True
+wasmHostRewrite = PassSpec "wasm.host-rewrite" "wasm" "lower" True True True
 
 export wasmPrune : PassSpec
 wasmPrune = PassSpec "wasm.prune" "wasm" "prune" False True True
@@ -198,8 +198,8 @@ checkPassAfter spec ds =
   else
     Ok 0
 
--- | 一步之前的 scoped 校验（`psCheckBefore`）：与 `checkPassAfter` 同口径，用于链首
--- 输入与「上一步没有跑 after 校验」的驱动。
+-- | 一步之前的 scoped 校验（`psCheckBefore`）：与 `checkPassAfter` 同口径。驱动只在链首
+-- 用它检查进入链之前的输入；链内各步的输入就是上一步的输出，由上一步的 after 校验覆盖。
 export checkPassBefore : PassSpec -> List IrDef -> Result Int
 checkPassBefore spec ds =
   if spec.psCheckBefore then
@@ -208,6 +208,13 @@ checkPassBefore spec ds =
       OkC n => Ok n
   else
     Ok 0
+
+-- | 链首输入的 before 校验：用 `stages` 第一项的 `psCheckBefore` 检查**进入链之前**的数据
+-- （不是该项的输出）。驱动只在链首需要它：`after(n-1)` 与 `before(n)` 是同一次遍历，
+-- 链内各步的输入已由上一步的 after 覆盖。
+export checkHeadBefore : List (PassSpec, List IrDef) -> List IrDef -> Result Int
+checkHeadBefore [] _ = Ok 0
+checkHeadBefore ((spec, _) :: _) head0 = checkPassBefore spec head0
 
 -- | 依次检查一批（pass, 该步输出）对；第一个失败即停。驱动在链尾统一调用，避免把
 -- 校验塞进每一步的嵌套 `let`。

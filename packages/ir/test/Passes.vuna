@@ -1,4 +1,5 @@
--- pass 表不变量：名字唯一、事件名唯一且带 `vuna.pass.` 前缀、`findPass` 可反查。
+-- pass 表不变量：名字唯一、事件名唯一且带 `vuna.pass.` 前缀、`findPass` 可反查；
+-- 链首 before 校验用第一项的标记检查进入链前的数据。
 import Base
 import Base.Effect.Core
 import Base.Data.List as List
@@ -36,8 +37,18 @@ results =
     Pair "check-after-off" (checkOk (checkPassAfter offSpec [badVarDef])),
     Pair
       "check-after-all"
-      (checkErrNamed "ir.machine.mark" (checkAfterAll [(irCps, [goodDef]), (irMachineMark, [badVarDef])]))
+      (checkErrNamed "ir.machine.mark" (checkAfterAll [(irCps, [goodDef]), (irMachineMark, [badVarDef])])),
+    Pair "check-before-scope" (checkErrNamed "ir.cps (before)" (checkPassBefore irCps [badVarDef])),
+    Pair
+      "check-head-before"
+      (checkErrNamed "native.cps (before)" (checkHeadBefore nativeStages [badVarDef])),
+    Pair "check-head-before-ok" (checkOk (checkHeadBefore nativeStages [goodDef])),
+    Pair "check-head-before-empty" (checkOk (checkHeadBefore [] [badVarDef]))
   ]
+
+-- | 链首 before 校验的调用形态：用第一项的标记检查进入链前的数据。
+nativeStages : List (PassSpec, List IrDef)
+nativeStages = [(nativeCps, [goodDef])]
 
 goodDef : IrDef
 goodDef = IrDef "f" 0 [] Nothing (IrInt 1) False False Nothing
