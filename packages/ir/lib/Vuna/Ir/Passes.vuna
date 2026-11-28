@@ -35,7 +35,7 @@ passSpan spec f = obsPure (passEventName spec.psName) f
 -- IR 链（`Ir.Cps.cpsDefsMachine`）
 -- ---------------------------------------------------------------
 export irCps : PassSpec
-irCps = PassSpec "ir.cps" "ir" "lower" False True True
+irCps = PassSpec "ir.cps" "ir" "lower" True True True
 
 export irMachineHandlers : PassSpec
 irMachineHandlers = PassSpec "ir.machine.handlers" "ir" "lower" False True True
@@ -194,6 +194,17 @@ checkPassAfter spec ds =
   if spec.psCheckAfter then
     case Vuna.Ir.Validate.validateScopedDefs ds of
       ErrC e => Err "pass ${spec.psName}: ${diagText e}"
+      OkC n => Ok n
+  else
+    Ok 0
+
+-- | 一步之前的 scoped 校验（`psCheckBefore`）：与 `checkPassAfter` 同口径，用于链首
+-- 输入与「上一步没有跑 after 校验」的驱动。
+export checkPassBefore : PassSpec -> List IrDef -> Result Int
+checkPassBefore spec ds =
+  if spec.psCheckBefore then
+    case Vuna.Ir.Validate.validateScopedDefs ds of
+      ErrC e => Err "pass ${spec.psName} (before): ${diagText e}"
       OkC n => Ok n
   else
     Ok 0

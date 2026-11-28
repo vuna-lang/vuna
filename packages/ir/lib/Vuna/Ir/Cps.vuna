@@ -1868,15 +1868,19 @@ cpsMachineStages defs =
 runMachineStages : Maybe String -> List (PassSpec, List IrDef -> Result (List IrDef)) -> List IrDef -> Result (List IrDef)
 runMachineStages stop [] ds = Ok ds
 runMachineStages stop ((spec, step) :: rest) ds =
-  case Passes.passSpan spec (\_ => step ds) of
+  case Passes.checkPassBefore spec ds of
     Err msg => Err msg
-    Ok next =>
-      case Passes.checkPassAfter spec next of
+    Ok _ =>
+      case Passes.passSpan spec (\_ => step ds) of
         Err msg => Err msg
-        Ok _ =>
-          case stop of
-            Just name => if name == spec.psName then Ok next else runMachineStages stop rest next
-            Nothing => runMachineStages stop rest next
+        Ok next =>
+          case Passes.checkPassAfter spec next of
+            Err msg => Err msg
+            Ok _ =>
+              case stop of
+                Just name =>
+                  if name == spec.psName then Ok next else runMachineStages stop rest next
+                Nothing => runMachineStages stop rest next
 
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs = runMachineStages Nothing (cpsMachineStages defs) defs
