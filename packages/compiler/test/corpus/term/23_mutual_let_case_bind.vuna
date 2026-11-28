@@ -1,0 +1,33 @@
+-- 正例：互递归组的调用先绑进 let 再 case；arity 判定按被调方签名走，
+-- 不能按剩余实参推断。
+import Prelude
+
+data Maybe2 a : Type where
+  Nope : Maybe2 a
+  Yep : a -> Maybe2 a
+
+f : List Int -> Int -> List Int -> Maybe2 Int
+f table fuel qs =
+  if fuel <= 0 then
+    Nope
+  else
+    case qs of
+      [] => Nope
+      x :: rest => g table (fuel - 1) qs
+
+g : List Int -> Int -> List Int -> Maybe2 Int
+g table fuel qs =
+  if fuel <= 0 then
+    Nope
+  else
+    case qs of
+      [] => Nope
+      x :: rest =>
+        let
+          deeper = f table (fuel - 1) qs
+        in case deeper of
+          Nope => Nope
+          Yep v => Yep v
+
+main : Int
+main = 0
