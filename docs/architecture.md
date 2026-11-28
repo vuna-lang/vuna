@@ -37,7 +37,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 │                             模块图 / 名字解析 / flatten / fixity / 地址与身份 / 层约束
 ├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
 ├─ Elab/        Sig Types Meta MetaSpans Case Dict Term{,.Impl,.Support} Data Trait
-│               InstName InstCoherence Driver Termination{,.ElabInput,.Measure,.Scc}
+│               InstName InstCoherence Driver Termination{,.ElabInput,.Measure,.Walk,.Scc}
 │               Prelude Match Records Derive Coverage Representation Usage Canonical   双向精化
 ├─ Lowering/    Program Env Ty Entry Erased Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ 擦除视图 + Core 侧检查
 └─ Driver/      Dt Compile Cache Iface Owner CompilerCli

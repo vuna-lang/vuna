@@ -1,0 +1,16 @@
+-- HOF 的部分应用实参：`map (add k) xs`（cb = EApp (EVar) pargs）同样按元素尺寸展开。
+import Prelude
+
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+add : Nat -> Nat -> Nat
+add Zero m = m
+add (Succ k) m = Succ (add k m)
+
+bump : Nat -> List Nat -> List Nat
+bump k xs = map (add k) xs
+
+main : Int
+main = length (bump Zero [Zero, Succ Zero])

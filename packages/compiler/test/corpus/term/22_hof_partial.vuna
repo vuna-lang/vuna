@@ -1,0 +1,16 @@
+-- HOF 的裸函数实参：`map sizeR ts`（cb = EVar）按元素尺寸展开，递归调用在元素上下降。
+import Prelude
+
+data Tree : Type where
+  Leaf : Tree
+  Node : List Tree -> Tree
+
+sizeR : Tree -> Int
+sizeR Leaf = 0
+sizeR (Node ts) = foldl (\a, t => a + sizeR t) 0 ts
+
+sizeAll : List Tree -> Int
+sizeAll ts = foldl (\a, b => a + b) 0 (map sizeR ts)
+
+main : Int
+main = sizeAll [Leaf]

@@ -106,16 +106,23 @@ posFilterTbl [] neg = []
 posFilterTbl ((f, i) :: rest) neg =
   if posHasTbl f i neg then posFilterTbl rest neg else (f, i) :: posFilterTbl rest neg
 
-posSubsetTbl : List (String, Int) -> HashMap String (List Int) -> Bool
-posSubsetTbl [] b = True
-posSubsetTbl ((f, i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
-
-posSetEqTbl : List (String, Int) -> List (String, Int) -> Bool
-posSetEqTbl a b = length a == length b && posSubsetTbl a (posTblOf b) && posSubsetTbl b (posTblOf a)
-
 -- 并集：fresh 在前，facts 中不在 fresh 的在后（集合语义与 `posUnion facts fresh` 一致）。
 export posUnionTbl : List (String, Int) -> List (String, Int) -> List (String, Int)
 posUnionTbl facts fresh = append fresh (posFilterTbl facts (posTblOf fresh))
+
+-- 一轮正性扫描结束后的去重（哈希分组 + 每组 memInt 去重；顺序不影响语义）。
+export posNormalize : List (String, Int) -> List (String, Int)
+posNormalize xs = posTblPairs (posTblOf xs)
+
+posTblPairs : HashMap String (List Int) -> List (String, Int)
+posTblPairs tbl = concatMap posEntryPairs (HashMap.toList tbl)
+
+posEntryPairs : (String, List Int) -> List (String, Int)
+posEntryPairs (n, is) = map (\i => (n, i)) (dedupInts is)
+
+dedupInts : List Int -> List Int
+dedupInts [] = []
+dedupInts (x :: rest) = if memInt x rest then dedupInts rest else x :: dedupInts rest
 
 export funDeclsOf : List Decl -> List (String, List Pat, Expr)
 funDeclsOf [] = []
@@ -753,12 +760,6 @@ isNatCoerceName name =
     b = opBaseName name
   in b == "natToInt" || b == "natFromInt" || b == "toInt"
 
--- | 局部函数子句 → 只保留体的“绑定”视图（模式不影响正性/尺寸事实）。
---   树的三种遍历共用这一份，避免各自实现漂移。
-export localClauseBinds : List LocalClause -> List (Pat, Expr)
-localClauseBinds [] = []
-localClauseBinds (c :: rest) = (PWild c.lcRef, c.lcBody) :: localClauseBinds rest
-
 -- | 正性事实的集合运算：`&&` 的真分支取并、`||` 的真分支取交；
 -- 假分支由德摩根定律对调。
 export guardUnion : List String -> List String -> List String
@@ -896,234 +897,6 @@ argPositive args i sizes caller facts region =
 -- 扫阶段的累积只做 O(1) 前插，**去重推迟到一轮扫描结束**（冷路径）：
 -- 每标记一个 (callee, argIndex) 就对已累积的整表线性扫一遍（`posAdd`），
 -- 一轮扫描内累积到数千条 ⇒ O(#标记 × #事实)，是 check 冷路径的最大热点。
-export posMarkPos : String -> Int -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posMarkPos f i st = ((f, i) :: firstOf st, secondOf st)
-
-export posMarkNeg : String -> Int -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posMarkNeg f i st = (firstOf st, (f, i) :: secondOf st)
-
--- 一轮扫描结束后的去重（哈希分组 + 每组 memInt 去重；顺序不影响语义）。
-posNormalize : List (String, Int) -> List (String, Int)
-posNormalize xs = posTblPairs (posTblOf xs)
-
-posTblPairs : HashMap String (List Int) -> List (String, Int)
-posTblPairs tbl = concatMap posEntryPairs (HashMap.toList tbl)
-
-posEntryPairs : (String, List Int) -> List (String, Int)
-posEntryPairs (n, is) = map (\i => (n, i)) (dedupInts is)
-
-dedupInts : List Int -> List Int
-dedupInts [] = []
-dedupInts (x :: rest) = if memInt x rest then dedupInts rest else x :: dedupInts rest
-
-posWalkArgsF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkArgsF fuel namesTbl caller sizes facts region [] st = st
-posWalkArgsF fuel namesTbl caller sizes facts region (a :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    posWalkArgsF
-      (fuel - 1)
-      namesTbl
-      caller
-      sizes
-      facts
-      region
-      rest
-      (posWalkF (fuel - 1) namesTbl caller sizes facts region a st)
-
-posWalkFieldsF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List (String, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkFieldsF fuel namesTbl caller sizes facts region [] st = st
-posWalkFieldsF fuel namesTbl caller sizes facts region ((fn, fe) :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    posWalkFieldsF
-      (fuel - 1)
-      namesTbl
-      caller
-      sizes
-      facts
-      region
-      rest
-      (posWalkF (fuel - 1) namesTbl caller sizes facts region fe st)
-
-posWalkAltsF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> List Alt -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkAltsF fuel namesTbl caller sizes facts region scrut [] st = st
-posWalkAltsF fuel namesTbl caller sizes facts region scrut (a :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    posWalkAltsF
-      (fuel - 1)
-      namesTbl
-      caller
-      sizes
-      facts
-      region
-      scrut
-      rest
-      (posWalkF (fuel - 1) namesTbl caller (extendSizesVarOnly sizes scrut a.altPat) facts region a.altBody st)
-
--- `posWalk` 不携带投影表：只有变量 scrutinee 能扩尺寸（`case r.field of …` 的下降由
--- `strWalkAlts` / `siteCollectAlts` 的完整版本负责）。
-extendSizesVarOnly : List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
-extendSizesVarOnly sizes (scrut@(EVar _ _)) pat = extendSizesStrict [] sizes scrut pat
-extendSizesVarOnly sizes _ pat = sizes
-
-posWalkClausesF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List LocalClause -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkClausesF fuel namesTbl caller sizes facts region [] st = st
-posWalkClausesF fuel namesTbl caller sizes facts region (c :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    posWalkClausesF
-      (fuel - 1)
-      namesTbl
-      caller
-      sizes
-      facts
-      region
-      rest
-      (posWalkF (fuel - 1) namesTbl caller sizes facts region c.lcBody st)
-
-posWalkBindsF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List Binding -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkBindsF fuel namesTbl caller sizes facts region [] st = st
-posWalkBindsF fuel namesTbl caller sizes facts region (b :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    posWalkBindsF
-      (fuel - 1)
-      namesTbl
-      caller
-      sizes
-      facts
-      region
-      rest
-      (posWalkBindingF (fuel - 1) namesTbl caller sizes facts region b st)
-
-posWalkBindingF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Binding -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkBindingF fuel namesTbl caller sizes facts region b st =
-  if fuel <= 0 then
-    st
-  else
-    let
-      st1 =
-        case b.bindValue of
-          BVal e => posWalkF (fuel - 1) namesTbl caller sizes facts region e st
-          BClauses cs => posWalkClausesF (fuel - 1) namesTbl caller sizes facts region cs st
-    in case b.bindSig of
-      Just sig => posWalkF (fuel - 1) namesTbl caller sizes facts region sig.sigType st1
-      Nothing => st1
-
-posWalkStmtsF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> List DoStmt -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkStmtsF fuel namesTbl caller sizes facts region [] st = st
-posWalkStmtsF fuel namesTbl caller sizes facts region (s :: rest) st =
-  if fuel <= 0 then
-    st
-  else
-    case s of
-      DBind pat e sp => posWalkStmtsF (fuel - 1) namesTbl caller sizes facts region rest (posWalkF (fuel - 1) namesTbl caller sizes facts region e st)
-      DExpr e sp => posWalkStmtsF (fuel - 1) namesTbl caller sizes facts region rest (posWalkF (fuel - 1) namesTbl caller sizes facts region e st)
-      DLet binds sp => posWalkStmtsF (fuel - 1) namesTbl caller sizes facts region rest (posWalkBindsF (fuel - 1) namesTbl caller sizes facts region binds st)
-
-export posWalk : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalk namesTbl caller sizes facts region e st =
-  posWalkF (exprBudget 32 e) namesTbl caller sizes facts region e st
-
-posWalkF : Int -> HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkF fuel namesTbl caller sizes facts region e st =
-  if fuel <= 0 then
-    st
-  else
-    case e of
-      EApp fn args sp =>
-        case fn of
-          EVar g gsp => if HashMap.member (g) namesTbl then posWalkArgsF (fuel - 1) namesTbl caller sizes facts region args (posWalkCallee namesTbl caller sizes facts region (g) 0 args st) else posWalkArgsF (fuel - 1) namesTbl caller sizes facts region args (posWalkF (fuel - 1) namesTbl caller sizes facts region fn st)
-          _ => posWalkArgsF (fuel - 1) namesTbl caller sizes facts region args (posWalkF (fuel - 1) namesTbl caller sizes facts region fn st)
-      EIf c t el sp =>
-        let
-          st1 = posWalkF (fuel - 1) namesTbl caller sizes facts region c st
-          st2 = posWalkF (fuel - 1) namesTbl caller sizes facts (append (guardThenPosVars c) region) t st1
-        in posWalkF (fuel - 1) namesTbl caller sizes facts (append (guardElsePosVars c) region) el st2
-      ECase scrut alts sp => posWalkAltsF (fuel - 1) namesTbl caller sizes facts region scrut alts (posWalkF (fuel - 1) namesTbl caller sizes facts region scrut st)
-      ELam ns b sp => posWalkF (fuel - 1) namesTbl caller sizes facts region b st
-      ELet binds body rec_ sp => posWalkF (fuel - 1) namesTbl caller sizes facts region body (posWalkBindsF (fuel - 1) namesTbl caller sizes facts region binds st)
-      EPi n implicit _ dom cod sp => posWalkF (fuel - 1) namesTbl caller sizes facts region cod (posWalkF (fuel - 1) namesTbl caller sizes facts region dom st)
-      EField base f sp => posWalkF (fuel - 1) namesTbl caller sizes facts region base st
-      ERecord rn fields sp => posWalkFieldsF (fuel - 1) namesTbl caller sizes facts region fields st
-      ERecUpdate base fields sp => posWalkFieldsF (fuel - 1) namesTbl caller sizes facts region fields (posWalkF (fuel - 1) namesTbl caller sizes facts region base st)
-      EDo stmts sp => posWalkStmtsF (fuel - 1) namesTbl caller sizes facts region stmts st
-      EVar n sp => st
-      EInt _ _ => st
-      EStr _ _ => st
-      EFloat _ _ => st
-      EInterp _ _ => st
-
-export posWalkCallee : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkCallee namesTbl caller sizes facts region g i args st =
-  posWalkCalleeGo namesTbl caller sizes facts region g (length args - i) args st
-
-export posWalkCalleeGo : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> String -> Int -> List Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posWalkCalleeGo namesTbl caller sizes facts region g remaining args st =
-  if remaining <= 0 then
-    st
-  else
-    let
-      i = length args - remaining
-      st1 = if argPositive args i sizes caller facts region then posMarkPos g i st else posMarkNeg g i st
-    in posWalkCalleeGo namesTbl caller sizes facts region g (remaining - 1) args st1
-
-export posScanClauses : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posScanClauses namesTbl defs facts caller [] st = st
-posScanClauses namesTbl defs facts caller (cl :: rest) st =
-  let
-    sizes = strSizeEntries (firstOf cl)
-    st2 = posWalk namesTbl caller sizes facts [] (secondOf cl) st
-  in posScanClauses namesTbl defs facts caller rest st2
-
-export posScanDefs : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> List (String, List (List Pat, Expr)) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posScanDefs namesTbl defs facts [] st = st
-posScanDefs namesTbl defs facts (d :: rest) st =
-  posScanDefs
-    namesTbl
-    defs
-    facts
-    rest
-    (posScanClauses namesTbl defs facts (firstOf d) (secondOf d) st)
-
--- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs。
-export posScanNames : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posScanNames namesTbl defTbl factsTbl work st =
-  let
-    scanned = posScanNamesGo namesTbl defTbl factsTbl work st
-  in (posNormalize (firstOf scanned), posNormalize (secondOf scanned))
-
-posScanNamesGo : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
-posScanNamesGo namesTbl defTbl factsTbl [] st = st
-posScanNamesGo namesTbl defTbl factsTbl (n :: rest) st =
-  posScanNamesGo
-    namesTbl
-    defTbl
-    factsTbl
-    rest
-    (posScanClauses namesTbl [] factsTbl n (clausesOfDefTbl n defTbl) st)
-
--- 单调不动点：每轮用当前事实重扫，只增不减；不收敛时提前停（保守，宁可多拒）。
-export computePosFacts : List (String, List (List Pat, Expr)) -> Int -> List (String, Int) -> List (String, Int)
-computePosFacts defs fuel facts = if fuel <= 0 then facts else computePosFactsStep defs fuel facts
-
-export computePosFactsStep : List (String, List (List Pat, Expr)) -> Int -> List (String, Int) -> List (String, Int)
-computePosFactsStep defs fuel facts =
-  let
-    namesTbl = HashMap.ofNames (defNames defs)
-    scanned = posScanDefs namesTbl defs (posTblOf facts) defs ([], [])
-    scan = (posNormalize (firstOf scanned), posNormalize (secondOf scanned))
-    fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
-    merged = posUnionTbl facts fresh
-  in if posSetEqTbl facts merged then merged else computePosFacts defs (fuel - 1) merged
-
 export pathInPats : String -> List Pat -> List Int -> Int -> Maybe (List Int)
 pathInPats v [] path k = Nothing
 pathInPats v (p :: rest) path k =
@@ -1472,12 +1245,6 @@ hintArith p [EVar x xsp, EInt k ksp] sizes mode =
           (base, depth, path) => if base == p then if depth == 0 then Just mode else Just relNoRelation else Just relOtherPosition
       Nothing => Just relUnknownSize
 hintArith p _ sizes mode = Just relNoRelation
-
-export markInvalid : (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
-markInvalid acc = (False, secondOf acc)
-
-export addEdgeMode : String -> String -> Int -> Span -> (Bool, List (((String, String), Int), Span)) -> (Bool, List (((String, String), Int), Span))
-addEdgeMode caller callee m sp acc = (firstOf acc, (((caller, callee), m), sp) :: secondOf acc)
 
 export groupHead : List String -> Expr -> Maybe String
 groupHead comp (EVar n sp) = if memName (n) comp then Just (n) else Nothing

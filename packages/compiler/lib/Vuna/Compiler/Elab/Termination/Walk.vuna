@@ -1,0 +1,574 @@
+module Vuna.Compiler.Elab.Termination.Walk where
+
+-- Vuna.Compiler.Elab.Termination.Walk：终止性分析的三套表达式遍历共用这一份骨架。
+-- 结构递归（case / if / lam / let / pi / field / record / do）与 fuel 语义只在这里维护；
+-- 三处差异收敛成 `WalkMode`（叶子和调用点怎么写）与 `WalkCfg`（上下文与尺寸策略）：
+--   * `WalkStr`：收集 size-change 边（关系 + 诊断边），盲调用记 `waValid = False`；
+--   * `WalkSite`：收集调用站点（含盲站点），供 SCT / fuel 线程判据消费；
+--   * `WalkPos`：收集正性事实候选，不带投影 / 绑定尺寸扩展，也不认 HOF。
+import Vuna.Compiler.Base.Common
+import Base.Container.HashMap as HashMap
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.AstWalk
+import Vuna.Compiler.Frontend.Name
+import Vuna.Compiler.Elab.Termination.Measure
+import Vuna.Compiler.Frontend.AstQuery
+
+-- 调用站点：caller 在什么尺寸上下文里调用了组内 callee。
+export record Site where
+  siteCaller : String
+  siteCallee : String
+  siteArgs : List Expr
+  siteSizes : List (String, Int, Int, List Int)
+  siteRegion : List String
+  -- 编译期看不见实参位置的调用（callee 以值传递 / 遍历预算耗尽）：只落全弱边。
+  siteBlind : Bool
+  -- 调用点位置：放弃时按它给用户面诊断定位（遍历预算兜底的合成站点没有位置）。
+  siteSpan : Span
+
+-- 遍历预算耗尽或 callee 以值传递时，用「全弱边」占位站点覆盖该 caller 到组内每个
+-- 成员：漏掉的调用边仍留在图上，且不可能贡献严格下降（sound 方向）。
+blindSitesOf : List String -> String -> List (String, Int, Int, List Int) -> List String -> List Site
+blindSitesOf comp caller sizes region =
+  map (\g => Site caller g [] sizes region True spanEmpty) comp
+
+data WalkMode : Type where
+  WalkStr : WalkMode
+  WalkSite : WalkMode
+  WalkPos : WalkMode
+
+record WalkCfg where
+  wcMode : WalkMode
+  wcComp : List String
+  wcCtors : List String
+  wcProjs : List (String, List Int)
+  wcP : Int
+  wcCaller : String
+  wcFacts : HashMap String (List Int)
+  wcNames : HashMap String Bool
+
+-- 单一累加器：每种模式只写自己那几格（`WalkPos` 只动 `waPos` / `waNeg`，
+-- `WalkSite` 只动 `waSites`，`WalkStr` 只动 `waValid` / `waEdges`）。
+record WalkAcc where
+  waValid : Bool
+  waEdges : List (((String, String), Int), Span)
+  waSites : List Site
+  waPos : List (String, Int)
+  waNeg : List (String, Int)
+
+emptyWalkAcc : WalkAcc
+emptyWalkAcc = WalkAcc True [] [] [] []
+
+walkAccOfPos : (List (String, Int), List (String, Int)) -> WalkAcc
+walkAccOfPos st = WalkAcc True [] [] (firstOf st) (secondOf st)
+
+walkAccOfSites : List Site -> WalkAcc
+walkAccOfSites sites = WalkAcc True [] sites [] []
+
+strCfg : List String -> List String -> List (String, List Int) -> Int -> String -> HashMap String (List Int) -> WalkCfg
+strCfg comp ctors projs p caller facts =
+  WalkCfg WalkStr comp ctors projs p caller facts (HashMap.fromList [])
+
+siteCfg : List String -> List String -> List (String, List Int) -> String -> HashMap String (List Int) -> WalkCfg
+siteCfg comp ctors projs caller facts =
+  WalkCfg WalkSite comp ctors projs 0 caller facts (HashMap.fromList [])
+
+posCfg : HashMap String Bool -> String -> HashMap String (List Int) -> WalkCfg
+posCfg namesTbl caller facts = WalkCfg WalkPos [] [] [] 0 caller facts namesTbl
+
+-- 尺寸策略：只有 `WalkPos` 不扩投影 / 绑定，`WalkStr` 与 `WalkSite` 用完整尺寸表。
+strictSizes : WalkCfg -> Bool
+strictSizes cfg =
+  case cfg.wcMode of
+    WalkPos => False
+    _ => True
+
+-- 预算耗尽：边模式记「不完整」，站点模式补盲站点，正性模式无动作。
+exhausted : WalkCfg -> List (String, Int, Int, List Int) -> List String -> WalkAcc -> WalkAcc
+exhausted cfg sizes region acc =
+  case cfg.wcMode of
+    WalkStr => { acc | waValid = False }
+    WalkSite =>
+      { acc | waSites = append (blindSitesOf cfg.wcComp cfg.wcCaller sizes region) acc.waSites }
+    WalkPos => acc
+
+-- `posWalk` 不携带投影表：只有变量 scrutinee 能扩尺寸（`case r.field of …` 的下降由
+-- 边 / 站点模式负责）。
+extendSizesVarOnly : List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
+extendSizesVarOnly sizes (scrut@(EVar _ _)) pat = extendSizesStrict [] sizes scrut pat
+extendSizesVarOnly sizes _ pat = sizes
+
+sizesAfterCase : WalkCfg -> List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
+sizesAfterCase cfg sizes scrut pat =
+  if strictSizes cfg then
+    extendSizesStrict cfg.wcProjs sizes scrut pat
+  else
+    extendSizesVarOnly sizes scrut pat
+
+sizesAfterBind : WalkCfg -> List (String, Int, Int, List Int) -> Binding -> List (String, Int, Int, List Int)
+sizesAfterBind cfg sizes b =
+  if strictSizes cfg then extendBindingSizes cfg.wcProjs sizes b else sizes
+
+sizesAfterBinds : WalkCfg -> List (String, Int, Int, List Int) -> List Binding -> List (String, Int, Int, List Int)
+sizesAfterBinds cfg sizes binds =
+  if strictSizes cfg then extendByBinds cfg.wcProjs binds sizes else sizes
+
+sizesAfterDoBind : WalkCfg -> List (String, Int, Int, List Int) -> Expr -> Pat -> List (String, Int, Int, List Int)
+sizesAfterDoBind cfg sizes e pat =
+  if strictSizes cfg then extendSizesStrict cfg.wcProjs sizes e pat else sizes
+
+addEdgeAcc : WalkCfg -> String -> Int -> Span -> WalkAcc -> WalkAcc
+addEdgeAcc cfg callee m sp acc =
+  { acc | waEdges = (((cfg.wcCaller, callee), m), sp) :: acc.waEdges }
+
+pushSiteAcc : WalkCfg -> String -> List Expr -> List (String, Int, Int, List Int) -> List String -> Bool -> Span -> WalkAcc -> WalkAcc
+pushSiteAcc cfg callee args sizes region blind sp acc =
+  { acc | waSites = Site cfg.wcCaller callee args sizes region blind sp :: acc.waSites }
+
+walkVar : WalkCfg -> List (String, Int, Int, List Int) -> List String -> String -> NodeRef -> WalkAcc -> WalkAcc
+walkVar cfg sizes region n sp acc =
+  case cfg.wcMode of
+    WalkStr => if memName n cfg.wcComp then { acc | waValid = False } else acc
+    WalkSite =>
+      if memName n cfg.wcComp then
+        pushSiteAcc cfg n [] sizes region True (nodeRefSpan sp) acc
+      else
+        acc
+    WalkPos => acc
+
+walk : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> WalkAcc -> WalkAcc
+walk fuel cfg sizes region e acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    case e of
+      EApp fn args sp => walkCall (fuel - 1) cfg sizes region fn args (nodeRefSpan sp) acc
+      ECase scrut alts sp => walkAlts (fuel - 1) cfg sizes region scrut alts (walk (fuel - 1) cfg sizes region scrut acc)
+      EIf c t el sp =>
+        let
+          acc1 = walk (fuel - 1) cfg sizes region c acc
+          acc2 = walk (fuel - 1) cfg sizes (append (guardThenPosVars c) region) t acc1
+        in walk (fuel - 1) cfg sizes (append (guardElsePosVars c) region) el acc2
+      ELam ns b sp => walk (fuel - 1) cfg sizes region b acc
+      ELet binds body rec_ sp => walk (fuel - 1) cfg (sizesAfterBinds cfg sizes binds) region body (walkBinds (fuel - 1) cfg sizes region binds acc)
+      EPi n implicit _ dom cod sp => walk (fuel - 1) cfg sizes region cod (walk (fuel - 1) cfg sizes region dom acc)
+      EField base f sp => walk (fuel - 1) cfg sizes region base acc
+      ERecord rn fields sp => walkFields (fuel - 1) cfg sizes region fields acc
+      ERecUpdate base fields sp => walkFields (fuel - 1) cfg sizes region fields (walk (fuel - 1) cfg sizes region base acc)
+      EDo stmts sp => walkStmts (fuel - 1) cfg sizes region stmts acc
+      EVar n sp => walkVar cfg sizes region n sp acc
+      EInt _ _ => acc
+      EStr _ _ => acc
+      EFloat _ _ => acc
+      EInterp _ _ => acc
+
+walkArgs : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> List Expr -> WalkAcc -> WalkAcc
+walkArgs fuel cfg sizes region [] acc = acc
+walkArgs fuel cfg sizes region (a :: rest) acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    walkArgs (fuel - 1) cfg sizes region rest (walk (fuel - 1) cfg sizes region a acc)
+
+walkFields : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> List (String, Expr) -> WalkAcc -> WalkAcc
+walkFields fuel cfg sizes region [] acc = acc
+walkFields fuel cfg sizes region ((fn, fe) :: rest) acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    walkFields (fuel - 1) cfg sizes region rest (walk (fuel - 1) cfg sizes region fe acc)
+
+walkAlts : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Alt -> WalkAcc -> WalkAcc
+walkAlts fuel cfg sizes region scrut [] acc = acc
+walkAlts fuel cfg sizes region scrut (a :: rest) acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    walkAlts
+      (fuel - 1)
+      cfg
+      sizes
+      region
+      scrut
+      rest
+      (walk (fuel - 1) cfg (sizesAfterCase cfg sizes scrut a.altPat) region a.altBody acc)
+
+walkBinds : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> List Binding -> WalkAcc -> WalkAcc
+walkBinds fuel cfg sizes region [] acc = acc
+walkBinds fuel cfg sizes region (b :: rest) acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    walkBinds
+      (fuel - 1)
+      cfg
+      (sizesAfterBind cfg sizes b)
+      region
+      rest
+      (walkBinding (fuel - 1) cfg sizes region b acc)
+
+walkBinding : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Binding -> WalkAcc -> WalkAcc
+walkBinding fuel cfg sizes region b acc =
+  if fuel <= 0 then
+    acc
+  else
+    let
+      acc1 =
+        case b.bindValue of
+          BVal e => walk (fuel - 1) cfg sizes region e acc
+          BClauses cs => walkClauses (fuel - 1) cfg sizes region cs acc
+    in case cfg.wcMode of
+      WalkSite => acc1
+      _ =>
+        case b.bindSig of
+          Just sig => walk (fuel - 1) cfg sizes region sig.sigType acc1
+          Nothing => acc1
+
+walkClauses : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> List LocalClause -> WalkAcc -> WalkAcc
+walkClauses fuel cfg sizes region [] acc = acc
+walkClauses fuel cfg sizes region (c :: rest) acc =
+  if fuel <= 0 then
+    acc
+  else
+    walkClauses (fuel - 1) cfg sizes region rest (walk (fuel - 1) cfg sizes region c.lcBody acc)
+
+walkStmts : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> List DoStmt -> WalkAcc -> WalkAcc
+walkStmts fuel cfg sizes region [] acc = acc
+walkStmts fuel cfg sizes region (s :: rest) acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    case s of
+      DBind pat e sp => walkStmts (fuel - 1) cfg (sizesAfterDoBind cfg sizes e pat) region rest (walk (fuel - 1) cfg sizes region e acc)
+      DExpr e sp => walkStmts (fuel - 1) cfg sizes region rest (walk (fuel - 1) cfg sizes region e acc)
+      DLet binds sp => walkStmts (fuel - 1) cfg (sizesAfterBinds cfg sizes binds) region rest (walkBinds (fuel - 1) cfg sizes region binds acc)
+
+-- 应用：三种模式的入口分派。`WalkPos` 只按名字表标记形参正性，不认 HOF。
+walkCall : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> Span -> WalkAcc -> WalkAcc
+walkCall fuel cfg sizes region fn args sp acc =
+  case cfg.wcMode of
+    -- 正性模式没有「不完整」这个结论：到点仍按原样标记这一层调用点，再由子遍历收尾。
+    WalkPos => walkPosApp fuel cfg sizes region fn args acc
+    _ =>
+      if fuel <= 0 then
+        exhausted cfg sizes region acc
+      else
+        walkGroupOrHof fuel cfg sizes region fn args sp acc
+
+walkPosApp : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> WalkAcc -> WalkAcc
+walkPosApp fuel cfg sizes region (EVar g gsp) args acc =
+  if HashMap.member g cfg.wcNames then
+    walkArgs (fuel - 1) cfg sizes region args (posMarkCallee cfg sizes region g 0 args acc)
+  else
+    walkArgs (fuel - 1) cfg sizes region args (walk (fuel - 1) cfg sizes region (EVar g gsp) acc)
+walkPosApp fuel cfg sizes region fn args acc =
+  walkArgs (fuel - 1) cfg sizes region args (walk (fuel - 1) cfg sizes region fn acc)
+
+-- 组内调用：边模式落关系（证不出则记诊断边 + 标不完整），站点模式落站点。
+walkGroupOrHof : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> Span -> WalkAcc -> WalkAcc
+walkGroupOrHof fuel cfg sizes region fn args sp acc =
+  case groupHead cfg.wcComp fn of
+    Just callee => walkGroupCall fuel cfg sizes region callee fn args sp acc
+    Nothing =>
+      case fn of
+        EVar nm nsp =>
+          case hofSpecOf nm of
+            Just spec =>
+              case hofLambdaCall spec args of
+                Just hc =>
+                  let
+                    acc1 = walkArgs (fuel - 1) cfg sizes region hc.hofSideArgs acc
+                    sizes2 = extendElemSizes sizes hc.hofListExpr hc.hofElemBinder
+                  in walk (fuel - 1) cfg sizes2 region hc.hofBody acc1
+                Nothing =>
+                  if spec.hofLambdaArity == 1 then
+                    walkEAppMap (fuel - 1) cfg sizes region fn args acc
+                  else
+                    walkPlainApp (fuel - 1) cfg sizes region fn args acc
+            Nothing => walkPlainApp (fuel - 1) cfg sizes region fn args acc
+        _ => walkPlainApp (fuel - 1) cfg sizes region fn args acc
+
+walkGroupCall : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> String -> Expr -> List Expr -> Span -> WalkAcc -> WalkAcc
+walkGroupCall fuel cfg sizes region callee fn args sp acc =
+  case cfg.wcMode of
+    WalkStr =>
+      case argRel cfg.wcP args sizes cfg.wcCtors cfg.wcProjs cfg.wcCaller cfg.wcFacts region of
+        Nothing =>
+          let
+            acc1 = hintEdgeAcc cfg sizes args callee sp acc
+            acc2 = { acc1 | waValid = False }
+          in walkArgs (fuel - 1) cfg sizes region args acc2
+        Just rel => walkArgs (fuel - 1) cfg sizes region args (addEdgeAcc cfg callee rel sp acc)
+    WalkSite =>
+      walkArgs
+        (fuel - 1)
+        cfg
+        sizes
+        region
+        args
+        (pushSiteAcc cfg callee args sizes region False (exprSpan fn) acc)
+    WalkPos => acc
+
+walkPlainApp : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> WalkAcc -> WalkAcc
+walkPlainApp fuel cfg sizes region fn args acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    walkArgs (fuel - 1) cfg sizes region args (walk (fuel - 1) cfg sizes region fn acc)
+
+walkEAppMap : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> Expr -> List Expr -> WalkAcc -> WalkAcc
+walkEAppMap fuel cfg sizes region fn args acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    case args of
+      [cb, lst] =>
+        case cb of
+          EApp (EVar g gsp) pargs cbsp => if memName g cfg.wcComp then walkMapPartialInline (fuel - 1) cfg sizes region g pargs lst (nodeRefSpan cbsp) acc else walkArgs (fuel - 1) cfg sizes region args acc
+          EVar g gsp => if memName g cfg.wcComp then walkMapPartialInline (fuel - 1) cfg sizes region g [] lst (nodeRefSpan gsp) acc else walkArgs (fuel - 1) cfg sizes region args acc
+          _ => walkArgs (fuel - 1) cfg sizes region args acc
+      _ => walkArgs (fuel - 1) cfg sizes region args acc
+
+walkMapPartialInline : Int -> WalkCfg -> List (String, Int, Int, List Int) -> List String -> String -> List Expr -> Expr -> Span -> WalkAcc -> WalkAcc
+walkMapPartialInline fuel cfg sizes region g pargs lst cbsp acc =
+  if fuel <= 0 then
+    exhausted cfg sizes region acc
+  else
+    let
+      acc1 = walk (fuel - 1) cfg sizes region lst acc
+      elems = extendElemSizes sizes lst "$elem"
+      fullArgs = append pargs [EVar ("$elem") (detachedNodeRef cbsp)]
+      acc2 = walkArgs (fuel - 1) cfg sizes region pargs acc1
+    in case cfg.wcMode of
+      WalkStr =>
+        case argRel cfg.wcP fullArgs elems cfg.wcCtors cfg.wcProjs cfg.wcCaller cfg.wcFacts region of
+          Nothing => { acc2 | waValid = False }
+          Just rel => addEdgeAcc cfg g rel cbsp acc2
+      WalkSite => pushSiteAcc cfg g fullArgs elems region False cbsp acc2
+      WalkPos => acc2
+
+-- 关系证不出来时记一条诊断边：位置 p 的实参为什么拿不到尺寸关系。
+hintEdgeAcc : WalkCfg -> List (String, Int, Int, List Int) -> List Expr -> String -> Span -> WalkAcc -> WalkAcc
+hintEdgeAcc cfg sizes args callee sp acc =
+  case argRelHint cfg.wcP args sizes cfg.wcCtors of
+    Nothing => acc
+    Just m => addEdgeAcc cfg callee m sp acc
+
+-- 正性候选：callee 的每个实参位标记 pos / neg。
+posMarkCallee : WalkCfg -> List (String, Int, Int, List Int) -> List String -> String -> Int -> List Expr -> WalkAcc -> WalkAcc
+posMarkCallee cfg sizes region g i args acc =
+  posMarkCalleeGo cfg sizes region g (length args - i) args acc
+
+posMarkCalleeGo : WalkCfg -> List (String, Int, Int, List Int) -> List String -> String -> Int -> List Expr -> WalkAcc -> WalkAcc
+posMarkCalleeGo cfg sizes region g remaining args acc =
+  if remaining <= 0 then
+    acc
+  else
+    let
+      i = length args - remaining
+      acc1 = if argPositive args i sizes cfg.wcCaller cfg.wcFacts region then { acc | waPos = (g, i) :: acc.waPos } else { acc | waNeg = (g, i) :: acc.waNeg }
+    in posMarkCalleeGo cfg sizes region g (remaining - 1) args acc1
+
+-- ---------------------------------------------------------------
+-- 站点模式的别名解析：`let g = f in g x`（f 是同组函数）按直接调用参与尺寸分析。
+-- 只在绑定是裸 `PVar` + `EVar` 组内函数时替换；遇到同名 binder 立即屏蔽。
+-- ---------------------------------------------------------------
+aliasNameOf : (String, String) -> String
+aliasNameOf p = firstOf p
+
+lookupAlias : String -> List (String, String) -> Maybe String
+lookupAlias n [] = Nothing
+lookupAlias n ((k, v) :: rest) = if n == k then Just v else lookupAlias n rest
+
+dropAliases : List String -> List (String, String) -> List (String, String)
+dropAliases [] als = als
+dropAliases (n :: rest) als = dropAliases rest (filter (\p => aliasNameOf p /= n) als)
+
+aliasOf : List String -> (Pat, Expr) -> Maybe (String, String)
+aliasOf comp (PVar g gsp, val) =
+  case val of
+    EVar n nsp => if memName (n) comp then Just (g, n) else Nothing
+    _ => Nothing
+aliasOf comp (_, val) = Nothing
+
+inlArgsF : Int -> List String -> List (String, String) -> List Expr -> List Expr
+inlArgsF fuel comp als [] = []
+inlArgsF fuel comp als (a :: rest) =
+  inlGoF (fuel - 1) comp als a :: inlArgsF (fuel - 1) comp als rest
+
+inlFieldsF : Int -> List String -> List (String, String) -> List (String, Expr) -> List (String, Expr)
+inlFieldsF fuel comp als [] = []
+inlFieldsF fuel comp als ((fn, fe) :: rest) =
+  (fn, inlGoF (fuel - 1) comp als fe) :: inlFieldsF (fuel - 1) comp als rest
+
+inlPartsF : Int -> List String -> List (String, String) -> List InterpPart -> List InterpPart
+inlPartsF fuel comp als [] = []
+inlPartsF fuel comp als (p :: rest) =
+  case p of
+    IPText t => IPText t :: inlPartsF (fuel - 1) comp als rest
+    IPHole e => IPHole (inlGoF (fuel - 1) comp als e) :: inlPartsF (fuel - 1) comp als rest
+
+inlBindsF : Int -> List String -> List (String, String) -> List Binding -> (List Binding, List (String, String))
+inlBindsF fuel comp als [] = ([], als)
+inlBindsF fuel comp als (b :: rest) =
+  let
+    b2 = inlBindingF (fuel - 1) comp als b
+  in case b2.bindValue of
+    BVal rhs =>
+      case aliasOf comp (b2.bindPat, rhs) of
+        Just a =>
+          let
+            restP = inlBindsF (fuel - 1) comp (a :: als) rest
+          in (firstOf restP, secondOf restP)
+        Nothing =>
+          let
+            restP = inlBindsF (fuel - 1) comp (dropAliases (patBinders b2.bindPat) als) rest
+          in (b2 :: firstOf restP, secondOf restP)
+    BClauses cs =>
+      let
+        restP = inlBindsF (fuel - 1) comp (dropAliases (patBinders b2.bindPat) als) rest
+      in (b2 :: firstOf restP, secondOf restP)
+
+inlBindingF : Int -> List String -> List (String, String) -> Binding -> Binding
+inlBindingF fuel comp als b =
+  let
+    value =
+      case b.bindValue of
+        BVal e => BVal (inlGoF (fuel - 1) comp als e)
+        BClauses cs => BClauses (inlClausesF (fuel - 1) comp als cs)
+    sig =
+      case b.bindSig of
+        Just s => Just ({ s | sigType = inlGoF (fuel - 1) comp als s.sigType })
+        Nothing => Nothing
+  in { b | bindValue = value, bindSig = sig }
+
+inlAltsF : Int -> List String -> List (String, String) -> List Alt -> List Alt
+inlAltsF fuel comp als [] = []
+inlAltsF fuel comp als (a :: rest) =
+  { a | altBody = inlGoF (fuel - 1) comp (dropAliases (patBinders a.altPat) als) a.altBody }
+    :: inlAltsF (fuel - 1) comp als rest
+
+inlClausesF : Int -> List String -> List (String, String) -> List LocalClause -> List LocalClause
+inlClausesF fuel comp als [] = []
+inlClausesF fuel comp als (c :: rest) =
+  { c | lcBody = inlGoF (fuel - 1) comp (dropAliases (concatMap patBinders c.lcPats) als) c.lcBody }
+    :: inlClausesF (fuel - 1) comp als rest
+
+inlStmtsF : Int -> List String -> List (String, String) -> List DoStmt -> List DoStmt
+inlStmtsF fuel comp als [] = []
+inlStmtsF fuel comp als (s :: rest) =
+  case s of
+    DBind pat e sp =>
+      DBind pat (inlGoF (fuel - 1) comp als e) sp
+        :: inlStmtsF (fuel - 1) comp (dropAliases (patBinders pat) als) rest
+    DExpr e sp => DExpr (inlGoF (fuel - 1) comp als e) sp :: inlStmtsF (fuel - 1) comp als rest
+    DLet binds sp =>
+      let
+        p = inlBindsF (fuel - 1) comp als binds
+      in DLet (firstOf p) sp :: inlStmtsF (fuel - 1) comp (secondOf p) rest
+
+inlGoF : Int -> List String -> List (String, String) -> Expr -> Expr
+inlGoF fuel comp als e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      EVar n sp =>
+        case lookupAlias (n) als of
+          Just target => EVar (target) sp
+          Nothing => EVar n sp
+      ELam ns body sp => ELam ns (inlGoF (fuel - 1) comp (dropAliases (map firstOf ns) als) body) sp
+      EApp fn args sp => EApp (inlGoF (fuel - 1) comp als fn) (inlArgsF (fuel - 1) comp als args) sp
+      EPi n implicit qty dom cod sp => EPi n implicit qty (inlGoF (fuel - 1) comp als dom) (inlGoF (fuel - 1) comp (dropAliases [n] als) cod) sp
+      ELet binds body rec_ sp =>
+        let
+          p = inlBindsF (fuel - 1) comp als binds
+        in ELet (firstOf p) (inlGoF (fuel - 1) comp (secondOf p) body) rec_ sp
+      ECase scrut alts sp => ECase (inlGoF (fuel - 1) comp als scrut) (inlAltsF (fuel - 1) comp als alts) sp
+      EIf c t el sp => EIf (inlGoF (fuel - 1) comp als c) (inlGoF (fuel - 1) comp als t) (inlGoF (fuel - 1) comp als el) sp
+      EField base f sp => EField (inlGoF (fuel - 1) comp als base) f sp
+      ERecord rn fields sp => ERecord rn (inlFieldsF (fuel - 1) comp als fields) sp
+      ERecUpdate base fields sp => ERecUpdate (inlGoF (fuel - 1) comp als base) (inlFieldsF (fuel - 1) comp als fields) sp
+      EDo stmts sp => EDo (inlStmtsF (fuel - 1) comp als stmts) sp
+      EInterp parts sp => EInterp (inlPartsF (fuel - 1) comp als parts) sp
+      _ => e
+
+inlineAliases : List String -> Expr -> Expr
+inlineAliases comp e = inlGoF (exprBudget 32 e) comp [] e
+
+-- ---------------------------------------------------------------
+-- 三个消费方：string 边 / 调用站点 / 正性事实。
+-- ---------------------------------------------------------------
+export strClause : List String -> List String -> List (String, List Int) -> Int -> String -> HashMap String (List Int) -> (List Pat, Expr) -> (Bool, List (((String, String), Int), Span))
+strClause comp ctors projs p caller facts clause =
+  let
+    cfg = strCfg comp ctors projs p caller facts
+    body = secondOf clause
+    acc = walk (exprBudget 32 body) cfg (strSizeEntries (firstOf clause)) [] body emptyWalkAcc
+  in (acc.waValid, acc.waEdges)
+
+export siteCollect : List String -> List String -> List (String, List Int) -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List Site
+siteCollect comp ctors projs defTbl facts = siteCollectGo comp ctors projs defTbl facts comp []
+
+siteCollectGo : List String -> List String -> List (String, List Int) -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> List Site -> List Site
+siteCollectGo comp ctors projs defTbl facts [] acc = acc
+siteCollectGo comp ctors projs defTbl facts (f :: rest) acc =
+  siteCollectGo
+    comp
+    ctors
+    projs
+    defTbl
+    facts
+    rest
+    (siteCollectClauses comp ctors projs facts f (clausesOfDefTbl f defTbl) acc)
+
+siteCollectClauses : List String -> List String -> List (String, List Int) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> List Site -> List Site
+siteCollectClauses comp ctors projs facts caller [] acc = acc
+siteCollectClauses comp ctors projs facts caller (cl :: rest) acc =
+  let
+    body = inlineAliases comp (secondOf cl)
+    cfg = siteCfg comp ctors projs caller facts
+    acc2 = walk (exprBudget 32 body) cfg (strSizeEntries (firstOf cl)) [] body (walkAccOfSites acc)
+  in siteCollectClauses comp ctors projs facts caller rest acc2.waSites
+
+export posWalk : HashMap String Bool -> String -> List (String, Int, Int, List Int) -> HashMap String (List Int) -> List String -> Expr -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posWalk namesTbl caller sizes facts region e st =
+  let
+    cfg = posCfg namesTbl caller facts
+    acc = walk (exprBudget 32 e) cfg sizes region e (walkAccOfPos st)
+  in (acc.waPos, acc.waNeg)
+
+export posScanClauses : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> String -> List (List Pat, Expr) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posScanClauses namesTbl defs facts caller [] st = st
+posScanClauses namesTbl defs facts caller (cl :: rest) st =
+  let
+    sizes = strSizeEntries (firstOf cl)
+    st2 = posWalk namesTbl caller sizes facts [] (secondOf cl) st
+  in posScanClauses namesTbl defs facts caller rest st2
+
+export posScanDefs : HashMap String Bool -> List (String, List (List Pat, Expr)) -> HashMap String (List Int) -> List (String, List (List Pat, Expr)) -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posScanDefs namesTbl defs facts [] st = st
+posScanDefs namesTbl defs facts (d :: rest) st =
+  posScanDefs
+    namesTbl
+    defs
+    facts
+    rest
+    (posScanClauses namesTbl defs facts (firstOf d) (secondOf d) st)
+
+-- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs。
+export posScanNames : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posScanNames namesTbl defTbl factsTbl work st =
+  let
+    scanned = posScanNamesGo namesTbl defTbl factsTbl work st
+  in (posNormalize (firstOf scanned), posNormalize (secondOf scanned))
+
+posScanNamesGo : HashMap String Bool -> HashMap String (List (List Pat, Expr)) -> HashMap String (List Int) -> List String -> (List (String, Int), List (String, Int)) -> (List (String, Int), List (String, Int))
+posScanNamesGo namesTbl defTbl factsTbl [] st = st
+posScanNamesGo namesTbl defTbl factsTbl (n :: rest) st =
+  posScanNamesGo
+    namesTbl
+    defTbl
+    factsTbl
+    rest
+    (posScanClauses namesTbl [] factsTbl n (clausesOfDefTbl n defTbl) st)
