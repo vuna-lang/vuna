@@ -2610,13 +2610,19 @@ explicitCtorsOf (alt :: rest) =
     _ => explicitCtorsOf rest
 
 -- 内部：显式构造子全属同一族、且该族还有未覆盖构造子时，返回（族名，缺失构造子）。
+-- 一个显式构造子都没有时不判定：兜底分支此时不是「代替了族里未写的构造子」，而是
+-- 匹配别的类型（字面量 / record / 跨文件族的 scrutinee），族名无从推断。
 familyGapOf : List (String, List String) -> List String -> Maybe (String, List String)
-familyGapOf [] used = Nothing
-familyGapOf ((fam, ctors) :: rest) used =
-  if allCtorIn used ctors && length (dedupeCtor ctors) > length (dedupeCtor used) then
+familyGapOf fams [] = Nothing
+familyGapOf fams (c :: rest) = familyGapOfCovering fams (dedupeCtorGo [c] rest)
+
+familyGapOfCovering : List (String, List String) -> List String -> Maybe (String, List String)
+familyGapOfCovering [] used = Nothing
+familyGapOfCovering ((fam, ctors) :: rest) used =
+  if allCtorIn used ctors && length (dedupeCtor ctors) > length used then
     Just (fam, filter (\c => not (memName c used)) ctors)
   else
-    familyGapOf rest used
+    familyGapOfCovering rest used
 
 allCtorIn : List String -> List String -> Bool
 allCtorIn [] used = True
