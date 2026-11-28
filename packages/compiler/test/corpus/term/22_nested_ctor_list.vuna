@@ -1,0 +1,22 @@
+-- 正例：嵌套模式 alt 同时嵌构造子与列表模式时，矩阵降级按构造子真实 arity 取子模式
+-- （`A (V "->" _) (dom :: cod :: rest) sp`：外层构造子 3 个字段、内层构造子 + 列表模式）。
+import Prelude
+
+data E : Type where
+  V : String -> Int -> E
+  A : E -> List E -> Int -> E
+
+headDom : E -> Int
+headDom (A (V "->" _) (dom :: cod :: rest) sp) = 1
+headDom (A f args sp) = 2
+headDom (V s n) = 3
+
+headDomCase : E -> Int
+headDomCase e =
+  case e of
+    A (V "->" _) (dom :: cod :: rest) sp => 1
+    A f args sp => 2
+    V s n => 3
+
+main : Int
+main = headDom (A (V "->" 0) [] 0) + headDomCase (A (V "->" 0) [] 0)
