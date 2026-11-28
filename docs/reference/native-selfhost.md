@@ -13,7 +13,8 @@
 | conformance 自举 | 该二进制能自检整个 workspace，并在对拍 / 夹具上与 OCaml 编译器给出相同结果 | `nix run .#backend-check -- --compiler native` |
 
 产物自举只证明「编译器能被 native 目标编出来并启动」；conformance 才证明「它能承担编译器的工作」。
-两者当前不同步：产物自举通过，`selfhost` scope（整仓 `check .`）未通过（§4）。
+两者现在都通过：`selfhost` scope（逐成员 `check`，§4.1）16/16 通过、0 error，整仓 `check .`
+（文本格式，成员逐进程）也 0 error。
 
 信任锚点仍是 OCaml `seed/`：native 产物（`.s` 文件集）还没有参与 `stage1 == stage2`，
 也没有独立的 native 种子轮换路径（gh#144，前提见
@@ -29,20 +30,21 @@
 - 平台是 x86-64 Linux（SysV AMD64），静态链接、无 libc。构建期只需要 `cc` / `as` / `ld`；
   它们与 wasm 侧的 `wasm-tools` / `wasm-opt` 同属**构建期外部工具，不进 TCB、不进 seed**。
 - 同一 IR 的 `.s` 文件集逐字节确定；ELF 字节只保证行为（依赖链接工具版本）。
-- 编译器自身的 native 产物（`bench/baselines/artifacts.json` 的 `self` 用例，2026-11-22 基线；
-  `nix run .#vuna-artifacts -- --target native --only self --check` 按基线判定漂移）：
+- 编译器自身的 native 产物（`bench/baselines/artifacts.json` 的 `self` 用例；
+  `nix run .#vuna-artifacts -- --target native --only self --check` 按基线判定尺寸漂移）：
 
-  | 指标 | 读数 |
+  | 指标 | 读数（12 核，冷对象库） |
   | --- | --- |
-  | `.s` 文件集 | 138 个文件 / 23.97 MB / 975,735 行 |
-  | codegen | 12.4 s |
+  | `.s` 文件集 | 142 个文件 / 42.66 MB（含 `build.sh` 与对象目录）/ 1,905,169 行 |
+  | codegen（`build --no-compile`） | 15.7 s；同机 OCaml 目标 8.9 s ⇒ **1.77×** |
   | `cc` 工具链 | 1.6 s |
 
-  2026-11-26 在同一命令形状上复测（`build --no-compile --target native packages/compiler`，
-  冷对象库）：`.s` 仍是 **138 个文件 / 23.77 MB / 964,716 行**，codegen 用了 **648 s**。
-  产物规模没变而耗时放大 ~50×，且插件进程全程单核满载——指向插件里新增的 IR 变换
-  （`Inline` / `Specialize` / CSE）在编译器自身规模上的复杂度回退。648 s 已超过插件缺省
-  300 s 超时，所以 `.#vuna-native` 派生显式设 `VUNA_PLUGIN_TIMEOUT=0`。
+  codegen 的判据是**同机比值**而不是绝对秒数：`checks.vuna-native-codegen-budget` 在同一个
+  driver 二进制下各跑一次 `--target native` / `--target ocaml`，比值 ≤3 才算通过。
+  逐段的 pass 读数用 `VUNA_OBS=1 vuna build --no-compile --target native packages/compiler`
+  ＋ `vuna dev obs summarize`：`native.emit` 2.3 s、`native.init` 1.2 s、`native.specialize`
+  0.64 s、两遍 `native.inline` 各 0.39 s，其余各段 <0.2 s。插件的 pass 链也可以脱离整条
+  编译命令单独重跑（`VUNA_KEEP_PLUGIN_IR=1` 保留载荷后直接调 `vuna-target-native`）。
 
 ## 3. 复现
 
@@ -64,6 +66,20 @@ nix run .#backend-check -- --compiler native --scope corpus --jobs 8
 VUNA_ALT_NATIVE=<out>/bin/vuna-native bash nix/tools/backend-check.sh --compiler native --scope selfhost
 ```
 
+codegen（后端插件）的读数不必每次重建整条链：`VUNA_KEEP_PLUGIN_IR=1` 让编译器保留
+`<out>/.vuna-ir-<target>` 载荷，之后直接跑插件就能复现插件侧的全部耗时与产物：
+
+```console
+VUNA_KEEP_PLUGIN_IR=1 vuna build --no-compile --target native packages/compiler --out OUT
+VUNA_OBS=1 vuna-target-native --ir OUT/.vuna-ir-native --out OUT2 --print
+vuna dev obs summarize <VUNA_OBS_DIR>/vuna-*.jsonl
+```
+
+`VUNA_OBS=1` 下每条 `vuna.pass.native.*` 是一段：16 步变换之外，可达性收尾
+（`native.reach`）、形参区间不动点（`native.params`）、作用域校验（`native.validate`）、
+代码发射（`native.emit`）与入口装配（`native.init`）各占一段，所以份额能闭合到墙钟。
+校验缺省只跑首末两步（`VUNA_STAGE_CHECK=all` 打开全量，CI 与排查用）。
+
 内存与回收形状用运行时的诊断开关观察（[native-runtime.md](native-runtime.md) §1.1）：
 `VUNA_NATIVE_GC_LOG=1` 逐次打印 `live` / `gen`，以及归因用的 `span`（本次扫的栈字节）、
 `segs` / `mapped`（段数与段区总字节）、`objs`（live 对象数）、`gcus`（累计回收微秒）；
@@ -71,76 +87,87 @@ VUNA_ALT_NATIVE=<out>/bin/vuna-native bash nix/tools/backend-check.sh --compiler
 
 ## 4. 当前读数
 
-口径：12 核 / 27 GiB Linux；对象库冷（每项独立 `VUNA_STORE`）；下表的 native 读数取自
-`43874ad` 重建的 `.#vuna-native`（`/nix/store/h5sp…`）。本页合入时 main 已前进到 `a4aa9ad`
-（native codegen 的 T3 / 内联提交）；同机复测 `check packages/base` 为 2.3–2.7 s，与本表一致，
-其余行未逐项复测。native 列不含 `VUNA_NATIVE_GC_LOG`，带诊断的读数在 §4.3 单独列。绝对值随
-机器变化，跨机器只比同一轮的 native / OCaml 比值。
+口径：12 核 / 27 GiB Linux，**全冷**（每项独立 `VUNA_STORE` + 独立 `VUNA_PKG_STATE`，
+`VUNA_OBS=0`、`VUNA_LOG` 未设）；native 列取自 `.#vuna-native`（`vuna-native check <pkg>`），
+OCaml 列取自同源码的 `.#vuna`（`vuna check <pkg>`）。两列**同一窗口交替**测量，
+单独进程、无并行。绝对值随机器与源码规模变化，**跨机器只比 native / OCaml 比值**。
 
-**读数必须绑定当轮二进制。** `result-native` 是共享 out-link：本轮开工时旧产物已经跑不动当前
-源码（`Base/Thread/Par.vuna` 报 `RN_UnknownConstructor`）。`.#vuna-native` 的源码输入还要带上
-后端插件包的依赖闭包（`target-native` / `target-wasm` 的 `vuna-obs` 这类路径依赖）。
+`VUNA_PKG_STATE` 不隔离时读数会低一大截：包内的 `.vuna/iface` 留着依赖包的接口，
+`check` 于是只精化本包（`toolchain` 从 86 s 落到 13 s），那是另一种口径，不要混。
+
+**读数必须绑定当轮二进制。** `result-native` 是共享 out-link，可能指向上游旧产物：
+本轮开工时它已经跑不动当前源码（`Base/Thread/Par.vuna` 报 `RN_UnknownConstructor`）。
+`.#vuna-native` 的源码输入还要带上后端插件的依赖闭包（`target-native` / `target-wasm` 的
+`vuna-obs` 这类路径依赖），否则插件找不到自己的依赖。
 
 ### 4.1 整仓
 
-| 运行 | 结果 | 墙钟 | 峰值 RSS | 形状 |
-| --- | --- | --- | --- | --- |
-| native `check . --error-format json`（单进程） | 未完成 | 902 s（超时） | 13.5 GB | live 11.4 GB / mapped 14.8 GB / 237 M live 对象 / 148 次回收 |
-| native `check .`（文本格式，成员逐进程） | 通过，0 error | 402 s | 20 MB（父进程） | 15 个成员各自一个子进程 |
-| OCaml `check . --error-format json` | 通过，0 error | 76 s | 640 MB | — |
+逐成员形态（`selfhost` scope，`VUNA_BACKEND_SELFHOST_JOBS=2`，冷 store）：
 
-逐成员形态（`selfhost` scope，`VUNA_BACKEND_SELFHOST_JOBS=2`，冷 store，`adbf25a` 的二进制）：
-16 个成员合计 **655 s**（`toolchain` 543 s 与 `dev` 503 s 并发），单成员峰值 RSS 见 §4.2 的
-5–6 GiB 档。
-单进程未完成不是算错：同一份源码逐包与文本格式都 0 error。它是**单堆规模**——所有成员的接口与
-中间态留在同一个堆里，后段 live 稳定在 10–11 GB（237 M 个对象，约 48 B/个），每次整堆回收都要
-重扫这张堆；148 次回收累计 749 s，占墙钟 83%（§4.3）。门禁的 `selfhost` scope 用的是逐成员
-进程形态（与文本格式同构），单进程那一行只作为 `selfhost-stress` 的读数保留。
+| 运行 | 结果 | 成员合计 | 最慢成员 |
+| --- | --- | --- | --- |
+| native `check <member> --error-format json` | 16/16 通过，0 error | **296 s** | `plugin-web` 101 s（`dev` 71 s、`compiler` 56 s 次之） |
+| OCaml 同命令（同源码、`.#vuna`） | 通过，0 error | 约 115 s（16 成员逐包之和） | — |
 
-### 4.2 逐包（冷 store）
+单进程整仓（`selfhost-stress`）仍是**单堆规模**问题：所有成员的接口与中间态留在同一个堆里，
+后段 live 到 10 GB 量级（237 M 个对象，约 48 B/个），每次整堆回收都要重扫这张堆。所以门禁的
+`selfhost` scope 用逐成员进程形态（与文本格式同构），单进程那一行只作成本读数保留。
 
-OCaml 的峰值按**进程树**计（`vuna` 把命令派给 `vuna-toolchain` 子进程，只看路由进程会漏）。
+### 4.2 逐包（全冷，同窗口交替）
 
-| 包 | native ms | native 峰值 MiB | OCaml ms | OCaml 峰值 MiB | native / OCaml |
-| --- | --- | --- | --- | --- | --- |
-| `base` | 2678 | 456 | 414 | 176 | 6.5× |
-| `compiler-base` | 3498 | 615 | 622 | 190 | 5.6× |
-| `ir` | 4321 | 737 | 2270 | 186 | 1.9× |
-| `target-ocaml` | 3290 | 659 | 619 | 11 | 5.3× |
-| `obs` | 1027 | 193 | 418 | 15 | 2.5× |
-| `plugin-kit` | 1237 | 211 | 416 | 11 | 3.0× |
-| `http` | 1241 | 250 | 414 | 11 | 3.0× |
-| `web` | 1441 | 317 | 414 | 11 | 3.5× |
-| `target-native` | 13373 | 1637 | 3294 | 282 | 4.1× |
-| `compiler` | 71587 | 6016 | 12973 | 406 | 5.5× |
-| `web-cli` | 34366 | 3163 | 5959 | 344 | 5.8× |
-| `plugin-web` | 34785 | 3317 | 6161 | 345 | 5.6× |
-| `cli` | 4737 | 962 | 617 | 177 | 7.7× |
-| `toolchain` | 473834 | 6398 | 24083 | 669 | 19.7× |
-| `dev` | 511104 | 5837 | 22075 | 599 | 23.1× |
+| 包 | native ms | OCaml ms | native / OCaml |
+| --- | --- | --- | --- |
+| `base` | 2406 | 360 | 6.7× |
+| `compiler-base` | 5479 | 721 | 7.6× |
+| `ir` | 15144 | 2575 | 5.9× |
+| `target-ocaml` | 19382 | 2885 | 6.7× |
+| `obs` | 2919 | 461 | 6.3× |
+| `plugin-kit` | 3175 | 483 | 6.6× |
+| `http` | 3264 | 498 | 6.6× |
+| `web` | 4379 | 626 | 7.0× |
+| `target-native` | 31122 | 4334 | 7.2× |
+| `compiler` | 56558 | 7281 | 7.8× |
+| `web-cli` | 68992 | 8738 | 7.9× |
+| `plugin-web` | 80646 | 9927 | 8.1× |
+| `cli` | 65676 | 9655 | 6.8× |
+| `toolchain` | 85902 | 11223 | 7.7× |
+| `dev` | 129180 | 15195 | 8.5× |
 
-墙钟比多数包在 2–6×；`toolchain` / `dev` 是 19–23×。RSS 比更大（`compiler` 15×、
-`toolchain` 9.6×），与 §4.3 的 live 集同向。`dev` 与本行的 `toolchain` 同量级，未单独复测。
+比值集中在 5.9–8.5×：小包是固定成本（进程启动 + 解析 + 接口摘要）之比，大包是「同一份
+精化 + 同一份 codegen 检查」在 native 运行时上跑出来的比值。**指令质量不是主因**
+（`benchmarks.md` §1.1 的生成程序基准里 native vs vuna-OCaml 后端是 1.2–2.8×），差距在
+运行时：分配吞吐与 GC（§4.3）。
+
+同一份口径下的历史读数（`adbf25a` 的二进制、`43874ad` 起的一轮）是 `toolchain` 473 s /
+`dev` 511 s / `compiler` 72 s：本轮 codegen 与 GC 侧的改动把它压到 86 s / 129 s / 57 s。
 
 ### 4.3 GC 形状（`VUNA_NATIVE_GC_LOG=1`）
 
-诊断行自身的开销只剩「段表遍历 + 一次 write」（`objs` 由清扫阶段顺带计数），与无诊断的墙钟差
-在 5% 以内；`gcus` 是 `gc_collect` 内的累计时间，含这一次 write。
+诊断行自身的开销只剩「段表遍历 + 一次 write」（`objs` 由清扫阶段顺带计数）；`gcus` 是
+`gc_collect` 内的累计时间。全冷、单进程，与 §4.2 同一轮二进制：
 
 | 运行 | 墙钟 | 回收（full / minor） | live | mapped | live 对象 | 累计回收 | 占墙钟 | 栈跨度和 / 峰值 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `check packages/base` | 3.18 s | 22 / 68 | 138 MB | 481 MB | 2.53 M | 1.74 s | 55% | 1.4 MB / 210 KB |
-| `check packages/compiler` | 72.6 s | 46 / 73 | 3.36 GB | 6.67 GB | 67.1 M | 43.6 s | 60% | 4.3 MB / 1.0 MB |
-| `check packages/toolchain` | 450 s | 117 / 57 | 2.67 GB | 6.70 GB | 54.4 M | 360 s | 80% | 2.6 GB / 91 MB |
-| 92 夹具 `compile --target native` | 572 s | 647 / 5,088 | 118 MB | 742 MB | 2.62 M | 415 s | 73% | **225 GB** / 147 MB |
-| 整仓 `check . --error-format json` | 902 s（超时） | 74 / 74 | 11.4 GB | 14.8 GB | 237 M | 749 s | 83% | 2.0 GB / 91 MB |
+| `check packages/base` | 2.4 s | 18 / 81 | 126 MB | 403 MB | 1.95 M | 1.35 s | 56% | 0.5 MB / 24 KB |
+| `check packages/compiler` | 56 s | 35 / 100 | 2.49 GB | 5.29 GB | 47.8 M | 30.4 s | 54% | 3.5 MB / 1.5 MB |
+| `check packages/toolchain` | 87 s | 40 / 127 | 4.53 GB | 8.57 GB | 89.3 M | 52.2 s | 60% | 1.2 MB / 0.2 MB |
 
-平均对象 45–57 B。mapped/live 从整仓的 1.3× 到 92 夹具的 6.3×：回收时间跟着 live 与回收次数走，
-不是按 mapped 走。
+平均对象 50–57 B，mapped/live 1.9–2.1×。回收成本由三项组成，都是**同一份字级常数**乘上去的：
 
-`92_eff_thread_mutex_cond` 的失败（corpus scope）在编译器侧复现：native 编译该夹具 572 s（无诊断
-585 s）/ 912 MB，OCaml 42 s。它不靠大 live（只有 118 MB），而是 **5,735 次回收 × 平均 39 MB 栈跨度**
-——累计保守扫栈 225 GB。深层递归的编译器阶段每次回收都按栈跨度保守扫描，这是 native 自举成本的主体。
+1. **标记与扫栈**：`gc_try` 对每个候选机器字付 ~12 次内存访问 + 一次 `seg_find` 二分；
+   `gc_scan_words` 又把游标放在 `.bss`（每个字多 4 次访问 + 一次 call/ret）。full 回收要
+   遍历 live 的全部 payload 字，所以 `full 次数 × live` 就是这条轴的总量。
+2. **清扫与卡片**：`gc_sweep` 逐段逐**块头**前进（成本 ∝ mapped），死块还要按 `shl` 循环
+   重算尺寸类再前插；minor 的卡片表逐段扫 `size/512` 字节。死块留在段里不回收 ⇒ mapped 只
+   增不减 ⇒ 这两项一起被放大。
+3. **span 不再是主因**：阈值里的 `span` 项（`max(gcMin, live/8, 栈跨度)`）会把深递归阶段的
+   回收推稀，换来的是每次回收更贵；本轮的累计扫栈只有 MB 级。深递归 + 中等 live 的形状
+   （`92_eff_thread_mutex_cond`：5735 次回收 × 39 MB 跨度和）仍然存在，属于这条轴的极端端。
+
+## 7. 已知边界与优化边界
+
+
+
 - **多线程**：`clone` + futex 与 STW GC 可用；宿主持有态按线程隔离（状态槽 / cleanup 链在 TCB，
   路径等固定缓冲在每线程 scratch），阻塞的宿主 syscall 也发布停车标记；线程体仍是
   `Eff []`，宿主效应族要在 worker 体内显式装 handler（`runFsHost`，见
