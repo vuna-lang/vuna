@@ -20,6 +20,7 @@ modules = [
   "Vuna.Compiler.Driver.Compile",
   "Vuna.Compiler.Driver.CompilerCli",
   "Vuna.Compiler.Driver.Dt",
+  "Vuna.Compiler.Driver.Graph",
   "Vuna.Compiler.Driver.Iface",
   "Vuna.Compiler.Driver.Target",
   "Vuna.Compiler.Driver.TargetBuild",
