@@ -59,6 +59,7 @@ in
     "check:vuna-native-surface"
     "check:vuna-native-artifact"
     "check:vuna-native-codegen-growth"
+    "check:vuna-native-codegen-budget"
     "check:vuna-compiler-growth"
     "check:vuna-compiler-growth-ctor"
     "check:vuna-compiler-growth-incremental"

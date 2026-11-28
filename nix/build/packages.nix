@@ -508,9 +508,8 @@ let
       }/packages packages
       chmod -R u+w packages
       export VUNA_STORE="$TMPDIR/vuna-store"
-      # 自举这一步的 codegen 量随编译器源码增长；插件缺省 300 s 超时会在慢机上误杀。
-      # 构建时长由 Nix 的 build 超时兜底，这里不再叠一层插件超时。
-      export VUNA_PLUGIN_TIMEOUT=0
+      # 后端插件缺省 300 s 超时足够：编译器自身的 codegen 是秒级（`checks.vuna-native-codegen-budget`
+      # 守住这个量级）。再慢就该失败，而不是靠关掉超时躲过去。
       # 后端插件先用 stage 1 编译器建好：parity / corpus 用 `vuna-native` 编到
       # native 与 wasm，插件必须与它同目录（`<exeDir>` 优先于 `$VUNA_EXEC_PATH`）。
       ${vuna-compiler}/bin/vuna-compiler build packages/target-native --out "$TMPDIR/tnative"
