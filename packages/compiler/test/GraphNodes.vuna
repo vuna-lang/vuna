@@ -1,0 +1,75 @@
+-- 查询图节点表：接口 key = 地址、依赖 = import 的地址、闭包外名字保留 ext: 哨兵。
+import Base
+import Base.Effect.Core
+import Base.Effect.Console
+import Base.Effect.Exit
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.Graph
+import Vuna.Compiler.Loader.Closure
+
+main : Eff [ConsoleOp, ExitOp] String
+main =
+  case bad of
+    [] => pure ""
+    xs =>
+      do
+        _ <- consolePrint ("graph nodes failed: " ++ join ", " xs ++ "\n")
+        _ <- exitWith 1
+        pure ""
+
+bad : List String
+bad = map firstOf (filter (\p => not (secondOf p)) results)
+
+results : List (Pair String Bool)
+results =
+  [
+    Pair "iface-key" ifaceKeyOk,
+    Pair "iface-deps" ifaceDepsOk,
+    Pair "graph-layers" graphLayersOk,
+    Pair "graph-stats" graphStatsOk,
+    Pair "graph-cycle" graphCycleOk
+  ]
+
+mod : String -> String -> List String -> ClosureMod
+mod name addr deps = ClosureMod "pkg" "pk" "env" name "${name}.vuna" "src" 0 deps addr
+
+nodes : List GraphNode
+nodes = ifaceNodesOf [mod "a" "addr-a" ["b", "outside"], mod "b" "addr-b" []]
+
+findKey : String -> List GraphNode -> Maybe GraphNode
+findKey _ [] = Nothing
+findKey k (n :: rest) = if n.gnKey == k then Just n else findKey k rest
+
+ifaceKeyOk : Bool
+ifaceKeyOk =
+  case findKey "addr-a" nodes of
+    Just n =>
+      case n.gnKind of
+        NodeIface => True
+        NodeSource => False
+        NodePass _ => False
+    Nothing => False
+
+ifaceDepsOk : Bool
+ifaceDepsOk =
+  case findKey "addr-a" nodes of
+    Just n => n.gnDeps == ["addr-b", "ext:outside"]
+    Nothing => False
+
+graphLayersOk : Bool
+graphLayersOk =
+  case graphLayers nodes of
+    OkC [first, second] => length first == 1 && length second == 1
+    _ => False
+
+graphStatsOk : Bool
+graphStatsOk =
+  let
+    s = graphStats nodes
+  in s.gsNodes == 2 && s.gsEdges == 2 && s.gsExternal == 1
+
+graphCycleOk : Bool
+graphCycleOk =
+  case graphLayers (ifaceNodesOf [mod "a" "addr-a" ["b"], mod "b" "addr-b" ["a"]]) of
+    ErrC _ => True
+    OkC _ => False

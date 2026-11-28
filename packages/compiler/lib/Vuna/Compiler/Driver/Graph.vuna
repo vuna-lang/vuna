@@ -1,0 +1,74 @@
+-- | 查询图的节点表（进程内）：节点 key = 输入地址，边 = 直接依赖。
+--
+-- 这里只做**节点形状与调度层**：源摘要 / 模块接口 / pass 结果统一成 `GraphNode`；
+-- 有效性仍由对象库回答，源码扫描由 `Driver.Compile.ScanMode` 提供。当前接的是模块接口
+-- 节点（`ClosureMod.cmAddr`），后续再加源摘要与 pass 节点时复用同一张表。
+module Vuna.Compiler.Driver.Graph where
+
+import Base.Data.List as List
+import Base.Data.String as String
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Loader.Closure
+
+export data NodeKind(..) : Type where
+  NodeSource : NodeKind
+  NodeIface : NodeKind
+  NodePass : String -> NodeKind
+
+export record GraphNode(..) where
+  gnKey : String
+  gnKind : NodeKind
+  gnDeps : List String
+  gnCost : Int
+
+-- | 模块接口节点：key 是接口地址，依赖是每个 import 的接口地址；闭包外的名字保留成
+-- `ext:<name>` 哨兵（不阻塞调度，但观测里能看出缺口）。
+export ifaceNodesOf : List ClosureMod -> List GraphNode
+ifaceNodesOf mods = map (ifaceNodeOf mods) mods
+
+ifaceNodeOf : List ClosureMod -> ClosureMod -> GraphNode
+ifaceNodeOf mods m =
+  GraphNode m.cmAddr NodeIface (map (ifaceDepKey mods) m.cmImports) (1 + length m.cmImports)
+
+ifaceDepKey : List ClosureMod -> String -> String
+ifaceDepKey mods name =
+  case findMod mods name of
+    Just m => m.cmAddr
+    Nothing => "ext:${name}"
+
+findMod : List ClosureMod -> String -> Maybe ClosureMod
+findMod [] _ = Nothing
+findMod (m :: rest) name = if m.cmName == name then Just m else findMod rest name
+
+-- | 依赖层：层内节点互不依赖，可并行；成环 / 空层显式错误（与 `Closure.topoLayers` 同口径）。
+export graphLayers : List GraphNode -> Check (List (List GraphNode))
+graphLayers nodes = topoLayers gnKey gnDeps nodes
+
+-- | 节点 / 边 / 外部缺口计数（观测用；不参与调度）。
+export record GraphStats(..) where
+  gsNodes : Int
+  gsEdges : Int
+  gsExternal : Int
+
+export graphStats : List GraphNode -> GraphStats
+graphStats nodes = GraphStats (length nodes) (sumDeps nodes) (countExternal nodes [])
+
+sumDeps : List GraphNode -> Int
+sumDeps [] = 0
+sumDeps (n :: rest) = length n.gnDeps + sumDeps rest
+
+countExternal : List GraphNode -> List String -> Int
+countExternal [] _ = 0
+countExternal (n :: rest) seen =
+  countExternalDeps n.gnDeps seen + countExternal rest (append (map extKey n.gnDeps) seen)
+
+countExternalDeps : List String -> List String -> Int
+countExternalDeps [] _ = 0
+countExternalDeps (d :: rest) seen =
+  (if isExternalKey d && not (memName d seen) then 1 else 0) + countExternalDeps rest (d :: seen)
+
+isExternalKey : String -> Bool
+isExternalKey d = startsWith "ext:" d
+
+extKey : String -> String
+extKey d = d

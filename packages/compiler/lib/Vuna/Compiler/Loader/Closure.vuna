@@ -9,6 +9,31 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 
 -- ---------------------------------------------------------------
+-- 闭包节点（纯数据）
+-- ---------------------------------------------------------------
+-- | 一个包在闭包里的身份 / 环境（地址计算的输入）。
+export record ClosurePkg(..) where
+  peName : String
+  peDir : String
+  peKey : String
+  peEnv : String
+  peImplicitPrelude : Bool
+
+-- | 一个模块在闭包里的全部输入：包身份 / 模块名 / 源码路径 / 内容地址与 63-bit 键 /
+-- header import 边 / 接口地址。
+export record ClosureMod(..) where
+  cmPkg : String
+  cmPkgKey : String
+  cmPkgEnv : String
+  cmName : String
+  cmPath : String
+  cmSrc : String
+  cmKey : Int
+  cmImports : List String
+  cmAddr : String
+deriving (Selectors)
+
+-- ---------------------------------------------------------------
 -- 可达名字闭包
 -- ---------------------------------------------------------------
 -- | 从 `starts` 沿 `depsOf` 展开可达名字。结果按首次访问的逆序返回（与既有

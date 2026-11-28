@@ -30,6 +30,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Frontend.Packages.State
 import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Driver.Graph
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Base.Diag.Codec
@@ -696,25 +697,6 @@ depPackageCount ctx = length (depPackageList ctx)
 ifaceObjectCodec : String
 ifaceObjectCodec = "module-iface 6"
 
-export record PkgEntry(..) where
-  peName : String
-  peDir : String
-  peKey : String
-  peEnv : String
-  peImplicitPrelude : Bool
-
-export record ClosureMod(..) where
-  cmPkg : String
-  cmPkgKey : String
-  cmPkgEnv : String
-  cmName : String
-  cmPath : String
-  cmSrc : String
-  cmKey : Int
-  cmImports : List String
-  cmAddr : String
-deriving (Selectors)
-
 -- 包身份：**只要包名**。vuna 的依赖解析是「按名字在闭包里唯一」（同名不同目录会被 loader
 -- 拒绝），所以名字就是身份；目录不进 key 反而是必要的——同一个包在不同入口写法、不同 cwd、
 -- 作为依赖被引用时，路径字符串会不同（相对/绝对/`.` 分量），把目录算进身份会让
@@ -723,19 +705,19 @@ deriving (Selectors)
 pkgKeyOf : String -> String
 pkgKeyOf name = addrOf ["pkg", name]
 
-pkgTableEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List PkgEntry)
+pkgTableEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List ClosurePkg)
 pkgTableEff ctx =
   do
     ownEnv <- packageEnvHash ctx
     let
-      own = PkgEntry (contextPackageName ctx) (contextDir ctx) (pkgKeyOf (contextPackageName ctx)) (strFromInt ownEnv) (contextImplicitPrelude ctx)
+      own = ClosurePkg (contextPackageName ctx) (contextDir ctx) (pkgKeyOf (contextPackageName ctx)) (strFromInt ownEnv) (contextImplicitPrelude ctx)
     in do
       deps <-
         mapEff (
             \p =>
               do
                 e <- packageEnvHash (packageContext p)
-                pure (PkgEntry (packageName p) (packageDir p) (pkgKeyOf (packageName p)) (strFromInt e) (packageImplicitPrelude p))
+                pure (ClosurePkg (packageName p) (packageDir p) (pkgKeyOf (packageName p)) (strFromInt e) (packageImplicitPrelude p))
           ) (depPackageList ctx)
       pure (own :: deps)
 
@@ -746,12 +728,12 @@ contextImplicitPrelude ctx =
     Nothing => True
     Just package => packageImplicitPrelude package
 
-pkgPreludePair : PkgEntry -> (String, Bool)
+pkgPreludePair : ClosurePkg -> (String, Bool)
 pkgPreludePair entry = (entry.peName, entry.peImplicitPrelude)
 
-findPkgEntry : String -> List PkgEntry -> Maybe PkgEntry
-findPkgEntry _ [] = Nothing
-findPkgEntry n (e :: rest) = if e.peName == n then Just e else findPkgEntry n rest
+findClosurePkg : String -> List ClosurePkg -> Maybe ClosurePkg
+findClosurePkg _ [] = Nothing
+findClosurePkg n (e :: rest) = if e.peName == n then Just e else findClosurePkg n rest
 
 findClosureMod : String -> List ClosureMod -> Maybe ClosureMod
 findClosureMod _ [] = Nothing
@@ -766,7 +748,7 @@ export data ScanMode(..) : Type where
 -- | 唯一的「目录遍历 + 读文件 + 摘要（+ header import）」实现。
 -- `ScanDigest` 忽略 `pkgs`（用 root 名占位，调用方只取名字/键）；`ScanImports` 只扫
 -- 在包表里有记录的 root，与旧 `closureModsEff` 的静默跳过一致。
-export scanRootsEff : Member nFs FsOp r => ScanMode -> List Root -> List PkgEntry -> Eff r (List ClosureMod)
+export scanRootsEff : Member nFs FsOp r => ScanMode -> List Root -> List ClosurePkg -> Eff r (List ClosureMod)
 scanRootsEff mode roots pkgs =
   do
     per <-
@@ -775,22 +757,22 @@ scanRootsEff mode roots pkgs =
             case mode of
               ScanDigest => scanRootEff ScanDigest (digestPkgFor r) r []
               ScanImports =>
-                case findPkgEntry (rootName r) pkgs of
+                case findClosurePkg (rootName r) pkgs of
                   Nothing => pure []
                   Just pe => scanRootEff ScanImports pe r []
         ) roots
     pure (concatMap (\xs => xs) per)
 
-digestPkgFor : Root -> PkgEntry
-digestPkgFor r = PkgEntry (rootName r) (rootDir r) "" "" True
+digestPkgFor : Root -> ClosurePkg
+digestPkgFor r = ClosurePkg (rootName r) (rootDir r) "" "" True
 
-scanRootEff : Member nFs FsOp r => ScanMode -> PkgEntry -> Root -> List ClosureMod -> Eff r (List ClosureMod)
+scanRootEff : Member nFs FsOp r => ScanMode -> ClosurePkg -> Root -> List ClosureMod -> Eff r (List ClosureMod)
 scanRootEff mode pe root acc =
   do
     paths <- collectVunaMeta (rootDir root)
     mapEff (\p => scanModEff mode pe root p) paths
 
-scanModEff : Member nFs FsOp r => ScanMode -> PkgEntry -> Root -> String -> Eff r ClosureMod
+scanModEff : Member nFs FsOp r => ScanMode -> ClosurePkg -> Root -> String -> Eff r ClosureMod
 scanModEff mode pe root p =
   do
     raw <- fsReadFile p
@@ -814,7 +796,7 @@ scanModEff mode pe root p =
           pure (ClosureMod pe.peName pe.peKey pe.peEnv name p src key imports "")
 
 -- | 接口闭包：一次扫描 + 纯投影（Prelude 边 / 地址）。
-closureModsEff : Member nFs FsOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
+closureModsEff : Member nFs FsOp r => PackageContext -> List ClosurePkg -> Eff r (List ClosureMod)
 closureModsEff ctx pkgs = scanRootsEff ScanImports (contextRoots ctx) pkgs
 
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」
@@ -900,7 +882,7 @@ ifaceModsEff ctx =
     pkgs <- pkgTableEff ctx
     ifaceModsWithEff ctx pkgs
 
-ifaceModsWithEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List PkgEntry -> Eff r (List ClosureMod)
+ifaceModsWithEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosurePkg -> Eff r (List ClosureMod)
 ifaceModsWithEff ctx pkgs =
   do
     -- 阶段标记（`Eff` 动作不能被纯跨度包住，只能打零宽度点）：进入 / 退出各一个
@@ -918,7 +900,11 @@ ifaceModsWithEff ctx pkgs =
     in do
       _ <- pure (log! "info" "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms assign=direct")
       _ <- obsMarkEff "vuna.iface.compute"
-      pure assigned
+      let
+        nodes = ifaceNodesOf assigned
+        stats = graphStats nodes
+        _ = log! "info" "iface-graph nodes=${strFromInt stats.gsNodes} edges=${strFromInt stats.gsEdges} ext=${strFromInt stats.gsExternal}"
+      in pure assigned
 
 -- | 摘要路径与 iface 影子写共用的闭包扫描：无包上下文时给出空表
 -- （`depIfacesOfWith` 对无包上下文直接返回 `Nothing`，不会用到它）。
@@ -951,13 +937,13 @@ rootEnvHashOf dir =
     tag <- ifaceCompilerTag
     pure (textHash "${textHash toml}|${tag}|")
 
-rootPkgTableEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r (List PkgEntry)
+rootPkgTableEff : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r (List ClosurePkg)
 rootPkgTableEff ctx =
   mapEff (
       \r =>
         do
           env <- rootEnvHashOf (rootDir r)
-          pure (PkgEntry (rootName r) (rootDir r) (pkgKeyOf (rootName r)) (strFromInt env) (rootImplicitPrelude r))
+          pure (ClosurePkg (rootName r) (rootDir r) (pkgKeyOf (rootName r)) (strFromInt env) (rootImplicitPrelude r))
     ) (contextRoots ctx)
 
 -- | 某上下文的整个模块闭包接口（工具 / 单文件 / 测试会话用）。
