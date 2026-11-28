@@ -185,6 +185,10 @@ IR 支持面；这里讲生成物**跑起来**依赖的那一层——运行时�
   （bump 扩容 / 超大块）调用 `rt_seg_index_add` 插入；`_start` 建好初始段后调
   `rt_seg_index_init` 重建。写屏障定位段走同一个函数。
 - **不扫的块**：`leaf`（String / Float，payload 是字节或位型）。
+- **候选字的预筛**：`gc_scan_words` 先把机器的地址包络 `[rt_heap_lo, rt_heap_hi)` 读进
+  `r14` / `r15`（`seg_index_add` / `seg_index_init` 维护，段只增不缩），每个机器字两次
+  比较就落在外面的直接跳过 `gc_try`。栈字里未装箱标量、`.rodata` 字面量、字符串字节
+  占多数，这一步省掉的是它们对齐/段定位/块头校验的整条路径。
 - **两代**：
   - **年轻代回收**（minor）：`gc_try` 只接受不带 `old` 的块，所以只沿根集标记年轻代
     对象；`gc_sweep` 跳过老代块，把带 mark 的年轻代块晋升（置 `old`、保留 `leaf`、
