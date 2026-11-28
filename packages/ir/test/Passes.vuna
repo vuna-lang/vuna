@@ -1,11 +1,13 @@
 -- pass 表不变量：名字唯一、事件名唯一且带 `vuna.pass.` 前缀、`findPass` 可反查；
--- 链首 before 校验用第一项的标记检查进入链前的数据。
+-- 链首 before 校验用第一项的标记检查进入链前的数据；尾标记在已有 `IrTail` 上幂等。
 import Base
 import Base.Effect.Core
 import Base.Data.List as List
 import Base.Data.String as String
 import Vuna.Ir.Model
 import Vuna.Ir.Passes
+import Vuna.Ir.Tail
+import Vuna.Ir.Codec
 import Base.Effect.Console
 import Base.Effect.Exit
 
@@ -43,12 +45,49 @@ results =
       "check-head-before"
       (checkErrNamed "native.cps (before)" (checkHeadBefore nativeStages [badVarDef])),
     Pair "check-head-before-ok" (checkOk (checkHeadBefore nativeStages [goodDef])),
-    Pair "check-head-before-empty" (checkOk (checkHeadBefore [] [badVarDef]))
+    Pair "check-head-before-empty" (checkOk (checkHeadBefore [] [badVarDef])),
+    Pair "tail-annotate-idempotent" annotateIdempotent,
+    Pair "tail-annotate-keeps-tail" annotateKeepsExistingTail
   ]
 
 -- | 链首 before 校验的调用形态：用第一项的标记检查进入链前的数据。
 nativeStages : List (PassSpec, List IrDef)
 nativeStages = [(nativeCps, [goodDef])]
+
+-- | 结构相等：`IrDef` 没有 `Eq` 实例，用规范编码比较（同一 IR 编码成同一串字节）。
+encoded : List IrDef -> String
+encoded ds = encodeUnit (IrUnit [] [IrGroup False ds] False [] Nothing)
+
+-- 夹具：`h = g`（`g` 是零参定义），标记把尾位置的 `IrGlobal` 包成 `IrTail`。
+tailZeroDef : IrDef
+tailZeroDef = IrDef "g" 0 [] Nothing (IrInt 0) False False Nothing
+
+tailAliasDef : IrDef
+tailAliasDef = IrDef "h" 0 [] Nothing (IrGlobal "g") False False Nothing
+
+tailSampleDefs : List IrDef
+tailSampleDefs = [tailZeroDef, tailAliasDef]
+
+-- | 已带尾标记的输入。
+tailWrappedDef : IrDef
+tailWrappedDef = IrDef "h" 0 [] Nothing (IrTail (IrGlobal "g")) False False Nothing
+
+-- 幂等门禁：`ir.tail.annotate` 重复跑与只跑一次等价（第一次已包好 `IrTail`，第二次不再包）。
+annotateIdempotent : Bool
+annotateIdempotent =
+  case annotateDefs tailSampleDefs of
+    Err _ => False
+    Ok once =>
+      case annotateDefs once of
+        Err _ => False
+        Ok twice => encoded twice == encoded once
+
+-- | 输入里已有的 `IrTail` 原样保留，不叠第二层。
+annotateKeepsExistingTail : Bool
+annotateKeepsExistingTail =
+  case annotateDefs [tailWrappedDef] of
+    Err _ => False
+    Ok ds => encoded ds == encoded [tailWrappedDef]
 
 goodDef : IrDef
 goodDef = IrDef "f" 0 [] Nothing (IrInt 1) False False Nothing

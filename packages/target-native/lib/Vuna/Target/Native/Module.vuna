@@ -3374,8 +3374,13 @@ bindArgsGo (b :: rest) i st =
 -- ---------------------------------------------------------------
 -- 零参运行时别名解析
 -- ---------------------------------------------------------------
--- | `Nat.plus = natAdd` 这类零参别名在应用位置直接改写成运行时叶子应用，
---   让标量树（以及后续内联）看到 `IrRtApp`；实参顺序与求值顺序保持原样。
+-- | 零参运行时别名解析：`Nat.plus = natAdd` 这类零参别名在应用位置直接改写成运行时叶子应用，
+--   让标量树（以及后续内联）看到 `IrRtApp`；实参顺序与求值顺序保持原样。解析只读入参 defs
+--   表，所以对合法输入重复跑与跑一次等价（门禁见 `packages/target-native/test/Inline.vuna`）。
+export resolveAliasDefs : List IrDef -> List IrDef
+resolveAliasDefs defs = map (resolveDefAliases defs) defs
+
+-- | 单个定义：前缀里的 defs 表决定别名解析结果。extern 定义原样返回。
 resolveDefAliases : List IrDef -> IrDef -> IrDef
 resolveDefAliases defs (IrDef nm ar deps ty body recOk guard span) =
   IrDef nm ar deps ty (resolveAliasIn (64 + 4 * irSize body) defs body) recOk guard span
@@ -4515,7 +4520,7 @@ buildWithDump fullChecks program printResult dump =
                       cpsMerged = Passes.passSpan Passes.nativeMergeTailIf (\_ => Inline.mergeTailIfs cps1)
                       -- 零参别名（`Nat.plus = natAdd`）先展开成 `IrRtApp`：循环变换要看到
                       -- 运行时叶子（饱和求和识别 `natAdd`）。
-                      cpsAlias0 = Passes.passSpan Passes.nativeAlias (\_ => map (resolveDefAliases cpsMerged) cpsMerged)
+                      cpsAlias0 = Passes.passSpan Passes.nativeAlias (\_ => resolveAliasDefs cpsMerged)
                       -- 循环仿射累加折叠：退出表达式是形参的仿射式时，用一个累加器
                       -- 替掉其余形参（`tco_wide` / `tco_arity6`）。
                       -- 饱和求和循环：入口计数有界时用普通 `+`（`tco_nat`）；快路径
@@ -4530,7 +4535,7 @@ buildWithDump fullChecks program printResult dump =
                       -- 可达性再丢掉（不跟 `irDefDeps`：那是源码级 term-use 依赖，含已擦除
                       -- 的引用，会把刚内联掉的被调重新钉住）。
                       cpsOrdered = Passes.passSpan Passes.nativePrune (\_ => if changed then reachableDefsByRefs (\_ => False) 0 (append accNames seeds) cpsAcc else cpsAcc)
-                      cpsAliased = Passes.passSpan Passes.nativeAliasAgain (\_ => map (resolveDefAliases cpsOrdered) cpsOrdered)
+                      cpsAliased = Passes.passSpan Passes.nativeAliasAgain (\_ => resolveAliasDefs cpsOrdered)
                       -- Float `let` 代进唯一使用点，让浮点表达式树跨过绑定、只装盒一次。
                       cpsFloatLets = Passes.passSpan Passes.nativeFloatLets (\_ => Inline.inlineFloatLetsDefs cpsAliased)
                       pools = Passes.passSpan Passes.nativeReach (\_ => modulePools cpsOrdered)
