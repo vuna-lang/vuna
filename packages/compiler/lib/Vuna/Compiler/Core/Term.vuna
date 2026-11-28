@@ -307,28 +307,28 @@ termSizeCap = 1000000
 termSizeGo : Int -> List Term -> Int
 termSizeGo fuel [] = 0
 termSizeGo fuel (t :: rest) =
-  if fuel <= 0 then 0 else 1 + termSizeGo (fuel - 1) (append (termSizeWork t) rest)
+  if fuel <= 0 then 0 else 1 + termSizeGo (fuel - 1) (append (termAllChildren t) rest)
 
--- 直接子项（顺序无关，只用于计数）。
-termSizeWork : Term -> List Term
-termSizeWork (TVar _ _ _) = []
-termSizeWork (TMeta _) = []
-termSizeWork (TGlobal _) = []
-termSizeWork (TType _) = []
-termSizeWork (TInt _) = []
-termSizeWork (TStr _) = []
-termSizeWork (TFloat _) = []
-termSizeWork (TBool _) = []
-termSizeWork (TPi _ _ _ dom cod) = [dom, cod]
-termSizeWork (TLam _ _ slot _ body) = append (termSizeSlotTerms slot) [body]
-termSizeWork (TApp f a _) = [f, a]
-termSizeWork (TCon _ args) = termSizeArgTerms args
-termSizeWork (TMk _ args) = termSizeArgTerms args
-termSizeWork (TRecord _ args) = termSizeArgTerms args
-termSizeWork (TCase scrut alts) = scrut :: termSizeAltTerms alts
-termSizeWork (TProj base _ _ _ _) = [base]
-termSizeWork (TRecUpd base _ _ _ body) = [base, body]
-termSizeWork (TIf c th el) = [c, th, el]
+-- 全部直接子项（含 λ 类型槽；规模 / 元变量扫描用）。
+export termAllChildren : Term -> List Term
+termAllChildren (TVar _ _ _) = []
+termAllChildren (TMeta _) = []
+termAllChildren (TGlobal _) = []
+termAllChildren (TType _) = []
+termAllChildren (TInt _) = []
+termAllChildren (TStr _) = []
+termAllChildren (TFloat _) = []
+termAllChildren (TBool _) = []
+termAllChildren (TPi _ _ _ dom cod) = [dom, cod]
+termAllChildren (TLam _ _ slot _ body) = append (termSizeSlotTerms slot) [body]
+termAllChildren (TApp f a _) = [f, a]
+termAllChildren (TCon _ args) = termSizeArgTerms args
+termAllChildren (TMk _ args) = termSizeArgTerms args
+termAllChildren (TRecord _ args) = termSizeArgTerms args
+termAllChildren (TCase scrut alts) = scrut :: termSizeAltTerms alts
+termAllChildren (TProj base _ _ _ _) = [base]
+termAllChildren (TRecUpd base _ _ _ body) = [base, body]
+termAllChildren (TIf c th el) = [c, th, el]
 
 termSizeArgTerms : List (Term, Rig) -> List Term
 termSizeArgTerms [] = []
@@ -346,6 +346,49 @@ termSizeSlotTerms (Just p) =
 termSizeMaybeTerms : Maybe Term -> List Term
 termSizeMaybeTerms Nothing = []
 termSizeMaybeTerms (Just t) = [t]
+
+-- ---------------------------------------------------------------
+-- Plain 遍历（值子项）：语义扫描只跟运行时值走，不进入 λ 类型槽。
+-- `termValueChildren` 是唯一的结构真源；`foldTermPlain` / `termAnyPlain` 只负责
+-- 顺序与短路。新增 `Term` 构造子必须在这里接线（不写 `_` 兜底）。
+-- ---------------------------------------------------------------
+export termValueChildren : Term -> List Term
+termValueChildren (TVar _ _ _) = []
+termValueChildren (TMeta _) = []
+termValueChildren (TGlobal _) = []
+termValueChildren (TType _) = []
+termValueChildren (TInt _) = []
+termValueChildren (TStr _) = []
+termValueChildren (TFloat _) = []
+termValueChildren (TBool _) = []
+termValueChildren (TPi _ _ _ dom cod) = [dom, cod]
+termValueChildren (TLam _ _ _ _ body) = [body]
+termValueChildren (TApp f a _) = [f, a]
+termValueChildren (TCon _ args) = termValueArgTerms args
+termValueChildren (TMk _ args) = termValueArgTerms args
+termValueChildren (TRecord _ args) = termValueArgTerms args
+termValueChildren (TCase scrut alts) = scrut :: map caseAltBody alts
+termValueChildren (TProj base _ _ _ _) = [base]
+termValueChildren (TRecUpd base _ _ _ body) = [base, body]
+termValueChildren (TIf c th el) = [c, th, el]
+
+termValueArgTerms : List (Term, Rig) -> List Term
+termValueArgTerms [] = []
+termValueArgTerms ((a, _) :: rest) = a :: termValueArgTerms rest
+
+export foldTermPlain : (acc -> Term -> acc) -> acc -> Term -> acc
+foldTermPlain f acc t = foldTermPlainGo f (f acc t) (termValueChildren t)
+
+foldTermPlainGo : (acc -> Term -> acc) -> acc -> List Term -> acc
+foldTermPlainGo f acc [] = acc
+foldTermPlainGo f acc (k :: rest) = foldTermPlainGo f (foldTermPlain f acc k) rest
+
+export termAnyPlain : (Term -> Bool) -> Term -> Bool
+termAnyPlain pred t = if pred t then True else termAnyPlainList pred (termValueChildren t)
+
+termAnyPlainList : (Term -> Bool) -> List Term -> Bool
+termAnyPlainList pred [] = False
+termAnyPlainList pred (k :: rest) = termAnyPlain pred k || termAnyPlainList pred rest
 
 -- ---------------------------------------------------------------
 -- 元变量 / 定义表（解是 level 形态的 Value，可以提到当前上下文里的局部变量）
@@ -467,61 +510,50 @@ termHasUnsolvedMetaAltsFuel fuel sols alts =
 -- | 项是否含浮点字面量，或引用名字在给定列表里的全局（`floatIntrinsicNames` 等）：
 -- interp/REPL 拒绝浮点求值、codegen 按需生成浮点 runtime helper 的共用判据。
 export termUsesFloat : List String -> Term -> Bool
-termUsesFloat names (TFloat raw) = True
-termUsesFloat names (TGlobal n) = memName n names
-termUsesFloat names (TVar n i _) = False
-termUsesFloat names (TMeta m) = False
-termUsesFloat names (TType l) = False
-termUsesFloat names (TPi n i r dom cod) = termUsesFloat names dom || termUsesFloat names cod
-termUsesFloat names (TLam n r _ _ b) = termUsesFloat names b
-termUsesFloat names (TApp f a r) = termUsesFloat names f || termUsesFloat names a
-termUsesFloat names (TCon c args) = anyArgUsesFloat names args
-termUsesFloat names (TMk c args) = anyArgUsesFloat names args
-termUsesFloat names (TRecord c args) = anyArgUsesFloat names args
-termUsesFloat names (TProj base c tele i fi) = termUsesFloat names base
-termUsesFloat names (TRecUpd base c tele idxs body) =
-  termUsesFloat names base || termUsesFloat names body
-termUsesFloat names (TCase s alts) = termUsesFloat names s || anyAltUsesFloat names alts
-termUsesFloat names (TInt n) = False
-termUsesFloat names (TStr s) = False
-termUsesFloat names (TBool b) = False
-termUsesFloat names (TIf c th el) =
-  termUsesFloat names c || termUsesFloat names th || termUsesFloat names el
+termUsesFloat names t = termAnyPlain (usesFloatAt names) t
 
--- | 实参列表里是否有任一表达式用到浮点（`termUsesFloat` 的列表版）。
-anyArgUsesFloat : List String -> List (Term, Rig) -> Bool
-anyArgUsesFloat names [] = False
-anyArgUsesFloat names ((a, rig) :: rest) = termUsesFloat names a || anyArgUsesFloat names rest
+usesFloatAt : List String -> Term -> Bool
+usesFloatAt names (TFloat _) = True
+usesFloatAt names (TGlobal n) = memName n names
+usesFloatAt names (TVar _ _ _) = False
+usesFloatAt names (TMeta _) = False
+usesFloatAt names (TType _) = False
+usesFloatAt names (TPi _ _ _ _ _) = False
+usesFloatAt names (TLam _ _ _ _ _) = False
+usesFloatAt names (TApp _ _ _) = False
+usesFloatAt names (TCon _ _) = False
+usesFloatAt names (TMk _ _) = False
+usesFloatAt names (TRecord _ _) = False
+usesFloatAt names (TProj _ _ _ _ _) = False
+usesFloatAt names (TRecUpd _ _ _ _ _) = False
+usesFloatAt names (TCase _ _) = False
+usesFloatAt names (TInt _) = False
+usesFloatAt names (TStr _) = False
+usesFloatAt names (TBool _) = False
+usesFloatAt names (TIf _ _ _) = False
 
--- | case 分支体列表里是否有任一用到浮点（`termUsesFloat` 的列表版）。
-anyAltUsesFloat : List String -> List CaseAlt -> Bool
-anyAltUsesFloat names [] = False
-anyAltUsesFloat names (a :: rest) =
-  termUsesFloat names (caseAltBody a) || anyAltUsesFloat names rest
-
--- | 项里出现的全部 `TGlobal` 名字（不去重；可达性扫描用）。
 export termGlobalNames : Term -> List String
-termGlobalNames (TFloat raw) = []
-termGlobalNames (TGlobal n) = [n]
-termGlobalNames (TVar n i _) = []
-termGlobalNames (TMeta m) = []
-termGlobalNames (TType l) = []
-termGlobalNames (TPi n i r dom cod) = append (termGlobalNames dom) (termGlobalNames cod)
-termGlobalNames (TLam n r _ _ b) = termGlobalNames b
-termGlobalNames (TApp f a r) = append (termGlobalNames f) (termGlobalNames a)
-termGlobalNames (TCon c args) = concatMap (\p => termGlobalNames (firstOf p)) args
-termGlobalNames (TMk c args) = concatMap (\p => termGlobalNames (firstOf p)) args
-termGlobalNames (TRecord c args) = c :: concatMap (\p => termGlobalNames (firstOf p)) args
-termGlobalNames (TProj base c tele i fi) = termGlobalNames base
-termGlobalNames (TRecUpd base c tele idxs body) =
-  append (termGlobalNames base) (termGlobalNames body)
-termGlobalNames (TCase s alts) =
-  append (termGlobalNames s) (concatMap (\a => termGlobalNames (caseAltBody a)) alts)
-termGlobalNames (TInt n) = []
-termGlobalNames (TStr s) = []
-termGlobalNames (TBool b) = []
-termGlobalNames (TIf c th el) =
-  append (termGlobalNames c) (append (termGlobalNames th) (termGlobalNames el))
+termGlobalNames t = foldTermPlain globalNameAt [] t
+
+globalNameAt : List String -> Term -> List String
+globalNameAt acc (TGlobal n) = append acc [n]
+globalNameAt acc (TRecord c _) = append acc [c]
+globalNameAt acc (TVar _ _ _) = acc
+globalNameAt acc (TMeta _) = acc
+globalNameAt acc (TType _) = acc
+globalNameAt acc (TPi _ _ _ _ _) = acc
+globalNameAt acc (TLam _ _ _ _ _) = acc
+globalNameAt acc (TApp _ _ _) = acc
+globalNameAt acc (TCon _ _) = acc
+globalNameAt acc (TMk _ _) = acc
+globalNameAt acc (TProj _ _ _ _ _) = acc
+globalNameAt acc (TRecUpd _ _ _ _ _) = acc
+globalNameAt acc (TCase _ _) = acc
+globalNameAt acc (TInt _) = acc
+globalNameAt acc (TStr _) = acc
+globalNameAt acc (TBool _) = acc
+globalNameAt acc (TIf _ _ _) = acc
+globalNameAt acc (TFloat _) = acc
 
 export defLookup : String -> HashMap String Term -> Maybe Term
 defLookup name tbl = HashMap.lookup name tbl
