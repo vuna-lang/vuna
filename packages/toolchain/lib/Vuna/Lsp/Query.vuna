@@ -343,7 +343,8 @@ formattingFixities uri text =
 -- ---------------------------------------------------------------
 -- | codeAction 入口：lint quick fix + fix all 的 `Command` 形式 + 洞 case split。
 --
--- 与诊断同源：本文件可见 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；只取可自动
+-- 与诊断同源：本文件可见 fixity 与 import 闭包声明（`Vuna.FixityEnv`）→
+-- `Vuna.Lint.Rules.lintParsedWithImports`；只取可自动
 -- 修复（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）相交的 finding。
 -- 另加一条 "fix all lint findings"（`Vuna.Lint.Fix.fixLoop` 跑到收敛，与 CLI `--fix` 同一条
 -- 路径）；请求 range 附近没有可修复 finding 时不给 fix all，避免每行都冒出全文档 fix。
@@ -371,28 +372,44 @@ codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol req
             OkC c => c
             ErrC _ => defaultLintConfig
         )
-    looked <- fixitiesForFile emptyFixityEnv label text
-    case secondOf looked of
+    case parseSourceDetailed label text of
       ErrC e => pure []
-      OkC programFixities =>
-        case lintSourceWithConfig cfg programFixities text of
-          ErrC e => pure []
-          OkC findings =>
-            do
-              rawSplits <- if refactorAllowed only then caseSplitActions uri label ctx mgoals text reqStart reqStartCol reqEnd reqEndCol else pure []
-              let
-                diagActions = if quickfixAllowed only then suggestionsInRange reqStart reqEnd suggestions else []
-                splits = take maxCodeActions rawSplits
-                fixable = if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
-                singles = mapMaybe (findingQuickFix uri) fixable
-                fixAll = if not (isEmptyList fixable) then fixAllActions uri cfg programFixities text findings else []
-                budget = maxOf 0 (maxCodeActions - length splits)
-                singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
-                -- fix all 需要一格；case split 已占满上限时不再追加（总数仍 ≤ maxCodeActions）。
-                fixAll2 = if isEmptyList fixAll || budget <= 0 then [] else fixAll
-                used = length splits + length singles2 + length fixAll2
-                diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
-              in pure (append splits (append singles2 (append fixAll2 diagActions2)))
+      OkC parsed =>
+        do
+          opt <- fixitiesAndImportsFor label parsed
+          case opt of
+            Nothing => pure []
+            Just (programFixities, importedDecls) =>
+              case lintParsedWithImports cfg programFixities importedDecls text parsed of
+                ErrC e => pure []
+                OkC findings =>
+                  do
+                    rawSplits <- if refactorAllowed only then caseSplitActions uri label ctx mgoals text reqStart reqStartCol reqEnd reqEndCol else pure []
+                    let
+                      diagActions = if quickfixAllowed only then suggestionsInRange reqStart reqEnd suggestions else []
+                      splits = take maxCodeActions rawSplits
+                      fixable = if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
+                      singles = mapMaybe (findingQuickFix uri) fixable
+                      fixAll = if not (isEmptyList fixable) then fixAllActions uri cfg programFixities importedDecls text findings else []
+                      budget = maxOf 0 (maxCodeActions - length splits)
+                      singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
+                      -- fix all 需要一格；case split 已占满上限时不再追加（总数仍 ≤ maxCodeActions）。
+                      fixAll2 = if isEmptyList fixAll || budget <= 0 then [] else fixAll
+                      used = length splits + length singles2 + length fixAll2
+                      diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
+                    in pure (append splits (append singles2 (append fixAll2 diagActions2)))
+
+-- | 内部：本文件可见 fixity 与 import 闭包声明（LSP 的 lint 入口共用一次解析）。
+fixitiesAndImportsFor : Member nFs FsOp r, Member nEnv EnvOp r => String -> ParsedSource -> Eff r (Maybe (List FixityDecl, List Decl))
+fixitiesAndImportsFor label parsed =
+  do
+    looked <- fixitiesForParsed emptyFixityEnv label parsed.parsedFile
+    let env1 = firstOf looked
+    pure (
+        case secondOf looked of
+          ErrC e => Nothing
+          OkC fx => Just (fx, importedDeclsOf env1 label parsed.parsedFile)
+      )
 
 -- | 内部：缓存条目形如 (0-based 起止行, actions)，只取与请求 range 相交的那些。
 suggestionsInRange : Int -> Int -> List ((Int, Int), List Json) -> List Json
@@ -465,16 +482,16 @@ fixAllActionJson uri =
 
 -- | 内部：`fixLoop` 把全部可修复 finding 迭代应用（最多 8 轮，与 CLI `--fix` 一致）；
 -- 无改动时返回 `Nothing`。
-fixAllLintEdit : LintConfig -> List FixityDecl -> String -> List Finding -> Maybe String
-fixAllLintEdit cfg programFixities text findings =
-  case fixLoop cfg programFixities text findings 8 0 of
+fixAllLintEdit : LintConfig -> List FixityDecl -> List Decl -> String -> List Finding -> Maybe String
+fixAllLintEdit cfg programFixities importedDecls text findings =
+  case fixLoop cfg programFixities importedDecls text findings 8 0 of
     ErrC e => Nothing
     OkC (count, newText) => if count == 0 || newText == text then Nothing else Just newText
 
 -- | 内部：fix all 的 codeAction；只有确实有改动时才产生动作。
-fixAllActions : String -> LintConfig -> List FixityDecl -> String -> List Finding -> List Json
-fixAllActions uri cfg programFixities text findings =
-  case fixAllLintEdit cfg programFixities text findings of
+fixAllActions : String -> LintConfig -> List FixityDecl -> List Decl -> String -> List Finding -> List Json
+fixAllActions uri cfg programFixities importedDecls text findings =
+  case fixAllLintEdit cfg programFixities importedDecls text findings of
     Nothing => []
     Just newText => [fixAllActionJson uri]
 
@@ -495,18 +512,22 @@ fixAllLintWorkspaceEdit uri text =
                   OkC c => c
                   ErrC _ => defaultLintConfig
               )
-          looked <- fixitiesForFile emptyFixityEnv label text
-          pure (
-              case secondOf looked of
-                ErrC e => Nothing
-                OkC programFixities =>
-                  case lintSourceWithConfig cfg programFixities text of
-                    ErrC e => Nothing
-                    OkC findings =>
-                      case fixAllLintEdit cfg programFixities text findings of
-                        Nothing => Nothing
-                        Just newText => Just (JObj [("changes", JObj [(uri, JArr [textEditJson (fullRange text) newText])])])
-            )
+          case parseSourceDetailed label text of
+            ErrC e => pure Nothing
+            OkC parsed =>
+              do
+                opt <- fixitiesAndImportsFor label parsed
+                pure (
+                    case opt of
+                      Nothing => Nothing
+                      Just (programFixities, importedDecls) =>
+                        case lintParsedWithImports cfg programFixities importedDecls text parsed of
+                          ErrC e => Nothing
+                          OkC findings =>
+                            case fixAllLintEdit cfg programFixities importedDecls text findings of
+                              Nothing => Nothing
+                              Just newText => Just (JObj [("changes", JObj [(uri, JArr [textEditJson (fullRange text) newText])])])
+                  )
 
 -- ---------------------------------------------------------------
 -- case split：洞 → 上下文 binder 的 data 构造子 / record 分支

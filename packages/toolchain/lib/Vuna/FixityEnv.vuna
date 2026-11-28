@@ -111,6 +111,9 @@ export fixitiesForCtx : Member nFs FsOp r => FixityEnv -> PackageContext -> Stri
 fixitiesForCtx (FixityEnv ctxCache modCache) ctx path sf =
   let
     modKey = contextDir ctx
+    -- 目录 → 上下文也回写：`fixityEnvModulesOf` 按文件目录找回这次用的上下文，
+    -- 才能拿到同一份模块图（`fixitiesForParsed` 走的是同一条回写）。
+    ctxCache2 = cachePut (dirKey path) ctx ctxCache
     mods =
       case cacheLookup modKey modCache of
         Just ms => ms
@@ -119,6 +122,28 @@ fixitiesForCtx (FixityEnv ctxCache modCache) ctx path sf =
     fxR <- fixitiesFromParsed ctx mods path sf
     pure (
         case fxR of
-          ErrC e => (FixityEnv ctxCache modCache, ErrC e)
-          OkC (mods2, fx) => (FixityEnv ctxCache (cachePut modKey mods2 modCache), OkC fx)
+          ErrC e => (FixityEnv ctxCache2 modCache, ErrC e)
+          OkC (mods2, fx) => (FixityEnv ctxCache2 (cachePut modKey mods2 modCache), OkC fx)
       )
+
+-- | 某个文件对应包上下文里**已加载**的模块图（复用池，不是本文件的可见表）。
+--
+-- 只读查询：键是「文件目录 → 包上下文 → `contextDir`」两级缓存，和 fixity 推进用的是同一
+-- 对键，所以 `fixitiesForCtx` 之后调用总能拿到本次加载的模块。缓存里没有时返回空表
+-- （调用方据此退化为「只认同文件声明」）。
+export fixityEnvModulesOf : String -> FixityEnv -> List Module
+fixityEnvModulesOf path env =
+  case cacheLookup (dirKey path) env.fixityEnvCtxCache of
+    Nothing => []
+    Just ctx =>
+      case cacheLookup (contextDir ctx) env.fixityEnvModCache of
+        Nothing => []
+        Just ms => ms
+
+-- | 该文件**显式 import 闭包**里各模块的声明（不含本文件的声明、不含隐式 Prelude）。
+--
+-- lint 的跨文件 `data` 族判定用它：只看本文件写了 import 的模块，别的文件凑巧加载过的
+-- 模块不会进入判据（同一文件单独 lint 与和别的文件一起 lint 结果一致）。
+export importedDeclsOf : FixityEnv -> String -> SourceFile -> List Decl
+importedDeclsOf env path sf =
+  concatMap moduleDeclsOf (modulesImportedBy (fixityEnvModulesOf path env) sf)

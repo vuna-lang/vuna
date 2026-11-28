@@ -113,6 +113,15 @@ fixityClosureModules modules imports =
   reverse
     (secondOf (fixityClosureGo (fixityClosureFuel modules imports) modules (map importName imports) (HashMap.fromList []) []))
 
+-- | 一处源码**显式** import 闭包里的模块（`export module X` 合成的 import 也算显式）。
+--
+-- 与可见 fixity 表同一条闭包口径，但**不含隐式 Prelude**：注入 Prelude 是宿主动作
+-- （`implicitPrelude` 要读根目录），纯函数在这里拿不到。工具侧用它判定「跨文件的 `data`
+-- 族」——只认本文件写了 import 的那些模块。
+export modulesImportedBy : List Module -> SourceFile -> List Module
+modulesImportedBy modules sf =
+  fixityClosureModules modules (namespaceImportsOf sf.sourceFileImports sf.sourceFileReexports)
+
 -- | DFS 的步数上界：初次 import 数 + 所有模块的 import 总数 + 1（每个模块只展开一次）。
 -- 显式 fuel 计步：递归会把「模块的 import 列表」换进待访问的名字列表，SCT 不闭合。
 fixityClosureFuel : List Module -> List Import -> Int

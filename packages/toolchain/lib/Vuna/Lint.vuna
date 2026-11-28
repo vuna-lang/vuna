@@ -507,11 +507,13 @@ lintText opts env ctxR displayPath configPath source =
                         case secondOf looked of
                           ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
                           OkC programFixities =>
-                            case lintParsedWithConfig cfg programFixities source parsed of
+                            let
+                              importedDecls = importedDeclsOf env2.lintRunFixity configPath parsed.parsedFile
+                            in case lintParsedWithImports cfg programFixities importedDecls source parsed of
                               ErrC e => pure (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
                               OkC findings =>
                                 do
-                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (findings, 0, Nothing))
+                                  fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities importedDecls source findings else pure (OkC (findings, 0, Nothing))
                                   pure (
                                       case fixedR of
                                         ErrC e => (env2, FileOutcome displayPath [] 0 (Just (diagText e)) Nothing)
@@ -559,9 +561,9 @@ printDiff path oldSource newSource =
 
 -- | 内部：fix 单文件（dry-run / 原子写 / 重新 lint 聚在一处）。`--diff` 只带回修复前后的
 -- 文本，打印由父线程按文件顺序完成。
-fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (List Finding, Int, Maybe (String, String)))
-fixFileWith opts cfg path programFixities source findings =
-  case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
+fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> List Decl -> String -> List Finding -> Eff r (Check (List Finding, Int, Maybe (String, String)))
+fixFileWith opts cfg path programFixities importedDecls source findings =
+  case fixLoop cfg programFixities importedDecls source findings opts.lintOptMaxPasses 0 of
     ErrC e => pure (ErrC e)
     OkC (count, newSource) =>
       if count == 0 then
@@ -574,7 +576,7 @@ fixFileWith opts cfg path programFixities source findings =
         do
           _ <- fsWriteFileAtomic path newSource
           pure (
-              case lintSourceWithConfig cfg programFixities newSource of
+              case lintSourceWithImports cfg programFixities importedDecls newSource of
                 ErrC e => ErrC e
                 OkC remaining => OkC (remaining, count, Nothing)
             )

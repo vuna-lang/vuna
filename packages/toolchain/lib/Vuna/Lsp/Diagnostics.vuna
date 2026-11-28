@@ -3,8 +3,9 @@
 --
 -- 诊断来源：解析失败 ⇒ 一条带位置的 parse 诊断；有 `module` 头按模块源码路径、无头按入口语义
 -- 做 DT 精化；依赖文件（`spanFile` 不是当前文件）的错误被过滤掉——每个打开的文件只发布自己的
--- 诊断；没有位置的错误归到当前文件 0:0。最后并入 [Vuna.Lint.Rules.lintSourceWith] 的语法级
--- finding（severity 2，code 取 `LN_*` 规则码；重排用程序级 [Vuna.FixityEnv]，与 fmt/CLI 同源）。
+-- 诊断；没有位置的错误归到当前文件 0:0。最后并入 [Vuna.Lint.Rules.lintParsedWithImports]
+-- 的语法级 finding（severity 2，code 取 `LN_*` 规则码；重排用程序级 [Vuna.FixityEnv]，
+-- 跨文件 `data` 族的声明表也来自同一次加载，与 fmt/CLI 同源）。
 --
 -- 位置与字段：编译器列是 1-based UTF-8 字节，LSP 要 0-based UTF-16 code unit，由 `utf16ColOf`
 -- 按 buffer 文本换算；`diagnosticJson` 组装 range / severity / source / code / tags /
@@ -556,7 +557,7 @@ lintWithEnv c label text parsed =
       ErrC _ => pure (c2, [])
       OkC fx =>
         pure (
-            (c2, case lintParsedWithConfig cfg fx text parsed of
+            (c2, case lintParsedWithImports cfg fx (importedDeclsOf c2.dcFix label parsed.parsedFile) text parsed of
                 ErrC _ => []
                 OkC findings => map findingToDiagnostic findings)
           )

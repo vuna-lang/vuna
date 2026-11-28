@@ -83,10 +83,10 @@ applyFixes source findings =
 -- | 最多跑 `passes` 轮修复：每轮应用编辑、重新 lint，直到没有可应用的编辑或轮数用尽；任一
 -- 环节解析失败即整体报错。返回累计修复条数与最终源码。
 --
--- 每轮复验沿用首轮的本文件可见 fixity：修复只做格式与结构改写、不改 imports，换一份 fixity
--- 重排会退化成 unknown fixity。
-export fixLoop : LintConfig -> List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Int, String)
-fixLoop cfg programFixities source findings passes total =
+-- 每轮复验沿用首轮的本文件可见 fixity 与 import 闭包声明：修复只做格式与结构改写、不改
+-- imports，换一份 fixity 重排会退化成 unknown fixity。
+export fixLoop : LintConfig -> List FixityDecl -> List Decl -> String -> List Finding -> Int -> Int -> Check (Int, String)
+fixLoop cfg programFixities importedDecls source findings passes total =
   if passes <= 0 then
     OkC (total, source)
   else
@@ -96,6 +96,6 @@ fixLoop cfg programFixities source findings passes total =
         if count == 0 then
           OkC (total, source)
         else
-          case lintSourceWithConfig cfg programFixities newSource of
+          case lintSourceWithImports cfg programFixities importedDecls newSource of
             ErrC e => ErrC e
-            OkC remaining => fixLoop cfg programFixities newSource remaining (passes - 1) (total + count)
+            OkC remaining => fixLoop cfg programFixities importedDecls newSource remaining (passes - 1) (total + count)

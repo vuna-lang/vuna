@@ -24,6 +24,7 @@ import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Frontend.Parser
 import Vuna.FixityEnv
 import Vuna.Lint.Config
 import Vuna.Lint.Fix
@@ -244,12 +245,18 @@ export lintFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess Proces
 lintFile path =
   do
     textR <- fsReadFile path
-    looked <- fixitiesForFile emptyFixityEnv path textR
-    pure (
-        case secondOf looked of
-          ErrC e => ErrC e
-          OkC fixities => lintSourceWith fixities textR
-      )
+    case parseSourceDetailed path textR of
+      ErrC e => pure (ErrC e)
+      OkC parsed =>
+        do
+          looked <- fixitiesForParsed emptyFixityEnv path parsed.parsedFile
+          let
+            env1 = firstOf looked
+          in pure (
+              case secondOf looked of
+                ErrC e => ErrC e
+                OkC fixities => lintParsedWithImports defaultLintConfig fixities (importedDeclsOf env1 path parsed.parsedFile) textR parsed
+            )
 
 -- | `vuna lint --fix <file>` 的进程内形态（与 `Lint.fixReport` 同一条 `fixLoop` 路径）：
 -- 返回（修复数, 新源码），调用方负责把新源码写回工作副本。
@@ -259,12 +266,17 @@ lintFile path =
 export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Int, String))
 fixFile path text =
   do
-    looked <- fixitiesForFile emptyFixityEnv path text
-    pure (
-        case secondOf looked of
-          ErrC e => ErrC e
-          OkC fixities =>
-            case lintSourceWith fixities text of
-              ErrC e => ErrC e
-              OkC findings => fixLoop defaultLintConfig fixities text findings 8 0
-      )
+    case parseSourceDetailed path text of
+      ErrC e => pure (ErrC e)
+      OkC parsed =>
+        do
+          looked <- fixitiesForParsed emptyFixityEnv path parsed.parsedFile
+          let
+            env1 = firstOf looked
+            importedDecls = importedDeclsOf env1 path parsed.parsedFile
+          in case secondOf looked of
+            ErrC e => pure (ErrC e)
+            OkC fixities =>
+              case lintParsedWithImports defaultLintConfig fixities importedDecls text parsed of
+                ErrC e => pure (ErrC e)
+                OkC findings => pure (fixLoop defaultLintConfig fixities importedDecls text findings 8 0)
