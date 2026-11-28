@@ -678,110 +678,76 @@ lamTyWithResult resultTy = lamTyOf Nothing resultTy
 -- ---------------------------------------------------------------
 -- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。
 -- 局部上下文的类型按「绑定时上下文」存储，取用时需要 shift 0 (idx+1)。
+--
+-- `shift` / `substVarAt` 共用一份结构递归。
+-- 深度规则与 `termAnyScoped` 一致：`TPi` 余域 +1、`TLam` 结果类型与体 +1、
+-- `TCase` 分支 +binder 数、`TRecUpd` 体 +tele 长度。
+-- 元变量替换要按解继续下钻（不是子项），保留自己的 fuel 递归（`substMetasFuel`）。
 -- ---------------------------------------------------------------
+data TermMapMode : Type where
+  MapShift : Int -> TermMapMode
+  MapSubstVar : Int -> Term -> TermMapMode
+
+mapTermScoped : TermMapMode -> Int -> Term -> Term
+mapTermScoped (MapShift amount) depth (TVar n i sp) =
+  if i >= depth then TVar n (i + amount) sp else TVar n i sp
+mapTermScoped (MapSubstVar idx arg) depth (TVar n i sp) =
+  if i == idx + depth then arg else TVar n i sp
+mapTermScoped mode depth (TMeta m) = TMeta m
+mapTermScoped mode depth (TGlobal g) = TGlobal g
+mapTermScoped mode depth (TType l) = TType l
+mapTermScoped mode depth (TPi n im r dom cod) =
+  TPi n im r (mapTermScoped mode depth dom) (mapTermScoped mode (depth + 1) cod)
+mapTermScoped mode depth (TLam n r slot sp body) =
+  let
+    slot2 =
+      case slot of
+        Nothing => Nothing
+        Just (mark, bt, rt) =>
+          let
+            bt2 =
+              case bt of
+                Nothing => Nothing
+                Just t => Just (mapTermScoped mode depth t)
+            rt2 =
+              case rt of
+                Nothing => Nothing
+                Just t => Just (mapTermScoped mode (depth + 1) t)
+          in Just (mark, bt2, rt2)
+  in TLam n r slot2 sp (mapTermScoped mode (depth + 1) body)
+mapTermScoped mode depth (TApp f a r) =
+  TApp (mapTermScoped mode depth f) (mapTermScoped mode depth a) r
+mapTermScoped mode depth (TCon c args) =
+  TCon c (map (\p => (mapTermScoped mode depth (firstOf p), secondOf p)) args)
+mapTermScoped mode depth (TMk c args) =
+  TMk c (map (\p => (mapTermScoped mode depth (firstOf p), secondOf p)) args)
+mapTermScoped mode depth (TRecord c args) =
+  TRecord c (map (\p => (mapTermScoped mode depth (firstOf p), secondOf p)) args)
+mapTermScoped mode depth (TProj base c tele i fi) =
+  TProj (mapTermScoped mode depth base) c tele i fi
+mapTermScoped mode depth (TRecUpd base c tele idxs body) =
+  TRecUpd
+    (mapTermScoped mode depth base)
+    c
+    tele
+    idxs
+    (mapTermScoped mode (depth + length tele) body)
+mapTermScoped mode depth (TCase s alts) =
+  TCase
+    (mapTermScoped mode depth s)
+    (map (\alt => CaseAlt (caseAltName alt) (caseAltBinders alt) (mapTermScoped mode (depth + length (caseAltBinders alt)) (caseAltBody alt))) alts)
+mapTermScoped mode depth (TInt n) = TInt n
+mapTermScoped mode depth (TStr s) = TStr s
+mapTermScoped mode depth (TBool b) = TBool b
+mapTermScoped mode depth (TIf c th el) =
+  TIf (mapTermScoped mode depth c) (mapTermScoped mode depth th) (mapTermScoped mode depth el)
+mapTermScoped mode depth (TFloat raw) = TFloat raw
+
 export shift : Int -> Int -> Term -> Term
-shift depth amount (t@(TVar name i sp)) = if i >= depth then TVar name (i + amount) sp else t
-shift depth amount (t@(TMeta m)) = t
-shift depth amount (t@(TGlobal g)) = t
-shift depth amount (t@(TType l)) = t
-shift depth amount (TPi name implicit rig dom cod) =
-  TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
-shift depth amount (TLam name rig slot sp body) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (shift depth amount t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (shift (depth + 1) amount t)
-          in Just (mark, bt2, rt2)
-  in TLam name rig slot2 sp (shift (depth + 1) amount body)
-shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
-shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
-shift depth amount (TMk c args) = TMk c (shiftArgs depth amount args)
-shift depth amount (TRecord c args) = TRecord c (shiftArgs depth amount args)
-shift depth amount (TProj base c tele i fi) = TProj (shift depth amount base) c tele i fi
-shift depth amount (TRecUpd base c tele idxs body) =
-  TRecUpd (shift depth amount base) c tele idxs (shift (depth + length tele) amount body)
-shift depth amount (TCase scrut alts) =
-  TCase (shift depth amount scrut) (shiftAlts depth amount alts)
-shift depth amount (t@(TInt n)) = t
-shift depth amount (t@(TStr s)) = t
-shift depth amount (t@(TFloat raw)) = t
-shift depth amount (t@(TBool b)) = t
-shift depth amount (TIf c th el) =
-  TIf (shift depth amount c) (shift depth amount th) (shift depth amount el)
+shift depth amount t = mapTermScoped (MapShift amount) depth t
 
-export shiftArgs : Int -> Int -> List (Term, Rig) -> List (Term, Rig)
-shiftArgs depth amount [] = []
-shiftArgs depth amount ((a, rig) :: rest) =
-  (shift depth amount a, rig) :: shiftArgs depth amount rest
-
-export shiftAlts : Int -> Int -> List CaseAlt -> List CaseAlt
-shiftAlts depth amount [] = []
-shiftAlts depth amount (alt :: rest) = shiftAlt depth amount alt :: shiftAlts depth amount rest
-
-export shiftAlt : Int -> Int -> CaseAlt -> CaseAlt
-shiftAlt depth amount (CaseAlt name binders body) =
-  CaseAlt name binders (shift (depth + length binders) amount body)
-
--- 把项里对 de Bruijn 索引 `idx` 的变量引用替换成项 `arg`（按索引替换，不按名字）。
 export substVarAt : Int -> Term -> Term -> Term
-substVarAt idx arg (t@(TVar n i _)) = if i == idx then arg else t
-substVarAt idx arg (t@(TMeta m)) = t
-substVarAt idx arg (t@(TGlobal g)) = t
-substVarAt idx arg (t@(TType l)) = t
-substVarAt idx arg (TPi n implicit rig dom cod) =
-  TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
-substVarAt idx arg (TLam n erased slot sp body) =
-  let
-    slot2 =
-      case slot of
-        Nothing => Nothing
-        Just (mark, bt, rt) =>
-          let
-            bt2 =
-              case bt of
-                Nothing => Nothing
-                Just t => Just (substVarAt idx arg t)
-            rt2 =
-              case rt of
-                Nothing => Nothing
-                Just t => Just (substVarAt (idx + 1) arg t)
-          in Just (mark, bt2, rt2)
-  in TLam n erased slot2 sp (substVarAt (idx + 1) arg body)
-substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
-substVarAt idx arg (TCon c cargs) =
-  TCon c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
-substVarAt idx arg (TMk c cargs) =
-  TMk c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
-substVarAt idx arg (TRecord c cargs) =
-  TRecord c (map (\p => (substVarAt idx arg (firstOf p), secondOf p)) cargs)
-substVarAt idx arg (TProj base c tele i fi) = TProj (substVarAt idx arg base) c tele i fi
-substVarAt idx arg (TRecUpd base c tele idxs body) =
-  TRecUpd (substVarAt idx arg base) c tele idxs (substVarAt (idx + length tele) arg body)
-substVarAt idx arg (TCase scrut alts) =
-  TCase (substVarAt idx arg scrut) (map (substAltAt idx arg) alts)
-substVarAt idx arg (t@(TInt n)) = t
-substVarAt idx arg (t@(TStr s)) = t
-substVarAt idx arg (t@(TFloat raw)) = t
-substVarAt idx arg (t@(TBool b)) = t
-substVarAt idx arg (TIf c th el) =
-  TIf (substVarAt idx arg c) (substVarAt idx arg th) (substVarAt idx arg el)
-
-export substAltAt : Int -> Term -> CaseAlt -> CaseAlt
-substAltAt idx arg alt =
-  CaseAlt
-    (caseAltName alt)
-    (caseAltBinders alt)
-    (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
+substVarAt idx arg t = mapTermScoped (MapSubstVar idx arg) 0 t
 
 -- 字典提升：把 `?m` 换成 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
 -- `depth` 是 `?m` 出现处深度（de Bruijn）：延迟的字典元变量要变成提升后的字典绑定子变量，
@@ -829,7 +795,13 @@ substMetasFuel fuel resolve depth t =
       TRecUpd base c tele idxs body => TRecUpd (substMetasFuel (fuel - 1) resolve depth base) c tele idxs (substMetasFuel (fuel - 1) resolve (depth + length tele) body)
       TCase s alts => TCase (substMetasFuel (fuel - 1) resolve depth s) (map (substMetasAlt (fuel - 1) resolve depth) alts)
       TIf c th el => TIf (substMetasFuel (fuel - 1) resolve depth c) (substMetasFuel (fuel - 1) resolve depth th) (substMetasFuel (fuel - 1) resolve depth el)
-      _ => t
+      TInt n => t
+      TStr s => t
+      TBool b => t
+      TFloat raw => t
+      TVar n i sp => t
+      TGlobal g => t
+      TType l => t
 
 substMetasArgs : Int -> (Int -> Int -> Maybe Term) -> Int -> List (Term, Rig) -> List (Term, Rig)
 substMetasArgs fuel resolve depth [] = []
