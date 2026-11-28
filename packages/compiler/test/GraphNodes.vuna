@@ -27,6 +27,7 @@ results =
     Pair "iface-deps" ifaceDepsOk,
     Pair "graph-layers" graphLayersOk,
     Pair "graph-stats" graphStatsOk,
+    Pair "source-nodes" sourceNodesOk,
     Pair "graph-cycle" graphCycleOk
   ]
 
@@ -53,8 +54,17 @@ ifaceKeyOk =
 ifaceDepsOk : Bool
 ifaceDepsOk =
   case findKey "addr-a" nodes of
-    Just n => n.gnDeps == ["addr-b", "ext:outside"]
+    Just n => depsOk n
     Nothing => False
+
+depsOk : GraphNode -> Bool
+depsOk n =
+  case n.gnDeps of
+    [src, dep, ext] =>
+      src
+        == sourceKeyOf (mod "a" "addr-a" ["b", "outside"])
+        && dep == "addr-b" && ext == "ext:outside"
+    _ => False
 
 graphLayersOk : Bool
 graphLayersOk =
@@ -66,7 +76,13 @@ graphStatsOk : Bool
 graphStatsOk =
   let
     s = graphStats nodes
-  in s.gsNodes == 2 && s.gsEdges == 2 && s.gsExternal == 1
+  in s.gsNodes == 2 && s.gsEdges == 4 && s.gsExternal == 1
+
+sourceNodesOk : Bool
+sourceNodesOk =
+  let
+    ns = ifaceGraphOf [mod "a" "addr-a" [], mod "b" "addr-b" []]
+  in length ns == 4
 
 graphCycleOk : Bool
 graphCycleOk =
