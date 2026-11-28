@@ -484,17 +484,39 @@ export nodeKind : CstNode -> Maybe CstKind
 nodeKind (CstLeaf _) = Nothing
 nodeKind (CstBranch k _ _ _ _ _) = Just k
 
--- | 字节投影的 children：只走主树。`collectLeaves` / 渲染 / `AstView` 用这一份，
--- 模板洞的子树由 `TTmpl` 叶覆盖，重复下降会让字节还原不成立。
-export nodeChildren : CstNode -> List CstNode
-nodeChildren (CstLeaf _) = []
-nodeChildren (CstBranch _ _ _ _ _ kids) = kids
+-- | 树的两种 children 投影。**这是「洞子树是否下降」的唯一判定点**：所有遍历都从
+-- `cstChildren` 取子节点，不自己写 `kids` / `surface.cstHoleTrees` 的组合。
+--
+-- `ProjBytes`：只走主树。模板洞的子树由 `TTmpl` 叶覆盖，重复下降会让逐字节还原不成立
+-- （`collectLeaves` / 渲染 / `AstView` 用这一份）。
+-- `ProjNodes`：主树 children 再追加模板洞子树。节点身份 / 载荷 / 表面事实 / 宏调用 /
+-- 索引用这一份；洞内节点（id < 0）因此能被 `nodeIndex` 查到。
+export data CstProjection(..) : Type where
+  ProjBytes : CstProjection
+  ProjNodes : CstProjection
 
--- | 节点投影的 children：主树 children 再追加模板洞子树。节点身份 / 载荷 / 表面事实 /
--- 宏调用 / 索引用这一份；洞内节点（id < 0）因此能被 `nodeIndex` 查到。
+export cstChildren : CstProjection -> CstNode -> List CstNode
+cstChildren proj (CstLeaf _) = []
+cstChildren proj (CstBranch _ _ _ surface _ kids) =
+  case proj of
+    ProjBytes => kids
+    ProjNodes => append kids surface.cstHoleTrees
+
+-- | 结构遍历的 fuel：每个节点一步。树的嵌套深度远小于这个上界，合法输入不可达。
+--
+-- 递归遍历**必须**带 fuel：`cstChildren` 是普通函数调用，SCT 看不到「节点 → children
+-- 列表」的结构下降（洞子树还挂在 `CstSurface` 字段上，同样不是构造子参数）。显式 fuel
+-- 让终结性由「每步减一 + 下界守卫」成立，也让五种遍历共用同一个 `cstChildren` 真源。
+cstWalkFuel : Int
+cstWalkFuel = 1000000
+
+-- | 字节投影的 children（`cstChildren ProjBytes` 的具名入口）。
+export nodeChildren : CstNode -> List CstNode
+nodeChildren node = cstChildren ProjBytes node
+
+-- | 节点投影的 children（`cstChildren ProjNodes` 的具名入口）。
 export nodeChildrenAll : CstNode -> List CstNode
-nodeChildrenAll (CstLeaf _) = []
-nodeChildrenAll (CstBranch _ _ _ surface _ kids) = append kids surface.cstHoleTrees
+nodeChildrenAll node = cstChildren ProjNodes node
 
 -- | 叶 token；分支给 `Nothing`。
 export nodeToken : CstNode -> Maybe CstToken
@@ -761,7 +783,7 @@ emptyFixityFacts = FixityFacts emptyParenTable [] []
 export fixityFactsOf : CstNode -> FixityFacts
 fixityFactsOf root =
   let
-    entries = factsGo root emptyFactEntries
+    entries = factsGo cstWalkFuel root emptyFactEntries
   in FixityFacts (HashMap.fromList entries.feParens) entries.feBackticks entries.feSections
 
 -- | 查一个表达式节点的括号层数（没有条目 = 0）。
@@ -801,9 +823,12 @@ record FactEntries where
 emptyFactEntries : FactEntries
 emptyFactEntries = FactEntries [] [] []
 
-factsGo : CstNode -> FactEntries -> FactEntries
-factsGo (CstLeaf _) acc = acc
-factsGo (CstBranch _ nid sp surface _ kids) acc =
+factsGo : Int -> CstNode -> FactEntries -> FactEntries
+factsGo fuel node acc = if fuel <= 0 then acc else factsStep fuel node acc
+
+factsStep : Int -> CstNode -> FactEntries -> FactEntries
+factsStep fuel (CstLeaf _) acc = acc
+factsStep fuel (n@(CstBranch _ nid sp surface _ _)) acc =
   let
     acc1 =
       if surface.cstParenDepth > 0 then
@@ -816,11 +841,11 @@ factsGo (CstBranch _ nid sp surface _ kids) acc =
       case surface.cstSection of
         Just shape => { acc2 | feSections = (spanStartOffset sp, shape) :: acc2.feSections }
         Nothing => acc2
-  in factsGoList surface.cstHoleTrees (factsGoList kids acc3)
+  in factsGoList fuel (cstChildren ProjNodes n) acc3
 
-factsGoList : List CstNode -> FactEntries -> FactEntries
-factsGoList [] acc = acc
-factsGoList (n :: rest) acc = factsGoList rest (factsGo n acc)
+factsGoList : Int -> List CstNode -> FactEntries -> FactEntries
+factsGoList _ [] acc = acc
+factsGoList fuel (n :: rest) acc = factsGoList fuel rest (factsGo (fuel - 1) n acc)
 
 -- | 不建主树，直接从 parser 直出的三张表 + 模板洞子树派生事实。
 --
@@ -830,7 +855,7 @@ factsGoList (n :: rest) acc = factsGoList rest (factsGo n acc)
 export fixityFactsOfParts : List (Int, Int) -> List (Int, Bool) -> List (Int, SectionShape) -> List CstNode -> FixityFacts
 fixityFactsOfParts parens backticks sections holeRoots =
   let
-    holes = factsGoList holeRoots emptyFactEntries
+    holes = factsGoList cstWalkFuel holeRoots emptyFactEntries
     liveParens = List.filter (\p => secondOf p > 0) parens
     liveBackticks = List.filter (\p => secondOf p) backticks
     parenEntries = List.append liveParens holes.feParens
@@ -840,8 +865,16 @@ fixityFactsOfParts parens backticks sections holeRoots =
 
 -- | 树的叶序列（源码顺序）。无损断言用它对齐 token 流。
 export collectLeaves : CstNode -> List CstToken
-collectLeaves (CstLeaf t) = [t]
-collectLeaves (CstBranch _ _ _ _ _ kids) = concatMap collectLeaves kids
+collectLeaves node = collectLeavesAt cstWalkFuel node
+
+collectLeavesAt : Int -> CstNode -> List CstToken
+collectLeavesAt fuel node =
+  if fuel <= 0 then
+    []
+  else
+    case node of
+      CstLeaf t => [t]
+      _ => concatMap (collectLeavesAt (fuel - 1)) (cstChildren ProjBytes node)
 
 -- | 先序的分支节点表（id → 节点）。走节点投影（含模板洞子树），与 `cstIndexOf` /
 -- `factsGo` 的范围一致。
@@ -857,7 +890,7 @@ nodeTableAt fuel node =
   else
     case node of
       CstLeaf _ => []
-      CstBranch _ nid _ surface _ kids => (nid, node) :: append (concatMap (nodeTableAt (fuel - 1)) kids) (concatMap (nodeTableAt (fuel - 1)) surface.cstHoleTrees)
+      CstBranch _ nid _ _ _ _ => (nid, node) :: concatMap (nodeTableAt (fuel - 1)) (cstChildren ProjNodes node)
 
 -- | 整棵树的「id → 节点」索引。节点身份只此一处：span、kind、children 都从这里取，
 -- 而不是再按区间比较。
@@ -883,12 +916,15 @@ emptyIndexAcc = IndexAcc [] []
 export cstIndexOf : CstNode -> CstIndex
 cstIndexOf root =
   let
-    acc = indexGo root emptyIndexAcc
+    acc = indexGo cstWalkFuel root emptyIndexAcc
   in CstIndex (HashMap.fromList acc.iaById) (HashMap.fromList acc.iaBySpan)
 
-indexGo : CstNode -> IndexAcc -> IndexAcc
-indexGo (CstLeaf _) acc = acc
-indexGo (n@(CstBranch _ nid sp surface _ kids)) acc =
+indexGo : Int -> CstNode -> IndexAcc -> IndexAcc
+indexGo fuel node acc = if fuel <= 0 then acc else indexStep fuel node acc
+
+indexStep : Int -> CstNode -> IndexAcc -> IndexAcc
+indexStep fuel (CstLeaf _) acc = acc
+indexStep fuel (n@(CstBranch _ nid sp surface _ _)) acc =
   let
     hasIdFact = surface.cstParenDepth > 0 || surface.cstBacktick
     hasSpanFact =
@@ -901,11 +937,11 @@ indexGo (n@(CstBranch _ nid sp surface _ kids)) acc =
     acc1 = if hasIdFact then { acc | iaById = (nid, n) :: acc.iaById } else acc
     acc2 =
       if hasSpanFact then { acc1 | iaBySpan = (spanStartOffset sp, n) :: acc1.iaBySpan } else acc1
-  in indexGoList surface.cstHoleTrees (indexGoList kids acc2)
+  in indexGoList fuel (cstChildren ProjNodes n) acc2
 
-indexGoList : List CstNode -> IndexAcc -> IndexAcc
-indexGoList [] acc = acc
-indexGoList (n :: rest) acc = indexGoList rest (indexGo n acc)
+indexGoList : Int -> List CstNode -> IndexAcc -> IndexAcc
+indexGoList _ [] acc = acc
+indexGoList fuel (n :: rest) acc = indexGoList fuel rest (indexGo (fuel - 1) n acc)
 
 -- | 空索引（没有源码位置的位置：接口解码出来的 AST、合成节点）。
 export emptyCstIndex : CstIndex
@@ -963,8 +999,16 @@ interpMultiOfIndex ix sp =
 
 -- | 节点树逐字节还原源码（叶按源码顺序输出前置 trivia + token 原文）。
 export renderCstTree : CstNode -> String
-renderCstTree (CstLeaf t) = strConcatMany (renderParts t)
-renderCstTree (CstBranch _ _ _ _ _ kids) = strConcatMany (map renderCstTree kids)
+renderCstTree node = renderCstTreeAt cstWalkFuel node
+
+renderCstTreeAt : Int -> CstNode -> String
+renderCstTreeAt fuel node =
+  if fuel <= 0 then
+    ""
+  else
+    case node of
+      CstLeaf t => strConcatMany (renderParts t)
+      _ => strConcatMany (map (renderCstTreeAt (fuel - 1)) (cstChildren ProjBytes node))
 
 -- ---------------------------------------------------------------
 -- 条目锚点（注释归属的挂载点）
@@ -975,9 +1019,16 @@ renderCstTree (CstBranch _ _ _ _ _ kids) = strConcatMany (map renderCstTree kids
 -- | 注释锚点投影：只走主树。洞内注释在词法阶段随 trivia 丢弃（`Lexer` 的已知边界），
 -- 洞内节点没有可挂的注释；这不是遗漏，与 `nodeChildren` 同口径。
 export anchorRefsOfTree : (CstKind -> Bool) -> CstNode -> List (Int, Span)
-anchorRefsOfTree keep (CstLeaf _) = []
-anchorRefsOfTree keep (CstBranch kind nid sp _ _ kids) =
-  append (if keep kind then [(nid, sp)] else []) (concatMap (anchorRefsOfTree keep) kids)
+anchorRefsOfTree keep node = anchorRefsAt keep cstWalkFuel node
+
+anchorRefsAt : (CstKind -> Bool) -> Int -> CstNode -> List (Int, Span)
+anchorRefsAt keep fuel node =
+  if fuel <= 0 then
+    []
+  else
+    case node of
+      CstLeaf _ => []
+      CstBranch kind nid sp _ _ _ => append (if keep kind then [(nid, sp)] else []) (concatMap (anchorRefsAt keep (fuel - 1)) (cstChildren ProjBytes node))
 
 -- ---------------------------------------------------------------
 -- 表面形状（从建树事件 + 词法 token 派生）

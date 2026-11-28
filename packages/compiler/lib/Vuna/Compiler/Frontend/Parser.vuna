@@ -40,7 +40,7 @@ endOfInputDiag st = psDiagAt st ExpectedEndOfInput []
 --
 -- trivia token 流（`CstToken`）不在这里组装：只有需要注释归属/原文的工具（fmt / LSP）
 -- 才付那份成本，纯切片消费者（lint / index / doc）不该为它分配。fmt 用
--- `Cst.lexTokensOf` 从 `parsedRawToks` + `parsedComments` 组装。
+-- `parsedToks` 是组装好的产物（需要定制组装时可沿用 `Cst.lexTokensOf` 的入口）。
 export record ParsedSource(..) where
   -- | 语法树（从 `parsedCst` 投影：值在树节点的语义载荷里）。
   parsedFile : SourceFile
@@ -54,6 +54,11 @@ export record ParsedSource(..) where
   -- `Cst.cstIndexOf` 建定位表后按节点 id / span 查；`Cst.fixityFactsOf` 派生出中缀重排
   -- 需要的那三条事实（树在加载器里随后就丢，事实按模块保留）。
   parsedCst : CstNode
+  -- | trivia token 流（注释与空白已并进各 token 的前置 trivia）。
+  --
+  -- 建树时已经组装过一次（`nestToTreeWithSurface` 的第一个参数），这里原样带出：
+  -- 需要注释归属 / 原文的消费者（fmt / LSP semantic tokens）不再为同一份源码重新组装。
+  parsedToks : List CstToken
 
 -- | 内部：一次词法 + 语法分析的核心产物。建树还需要 parser 终态（事件流在那里），
 -- 所以两者一起返回；`parseSourceDetailed` 与 `parseSourceWithComments` 共用这一条路径。
@@ -87,16 +92,17 @@ parseSourceDetailed file source =
     OkC c =>
       let
         events = eventsOf c.pcFin
+        toks = lexTokensOf source c.pcToks c.pcComments
         cst =
           nestToTreeWithSurface
-            (lexTokensOf source c.pcToks c.pcComments)
+            toks
             events
             (parenEntriesOf c.pcToks events)
             c.pcFin.backtickShapes
             c.pcFin.sectionShapes
             c.pcFin.interpMultis
             c.pcFin.templateHoles
-      in OkC (ParsedSource (AstView.ofTree cst) c.pcComments c.pcToks cst)
+      in OkC (ParsedSource (AstView.ofTree cst) c.pcComments c.pcToks cst toks)
 
 -- | 只要 AST 与注释表的入口。
 --
